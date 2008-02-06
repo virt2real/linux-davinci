@@ -1851,6 +1851,9 @@ config FB_IBM_GXT4500
 config FB_DAVINCI
 	bool "Davinci Framebuffer support"
 	depends on FB && ARCH_DAVINCI
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
 	help
 	  This is the frame buffer device driver for the DaVinci video
 	  hardware found on the TI DaVinci EVM.	 If

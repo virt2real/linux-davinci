@@ -1499,6 +1499,8 @@ typedef struct emac_dev_s {
 	unsigned long set_to_close;
 	void *led_handle;
 
+	struct napi_struct napi;
+
 	/* DDC related parameters */
 	emac_status ddc_status;
 
@@ -1637,7 +1639,7 @@ static int emac_net_rx_cb(emac_dev_t * dev,
 			  void *rx_args);
 
 
-static int emac_poll(struct net_device *netdev, int *budget);
+static int emac_poll(struct napi_struct *napi, int budget);
 #ifdef CONFIG_NET_POLL_CONTROLLER
 static void emac_poll_controller(struct net_device *dev);
 #endif
@@ -1813,9 +1815,9 @@ static inline void emac_free(void *ptr)
 	kfree(ptr);
 }
 
-#define EMAC_CACHE_INVALIDATE(addr, size) consistent_sync((void *)addr, size, DMA_FROM_DEVICE)
-#define EMAC_CACHE_WRITEBACK(addr, size) consistent_sync((void *)addr, size, DMA_TO_DEVICE)
-#define EMAC_CACHE_WRITEBACK_INVALIDATE(addr, size) consistent_sync((void *)addr,size, DMA_BIDIRECTIONAL)
+#define EMAC_CACHE_INVALIDATE(addr, size) dma_cache_maint((void *)addr, size, DMA_FROM_DEVICE)
+#define EMAC_CACHE_WRITEBACK(addr, size) dma_cache_maint((void *)addr, size, DMA_TO_DEVICE)
+#define EMAC_CACHE_WRITEBACK_INVALIDATE(addr, size) dma_cache_maint((void *)addr,size, DMA_BIDIRECTIONAL)
 
 /* buffer-descriptors in IO space.  No cache invalidation needed */
 #define BD_CACHE_INVALIDATE(addr, size)
@@ -3450,11 +3452,10 @@ static int emac_dev_init(struct net_device *netdev)
 	netdev->set_multicast_list = emac_dev_mcast_set;
 	netdev->tx_timeout = emac_tx_timeout;
 	netdev->set_mac_address = emac_dev_set_mac_addr;
-	netdev->poll = emac_poll;
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	netdev->poll_controller = emac_poll_controller;
 #endif
-	netdev->weight = EMAC_DEFAULT_RX_MAX_SERVICE;
+	netif_napi_add(netdev, &dev->napi, emac_poll, 16);
 
 	/* reset the broadcast and multicast flags and enable them
 	   based upon configuration of driver */
@@ -4504,6 +4505,8 @@ static int emac_open(emac_dev_t * _dev, void *param)
 		dev->regs->rx_free_buffer[channel] = 0;
 	}
 
+	napi_enable(&dev->napi);
+
 	/* finally set MAC control register, enable MII */
 	dev->mac_control |= (1 << EMAC_MACCONTROL_MIIEN_SHIFT);
 	dev->regs->mac_control = dev->mac_control;
@@ -4544,6 +4547,8 @@ static int emac_close(emac_dev_t * _dev, void *param)
 		LOGERR("Device already closed");
 		return (EMAC_ERR_DEV_ALREADY_CLOSED);
 	}
+
+	napi_disable(&dev->napi);
 
 	/* stop the tick timer via DDA */
 	emac_control_cb(dev, EMAC_IOCTL_TIMER_STOP, NULL, NULL);
@@ -6510,17 +6515,17 @@ static int emac_rx_bdproc(emac_dev_t * _dev, u32 channel,
 /* Linux 2.6 Kernel Ethernet Poll function Call only RX processing in
  * the poll function - TX is taken care of in interrupt context
  */
-static int emac_poll(struct net_device *netdev, int *budget)
+static int emac_poll(struct napi_struct *napi, int budget)
 {
-	emac_dev_t *dev = netdev_priv(netdev);
-	unsigned int work = min(netdev->quota, *budget);
+        struct emac_dev_s *dev = container_of(napi, struct emac_dev_s, napi);
+        struct net_device *netdev = dev->next_device;
 	unsigned int pkts_pending = 0;
 	/* this is used to pass the rx packets to be processed and
 	 * return the number of rx packets processed */
 	rx_tx_params *napi_params = &dev->napi_rx_tx;
 
 	if (!dev->set_to_close) {
-		napi_params->rx_pkts = work;
+		napi_params->rx_pkts = budget;
 		napi_params->tx_pkts = EMAC_DEFAULT_TX_MAX_SERVICE;
 
 		/* process packets - call the DDC packet processing function */
@@ -6529,14 +6534,10 @@ static int emac_poll(struct net_device *netdev, int *budget)
 		/* if more packets reschedule the tasklet or call
 		 * pkt_process_end */
 		if (!pkts_pending) {
-			if (test_bit(__LINK_STATE_RX_SCHED, &netdev->state)) {
-				netif_rx_complete(netdev);
-			}
 			emac_pkt_process_end(dev, NULL);
+                        __netif_rx_complete(netdev, napi);
 			return 0;
 		} else if (!test_bit(0, &dev->set_to_close)) {
-			*budget -= napi_params->ret_rx_pkts;
-			netdev->quota -= napi_params->ret_rx_pkts;
 			return 1;
 		}
 	}
@@ -6671,7 +6672,7 @@ irqreturn_t emac_hal_isr(int irq, void *dev_id)
 	++dev->isr_count;
 	if (!dev->set_to_close) {
 		/* NAPI support */
-		netif_rx_schedule(dev->owner);
+	        netif_rx_schedule(dev->next_device, &dev->napi);
 	} else {
 		/* we are closing down, so dont process anything */
 	}

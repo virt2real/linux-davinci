@@ -45,7 +45,6 @@
 
 
 static ide_hwif_t *palm_bk3710_hwif = NULL;
-struct ide_pci_device_s palm_bk3710_dummydata;
 palm_bk3710_ideregs *palm_bk3710_base = NULL;
 long    ide_palm_clk = 0;
 /*
@@ -354,7 +353,7 @@ static int palm_bk3710_hostdma(ide_drive_t * drive, u8 xferspeed)
 
 static inline int palm_bk3710_drivedma(ide_drive_t * pDrive)
 {
-	u8 speed = ide_rate_filter(pDrive, 2);	/* We have a 76.5 MHz clock hence only UDMA66 is possible */
+	u8 speed = ide_set_xfer_rate(pDrive, 2); /* We have a 76.5 MHz clock hence only UDMA66 is possible */
 
 	/* If no DMA/single word DMA was available or the chipset has DMA bugs
 	   then disable DMA and use PIO */
@@ -362,7 +361,7 @@ static inline int palm_bk3710_drivedma(ide_drive_t * pDrive)
 		palm_bk3710_tune_drive(pDrive, 255);
 	} else {
 		palm_bk3710_hostdma(pDrive, speed);
-		ide_tune_dma(pDrive);
+		ide_set_dma(pDrive);
 	}
 
 	return 0;
@@ -383,7 +382,7 @@ static int palm_bk3710_checkdma(ide_drive_t * drive)
 
 	drive->init_speed = 0;
 
-	if ((id->capability & 1) && drive->autodma) {
+	if ((id->capability & 1) && (!drive->nodma) && (!noautodma)) {
 		if (id->field_valid & 4) {
 			if (id->dma_ultra & hwif->ultra_mask) {
 				/* Force if Capable UltraDMA */
@@ -405,7 +404,7 @@ static int palm_bk3710_checkdma(ide_drive_t * drive)
 	} else if ((id->capability & 8) || (id->field_valid & 2)) {
 	      fast_ata_pio:
 	      no_dma_set:
-		hwif->tuneproc(drive, 255);
+	        palm_bk3710_tune_drive(drive, 255);
 		hwif->dma_off_quietly(drive);
 	}
 
@@ -492,24 +491,16 @@ int palm_bk3710_init(void)
 		ide_ctlr_info.irq = IRQ_IDE;
 		ide_ctlr_info.chipset = ide_palm3710;
 		ide_ctlr_info.ack_intr = NULL;
-		if (ide_register_hw(&ide_ctlr_info, 0, &palm_bk3710_hwif) < 0) {
+		if (ide_register_hw(&ide_ctlr_info, NULL, 0, &palm_bk3710_hwif) < 0) {
 			printk("Palm Chip BK3710 IDE Register Fail\n");
 			return -1;
 		}
 
-		palm_bk3710_hwif->tuneproc = &palm_bk3710_tune_drive;
-
 		palm_bk3710_hwif->noprobe = 0;
 #ifndef CONFIG_DAVINCI_BLK_DEV_CF
 #ifdef  CONFIG_BLK_DEV_IDEDMA
-                palm_bk3710_hwif->speedproc = &palm_bk3710_hostdma;
-		/* Just put this for using the ide-dma.c init code */
-		palm_bk3710_dummydata.extra = 0;
-		palm_bk3710_hwif->cds = &palm_bk3710_dummydata;
-
 		/* Setup up the memory map base for this instance of hwif */
 		palm_bk3710_hwif->mmio = 0;
-		palm_bk3710_hwif->ide_dma_check = palm_bk3710_checkdma;
 		palm_bk3710_hwif->ultra_mask = 0x1f;	/* Ultra DMA Mode 4 Max
 						 (input clk 99MHz) */
 		palm_bk3710_hwif->mwdma_mask = 0x7;
@@ -520,8 +511,8 @@ int palm_bk3710_init(void)
 		    IO_ADDRESS(IDE_PALM_REG_MMAP_BASE) + 2;
 		palm_bk3710_hwif->dma_prdtable =
 		    IO_ADDRESS(IDE_PALM_REG_MMAP_BASE) + 4;
-		palm_bk3710_hwif->drives[0].autodma = 1;
-		palm_bk3710_hwif->drives[1].autodma = 1;
+		palm_bk3710_hwif->drives[0].nodma = 0;
+		palm_bk3710_hwif->drives[1].nodma = 0;
 		ide_setup_dma(palm_bk3710_hwif,
 			      IO_ADDRESS(IDE_PALM_REG_MMAP_BASE), 8);
 		palm_bk3710_checkdma (&palm_bk3710_hwif->drives[0]);
