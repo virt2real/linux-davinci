@@ -23,8 +23,8 @@
 
 static struct resource i2c_resources[] = {
 	{
-		.start		= IO_ADDRESS(DAVINCI_I2C_BASE),
-		.end		= IO_ADDRESS(DAVINCI_I2C_BASE) + 0x40,
+		.start		= DAVINCI_I2C_BASE,
+		.end		= DAVINCI_I2C_BASE + 0x40,
 		.flags		= IORESOURCE_MEM,
 	},
 	{
