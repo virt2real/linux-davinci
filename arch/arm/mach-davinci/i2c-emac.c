@@ -39,6 +39,12 @@ int davinci_get_macaddr (char *ptr)
 		return -EFAULT;
 	}
 
+	/* If already assigned via cmdline, just use it */
+	if (strncmp(cpmac_eth_string, "deadbeef", 8)) {
+		strncpy (ptr, cpmac_eth_string, 20);
+		return 0;
+	}
+
 	davinci_i2c_write (2, data, 0x50);
 	davinci_i2c_read (8, temp, 0x50);
 
@@ -84,7 +90,7 @@ int davinci_get_macaddr (char *ptr)
 	} else
 #endif
 	{
-		strcpy (ptr, cpmac_eth_string);
+		strncpy (ptr, cpmac_eth_string, 20);
 	}
 	return 0;
 }
