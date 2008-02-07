@@ -991,7 +991,8 @@ static void musb_shutdown(struct platform_device *pdev)
 #define	can_dynfifo()	0
 #endif
 
-#ifdef CONFIG_USB_TUSB6010
+#if defined(CONFIG_USB_TUSB6010) || \
+	defined(CONFIG_ARCH_OMAP2430) || defined(CONFIG_ARCH_OMAP34XX)
 static ushort __initdata fifo_mode = 4;
 #else
 static ushort __initdata fifo_mode = 2;
@@ -1992,6 +1993,9 @@ musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 	if (status < 0)
 		goto fail2;
 
+	/* Init IRQ workqueue before request_irq */
+	INIT_WORK(&musb->irq_work, musb_irq_work);
+
 	/* attach to the IRQ */
 	if (request_irq (nIrq, musb->isr, 0, dev->bus_id, musb)) {
 		dev_err(dev, "request_irq %d failed!\n", nIrq);
@@ -2070,8 +2074,6 @@ fail:
 		musb_free(musb);
 		return status;
 	}
-
-	INIT_WORK(&musb->irq_work, musb_irq_work);
 
 #ifdef CONFIG_SYSFS
 	status = device_create_file(dev, &dev_attr_mode);

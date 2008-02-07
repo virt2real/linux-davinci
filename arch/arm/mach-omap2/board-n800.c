@@ -1,7 +1,7 @@
 /*
  * linux/arch/arm/mach-omap2/board-n800.c
  *
- * Copyright (C) 2005 Nokia Corporation
+ * Copyright (C) 2005-2007 Nokia Corporation
  * Author: Juha Yrjola <juha.yrjola@nokia.com>
  *
  * Modified from mach-omap2/board-generic.c
@@ -42,11 +42,11 @@
 #include <../drivers/cbus/tahvo.h>
 #include <../drivers/media/video/tcm825x.h>
 
-#define N800_BLIZZARD_POWERDOWN_GPIO 15
-#define N800_STI_GPIO		62
+#define N800_BLIZZARD_POWERDOWN_GPIO	15
+#define N800_STI_GPIO			62
 #define N800_KEYB_IRQ_GPIO		109
 
-static void __init nokia_n800_init_irq(void)
+void __init nokia_n800_init_irq(void)
 {
 	omap2_init_common_hw();
 	omap_init_irq();
@@ -191,6 +191,14 @@ static void __init blizzard_dev_init(void)
 	omapfb_set_ctrl_platform_data(&n800_blizzard_data);
 }
 
+static struct omap_mmc_config n800_mmc_config __initdata = {
+	.mmc [0] = {
+		.enabled		= 1,
+		.wire4			= 1,
+	},
+};
+
+extern struct omap_mmc_platform_data n800_mmc_data;
 
 static struct omap_board_config_kernel n800_config[] __initdata = {
 	{ OMAP_TAG_UART,	                &n800_uart_config },
@@ -198,6 +206,7 @@ static struct omap_board_config_kernel n800_config[] __initdata = {
 	{ OMAP_TAG_FBMEM,			&n800_fbmem1_config },
 	{ OMAP_TAG_FBMEM,			&n800_fbmem2_config },
 	{ OMAP_TAG_TMP105,			&n800_tmp105_config },
+	{ OMAP_TAG_MMC,				&n800_mmc_config },
 };
 
 
@@ -448,39 +457,44 @@ static struct i2c_board_info __initdata n800_i2c_board_info_2[] = {
 #endif
 };
 
-static void __init nokia_n800_init(void)
+void __init nokia_n800_common_init(void)
 {
 	platform_add_devices(n800_devices, ARRAY_SIZE(n800_devices));
-
-	i2c_register_board_info(1, n800_i2c_board_info_1,
-				ARRAY_SIZE(n800_i2c_board_info_1));
-
-	i2c_register_board_info(2, n800_i2c_board_info_2,
-				ARRAY_SIZE(n800_i2c_board_info_2));
 
 	n800_flash_init();
 	n800_mmc_init();
 	n800_bt_init();
-	n800_audio_init(&tsc2301_config);
 	n800_dsp_init();
 	n800_usb_init();
 	n800_cam_init();
-	n800_ts_set_config();
 	spi_register_board_info(n800_spi_board_info,
 				ARRAY_SIZE(n800_spi_board_info));
 	omap_serial_init();
+	omap_register_i2c_bus(1, 400, n800_i2c_board_info_1,
+			      ARRAY_SIZE(n800_i2c_board_info_1));
+	omap_register_i2c_bus(2, 400, n800_i2c_board_info_2,
+			      ARRAY_SIZE(n800_i2c_board_info_2));
 	mipid_dev_init();
 	blizzard_dev_init();
+}
+
+static void __init nokia_n800_init(void)
+{
+	nokia_n800_common_init();
+
+	n800_audio_init(&tsc2301_config);
+	n800_ts_set_config();
 	tsc2301_dev_init();
 	omap_register_gpio_switches(n800_gpio_switches,
 				    ARRAY_SIZE(n800_gpio_switches));
 }
 
-static void __init nokia_n800_map_io(void)
+void __init nokia_n800_map_io(void)
 {
 	omap_board_config = n800_config;
 	omap_board_config_size = ARRAY_SIZE(n800_config);
 
+	omap2_set_globals_242x();
 	omap2_map_common_io();
 }
 

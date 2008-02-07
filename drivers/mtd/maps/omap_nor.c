@@ -61,7 +61,7 @@ static void omap_set_vpp(struct map_info *map, int enable)
 {
 	static int	count;
 
-	if (!cpu_is_omap24xx()) {
+	if (cpu_class_is_omap1()) {
 		if (enable) {
 			if (count++ == 0)
 				OMAP_EMIFS_CONFIG_REG |= OMAP_EMIFS_CONFIG_WP;
@@ -107,6 +107,10 @@ static int __devinit omapflash_probe(struct platform_device *pdev)
 		goto out_iounmap;
 	}
 	info->mtd->owner = THIS_MODULE;
+
+	/* Unlock the flash device. */
+	if (info->mtd->unlock)
+		info->mtd->unlock(info->mtd, 0, info->mtd->size);
 
 #ifdef CONFIG_MTD_PARTITIONS
 	err = parse_mtd_partitions(info->mtd, part_probes, &info->parts, 0);

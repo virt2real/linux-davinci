@@ -61,10 +61,13 @@ static void __init omap_generic_init(void)
 	omap_board_config = generic_config;
 	omap_board_config_size = ARRAY_SIZE(generic_config);
 	omap_serial_init();
+	omap_register_i2c_bus(1, 100, NULL, 0);
+	omap_register_i2c_bus(2, 100, NULL, 0);
 }
 
 static void __init omap_generic_map_io(void)
 {
+	omap2_set_globals_242x(); /* should be 242x, 243x, or 343x */
 	omap2_map_common_io();
 }
 

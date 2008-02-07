@@ -20,14 +20,15 @@
 #include <asm/mach/map.h>
 
 #include <asm/arch/tc.h>
+#include <asm/arch/control.h>
 #include <asm/arch/board.h>
+#include <asm/arch/mmc.h>
 #include <asm/arch/mux.h>
 #include <asm/arch/gpio.h>
 #include <asm/arch/menelaus.h>
+#include <asm/arch/dsp_common.h>
 
 #if	defined(CONFIG_OMAP_DSP) || defined(CONFIG_OMAP_DSP_MODULE)
-
-#include "../plat-omap/dsp/dsp_common.h"
 
 static struct dsp_platform_data dsp_pdata = {
 	.kdev_list = LIST_HEAD_INIT(dsp_pdata.kdev_list),
@@ -88,76 +89,6 @@ EXPORT_SYMBOL(dsp_kfunc_device_register);
 static inline void omap_init_dsp(void) { }
 #endif	/* CONFIG_OMAP_DSP */
 
-/*-------------------------------------------------------------------------*/
-#if	!defined(CONFIG_ARCH_OMAP243X)
-#if	defined(CONFIG_I2C_OMAP) || defined(CONFIG_I2C_OMAP_MODULE)
-
-#define	OMAP1_I2C_BASE		0xfffb3800
-#define OMAP2_I2C_BASE1		0x48070000
-#define OMAP_I2C_SIZE		0x3f
-#define OMAP1_I2C_INT		INT_I2C
-#define OMAP2_I2C_INT1		56
-
-static u32 omap2_i2c1_clkrate	= 100;
-
-static struct resource i2c_resources1[] = {
-	{
-		.start		= 0,
-		.end		= 0,
-		.flags		= IORESOURCE_MEM,
-	},
-	{
-		.start		= 0,
-		.flags		= IORESOURCE_IRQ,
-	},
-};
-
-/* DMA not used; works around erratum writing to non-empty i2c fifo */
-
-static struct platform_device omap_i2c_device1 = {
-	.name           = "i2c_omap",
-	.id             = 1,
-	.num_resources	= ARRAY_SIZE(i2c_resources1),
-	.resource	= i2c_resources1,
-	.dev		= {
-		.platform_data	= &omap2_i2c1_clkrate,
-	},
-};
-
-/* See also arch/arm/mach-omap2/devices.c for second I2C on 24xx */
-static void omap_init_i2c(void)
-{
-	if (cpu_is_omap242x()) {
-		i2c_resources1[0].start = OMAP2_I2C_BASE1;
-		i2c_resources1[0].end = OMAP2_I2C_BASE1 + OMAP_I2C_SIZE;
-		i2c_resources1[1].start = OMAP2_I2C_INT1;
-	} else {
-		i2c_resources1[0].start = OMAP1_I2C_BASE;
-		i2c_resources1[0].end = OMAP1_I2C_BASE + OMAP_I2C_SIZE;
-		i2c_resources1[1].start = OMAP1_I2C_INT;
-	}
-
-	/* FIXME define and use a boot tag, in case of boards that
-	 * either don't wire up I2C, or chips that mux it differently...
-	 * it can include clocking and address info, maybe more.
-	 */
-	if (cpu_class_is_omap2()) {
-		if (machine_is_omap_h4()) {
-			omap_cfg_reg(M19_24XX_I2C1_SCL);
-			omap_cfg_reg(L15_24XX_I2C1_SDA);
-		}
-	} else {
-		omap_cfg_reg(I2C_SCL);
-		omap_cfg_reg(I2C_SDA);
-	}
-
-	(void) platform_device_register(&omap_i2c_device1);
-}
-
-#else
-static inline void omap_init_i2c(void) {}
-#endif
-#endif
 /*-------------------------------------------------------------------------*/
 #if	defined(CONFIG_KEYBOARD_OMAP) || defined(CONFIG_KEYBOARD_OMAP_MODULE)
 
@@ -220,9 +151,10 @@ static inline void omap_init_kp(void) {}
 
 /*-------------------------------------------------------------------------*/
 
-#if	defined(CONFIG_MMC_OMAP) || defined(CONFIG_MMC_OMAP_MODULE)
+#if	defined(CONFIG_MMC_OMAP) || defined(CONFIG_MMC_OMAP_MODULE) \
+	|| defined(CONFIG_MMC_OMAP_HS) || defined(CONFIG_MMC_OMAP_HS_MODULE)
 
-#ifdef CONFIG_ARCH_OMAP24XX
+#if defined(CONFIG_ARCH_OMAP24XX) || defined(CONFIG_ARCH_OMAP34XX)
 #define	OMAP_MMC1_BASE		0x4809c000
 #define OMAP_MMC1_INT		INT_24XX_MMC_IRQ
 #else
@@ -231,7 +163,7 @@ static inline void omap_init_kp(void) {}
 #endif
 #define	OMAP_MMC2_BASE		0xfffb7c00	/* omap16xx only */
 
-static struct omap_mmc_conf mmc1_conf;
+static struct omap_mmc_platform_data mmc1_data;
 
 static u64 mmc1_dmamask = 0xffffffff;
 
@@ -252,7 +184,7 @@ static struct platform_device mmc_omap_device1 = {
 	.id		= 1,
 	.dev = {
 		.dma_mask	= &mmc1_dmamask,
-		.platform_data	= &mmc1_conf,
+		.platform_data	= &mmc1_data,
 	},
 	.num_resources	= ARRAY_SIZE(mmc1_resources),
 	.resource	= mmc1_resources,
@@ -260,7 +192,7 @@ static struct platform_device mmc_omap_device1 = {
 
 #ifdef	CONFIG_ARCH_OMAP16XX
 
-static struct omap_mmc_conf mmc2_conf;
+static struct omap_mmc_platform_data mmc2_data;
 
 static u64 mmc2_dmamask = 0xffffffff;
 
@@ -282,7 +214,7 @@ static struct platform_device mmc_omap_device2 = {
 	.id		= 2,
 	.dev = {
 		.dma_mask	= &mmc2_dmamask,
-		.platform_data	= &mmc2_conf,
+		.platform_data	= &mmc2_data,
 	},
 	.num_resources	= ARRAY_SIZE(mmc2_resources),
 	.resource	= mmc2_resources,
@@ -294,10 +226,6 @@ static void __init omap_init_mmc(void)
 	const struct omap_mmc_config	*mmc_conf;
 	const struct omap_mmc_conf	*mmc;
 
-	/* REVISIT: 2430 has HS MMC */
-	if (cpu_is_omap2430() || cpu_is_omap34xx())
-		return;
-
 	/* NOTE:  assumes MMC was never (wrongly) enabled */
 	mmc_conf = omap_get_config(OMAP_TAG_MMC, struct omap_mmc_config);
 	if (!mmc_conf)
@@ -305,6 +233,13 @@ static void __init omap_init_mmc(void)
 
 	/* block 1 is always available and has just one pinout option */
 	mmc = &mmc_conf->mmc[0];
+
+	if (cpu_is_omap2430() || cpu_is_omap34xx()) {
+		if (mmc->enabled)
+			(void) platform_device_register(&mmc_omap_device1);
+		return;
+	}
+
 	if (mmc->enabled) {
 		if (cpu_is_omap24xx()) {
 			omap_cfg_reg(H18_24XX_MMC_CMD);
@@ -339,18 +274,20 @@ static void __init omap_init_mmc(void)
 				omap_cfg_reg(MMC_DAT3);
 			}
 		}
+#if defined(CONFIG_ARCH_OMAP2420)
 		if (mmc->internal_clock) {
 			/*
 			 * Use internal loop-back in MMC/SDIO
 			 * Module Input Clock selection
 			 */
 			if (cpu_is_omap24xx()) {
-				u32 v = omap_readl(OMAP2_CONTROL_DEVCONF);
-				v |= (1 << 24);
-				omap_writel(v, OMAP2_CONTROL_DEVCONF);
+				u32 v = omap_ctrl_readl(OMAP2_CONTROL_DEVCONF0);
+				v |= (1 << 24); /* not used in 243x */
+				omap_ctrl_writel(v, OMAP2_CONTROL_DEVCONF0);
 			}
 		}
-		mmc1_conf = *mmc;
+#endif
+		mmc1_data.conf = *mmc;
 		(void) platform_device_register(&mmc_omap_device1);
 	}
 
@@ -379,13 +316,31 @@ static void __init omap_init_mmc(void)
 		if (cpu_is_omap1710())
 			omap_writel(omap_readl(MOD_CONF_CTRL_1) | (1 << 24),
 				     MOD_CONF_CTRL_1);
-		mmc2_conf = *mmc;
+		mmc2_data.conf = *mmc;
 		(void) platform_device_register(&mmc_omap_device2);
 	}
 #endif
 	return;
 }
+
+void omap_set_mmc_info(int host, const struct omap_mmc_platform_data *info)
+{
+	switch (host) {
+	case 1:
+		mmc1_data = *info;
+		break;
+#ifdef CONFIG_ARCH_OMAP16XX
+	case 2:
+		mmc2_data = *info;
+		break;
+#endif
+	default:
+		BUG();
+	}
+}
+
 #else
+void omap_set_mmc_info(int host, const struct omap_mmc_platform_data *info) {}
 static inline void omap_init_mmc(void) {}
 #endif
 
@@ -437,7 +392,9 @@ static inline void omap_init_uwire(void) {}
 
 #if	defined(CONFIG_OMAP_WATCHDOG) || defined(CONFIG_OMAP_WATCHDOG_MODULE)
 
-#ifdef CONFIG_ARCH_OMAP24XX
+#if defined(CONFIG_ARCH_OMAP34XX)
+#define	OMAP_WDT_BASE		0x48314000
+#elif defined(CONFIG_ARCH_OMAP24XX)
 
 #ifdef CONFIG_ARCH_OMAP2430
 /* WDT2 */
@@ -537,9 +494,6 @@ static int __init omap_init_devices(void)
 	omap_init_uwire();
 	omap_init_wdt();
 	omap_init_rng();
-	if (!cpu_is_omap2430() && !cpu_is_omap34xx()) {
-		omap_init_i2c();
-	}
 	return 0;
 }
 arch_initcall(omap_init_devices);

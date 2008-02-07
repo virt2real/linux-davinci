@@ -59,10 +59,7 @@
 
 #define IOMAP_VAL	0x3f
 
-#define omap_dsp_request_mem()	do { } while (0)
-#define omap_dsp_release_mem()	do { } while (0)
-
-#define INIT_TLB_ENTRY(ent,v,p,ps)				\
+#define INIT_TLB_ENTRY(ent, v, p, ps)				\
 do {								\
 	(ent)->va	= (v);					\
 	(ent)->pa	= (p);					\
@@ -74,7 +71,7 @@ do {								\
 	(ent)->tlb	= 1;					\
 } while (0)
 
-#define INIT_TLB_ENTRY_4KB_PRESERVED(ent,v,p) \
+#define INIT_TLB_ENTRY_4KB_PRESERVED(ent, v, p)		\
 do {								\
 	(ent)->va	= (v);					\
 	(ent)->pa	= (p);					\
@@ -85,7 +82,7 @@ do {								\
 	(ent)->mixed	= 0;					\
 } while (0)
 
-#define INIT_TLB_ENTRY_4KB_ES32_PRESERVED(ent,v,p)		\
+#define INIT_TLB_ENTRY_4KB_ES32_PRESERVED(ent, v, p)		\
 do {								\
 	(ent)->va	= (v);					\
 	(ent)->pa	= (p);					\
@@ -95,8 +92,6 @@ do {								\
 	(ent)->elsz	= OMAP_MMU_RAM_ELEMENTSIZE_32;		\
 	(ent)->mixed	= 0;					\
 } while (0)
-
-extern struct omap_mmu_ops omap2_mmu_ops;
 
 struct omap_mmu_tlb_entry {
 	unsigned long va;
@@ -118,7 +113,5 @@ static inline void omap_mmu_write_reg(struct omap_mmu *mmu,
 {
 	__raw_writel(val, mmu->base + reg);
 }
-static inline void omap_mmu_itack(struct omap_mmu *mmu)
-{
-}
+
 #endif /* __MACH_OMAP2_MMU_H */

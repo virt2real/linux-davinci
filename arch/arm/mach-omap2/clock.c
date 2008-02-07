@@ -43,6 +43,7 @@
 #include "prm_regbits_24xx.h"
 #include "cm.h"
 #include "cm_regbits_24xx.h"
+#include "cm_regbits_34xx.h"
 
 #define MAX_CLOCK_ENABLE_WAIT		100000
 
@@ -202,11 +203,11 @@ static void omap2_clk_wait_ready(struct clk *clk)
 	 * it and pull it into struct clk itself somehow.
 	 */
 	reg = clk->enable_reg;
-	if (reg == OMAP_CM_REGADDR(CORE_MOD, CM_FCLKEN1) ||
-	    reg == OMAP_CM_REGADDR(CORE_MOD, OMAP24XX_CM_FCLKEN2))
+	if ((((u32)reg & 0xff) >= CM_FCLKEN1) &&
+	    (((u32)reg & 0xff) <= OMAP24XX_CM_FCLKEN2))
 		other_reg = (void __iomem *)(((u32)reg & ~0xf0) | 0x10); /* CM_ICLKEN* */
-	else if (reg == OMAP_CM_REGADDR(CORE_MOD, CM_ICLKEN1) ||
-		 reg == OMAP_CM_REGADDR(CORE_MOD, CM_ICLKEN2))
+	else if ((((u32)reg & 0xff) >= CM_ICLKEN1) &&
+		 (((u32)reg & 0xff) <= OMAP24XX_CM_ICLKEN4))
 		other_reg = (void __iomem *)(((u32)reg & ~0xf0) | 0x00); /* CM_FCLKEN* */
 	else
 		return;
@@ -219,6 +220,12 @@ static void omap2_clk_wait_ready(struct clk *clk)
 		    clk->enable_bit == OMAP24XX_EN_CAM_SHIFT)
 			return;
 	}
+
+	/* REVISIT: What are the appropriate exclusions for 34XX? */
+	/* OMAP3: ignore DSS-mod clocks */
+	if (cpu_is_omap34xx() &&
+	    (((u32)reg & ~0xff) == (u32)OMAP_CM_REGADDR(OMAP3430_DSS_MOD, 0)))
+		return;
 
 	/* Check if both functional and interface clocks
 	 * are running. */
@@ -739,7 +746,7 @@ int omap2_clk_set_parent(struct clk *clk, struct clk *new_parent)
  *-------------------------------------------------------------------------*/
 
 #ifdef CONFIG_OMAP_RESET_CLOCKS
-void __init omap2_clk_disable_unused(struct clk *clk)
+void omap2_clk_disable_unused(struct clk *clk)
 {
 	u32 regval32, v;
 

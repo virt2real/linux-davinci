@@ -11,18 +11,8 @@
  * TWL support: Hiroshi DOYU <Hiroshi.DOYU@nokia.com>
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 #include <linux/module.h>
 #include <linux/mempool.h>
@@ -38,6 +28,7 @@
 #include <asm/pgtable.h>
 #include <asm/arch/mmu.h>
 #include <asm/sizes.h>
+#include <asm/arch/dsp_common.h>
 
 #if defined(CONFIG_ARCH_OMAP1)
 #include "../mach-omap1/mmu.h"
@@ -57,7 +48,7 @@
 #define CAMERA_MMU_LOCK_BASE_MASK	(0x7 << MMU_LOCK_BASE_SHIFT)
 #define CAMERA_MMU_LOCK_VICTIM_MASK	(0x7 << MMU_LOCK_VICTIM_SHIFT)
 
-#define is_aligned(adr,align)	(!((adr)&((align)-1)))
+#define is_aligned(adr, align)	(!((adr)&((align)-1)))
 #define ORDER_1MB	(20 - PAGE_SHIFT)
 #define ORDER_64KB	(16 - PAGE_SHIFT)
 #define ORDER_4KB	(12 - PAGE_SHIFT)
@@ -587,9 +578,12 @@ int omap_mmu_load_tlb_entry(struct omap_mmu *mmu,
 {
 	struct omap_mmu_tlb_lock lock;
 	struct cam_ram_regset *cr;
+	int ret;
 
 	clk_enable(mmu->clk);
-	omap_dsp_request_mem();
+	ret = omap_dsp_request_mem();
+	if (ret < 0)
+		goto out;
 
 	omap_mmu_get_tlb_lock(mmu, &lock);
 	for (lock.victim = 0; lock.victim < lock.base; lock.victim++) {
@@ -623,6 +617,7 @@ found_victim:
 	omap_mmu_set_tlb_lock(mmu, &lock);
 
 	omap_dsp_release_mem();
+out:
 	clk_disable(mmu->clk);
 	return 0;
 }
@@ -637,11 +632,13 @@ omap_mmu_cam_va(struct omap_mmu *mmu, struct cam_ram_regset *cr)
 int omap_mmu_clear_tlb_entry(struct omap_mmu *mmu, unsigned long vadr)
 {
 	struct omap_mmu_tlb_lock lock;
-	int i;
+	int i, ret = 0;
 	int max_valid = 0;
 
 	clk_enable(mmu->clk);
-	omap_dsp_request_mem();
+	ret = omap_dsp_request_mem();
+	if (ret < 0)
+		goto out;
 
 	omap_mmu_get_tlb_lock(mmu, &lock);
 	for (i = 0; i < lock.base; i++) {
@@ -665,23 +662,28 @@ int omap_mmu_clear_tlb_entry(struct omap_mmu *mmu, unsigned long vadr)
 	omap_mmu_set_tlb_lock(mmu, &lock);
 
 	omap_dsp_release_mem();
+out:
 	clk_disable(mmu->clk);
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(omap_mmu_clear_tlb_entry);
 
 static void omap_mmu_gflush(struct omap_mmu *mmu)
 {
 	struct omap_mmu_tlb_lock lock;
+	int ret;
 
 	clk_enable(mmu->clk);
-	omap_dsp_request_mem();
+	ret = omap_dsp_request_mem();
+	if (ret < 0)
+		goto out;
 
 	omap_mmu_write_reg(mmu, 0x1, OMAP_MMU_GFLUSH);
 	lock.base = lock.victim = mmu->nr_exmap_preserved;
 	omap_mmu_set_tlb_lock(mmu, &lock);
 
 	omap_dsp_release_mem();
+out:
 	clk_disable(mmu->clk);
 }
 
@@ -1072,7 +1074,10 @@ static int omap_mmu_init(struct omap_mmu *mmu)
 	int ret = 0;
 
 	clk_enable(mmu->clk);
-	omap_dsp_request_mem();
+	ret = omap_dsp_request_mem();
+	if (ret < 0)
+		goto out;
+
 	down_write(&mmu->exmap_sem);
 
 	ret = request_irq(mmu->irq, omap_mmu_interrupt, IRQF_DISABLED,
@@ -1092,9 +1097,10 @@ static int omap_mmu_init(struct omap_mmu *mmu)
 
 	if (unlikely(mmu->ops->startup))
 		ret = mmu->ops->startup(mmu);
- fail:
+fail:
 	up_write(&mmu->exmap_sem);
 	omap_dsp_release_mem();
+out:
 	clk_disable(mmu->clk);
 
 	return ret;
@@ -1183,7 +1189,7 @@ static ssize_t exmem_read(struct omap_mmu *mmu, char *buf, size_t count,
 }
 
 static ssize_t omap_mmu_mem_read(struct kobject *kobj,
-				 struct bin_attribute * attr,
+				 struct bin_attribute *attr,
 				 char *buf, loff_t offset, size_t count)
 {
 	struct device *dev = to_dev(kobj);
@@ -1250,7 +1256,7 @@ static ssize_t exmem_write(struct omap_mmu *mmu, char *buf, size_t count,
 }
 
 static ssize_t omap_mmu_mem_write(struct kobject *kobj,
-				  struct bin_attribute * attr,
+				  struct bin_attribute *attr,
 				  char *buf, loff_t offset, size_t count)
 {
 	struct device *dev = to_dev(kobj);
@@ -1285,7 +1291,7 @@ static struct bin_attribute dev_attr_mem = {
 
 /* To be obsolete for backward compatibility */
 ssize_t __omap_mmu_mem_read(struct omap_mmu *mmu,
-			    struct bin_attribute * attr,
+			    struct bin_attribute *attr,
 			    char *buf, loff_t offset, size_t count)
 {
 	return omap_mmu_mem_read(&mmu->dev.kobj, attr, buf, offset, count);
@@ -1293,7 +1299,7 @@ ssize_t __omap_mmu_mem_read(struct omap_mmu *mmu,
 EXPORT_SYMBOL_GPL(__omap_mmu_mem_read);
 
 ssize_t __omap_mmu_mem_write(struct omap_mmu *mmu,
-			     struct bin_attribute * attr,
+			     struct bin_attribute *attr,
 			     char *buf, loff_t offset, size_t count)
 {
 	return omap_mmu_mem_write(&mmu->dev.kobj, attr, buf, offset, count);
@@ -1308,15 +1314,18 @@ static ssize_t omap_mmu_show(struct device *dev, struct device_attribute *attr,
 {
 	struct omap_mmu *mmu = dev_get_drvdata(dev);
 	struct omap_mmu_tlb_lock tlb_lock;
-	int ret = -EIO;
+	int ret;
 
 	clk_enable(mmu->clk);
-	omap_dsp_request_mem();
+	ret = omap_dsp_request_mem();
+	if (ret < 0)
+		goto out;
 
 	down_read(&mmu->exmap_sem);
 
 	omap_mmu_get_tlb_lock(mmu, &tlb_lock);
 
+	ret = -EIO;
 	if (likely(mmu->ops->show))
 		ret = mmu->ops->show(mmu, buf, &tlb_lock);
 
@@ -1325,6 +1334,7 @@ static ssize_t omap_mmu_show(struct device *dev, struct device_attribute *attr,
 
 	up_read(&mmu->exmap_sem);
 	omap_dsp_release_mem();
+out:
 	clk_disable(mmu->clk);
 
 	return ret;
@@ -1446,13 +1456,8 @@ static ssize_t mempool_show(struct class *class, char *buf)
 
 static CLASS_ATTR(mempool, S_IRUGO, mempool_show, NULL);
 
-static void omap_mmu_class_dev_release(struct device *dev)
-{
-}
-
 static struct class omap_mmu_class = {
 	.name		= "mmu",
-	.dev_release	= omap_mmu_class_dev_release,
 };
 
 int omap_mmu_register(struct omap_mmu *mmu)

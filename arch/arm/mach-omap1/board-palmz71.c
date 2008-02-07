@@ -44,7 +44,6 @@
 #include <asm/arch/common.h>
 #include <asm/arch/omap-alsa.h>
 
-#include <linux/input.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 
@@ -364,6 +363,7 @@ omap_palmz71_init(void)
 	spi_register_board_info(palmz71_boardinfo,
 				ARRAY_SIZE(palmz71_boardinfo));
 	omap_serial_init();
+	omap_register_i2c_bus(1, 100, NULL, 0);
 	palmz71_gpio_setup(0);
 }
 

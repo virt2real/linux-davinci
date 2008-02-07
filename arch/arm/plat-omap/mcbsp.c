@@ -197,7 +197,14 @@ static int omap_mcbsp_check(unsigned int id)
 static void omap_mcbsp_dsp_request(void)
 {
 	if (cpu_is_omap15xx() || cpu_is_omap16xx()) {
-		omap_dsp_request_mem();
+		int ret;
+
+		ret = omap_dsp_request_mem();
+		if (ret < 0) {
+			printk(KERN_ERR "Could not get dsp memory: %i\n", ret);
+			return;
+		}
+
 		clk_enable(mcbsp_dsp_ck);
 		clk_enable(mcbsp_api_ck);
 
@@ -1022,6 +1029,8 @@ EXPORT_SYMBOL(omap_mcbsp_set_io_type);
 EXPORT_SYMBOL(omap_mcbsp_free);
 EXPORT_SYMBOL(omap_mcbsp_start);
 EXPORT_SYMBOL(omap_mcbsp_stop);
+EXPORT_SYMBOL(omap_mcbsp_pollread);
+EXPORT_SYMBOL(omap_mcbsp_pollwrite);
 EXPORT_SYMBOL(omap_mcbsp_xmit_word);
 EXPORT_SYMBOL(omap_mcbsp_recv_word);
 EXPORT_SYMBOL(omap_mcbsp_xmit_buffer);

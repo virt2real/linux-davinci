@@ -172,12 +172,12 @@ static void tusb_omap_dma_cb(int lch, u16 ch_status, void *data)
 		DBG(3, "Using PIO for remaining %lu bytes\n", pio);
 		buf = phys_to_virt((u32)chdat->dma_addr) + chdat->transfer_len;
 		if (chdat->tx) {
-			consistent_sync(phys_to_virt((u32)chdat->dma_addr),
+			dma_cache_maint(phys_to_virt((u32)chdat->dma_addr),
 					chdat->transfer_len, DMA_TO_DEVICE);
 			musb_write_fifo(hw_ep, pio, buf);
 		} else {
 			musb_read_fifo(hw_ep, pio, buf);
-			consistent_sync(phys_to_virt((u32)chdat->dma_addr),
+			dma_cache_maint(phys_to_virt((u32)chdat->dma_addr),
 					chdat->transfer_len, DMA_FROM_DEVICE);
 		}
 		channel->actual_len += pio;
@@ -303,9 +303,9 @@ static int tusb_omap_dma_program(struct dma_channel *channel, u16 packet_sz,
 
 	/* Since we're recycling dma areas, we need to clean or invalidate */
 	if (chdat->tx) {
-		consistent_sync(phys_to_virt(dma_addr), len, DMA_TO_DEVICE);
+		dma_cache_maint(phys_to_virt(dma_addr), len, DMA_TO_DEVICE);
 	} else
-		consistent_sync(phys_to_virt(dma_addr), len, DMA_FROM_DEVICE);
+		dma_cache_maint(phys_to_virt(dma_addr), len, DMA_FROM_DEVICE);
 
 	/* Use 16-bit transfer if dma_addr is not 32-bit aligned */
 	if ((dma_addr & 0x3) == 0) {
@@ -446,10 +446,10 @@ static inline int tusb_omap_dma_allocate_dmareq(struct tusb_omap_dma_ch *chdat)
 	const int sync_dev[6] = {
 		OMAP24XX_DMA_EXT_DMAREQ0,
 		OMAP24XX_DMA_EXT_DMAREQ1,
-		OMAP24XX_DMA_EXT_DMAREQ2,
-		OMAP24XX_DMA_EXT_DMAREQ3,
-		OMAP24XX_DMA_EXT_DMAREQ4,
-		OMAP24XX_DMA_EXT_DMAREQ5,
+		OMAP242X_DMA_EXT_DMAREQ2,
+		OMAP242X_DMA_EXT_DMAREQ3,
+		OMAP242X_DMA_EXT_DMAREQ4,
+		OMAP242X_DMA_EXT_DMAREQ5,
 	};
 
 	for (i = 0; i < MAX_DMAREQ; i++) {

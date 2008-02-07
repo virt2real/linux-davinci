@@ -349,85 +349,32 @@ static struct omap_uart_config sdp2430_uart_config __initdata = {
 	.enabled_uarts = ((1 << 0) | (1 << 1) | (1 << 2)),
 };
 
+static
+struct omap_serial_console_config sdp2430_serial_console_config __initdata = {
+	.console_uart = 1,
+	.console_speed = 115200,
+};
+
+static struct omap_mmc_config sdp2430_mmc_config __initdata = {
+	.mmc [0] = {
+		.enabled	= 1,
+		.wire4		= 1,
+	},
+};
+
 static struct omap_board_config_kernel sdp2430_config[] __initdata = {
 	{OMAP_TAG_UART, &sdp2430_uart_config},
 	{OMAP_TAG_LCD, &sdp2430_lcd_config},
+	{OMAP_TAG_SERIAL_CONSOLE, &sdp2430_serial_console_config},
+	{OMAP_TAG_MMC,	&sdp2430_mmc_config},
 };
-
-#if	defined(CONFIG_I2C_OMAP) || defined(CONFIG_I2C_OMAP_MODULE)
-
-#define OMAP2_I2C_BASE1		0x48070000
-#define OMAP2_I2C_BASE2		0x48072000
-#define OMAP2_I2C_INT1		56
-#define OMAP2_I2C_INT2		57
-
-static u32 omap2_i2c1_clkrate	= 400;
-static u32 omap2_i2c2_clkrate	= 2600;
-
-static struct resource i2c_resources1[] = {
-	{
-		.start	= OMAP2_I2C_BASE1,
-		.end	= OMAP2_I2C_BASE1 + 0x3f,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= OMAP2_I2C_INT1,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-static struct resource i2c_resources2[] = {
-	{
-		.start	= OMAP2_I2C_BASE2,
-		.end	= OMAP2_I2C_BASE2 + 0x3f,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= OMAP2_I2C_INT2,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device omap_i2c_device1 = {
-	.name		= "i2c_omap",
-	.id		= 1,
-	.num_resources	= ARRAY_SIZE(i2c_resources1),
-	.resource	= i2c_resources1,
-	.dev		= {
-		.platform_data	= &omap2_i2c1_clkrate,
-	},
-};
-
-static struct platform_device omap_i2c_device2 = {
-	.name		= "i2c_omap",
-	.id		= 2,
-	.num_resources	= ARRAY_SIZE(i2c_resources2),
-	.resource	= i2c_resources2,
-	.dev		= {
-		.platform_data	= &omap2_i2c2_clkrate,
-	},
-};
-
-static void omap_init_i2c(void)
-{
-	(void) platform_device_register(&omap_i2c_device2);
-	(void) platform_device_register(&omap_i2c_device1);
-}
-
-#else
-
-static void omap_init_i2c(void) {}
-
-#endif
 
 static int __init omap2430_i2c_init(void)
 {
-	omap_init_i2c();
+	omap_register_i2c_bus(1, 400, NULL, 0);
+	omap_register_i2c_bus(2, 2600, NULL, 0);
 	return 0;
 }
-
-extern void __init sdp2430_flash_init(void);
-extern void __init sdp2430_usb_init(void);
 
 static void __init omap_2430sdp_init(void)
 {
@@ -442,6 +389,7 @@ static void __init omap_2430sdp_init(void)
 	spi_register_board_info(sdp2430_spi_board_info,
 				ARRAY_SIZE(sdp2430_spi_board_info));
 	ads7846_dev_init();
+	sdp_mmc_init();
 
 	/* turn off secondary LCD backlight */
 	omap_set_gpio_direction(SECONDARY_LCD_GPIO, 0);
@@ -450,6 +398,7 @@ static void __init omap_2430sdp_init(void)
 
 static void __init omap_2430sdp_map_io(void)
 {
+	omap2_set_globals_243x();
 	omap2_map_common_io();
 }
 

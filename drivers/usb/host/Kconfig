@@ -28,6 +28,25 @@ config USB_EHCI_HCD
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called ehci-hcd.
+choice
+	prompt "PHY/TLL mode"
+	depends on USB_EHCI_HCD && EXPERIMENTAL && ARCH_OMAP34XX
+	---help---
+	Choose PHY or TLL mode of operation
+
+config OMAP_EHCI_PHY_MODE
+	bool "PHY mode: ISP1504 on Port1/2 (NEW 3430ES2.0)"
+	depends on USB_EHCI_HCD && EXPERIMENTAL && ARCH_OMAP34XX
+	---help---
+	  EHCI PHY mode. Port1 and Port2 are connected to ISP1504 transcievers
+
+config OMAP_EHCI_TLL_MODE
+	bool "TLL mode: (EXPERIMENTAL)"
+	depends on USB_EHCI_HCD && EXPERIMENTAL && ARCH_OMAP34XX
+	---help---
+	OMAP EHCI controller has TLL mode of operation for all 3 ports.
+	Use this mode when no transciever is present
+endchoice
 
 config USB_EHCI_SPLIT_ISO
 	bool "Full speed ISO transactions (EXPERIMENTAL)"
@@ -153,6 +172,19 @@ config USB_OHCI_HCD_PCI
 	---help---
 	  Enables support for PCI-bus plug-in USB controller cards.
 	  If unsure, say Y.
+
+config USB_OHCI_HCD_SSB
+	bool "OHCI support for Broadcom SSB OHCI core"
+	depends on USB_OHCI_HCD && (SSB = y || SSB = USB_OHCI_HCD) && EXPERIMENTAL
+	default n
+	---help---
+	  Support for the Sonics Silicon Backplane (SSB) attached
+	  Broadcom USB OHCI core.
+
+	  This device is present in some embedded devices with
+	  Broadcom based SSB bus.
+
+	  If unsure, say N.
 
 config USB_OHCI_BIG_ENDIAN_DESC
 	bool

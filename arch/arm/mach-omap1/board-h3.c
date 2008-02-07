@@ -26,8 +26,9 @@
 #include <linux/mtd/partitions.h>
 #include <linux/input.h>
 #include <linux/clk.h>
+#include <linux/i2c.h>
 #include <linux/spi/spi.h>
-#include <linux/spi/tsc2101.h>
+#include <linux/spi/tsc210x.h>
 
 #include <asm/setup.h>
 #include <asm/page.h>
@@ -37,11 +38,15 @@
 #include <asm/mach/flash.h>
 #include <asm/mach/map.h>
 
+#include <media/v4l2-int-device.h>
+
 #include <asm/arch/gpio.h>
+#include <asm/arch/gpio-switch.h>
 #include <asm/arch/gpioexpander.h>
 #include <asm/arch/irqs.h>
 #include <asm/arch/mux.h>
 #include <asm/arch/tc.h>
+#include <asm/arch/nand.h>
 #include <asm/arch/irda.h>
 #include <asm/arch/usb.h>
 #include <asm/arch/keypad.h>
@@ -50,7 +55,9 @@
 #include <asm/arch/mcbsp.h>
 #include <asm/arch/omap-alsa.h>
 
-extern int omap_gpio_init(void);
+#include <../drivers/media/video/ov9640.h>
+
+#define H3_TS_GPIO	48
 
 static int h3_keymap[] = {
 	KEY(0, 0, KEY_LEFT),
@@ -179,7 +186,7 @@ static struct mtd_partition nand_partitions[] = {
 };
 
 /* dip switches control NAND chip access:  8 bit, 16 bit, or neither */
-static struct nand_platform_data nand_data = {
+static struct omap_nand_platform_data nand_data = {
 	.options	= NAND_SAMSUNG_LP_OPTIONS,
 	.parts		= nand_partitions,
 	.nr_parts	= ARRAY_SIZE(nand_partitions),
@@ -374,77 +381,10 @@ static struct platform_device h3_lcd_device = {
 	.id		= -1,
 };
 
-struct {
-	struct clk	*mclk;
-	int		initialized;
-} h3_tsc2101;
-
-#define TSC2101_MUX_MCLK_ON	V5_1710_MCLK_ON
-#define TSC2101_MUX_MCLK_OFF	V5_1710_MCLK_OFF
-
-static int h3_tsc2101_init(struct spi_device *spi)
-{
-	u8 io_exp_val;
-	int r;
-
-	if (h3_tsc2101.initialized) {
-		printk(KERN_ERR "tsc2101: already initialized\n");
-		return -ENODEV;
-	}
-
-	/* Get the MCLK */
-	h3_tsc2101.mclk = clk_get(&spi->dev, "mclk");
-	if (IS_ERR(h3_tsc2101.mclk)) {
-		dev_err(&spi->dev, "unable to get the clock MCLK\n");
-		return PTR_ERR(h3_tsc2101.mclk);
-	}
-	if ((r = clk_set_rate(h3_tsc2101.mclk, 12000000)) < 0) {
-		dev_err(&spi->dev, "unable to set rate to the MCLK\n");
-		goto err;
-	}
-
-	if ((r = read_gpio_expa(&io_exp_val, 0x24))) {
-		dev_err(&spi->dev, "error reading from I/O EXPANDER\n");
-		goto err;
-	}
-	io_exp_val |= 0x8;
-	if ((r = write_gpio_expa(io_exp_val, 0x24))) {
-		dev_err(&spi->dev, "error writing to I/O EXPANDER\n");
-		goto err;
-	}
-
-	omap_cfg_reg(N14_1610_UWIRE_CS0);
-	omap_cfg_reg(TSC2101_MUX_MCLK_OFF);
-
-	return 0;
-err:
-	clk_put(h3_tsc2101.mclk);
-	return r;
-}
-
-static void h3_tsc2101_cleanup(struct spi_device *spi)
-{
-	clk_put(h3_tsc2101.mclk);
-	omap_cfg_reg(TSC2101_MUX_MCLK_OFF);
-}
-
-static void h3_tsc2101_enable_mclk(struct spi_device *spi)
-{
-	omap_cfg_reg(TSC2101_MUX_MCLK_ON);
-	clk_enable(h3_tsc2101.mclk);
-}
-
-static void h3_tsc2101_disable_mclk(struct spi_device *spi)
-{
-	clk_disable(h3_tsc2101.mclk);
-	omap_cfg_reg(R10_1610_MCLK_OFF);
-}
-
-static struct tsc2101_platform_data h3_tsc2101_platform_data = {
-	.init		= h3_tsc2101_init,
-	.cleanup	= h3_tsc2101_cleanup,
-	.enable_mclk	= h3_tsc2101_enable_mclk,
-	.disable_mclk	= h3_tsc2101_disable_mclk,
+static struct tsc210x_config tsc_platform_data = {
+	.use_internal		= 1,
+	.monitor		= TSC_VBAT | TSC_TEMP,
+	.mclk			= "mclk",
 };
 
 static struct spi_board_info h3_spi_board_info[] __initdata = {
@@ -452,8 +392,9 @@ static struct spi_board_info h3_spi_board_info[] __initdata = {
 		.modalias	= "tsc2101",
 		.bus_num	= 2,
 		.chip_select	= 0,
+		.irq		= OMAP_GPIO_IRQ(H3_TS_GPIO),
 		.max_speed_hz	= 16000000,
-		.platform_data	= &h3_tsc2101_platform_data,
+		.platform_data	= &tsc_platform_data,
 	},
 };
 
@@ -470,18 +411,18 @@ static struct omap_mcbsp_reg_cfg mcbsp_regs = {
 	.srgr2 = GSYNC | CLKSP | FSGM | FPER(31),
 
 	.pcr0  = CLKRM | SCLKME | FSXP | FSRP | CLKXP | CLKRP,
-	//.pcr0 = CLKXP | CLKRP,        /* mcbsp: slave */
+	/*.pcr0 = CLKXP | CLKRP,*/        /* mcbsp: slave */
 };
 
 static struct omap_alsa_codec_config alsa_config = {
 	.name                   = "H3 TSC2101",
 	.mcbsp_regs_alsa        = &mcbsp_regs,
-	.codec_configure_dev    = NULL, // tsc2101_configure,
-	.codec_set_samplerate   = NULL, // tsc2101_set_samplerate,
-	.codec_clock_setup      = NULL, // tsc2101_clock_setup,
-	.codec_clock_on         = NULL, // tsc2101_clock_on,
-	.codec_clock_off        = NULL, // tsc2101_clock_off,
-	.get_default_samplerate = NULL, // tsc2101_get_default_samplerate,
+	.codec_configure_dev    = NULL, /* tsc2101_configure, */
+	.codec_set_samplerate   = NULL, /* tsc2101_set_samplerate, */
+	.codec_clock_setup      = NULL, /* tsc2101_clock_setup, */
+	.codec_clock_on         = NULL, /* tsc2101_clock_on, */
+	.codec_clock_off        = NULL, /* tsc2101_clock_off, */
+	.get_default_samplerate = NULL, /* tsc2101_get_default_samplerate, */
 };
 
 static struct platform_device h3_mcbsp1_device = {
@@ -519,11 +460,12 @@ static struct omap_usb_config h3_usb_config __initdata = {
 
 static struct omap_mmc_config h3_mmc_config __initdata = {
 	.mmc[0] = {
-		.enabled 	= 1,
-		.power_pin	= -1,   /* tps65010 GPIO4 */
-		.switch_pin	= OMAP_MPUIO(1),
-	},
+		.enabled	= 1,
+		.wire4		= 1,
+       },
 };
+
+extern struct omap_mmc_platform_data h3_mmc_data;
 
 static struct omap_uart_config h3_uart_config __initdata = {
 	.enabled_uarts = ((1 << 0) | (1 << 1) | (1 << 2)),
@@ -540,12 +482,132 @@ static struct omap_board_config_kernel h3_config[] __initdata = {
 	{ OMAP_TAG_LCD,		&h3_lcd_config },
 };
 
+static struct omap_gpio_switch h3_gpio_switches[] __initdata = {
+	{
+		.name			= "mmc_slot",
+		.gpio                   = OMAP_MPUIO(1),
+		.type                   = OMAP_GPIO_SWITCH_TYPE_COVER,
+		.debounce_rising        = 100,
+		.debounce_falling       = 0,
+		.notify                 = h3_mmc_slot_cover_handler,
+		.notify_data            = NULL,
+	},
+};
+
 #define H3_NAND_RB_GPIO_PIN	10
 
-static int nand_dev_ready(struct nand_platform_data *data)
+static int nand_dev_ready(struct omap_nand_platform_data *data)
 {
 	return omap_get_gpio_datain(H3_NAND_RB_GPIO_PIN);
 }
+
+#if defined(CONFIG_VIDEO_OV9640) || defined(CONFIG_VIDEO_OV9640_MODULE)
+/*
+ * Common OV9640 register initialization for all image sizes, pixel formats,
+ * and frame rates
+ */
+const static struct ov9640_reg ov9640_common[] = {
+
+	{ 0x12, 0x80 }, { 0x11, 0x80 }, { 0x13, 0x88 },	/* COM7, CLKRC, COM8 */
+	{ 0x01, 0x58 }, { 0x02, 0x24 }, { 0x04, 0x00 },	/* BLUE, RED, COM1 */
+	{ 0x0E, 0x81 }, { 0x0F, 0x4F }, { 0x14, 0xcA },	/* COM5, COM6, COM9 */
+	{ 0x16, 0x02 }, { 0x1B, 0x01 }, { 0x24, 0x70 },	/* ?, PSHFT, AEW */
+	{ 0x25, 0x68 }, { 0x26, 0xD3 }, { 0x27, 0x90 },	/* AEB, VPT, BBIAS */
+	{ 0x2A, 0x00 }, { 0x2B, 0x00 }, { 0x32, 0x24 },	/* EXHCH, EXHCL, HREF */
+	{ 0x33, 0x02 }, { 0x37, 0x02 }, { 0x38, 0x13 },	/* CHLF, ADC, ACOM */
+	{ 0x39, 0xF0 }, { 0x3A, 0x00 }, { 0x3B, 0x01 },	/* OFON, TSLB, COM11 */
+	{ 0x3D, 0x90 }, { 0x3E, 0x02 }, { 0x3F, 0xF2 },	/* COM13, COM14, EDGE */
+	{ 0x41, 0x02 }, { 0x42, 0xC8 },		/* COM16, COM17 */
+	{ 0x43, 0xF0 }, { 0x44, 0x10 }, { 0x45, 0x6C },	/* ?, ?, ? */
+	{ 0x46, 0x6C }, { 0x47, 0x44 }, { 0x48, 0x44 },	/* ?, ?, ? */
+	{ 0x49, 0x03 }, { 0x59, 0x49 }, { 0x5A, 0x94 },	/* ?, ?, ? */
+	{ 0x5B, 0x46 }, { 0x5C, 0x84 }, { 0x5D, 0x5C },	/* ?, ?, ? */
+	{ 0x5E, 0x08 }, { 0x5F, 0x00 }, { 0x60, 0x14 },	/* ?, ?, ? */
+	{ 0x61, 0xCE },					/* ? */
+	{ 0x62, 0x70 }, { 0x63, 0x00 }, { 0x64, 0x04 },	/* LCC1, LCC2, LCC3 */
+	{ 0x65, 0x00 }, { 0x66, 0x00 },			/* LCC4, LCC5 */
+	{ 0x69, 0x00 }, { 0x6A, 0x3E }, { 0x6B, 0x3F },	/* HV, MBD, DBLV */
+	{ 0x6C, 0x40 }, { 0x6D, 0x30 }, { 0x6E, 0x4B },	/* GSP1, GSP2, GSP3 */
+	{ 0x6F, 0x60 }, { 0x70, 0x70 }, { 0x71, 0x70 },	/* GSP4, GSP5, GSP6 */
+	{ 0x72, 0x70 }, { 0x73, 0x70 }, { 0x74, 0x60 },	/* GSP7, GSP8, GSP9 */
+	{ 0x75, 0x60 }, { 0x76, 0x50 }, { 0x77, 0x48 },	/* GSP10,GSP11,GSP12 */
+	{ 0x78, 0x3A }, { 0x79, 0x2E }, { 0x7A, 0x28 },	/* GSP13,GSP14,GSP15 */
+	{ 0x7B, 0x22 }, { 0x7C, 0x04 }, { 0x7D, 0x07 },	/* GSP16,GST1, GST2 */
+	{ 0x7E, 0x10 }, { 0x7F, 0x28 }, { 0x80, 0x36 },	/* GST3, GST4, GST5 */
+	{ 0x81, 0x44 }, { 0x82, 0x52 }, { 0x83, 0x60 },	/* GST6, GST7, GST8 */
+	{ 0x84, 0x6C }, { 0x85, 0x78 }, { 0x86, 0x8C },	/* GST9, GST10,GST11 */
+	{ 0x87, 0x9E }, { 0x88, 0xBB }, { 0x89, 0xD2 },	/* GST12,GST13,GST14 */
+	{ 0x8A, 0xE6 }, { 0x13, 0xaF }, { 0x15, 0x02 },	/* GST15, COM8 */
+	{ 0x22, 0x8a }, /* GROS */
+	{ OV9640_REG_TERM, OV9640_VAL_TERM }
+};
+
+static int ov9640_sensor_power_set(int power)
+{
+	unsigned char expa;
+	int err;
+
+	/* read current state of GPIO EXPA outputs */
+	err = read_gpio_expa(&expa, 0x27);
+	if (err) {
+		printk(KERN_ERR "Error reading GPIO EXPA\n");
+		return err;
+	}
+	/* Clear GPIO EXPA P3 (CAMERA_MODULE_EN) to power-up/down sensor */
+	if (power)
+		expa |= 0x08;
+	else
+		expa &= ~0x08;
+
+	err = write_gpio_expa(expa, 0x27);
+	if (err) {
+		printk(KERN_ERR "Error writing to GPIO EXPA\n");
+		return err;
+	}
+
+	return err;
+}
+
+static struct v4l2_ifparm ifparm = {
+	.if_type = V4L2_IF_TYPE_BT656,
+	.u = {
+		.bt656 = {
+			 .frame_start_on_rising_vs = 1,
+			 .nobt_vs_inv = 1,
+			 .mode = V4L2_IF_TYPE_BT656_MODE_NOBT_8BIT,
+			 .clock_min = OV9640_XCLK_MIN,
+			 .clock_max = OV9640_XCLK_MAX,
+		 },
+	},
+};
+
+static int ov9640_ifparm(struct v4l2_ifparm *p)
+{
+	*p = ifparm;
+
+	return 0;
+}
+
+static struct ov9640_platform_data h3_ov9640_platform_data = {
+	.power_set	= ov9640_sensor_power_set,
+	.default_regs	= ov9640_common,
+	.ifparm		= ov9640_ifparm,
+};
+#endif
+
+static struct i2c_board_info __initdata h3_i2c_board_info[] = {
+#if defined(CONFIG_VIDEO_OV9640) || defined(CONFIG_VIDEO_OV9640_MODULE)
+	{
+		I2C_BOARD_INFO("ov9640", 0x30),
+		.platform_data = &h3_ov9640_platform_data,
+	},
+#endif
+	{
+		I2C_BOARD_INFO("isp1301_omap", 0x2d),
+		.type		= "isp1301_omap",
+		.irq		= OMAP_GPIO_IRQ(14),
+	},
+};
 
 static void __init h3_init(void)
 {
@@ -569,12 +631,23 @@ static void __init h3_init(void)
 	/* GPIO10 pullup/down register, Enable pullup on GPIO10 */
 	omap_cfg_reg(V2_1710_GPIO10);
 
+	/* TSC2101 */
+	omap_cfg_reg(W19_1610_GPIO48);
+	gpio_request(H3_TS_GPIO, "tsc_irq");
+	gpio_direction_input(H3_TS_GPIO);
+	omap_cfg_reg(N14_1610_UWIRE_CS0);
+
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	spi_register_board_info(h3_spi_board_info,
 				ARRAY_SIZE(h3_spi_board_info));
 	omap_board_config = h3_config;
 	omap_board_config_size = ARRAY_SIZE(h3_config);
 	omap_serial_init();
+	omap_register_i2c_bus(1, 100, h3_i2c_board_info,
+			      ARRAY_SIZE(h3_i2c_board_info));
+	h3_mmc_init();
+	omap_register_gpio_switches(h3_gpio_switches,
+				    ARRAY_SIZE(h3_gpio_switches));
 }
 
 static void __init h3_init_smc91x(void)

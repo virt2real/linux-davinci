@@ -45,4 +45,9 @@
 #define IH_TWL4030_GPIO_END		(IH_TWL4030_BASE+18)
 #define NR_IRQS				(IH_TWL4030_GPIO_END)
 
+/* Function prototypes */
+extern void sdp2430_flash_init(void);
+extern void sdp2430_usb_init(void);
+extern void sdp_mmc_init(void);
+
 #endif /* __ASM_ARCH_OMAP_2430SDP_H */

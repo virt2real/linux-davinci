@@ -148,6 +148,15 @@ config VIDEO_WM8739
 	  To compile this driver as a module, choose M here: the
 	  module will be called wm8739.
 
+config VIDEO_VP27SMPX
+	tristate "Panasonic VP27s internal MPX"
+	depends on VIDEO_V4L2 && I2C && EXPERIMENTAL
+	---help---
+	  Support for the internal MPX of the Panasonic VP27s tuner.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called vp27smpx.
+
 comment "Video decoders"
 
 config VIDEO_BT819
@@ -362,8 +371,8 @@ endmenu # encoder / decoder chips
 
 config VIDEO_VIVI
 	tristate "Virtual Video Driver"
-	depends on VIDEO_V4L2 && !SPARC32 && !SPARC64 && PCI
-	select VIDEO_BUF
+	depends on VIDEO_V4L2 && !SPARC32 && !SPARC64
+	select VIDEOBUF_VMALLOC
 	default n
 	---help---
 	  Enables a virtual video driver. This device shows a color bar
@@ -521,15 +530,6 @@ config TUNER_3036
 	depends on I2C && VIDEO_V4L1
 	help
 	  Say Y here to include support for Philips SAB3036 compatible tuners.
-	  If in doubt, say N.
-
-config TUNER_TEA5761
-	bool "TEA 5761 radio tuner (EXPERIMENTAL)"
-	depends on EXPERIMENTAL
-	depends on I2C
-	select VIDEO_TUNER
-	help
-	  Say Y here to include support for Philips TEA5761 radio tuner.
 	  If in doubt, say N.
 
 config VIDEO_VINO
@@ -695,6 +695,8 @@ config VIDEO_HEXIUM_GEMINI
 
 source "drivers/media/video/cx88/Kconfig"
 
+source "drivers/media/video/cx23885/Kconfig"
+
 source "drivers/media/video/ivtv/Kconfig"
 
 source drivers/media/video/omap/Kconfig
@@ -729,7 +731,8 @@ config VIDEO_CAFE_CCIC
 
 config VIDEO_OMAP2
 	tristate "OMAP 2 Camera support (EXPERIMENTAL)"
-	select VIDEO_BUF
+	select VIDEOBUF_GEN
+	select VIDEOBUF_DMA_SG
 	depends on VIDEO_V4L2 && ARCH_OMAP24XX
 	---help---
 	  Driver for an OMAP 2 camera controller.

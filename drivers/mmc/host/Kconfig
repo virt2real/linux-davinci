@@ -35,14 +35,42 @@ config MMC_SDHCI
 
 	  If unsure, say N.
 
+config MMC_RICOH_MMC
+	tristate "Ricoh MMC Controller Disabler  (EXPERIMENTAL)"
+	depends on PCI && EXPERIMENTAL && MMC_SDHCI
+	help
+	  This selects the disabler for the Ricoh MMC Controller. This
+	  proprietary controller is unnecessary because the SDHCI driver
+	  supports MMC cards on the SD controller, but if it is not
+	  disabled, it will steal the MMC cards away - rendering them
+	  useless. It is safe to select this driver even if you don't
+	  have a Ricoh based card reader.
+
+
+	  To compile this driver as a module, choose M here:
+	  the module will be called ricoh_mmc.
+
+	  If unsure, say Y.
+
 config MMC_OMAP
 	tristate "TI OMAP Multimedia Card Interface support"
-	depends on ARCH_OMAP
+	depends on ARCH_OMAP1 || (ARCH_OMAP2 && ARCH_OMAP2420)
 	select TPS65010 if MACH_OMAP_H2
 	select OMAP_GPIO_SWITCH if MACH_NOKIA_N800
 	help
 	  This selects the TI OMAP Multimedia card Interface.
 	  If you have an OMAP board with a Multimedia Card slot,
+	  say Y or M here.
+
+	  If unsure, say N.
+
+config MMC_OMAP_HS
+	tristate "TI OMAP High Speed Multimedia Card Interface support"
+	depends on (ARCH_OMAP2 && ARCH_OMAP2430) || ARCH_OMAP3
+	select TWL4030_CORE if MACH_OMAP_2430SDP || MACH_OMAP_3430SDP
+	help
+	  This selects the TI OMAP High Speed Multimedia card Interface.
+	  If you have an OMAP2(2430) or OMAP3 board with a Multimedia Card slot,
 	  say Y or M here.
 
 	  If unsure, say N.
@@ -108,4 +136,17 @@ config MMC_DAVINCI
 	  This selects the TI DAVINCI Multimedia card Interface.
 	  If you have an DAVINCI board with a Multimedia Card slot,
 	  say Y or M here.  If unsure, say N.
+
+config MMC_SPI
+	tristate "MMC/SD over SPI (EXPERIMENTAL)"
+	depends on MMC && SPI_MASTER && !HIGHMEM && EXPERIMENTAL
+	select CRC7
+	select CRC_ITU_T
+	help
+	  Some systems accss MMC/SD cards using a SPI controller instead of
+	  using a "native" MMC/SD controller.  This has a disadvantage of
+	  being relatively high overhead, but a compensating advantage of
+	  working on many systems without dedicated MMC/SD controllers.
+
+	  If unsure, or if your system has no SPI master driver, say N.
 

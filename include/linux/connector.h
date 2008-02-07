@@ -38,16 +38,15 @@
 #define CN_W1_VAL			0x1
 #define CN_IDX_SX1SND			0x4
 #define CN_VAL_SX1SND			0x1
-#define CN_IDX_SX1PM			0x5
-#define CN_VAL_SX1PM			0x1
+#define CN_IDX_V86D			0x4
+#define CN_VAL_V86D_UVESAFB		0x1
 
-
-#define CN_NETLINK_USERS		6
+#define CN_NETLINK_USERS		5
 
 /*
  * Maximum connector's message size.
  */
-#define CONNECTOR_MAX_MSG_SIZE 	1024
+#define CONNECTOR_MAX_MSG_SIZE		16384
 
 /*
  * idx and val are unique identifiers which 
@@ -157,7 +156,7 @@ struct cn_dev {
 
 	u32 seq, groups;
 	struct sock *nls;
-	void (*input) (struct sock * sk, int len);
+	void (*input) (struct sk_buff *skb);
 
 	struct cn_queue_dev *cbdev;
 };

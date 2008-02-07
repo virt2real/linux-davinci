@@ -20,7 +20,7 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/pm.h>
+#include <linux/suspend.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/interrupt.h>
@@ -39,18 +39,22 @@
 #include <asm/arch/irqs.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/sram.h>
+#include <asm/arch/control.h>
 #include <asm/arch/gpio.h>
 #include <asm/arch/pm.h>
 #include <asm/arch/mux.h>
 #include <asm/arch/dma.h>
 #include <asm/arch/board.h>
-#include <asm/arch/gpio.h>
 
 #include "prm.h"
 #include "prm_regbits_24xx.h"
 #include "cm.h"
 #include "cm_regbits_24xx.h"
 #include "sdrc.h"
+
+/* These addrs are in assembly language code to be patched at runtime */
+extern void *omap2_ocs_sdrc_power;
+extern void *omap2_ocs_sdrc_dlla_ctrl;
 
 static void (*omap2_sram_idle)(void);
 static void (*omap2_sram_suspend)(void __iomem *dllctrl);
@@ -240,15 +244,15 @@ static void omap2_pm_dump(int mode, int resume, unsigned int us)
 #endif
 #if 0
 		DUMP_CM_MOD_REG(CORE_MOD, CM_FCLKEN1);
-		DUMP_CM_MOD_REG(CORE_MOD, CM_FCLKEN2);
+		DUMP_CM_MOD_REG(CORE_MOD, OMAP24XX_CM_FCLKEN2);
 		DUMP_CM_MOD_REG(WKUP_MOD, CM_FCLKEN);
 		DUMP_CM_MOD_REG(CORE_MOD, CM_ICLKEN1);
 		DUMP_CM_MOD_REG(CORE_MOD, CM_ICLKEN2);
 		DUMP_CM_MOD_REG(WKUP_MOD, CM_ICLKEN);
-		DUMP_CM_MOD_REG(PLL_MOD, CM_CLKEN_PLL);
+		DUMP_CM_MOD_REG(PLL_MOD, CM_CLKEN);
 		DUMP_PRM_REG(OMAP24XX_PRCM_CLKEMUL_CTRL);
 		DUMP_CM_MOD_REG(PLL_MOD, CM_AUTOIDLE);
-		DUMP_PRM_MOD_REG(CORE_REG, PM_PWSTST);
+		DUMP_PRM_MOD_REG(CORE_MOD, PM_PWSTST);
 		DUMP_PRM_REG(OMAP24XX_PRCM_CLKSRC_CTRL);
 #endif
 #if 0
@@ -347,8 +351,6 @@ static struct subsys_attribute sleep_while_idle_attr = {
 
 static struct clk *osc_ck, *emul_ck;
 
-#define CONTROL_DEVCONF		__REG32(OMAP2_CTRL_BASE + 0x274)
-
 static int omap2_fclks_active(void)
 {
 	u32 f1, f2;
@@ -391,7 +393,7 @@ void omap2_allow_sleep(void)
 
 static void omap2_enter_full_retention(void)
 {
-	u32 sleep_time = 0;
+	u32 l, sleep_time = 0;
 
 	/* There is 1 reference hold for all children of the oscillator
 	 * clock, the following will remove it. If no one else uses the
@@ -411,7 +413,8 @@ static void omap2_enter_full_retention(void)
 			  MPU_MOD, PM_PWSTCTRL);
 
 	/* Workaround to kill USB */
-	CONTROL_DEVCONF |= 0x00008000;
+	l = omap_ctrl_readl(OMAP2_CONTROL_DEVCONF0) | OMAP24XX_USBSTANDBYCTRL;
+	omap_ctrl_writel(l, OMAP2_CONTROL_DEVCONF0);
 
 	omap2_gpio_prepare_for_retention();
 
@@ -444,6 +447,24 @@ no_sleep:
 
 	clk_enable(osc_ck);
 
+	/* clear CORE wake-up events */
+	prm_write_mod_reg(0xffffffff, CORE_MOD, PM_WKST1);
+	prm_write_mod_reg(0xffffffff, CORE_MOD, OMAP24XX_PM_WKST2);
+
+	/* wakeup domain events */
+	l = prm_read_mod_reg(WKUP_MOD, PM_WKST);
+	l &= 0x5;  /* bit 1: GPT1, bit5 GPIO */
+	prm_write_mod_reg(l, WKUP_MOD, PM_WKST);
+
+	/* MPU domain wake events */
+	l = prm_read_reg(OMAP24XX_PRCM_IRQSTATUS_MPU);
+	if (l & 0x01)
+		prm_write_reg(0x01, OMAP24XX_PRCM_IRQSTATUS_MPU);
+	if (l & 0x20)
+		prm_write_reg(0x20, OMAP24XX_PRCM_IRQSTATUS_MPU);
+
+	/* Mask future PRCM-to-MPU interrupts */
+	prm_write_reg(0x0, OMAP24XX_PRCM_IRQSTATUS_MPU);
 }
 
 static int omap2_i2c_active(void)
@@ -581,23 +602,13 @@ out:
 	local_irq_enable();
 }
 
-static int omap2_pm_prepare(suspend_state_t state)
+static int omap2_pm_prepare(void)
 {
-	int error = 0;
-
 	/* We cannot sleep in idle until we have resumed */
 	saved_idle = pm_idle;
 	pm_idle = NULL;
 
-	switch (state) {
-	case PM_SUSPEND_STANDBY:
-	case PM_SUSPEND_MEM:
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return error;
+	return 0;
 }
 
 static int omap2_pm_suspend(void)
@@ -635,17 +646,16 @@ static int omap2_pm_enter(suspend_state_t state)
 	return ret;
 }
 
-static int omap2_pm_finish(suspend_state_t state)
+static void omap2_pm_finish(void)
 {
 	pm_idle = saved_idle;
-	return 0;
 }
 
-static struct pm_ops omap_pm_ops = {
+static struct platform_suspend_ops omap_pm_ops = {
 	.prepare	= omap2_pm_prepare,
 	.enter		= omap2_pm_enter,
 	.finish		= omap2_pm_finish,
-	.valid		= pm_valid_only_mem,
+	.valid		= suspend_valid_only_mem,
 };
 
 static void __init prcm_setup_regs(void)
@@ -659,6 +669,9 @@ static void __init prcm_setup_regs(void)
 	prm_write_mod_reg(OMAP_EN_WKUP, MPU_MOD, PM_WKDEP);
 	prm_write_mod_reg(0, OMAP24XX_DSP_MOD, PM_WKDEP);
 	prm_write_mod_reg(0, GFX_MOD, PM_WKDEP);
+	prm_write_mod_reg(0, CORE_MOD, PM_WKDEP);
+	if (cpu_is_omap2430())
+		prm_write_mod_reg(0, OMAP2430_MDM_MOD, PM_WKDEP);
 
 	l = prm_read_mod_reg(CORE_MOD, PM_PWSTCTRL);
 	/* Enable retention for all memory blocks */
@@ -814,10 +827,19 @@ int __init omap2_pm_init(void)
 	 */
 	omap2_sram_idle = omap_sram_push(omap24xx_idle_loop_suspend,
 					 omap24xx_idle_loop_suspend_sz);
+
 	omap2_sram_suspend = omap_sram_push(omap24xx_cpu_suspend,
 					    omap24xx_cpu_suspend_sz);
 
-	pm_set_ops(&omap_pm_ops);
+	/* Patch in the correct register addresses for multiboot */
+	omap_sram_patch_va(omap24xx_cpu_suspend, &omap2_ocs_sdrc_power,
+			   omap2_sram_suspend,
+			   OMAP_SDRC_REGADDR(SDRC_POWER));
+	omap_sram_patch_va(omap24xx_cpu_suspend, &omap2_ocs_sdrc_dlla_ctrl,
+			   omap2_sram_suspend,
+			   OMAP_SDRC_REGADDR(SDRC_DLLA_CTRL));
+
+	suspend_set_ops(&omap_pm_ops);
 	pm_idle = omap2_pm_idle;
 
 	l = subsys_create_file(&power_subsys, &sleep_while_idle_attr);

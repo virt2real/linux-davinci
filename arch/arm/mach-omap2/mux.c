@@ -1,11 +1,12 @@
 /*
  * linux/arch/arm/mach-omap2/mux.c
  *
- * OMAP1 pin multiplexing configurations
+ * OMAP2 and OMAP3 pin multiplexing configurations
  *
- * Copyright (C) 2003 - 2005 Nokia Corporation
+ * Copyright (C) 2004 - 2008 Texas Instruments Inc.
+ * Copyright (C) 2003 - 2008 Nokia Corporation
  *
- * Written by Tony Lindgren <tony.lindgren@nokia.com>
+ * Written by Tony Lindgren
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,13 +29,17 @@
 #include <asm/io.h>
 #include <linux/spinlock.h>
 
+#include <asm/arch/control.h>
 #include <asm/arch/mux.h>
 
 #ifdef CONFIG_OMAP_MUX
 
+static struct omap_mux_cfg arch_mux_cfg;
+
 /* NOTE: See mux.h for the enumeration */
 
-struct pin_config __initdata_or_module omap24xx_pins[] = {
+#ifdef CONFIG_ARCH_OMAP24XX
+static struct pin_config __initdata_or_module omap24xx_pins[] = {
 /*
  *	description			mux	mux	pull	pull	debug
  *					offset	mode	ena	type
@@ -207,10 +212,240 @@ MUX_CFG_24XX("AE13_2430_MCBSP2_DX_OFF",	0x0130,	0,	0,	0,	1)
 MUX_CFG_24XX("AD13_2430_MCBSP2_DR_OFF",	0x0131,	0,	0,	0,	1)
 };
 
+#define OMAP24XX_PINS_SZ	ARRAY_SIZE(omap24xx_pins)
+
+#else
+#define omap24xx_pins		NULL
+#define OMAP24XX_PINS_SZ	0
+#endif	/* CONFIG_ARCH_OMAP24XX */
+
+#ifdef CONFIG_ARCH_OMAP34XX
+static struct pin_config __initdata_or_module omap34xx_pins[] = {
+/*
+ *		Name, reg-offset,
+ *		mux-mode | [active-mode | off-mode]
+ */
+
+/* PHY - HSUSB: 12-pin ULPI PHY: Port 1*/
+MUX_CFG_34XX("Y8_3430_USB1HS_PHY_CLK", 0x5da,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("Y9_3430_USB1HS_PHY_STP", 0x5d8,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AA14_3430_USB1HS_PHY_DIR", 0x5ec,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AA11_3430_USB1HS_PHY_NXT", 0x5ee,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W13_3430_USB1HS_PHY_D0", 0x5dc,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W12_3430_USB1HS_PHY_D1", 0x5de,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W11_3430_USB1HS_PHY_D2", 0x5e0,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y11_3430_USB1HS_PHY_D3", 0x5ea,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W9_3430_USB1HS_PHY_D4", 0x5e4,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y12_3430_USB1HS_PHY_D5", 0x5e6,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W8_3430_USB1HS_PHY_D6", 0x5e8,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y13_3430_USB1HS_PHY_D7", 0x5e2,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+
+/* PHY - HSUSB: 12-pin ULPI PHY: Port 2*/
+MUX_CFG_34XX("AA8_3430_USB2HS_PHY_CLK", 0x5f0,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AA10_3430_USB2HS_PHY_STP", 0x5f2,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AA9_3430_USB2HS_PHY_DIR", 0x5f4,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AB11_3430_USB2HS_PHY_NXT", 0x5f6,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AB10_3430_USB2HS_PHY_D0", 0x5f8,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AB9_3430_USB2HS_PHY_D1", 0x5fa,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W3_3430_USB2HS_PHY_D2", 0x1d4,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("T4_3430_USB2HS_PHY_D3", 0x1de,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("T3_3430_USB2HS_PHY_D4", 0x1d8,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("R3_3430_USB2HS_PHY_D5", 0x1da,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("R4_3430_USB2HS_PHY_D6", 0x1dc,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("T2_3430_USB2HS_PHY_D7", 0x1d6,
+		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_INPUT_PULLDOWN)
+
+/* TLL - HSUSB: 12-pin TLL Port 1*/
+MUX_CFG_34XX("Y8_3430_USB1HS_TLL_CLK", 0x5da,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("Y9_3430_USB1HS_TLL_STP", 0x5d8,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AA14_3430_USB1HS_TLL_DIR", 0x5ec,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AA11_3430_USB1HS_TLL_NXT", 0x5ee,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("W13_3430_USB1HS_TLL_D0", 0x5dc,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W12_3430_USB1HS_TLL_D1", 0x5de,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W11_3430_USB1HS_TLL_D2", 0x5e0,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y11_3430_USB1HS_TLL_D3", 0x5ea,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W9_3430_USB1HS_TLL_D4", 0x5e4,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y12_3430_USB1HS_TLL_D5", 0x5e6,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W8_3430_USB1HS_TLL_D6", 0x5e8,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y13_3430_USB1HS_TLL_D7", 0x5e2,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+
+/* TLL - HSUSB: 12-pin TLL Port 2*/
+MUX_CFG_34XX("AA8_3430_USB2HS_TLL_CLK", 0x5f0,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AA10_3430_USB2HS_TLL_STP", 0x5f2,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AA9_3430_USB2HS_TLL_DIR", 0x5f4,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AB11_3430_USB2HS_TLL_NXT", 0x5f6,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AB10_3430_USB2HS_TLL_D0", 0x5f8,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AB9_3430_USB2HS_TLL_D1", 0x5fa,
+		OMAP34XX_MUX_MODE6 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W3_3430_USB2HS_TLL_D2", 0x1d4,
+		OMAP34XX_MUX_MODE2 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("T4_3430_USB2HS_TLL_D3", 0x1de,
+		OMAP34XX_MUX_MODE2 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("T3_3430_USB2HS_TLL_D4", 0x1d8,
+		OMAP34XX_MUX_MODE2 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("R3_3430_USB2HS_TLL_D5", 0x1da,
+		OMAP34XX_MUX_MODE2 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("R4_3430_USB2HS_TLL_D6", 0x1dc,
+		OMAP34XX_MUX_MODE2 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("T2_3430_USB2HS_TLL_D7", 0x1d6,
+		OMAP34XX_MUX_MODE2 | OMAP34XX_PIN_INPUT_PULLDOWN)
+
+/* TLL - HSUSB: 12-pin TLL Port 3*/
+MUX_CFG_34XX("AA6_3430_USB3HS_TLL_CLK", 0x180,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AB3_3430_USB3HS_TLL_STP", 0x166,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AA3_3430_USB3HS_TLL_DIR", 0x168,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("Y3_3430_USB3HS_TLL_NXT", 0x16a,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_OUTPUT)
+MUX_CFG_34XX("AA5_3430_USB3HS_TLL_D0", 0x186,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y4_3430_USB3HS_TLL_D1", 0x184,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("Y5_3430_USB3HS_TLL_D2", 0x188,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("W5_3430_USB3HS_TLL_D3", 0x18a,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AB12_3430_USB3HS_TLL_D4", 0x16c,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AB13_3430_USB3HS_TLL_D5", 0x16e,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AA13_3430_USB3HS_TLL_D6", 0x170,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+MUX_CFG_34XX("AA12_3430_USB3HS_TLL_D7", 0x172,
+		OMAP34XX_MUX_MODE5 | OMAP34XX_PIN_INPUT_PULLDOWN)
+};
+
+#define OMAP34XX_PINS_SZ	ARRAY_SIZE(omap34xx_pins)
+
+#else
+#define omap34xx_pins		NULL
+#define OMAP34XX_PINS_SZ	0
+#endif	/* CONFIG_ARCH_OMAP34XX */
+
+#if defined(CONFIG_OMAP_MUX_DEBUG) || defined(CONFIG_OMAP_MUX_WARNINGS)
+void __init_or_module omap2_cfg_debug(const struct pin_config *cfg, u16 reg)
+{
+	u16 orig;
+	u8 warn = 0, debug = 0;
+
+	if (cpu_is_omap24xx())
+		orig = omap_ctrl_readb(cfg->mux_reg);
+	else
+		orig = omap_ctrl_readw(cfg->mux_reg);
+
+#ifdef	CONFIG_OMAP_MUX_DEBUG
+	debug = cfg->debug;
+#endif
+	warn = (orig != reg);
+	if (debug || warn)
+		printk(KERN_WARNING
+			"MUX: setup %s (0x%08x): 0x%04x -> 0x%04x\n",
+			cfg->name, omap_ctrl_base_get() + cfg->mux_reg,
+			orig, reg);
+}
+#else
+#define omap2_cfg_debug(x, y)	do {} while (0)
+#endif
+
+#ifdef CONFIG_ARCH_OMAP24XX
+int __init_or_module omap24xx_cfg_reg(const struct pin_config *cfg)
+{
+	static DEFINE_SPINLOCK(mux_spin_lock);
+	unsigned long flags;
+	u8 reg = 0;
+
+	spin_lock_irqsave(&mux_spin_lock, flags);
+	reg |= cfg->mask & 0x7;
+	if (cfg->pull_val)
+		reg |= OMAP2_PULL_ENA;
+	if (cfg->pu_pd_val)
+		reg |= OMAP2_PULL_UP;
+	omap2_cfg_debug(cfg, reg);
+	omap_ctrl_writeb(reg, cfg->mux_reg);
+	spin_unlock_irqrestore(&mux_spin_lock, flags);
+
+	return 0;
+}
+#else
+#define omap24xx_cfg_reg	0
+#endif
+
+#ifdef CONFIG_ARCH_OMAP34XX
+int __init_or_module omap34xx_cfg_reg(const struct pin_config *cfg)
+{
+	static DEFINE_SPINLOCK(mux_spin_lock);
+	unsigned long flags;
+	u16 reg = 0;
+
+	spin_lock_irqsave(&mux_spin_lock, flags);
+	reg |= cfg->mux_val;
+	omap2_cfg_debug(cfg, reg);
+	omap_ctrl_writew(reg, cfg->mux_reg);
+	spin_unlock_irqrestore(&mux_spin_lock, flags);
+
+	return 0;
+}
+#else
+#define omap34xx_cfg_reg	0
+#endif
+
 int __init omap2_mux_init(void)
 {
-	omap_mux_register(omap24xx_pins, ARRAY_SIZE(omap24xx_pins));
-	return 0;
+	if (cpu_is_omap24xx()) {
+		arch_mux_cfg.pins	= omap24xx_pins;
+		arch_mux_cfg.size	= OMAP24XX_PINS_SZ;
+		arch_mux_cfg.cfg_reg	= omap24xx_cfg_reg;
+	}
+
+	if (cpu_is_omap34xx()) {
+		arch_mux_cfg.pins	= omap34xx_pins;
+		arch_mux_cfg.size	= OMAP34XX_PINS_SZ;
+		arch_mux_cfg.cfg_reg	= omap34xx_cfg_reg;
+	}
+
+	return omap_mux_register(&arch_mux_cfg);
 }
 
 #endif

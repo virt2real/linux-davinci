@@ -38,7 +38,7 @@
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/usb/ch9.h>
-#include <linux/usb_gadget.h>
+#include <linux/usb/gadget.h>
 #include <linux/usb/otg.h>
 #include <linux/dma-mapping.h>
 #include <linux/clk.h>
@@ -52,6 +52,7 @@
 
 #include <asm/arch/dma.h>
 #include <asm/arch/usb.h>
+#include <asm/arch/control.h>
 
 #include "omap_udc.h"
 
@@ -1241,19 +1242,15 @@ static void pullup_enable(struct omap_udc *udc)
 	udc->gadget.dev.parent->power.power_state = PMSG_ON;
 	udc->gadget.dev.power.power_state = PMSG_ON;
 	UDC_SYSCON1_REG |= UDC_PULLUP_EN;
-#ifndef CONFIG_USB_OTG
-	if (!cpu_is_omap15xx())
+	if (!gadget_is_otg(&udc->gadget) && !cpu_is_omap15xx())
 		OTG_CTRL_REG |= OTG_BSESSVLD;
-#endif
 	UDC_IRQ_EN_REG = UDC_DS_CHG_IE;
 }
 
 static void pullup_disable(struct omap_udc *udc)
 {
-#ifndef CONFIG_USB_OTG
-	if (!cpu_is_omap15xx())
+	if (!gadget_is_otg(&udc->gadget) && !cpu_is_omap15xx())
 		OTG_CTRL_REG &= ~OTG_BSESSVLD;
-#endif
 	UDC_IRQ_EN_REG = UDC_DS_CHG_IE;
 	UDC_SYSCON1_REG &= ~UDC_PULLUP_EN;
 }
@@ -1390,7 +1387,7 @@ static void update_otg(struct omap_udc *udc)
 {
 	u16	devstat;
 
-	if (!udc->gadget.is_otg)
+	if (!gadget_is_otg(&udc->gadget))
 		return;
 
 	if (OTG_CTRL_REG & OTG_ID)
@@ -2267,8 +2264,15 @@ static int proc_otg_show(struct seq_file *s)
 
 	tmp = OTG_REV_REG;
 	if (cpu_is_omap24xx()) {
+		/*
+		 * REVISIT: Not clear how this works on OMAP2.  trans
+		 * is ANDed to produce bits 7 and 8, which might make
+		 * sense for USB_TRANSCEIVER_CTRL_REG on OMAP1,
+		 * but with CONTROL_DEVCONF, these bits have something to
+		 * do with the frame adjustment counter and McBSP2.
+		 */
 		ctrl_name = "control_devconf";
-		trans = CONTROL_DEVCONF_REG;
+		trans = ctrl_read_reg(OMAP2_CONTROL_DEVCONF0);
 	} else {
 		ctrl_name = "tranceiver_ctrl";
 		trans = USB_TRANSCEIVER_CTRL_REG;

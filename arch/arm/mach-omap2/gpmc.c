@@ -15,6 +15,7 @@
 #include <linux/clk.h>
 #include <linux/ioport.h>
 #include <linux/spinlock.h>
+#include <linux/module.h>
 
 #include <asm/io.h>
 #include <asm/mach-types.h>
@@ -24,7 +25,7 @@
 
 #if defined(CONFIG_ARCH_OMAP2420)
 #define GPMC_BASE		0x6800a000
-#elif defined(CONFIG_ARCH_OMAP2430) || defined(CONFIG_ARCH_OMAP3430)
+#elif defined(CONFIG_ARCH_OMAP2430) || defined(CONFIG_ARCH_OMAP34XX)
 #define GPMC_BASE		0x6e000000
 #endif
 
@@ -94,8 +95,17 @@ u32 gpmc_cs_read_reg(int cs, int idx)
 /* TODO: Add support for gpmc_fck to clock framework and use it */
 unsigned long gpmc_get_fclk_period(void)
 {
-	/* In picoseconds */
-	return 1000000000 / ((clk_get_rate(gpmc_l3_clk)) / 1000);
+	unsigned long rate = clk_get_rate(gpmc_l3_clk);
+
+	if (rate == 0) {
+		printk(KERN_WARNING "gpmc_l3_clk no enabled\n");
+		return 0;
+	}
+
+	rate /= 1000;
+	rate = 1000000000 / rate;	/* In picoseconds */
+
+	return rate;
 }
 
 unsigned int gpmc_ns_to_ticks(unsigned int time_ns)
@@ -106,6 +116,11 @@ unsigned int gpmc_ns_to_ticks(unsigned int time_ns)
 	tick_ps = gpmc_get_fclk_period();
 
 	return (time_ns * 1000 + tick_ps - 1) / tick_ps;
+}
+
+unsigned int gpmc_ticks_to_ns(unsigned int ticks)
+{
+	return ticks * gpmc_get_fclk_period() / 1000;
 }
 
 unsigned int gpmc_round_ns_to_ticks(unsigned int time_ns)
@@ -348,6 +363,7 @@ out:
 	spin_unlock(&gpmc_mem_lock);
 	return r;
 }
+EXPORT_SYMBOL(gpmc_cs_request);
 
 void gpmc_cs_free(int cs)
 {
@@ -363,6 +379,7 @@ void gpmc_cs_free(int cs)
 	gpmc_cs_set_reserved(cs, 0);
 	spin_unlock(&gpmc_mem_lock);
 }
+EXPORT_SYMBOL(gpmc_cs_free);
 
 void __init gpmc_mem_init(void)
 {
