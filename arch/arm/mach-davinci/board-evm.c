@@ -106,7 +106,7 @@ struct mtd_partition davinci_evm_nandflash_partition[] = {
 	}
 };
 
-static struct nand_platform_data davinci_evm_nandflash_data = {
+static struct flash_platform_data davinci_evm_nandflash_data = {
 	.parts		= davinci_evm_nandflash_partition,
 	.nr_parts	= ARRAY_SIZE(davinci_evm_nandflash_partition),
 };

@@ -474,7 +474,7 @@ static void __devinit nand_davinci_flash_init(void)
  */
 int __devinit nand_davinci_probe(struct platform_device *pdev)
 {
-	struct nand_platform_data *pdata = pdev->dev.platform_data;
+	struct flash_platform_data *pdata = pdev->dev.platform_data;
 	struct resource		  *res = pdev->resource;
 	struct nand_chip     	  *chip;
 	struct device        	  *dev = NULL;
