@@ -6535,7 +6535,7 @@ static int emac_poll(struct napi_struct *napi, int budget)
 		 * pkt_process_end */
 		if (!pkts_pending) {
 			emac_pkt_process_end(dev, NULL);
-                        __netif_rx_complete(netdev, napi);
+                        netif_rx_complete(netdev, napi);
 			return 0;
 		} else if (!test_bit(0, &dev->set_to_close)) {
 			return 1;
