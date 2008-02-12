@@ -716,7 +716,7 @@ static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
 
 	sg = host->data->sg + host->sg_idx;
 	host->buffer_bytes_left = sg->length;
-	host->buffer = page_address(sg->page) + sg->offset;
+	host->buffer = sg_virt(sg);
 	if (host->buffer_bytes_left > host->bytes_left) {
 		host->buffer_bytes_left = host->bytes_left;
 	}
@@ -729,7 +729,7 @@ static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)
 
 	if (is_card_removed) {
 		if (req->cmd) {
-			req->cmd->error |= MMC_ERR_TIMEOUT;
+			req->cmd->error = -ETIMEDOUT;
 			mmc_request_done(mmc, req);
 		}
 		dev_dbg(&mmc_dev,
@@ -827,7 +827,7 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 
 	host->data = NULL;
 	host->data_dir = DAVINCI_MMC_DATADIR_NONE;
-	if (data->error == MMC_ERR_NONE)
+	if (data->error == 0)
 		data->bytes_xfered += data->blocks * data->blksz;
 
 	if (host->do_dma) {
@@ -839,7 +839,7 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 			     DMA_FROM_DEVICE);
 	}
 
-	if (data->error == MMC_ERR_TIMEOUT) {
+	if (data->error == -ETIMEDOUT) {
 		spin_lock_irqsave(&mmc_lock, flags);
 		is_card_busy = 0;
 		spin_unlock_irqrestore(&mmc_lock, flags);
@@ -882,9 +882,9 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 		}
 	}
 
-	if (host->data == NULL || cmd->error != MMC_ERR_NONE) {
+	if (host->data == NULL || cmd->error) {
 		host->req = NULL;
-		if (cmd->error == MMC_ERR_TIMEOUT)
+		if (cmd->error == -ETIMEDOUT)
 			cmd->mrq->cmd->retries = 0;
 		spin_lock_irqsave(&mmc_lock, flags);
 		is_card_busy = 0;
@@ -922,7 +922,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 		if (is_card_initialized) {
 			if (new_card_state == 0) {
 				if (host->cmd) {
-					host->cmd->error |= MMC_ERR_TIMEOUT;
+					host->cmd->error = -ETIMEDOUT;
 					mmc_davinci_cmd_done(host, host->cmd);
 				}
 				dev_dbg(&mmc_dev,
@@ -970,7 +970,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 			if (status & MMCSD_EVENT_ERROR_DATATIMEOUT) {
 				/* Data timeout */
 				if ((host->data) && (new_card_state != 0)) {
-					host->data->error |= MMC_ERR_TIMEOUT;
+					host->data->error = -ETIMEDOUT;
 					spin_lock_irqsave(&mmc_lock, flags);
 					is_card_removed = 1;
 					new_card_state = 0;
@@ -982,8 +982,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 						host->cmd->opcode, status);
 
 					if (host->cmd) {
-						host->cmd->error |=
-						    MMC_ERR_TIMEOUT;
+						host->cmd->error =
+						    -ETIMEDOUT;
 					}
 					end_transfer = 1;
 				}
@@ -999,7 +999,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 
 				/* Data CRC error */
 				if (host->data) {
-					host->data->error |= MMC_ERR_BADCRC;
+					host->data->error = -EILSEQ;
 					dev_dbg(&mmc_dev,
 						"MMCSD: Data CRC error, bytes left %d\r\n",
 						host->bytes_left);
@@ -1034,7 +1034,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 						spin_unlock_irqrestore(
 							&mmc_lock, flags);
 					}
-					host->cmd->error |= MMC_ERR_TIMEOUT;
+					host->cmd->error = -ETIMEDOUT;
 					end_command = 1;
 
 				}
@@ -1046,8 +1046,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 				if (host->cmd) {
 					/* Ignore CMD CRC errors during high speed operation */
 					if (host->mmc->ios.clock <= 25000000) {
-						host->cmd->error |=
-						    MMC_ERR_BADCRC;
+						host->cmd->error = -EILSEQ;
 					}
 					end_command = 1;
 				}
