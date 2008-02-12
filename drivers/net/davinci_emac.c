@@ -6534,8 +6534,8 @@ static int emac_poll(struct napi_struct *napi, int budget)
 		/* if more packets reschedule the tasklet or call
 		 * pkt_process_end */
 		if (!pkts_pending) {
+			netif_rx_complete(netdev, napi);
 			emac_pkt_process_end(dev, NULL);
-                        netif_rx_complete(netdev, napi);
 			return 0;
 		} else if (!test_bit(0, &dev->set_to_close)) {
 			return 1;
