@@ -37,7 +37,7 @@
 #define NANDFSR_OFFSET 		0x64
 #define NANDF1ECC_OFFSET	0x70
 
-#define	MASK_ALE		0x0A
+#define	MASK_ALE		0x08
 #define	MASK_CLE		0x10
 
 #define NAND_BUSY_FLAG		0x01
