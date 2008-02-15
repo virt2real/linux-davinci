@@ -245,7 +245,6 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	struct davinci_i2c_dev *dev = i2c_get_adapdata(adap);
 	struct davinci_i2c_platform_data *pdata = dev->dev->platform_data;
 	u32 flag;
-	u32 stat;
 	u16 w;
 	int r;
 #ifdef DAVINCI_HACK
@@ -283,11 +282,6 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 
 	init_completion(&dev->cmd_complete);
 	dev->cmd_err = 0;
-
-	/* Clear any pending interrupts by reading the IVR */
-	do {
-		stat = davinci_i2c_read_reg(dev, DAVINCI_I2C_IVR_REG);
-	} while (stat);
 
 	/* Take I2C out of reset, configure it as master and set the
 	 * start bit */
