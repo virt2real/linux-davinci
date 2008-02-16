@@ -344,8 +344,6 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 
 	host->do_dma = 1;
 
-	host->dma_state = 0;
-
 	mmc_davinci_send_dma_request(host, req);
 
 	return 0;
@@ -704,7 +702,6 @@ static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)
 		mmc_davinci_start_command(host, req->cmd);
 	} else {
 		/* Queue up the request as card dectection is being excuted */
-		host->que_mmc_host = mmc;
 		host->que_mmc_request = req;
 		spin_lock_irqsave(&host->lock, flags);
 		host->is_req_queued_up = 1;
@@ -818,7 +815,6 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 	}
 
 	if (!data->stop) {
-		host->req = NULL;
 		spin_lock_irqsave(&host->lock, flags);
 		host->is_card_busy = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
@@ -854,7 +850,6 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 	}
 
 	if (host->data == NULL || cmd->error) {
-		host->req = NULL;
 		if (cmd->error == -ETIMEDOUT)
 			cmd->mrq->cmd->retries = 0;
 		spin_lock_irqsave(&host->lock, flags);
@@ -1074,7 +1069,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 			spin_unlock_irqrestore(&host->lock, flags);
 
 			if (host->is_req_queued_up) {
-				mmc_davinci_request(host->que_mmc_host,
+				mmc_davinci_request(host->mmc,
 					host->que_mmc_request);
 				spin_lock_irqsave(&host->lock, flags);
 				host->is_req_queued_up = 0;
@@ -1104,7 +1099,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 			spin_unlock_irqrestore(&host->lock, flags);
 
 			if (host->is_req_queued_up) {
-				mmc_davinci_request(host->que_mmc_host,
+				mmc_davinci_request(host->mmc,
 					host->que_mmc_request);
 				spin_lock_irqsave(&host->lock, flags);
 				host->is_req_queued_up = 0;

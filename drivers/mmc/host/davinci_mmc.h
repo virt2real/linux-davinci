@@ -161,14 +161,9 @@ struct edma_ch_mmcsd {
 };
 
 struct mmc_davinci_host {
-	int initialized;
-	int suspended;
-	struct mmc_request *req;
 	struct mmc_command *cmd;
 	struct mmc_data *data;
 	struct mmc_host *mmc;
-	struct device *dev;
-	unsigned char id;
 	struct clk *clk;
 	unsigned int mmc_input_clk;
 	void __iomem *base;
@@ -182,11 +177,9 @@ struct mmc_davinci_host {
 	unsigned char data_dir;
 	u8 *buffer;
 	u32 bytes_left;
-	int power_pin;
 
 	bool use_dma;
 	bool do_dma;
-	struct completion dma_completion;
 
 	struct timer_list timer;
 	unsigned int is_core_command:1;
@@ -200,8 +193,6 @@ struct mmc_davinci_host {
 	unsigned int sg_len;
 	int sg_idx;
 	unsigned int buffer_bytes_left;
-	unsigned int dma_len;
-	int dma_state;
 
 	unsigned int option_read;
 	unsigned int option_write;
@@ -219,9 +210,6 @@ struct mmc_davinci_host {
 	 * request has come when card detection/probe was in progress
 	 */
 	unsigned int is_req_queued_up:1;
-
-	/* data structure to queue one request */
-	struct mmc_host *que_mmc_host;
 
 	/* data structure to queue one request */
 	struct mmc_request *que_mmc_request;
