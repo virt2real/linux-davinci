@@ -172,6 +172,7 @@ struct mmc_davinci_host {
 	struct clk *clk;
 	unsigned int mmc_input_clk;
 	void __iomem *base;
+	struct resource *mem_res;
 	int irq;
 	unsigned char bus_mode;
 
@@ -179,7 +180,7 @@ struct mmc_davinci_host {
 #define DAVINCI_MMC_DATADIR_READ	1
 #define DAVINCI_MMC_DATADIR_WRITE	2
 	unsigned char data_dir;
-	u32 *buffer;
+	u8 *buffer;
 	u32 bytes_left;
 	int power_pin;
 

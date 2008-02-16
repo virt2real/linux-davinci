@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/dma-mapping.h>
 
 #include <asm/hardware.h>
 #include <asm/io.h>
@@ -51,6 +52,46 @@ static void davinci_init_i2c(void) {}
 
 #endif
 
+
+#if 	defined(CONFIG_MMC_DAVINCI) || defined(CONFIG_MMC_DAVINCI_MODULE)
+
+static u64 mmc_dma_mask = DMA_32BIT_MASK;
+
+static struct resource mmc_resources[] = {
+	{
+		.start = DAVINCI_MMC_SD_BASE,
+		.end   = DAVINCI_MMC_SD_BASE + 0x73,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = IRQ_MMCINT,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device davinci_mmcsd_device = {
+	.name = "davinci_mmc",
+	.id = 1,
+	.dev = {
+		.dma_mask = &mmc_dma_mask,
+		.coherent_dma_mask = DMA_32BIT_MASK,
+	},
+	.num_resources = ARRAY_SIZE(mmc_resources),
+	.resource = mmc_resources,
+};
+
+
+static void davinci_init_mmcsd(void)
+{
+	(void) platform_device_register(&davinci_mmcsd_device);
+}
+
+#else
+
+static void davinci_init_mmcsd(void) {}
+
+#endif
+
 /*-------------------------------------------------------------------------*/
 
 static int __init davinci_init_devices(void)
@@ -59,6 +100,7 @@ static int __init davinci_init_devices(void)
 	 * in alphabetical order so they're easier to sort through.
 	 */
 	davinci_init_i2c();
+	davinci_init_mmcsd();
 
 	return 0;
 }

@@ -30,11 +30,7 @@
  */
 
 #include <linux/module.h>
-#include <linux/tty.h>
 #include <linux/ioport.h>
-#include <linux/init.h>
-#include <linux/console.h>
-#include <linux/blkdev.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/mmc/host.h>
@@ -55,9 +51,8 @@ extern void davinci_clean_channel(int ch_no);
 
 /* MMCSD Init clock in Hz in opendain mode */
 #define MMCSD_INIT_CLOCK 		200000
-#define DRIVER_NAME 			"mmc0"
-#define MMCINT_INTERRUPT    		IRQ_MMCINT
-#define MMCSD_REGS_BASE_ADDR  		DAVINCI_MMC_SD_BASE
+
+#define DRIVER_NAME 			"davinci_mmc"
 #define TCINTEN 			(0x1<<20)
 
 /* This macro could not be defined to 0 (ZERO) or -ve value.
@@ -478,7 +473,8 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		fifo_width_src = W8BIT;	/* It's not cared as modeDsr is INCR */
 		src_bidx = acnt;
 		src_cidx = acnt * bcnt;
-		dst_port = MMCSD_REGS_BASE_ADDR + 0x2C;
+		dst_port = (unsigned int)(host->mem_res->start +
+				DAVINCI_MMCDXR);
 		mode_dst = INCR;
 		fifo_width_dst = W8BIT;	/* It's not cared as modeDsr is INCR */
 		dst_bidx = 0;
@@ -489,7 +485,8 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	} else {
 		sync_dev = DAVINCI_DMA_MMCRXEVT;
 
-		src_port = MMCSD_REGS_BASE_ADDR + 0x28;
+		src_port = (unsigned int)(host->mem_res->start +
+				DAVINCI_MMCDRR);
 		mode_src = INCR;
 		fifo_width_src = W8BIT;
 		src_bidx = 0;
@@ -1255,23 +1252,40 @@ static void init_mmcsd_host(struct mmc_davinci_host *host)
 
 static int davinci_mmcsd_probe(struct platform_device *pdev)
 {
-	struct mmc_davinci_host *host;
-	struct mmc_host *mmc;
-	int ret = 0;
+	struct mmc_davinci_host *host = NULL;
+	struct mmc_host *mmc = NULL;
+	struct resource *r, *mem = NULL;
+	int ret = 0, irq = 0;
+	size_t mem_size;
 
-	mmc = mmc_alloc_host(sizeof(struct mmc_davinci_host), &pdev->dev);
-	if (!mmc) {
-		ret = -ENOMEM;
+	ret = -ENODEV;
+	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	irq = platform_get_irq(pdev, 0);
+	if (!r || irq == NO_IRQ)
 		goto out;
-	}
+
+	ret = -EBUSY;
+	mem_size = r->end - r->start + 1;
+	mem = request_mem_region(r->start, mem_size, DRIVER_NAME);
+	if (!mem)
+		goto out;
+
+	ret = -ENOMEM;
+	mmc = mmc_alloc_host(sizeof(struct mmc_davinci_host), &pdev->dev);
+	if (!mmc)
+		goto out;
 
 	host = mmc_priv(mmc);
 	host->mmc = mmc;	/* Important */
 
-	host->base = (void __iomem *)IO_ADDRESS(MMCSD_REGS_BASE_ADDR);
+	host->mem_res = mem;
+	host->base = ioremap(r->start, SZ_4K);
+	if (!host->base)
+		goto out;
 
 	spin_lock_init(&host->lock);
 
+	ret = -ENXIO;
 	host->clk = clk_get(NULL, "MMCSDCLK");
 	if (host->clk) {
 		clk_enable(host->clk);
@@ -1281,16 +1295,14 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 
 	init_mmcsd_host(host);
 
-	if (mmcsd_cfg.use_4bit_mode) {
-		dev_warn(mmc_dev(host->mmc), "Supporting 4-bit mode\n");
+	if (mmcsd_cfg.use_4bit_mode)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
-	} else
-		dev_warn(mmc_dev(host->mmc), "Not Supporting 4-bit mode\n");
 
 	mmc->ops = &mmc_davinci_ops;
 	mmc->f_min = 312500;
-#ifdef CONFIG_MMC_HIGHSPEED
+#ifdef CONFIG_MMC_HIGHSPEED /* FIXME: no longer used */
 	mmc->f_max = 50000000;
+	mmc->caps |= MMC_CAP_MMC_HIGHSPEED;
 #else
 	mmc->f_max = 25000000;
 #endif
@@ -1309,19 +1321,15 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	dev_dbg(mmc_dev(host->mmc), "max_req_size=%d\n", mmc->max_req_size);
 	dev_dbg(mmc_dev(host->mmc), "max_seg_size=%d\n", mmc->max_seg_size);
 
-	if (mmcsd_cfg.use_dma) {
-		dev_dbg(mmc_dev(host->mmc), "Using DMA mode\n");
+	if (mmcsd_cfg.use_dma)
 		if (davinci_acquire_dma_channels(host) != 0)
 			goto out;
-	} else
-		dev_dbg(mmc_dev(host->mmc), "Not Using DMA mode\n");
 
 	host->use_dma = mmcsd_cfg.use_dma;
-	host->irq = MMCINT_INTERRUPT;
+	host->irq = irq;
 	host->sd_support = 1;
-	ret = request_irq(MMCINT_INTERRUPT, mmc_davinci_irq, 0, DRIVER_NAME,
-			host);
 
+	ret = request_irq(irq, mmc_davinci_irq, 0, DRIVER_NAME, host);
 	if (ret)
 		goto out;
 
@@ -1334,10 +1342,31 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	host->timer.expires = jiffies + MULTIPILER_TO_HZ * HZ;
 	add_timer(&host->timer);
 
+	dev_info(mmc_dev(host->mmc), "Using %s, %d-bit mode\n",
+	    mmcsd_cfg.use_dma ? "DMA" : "PIO",
+	    mmcsd_cfg.use_4bit_mode ? 4 : 1);
+
 	return 0;
 
 out:
-	/* TBD: Free other resources too. */
+	if (host) {
+		if (host->edma_ch_details.cnt_chanel)
+			davinci_release_dma_channels(host);
+
+		if (host->clk) {
+			clk_disable(host->clk);
+			clk_put(host->clk);
+		}
+
+		if (host->base)
+			iounmap(host->base);
+	}
+
+	if (mmc)
+		mmc_free_host(mmc);
+
+	if (mem)
+		release_resource(mem);
 
 	return ret;
 }
@@ -1349,21 +1378,26 @@ static int davinci_mmcsd_remove(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, NULL);
 	if (host) {
-		mmc_remove_host(host->mmc);
-		free_irq(host->irq, host);
-
 		spin_lock_irqsave(&host->lock, flags);
 		del_timer(&host->timer);
 		spin_unlock_irqrestore(&host->lock, flags);
+
+		mmc_remove_host(host->mmc);
+		free_irq(host->irq, host);
 
 		davinci_release_dma_channels(host);
 
 		clk_disable(host->clk);
 		clk_put(host->clk);
+
+		iounmap(host->base);
+
+		release_resource(host->mem_res);
+
+		mmc_free_host(host->mmc);
 	}
 
 	return 0;
-
 }
 
 #ifdef CONFIG_PM
@@ -1399,63 +1433,14 @@ static struct platform_driver davinci_mmcsd_driver = {
 	.resume = davinci_mmcsd_resume,
 };
 
-/* FIXME don't be a legacy driver ... register the device as part
- * of cpu-specific board setup.
- */
-static void mmc_release(struct device *dev)
-{
-	/* Nothing to release? */
-}
-
-static u64 mmc_dma_mask = 0xffffffff;
-
-static struct resource mmc_resources[] = {
-	{
-		.start = IO_ADDRESS(MMCSD_REGS_BASE_ADDR),
-		.end = IO_ADDRESS((MMCSD_REGS_BASE_ADDR) + 0x74),
-		.flags = IORESOURCE_MEM,
-	},
-	{
-		.start = MMCINT_INTERRUPT,
-		.flags = IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device mmc_davinci_device = {
-	.name = DRIVER_NAME,
-	.id = 1,
-	.dev = {
-		.release = mmc_release,
-		.dma_mask = &mmc_dma_mask,
-	},
-	.num_resources = ARRAY_SIZE(mmc_resources),
-	.resource = mmc_resources,
-};
-
 static int davinci_mmcsd_init(void)
 {
-	int ret = 0;
-
-	ret = platform_device_register(&mmc_davinci_device);
-	if (ret != 0)
-		goto free1;
-
-	ret = platform_driver_register(&davinci_mmcsd_driver);
-	if (ret != 0)
-		goto free1;
-
-	return 0;
-
-free1:
-	platform_device_unregister(&mmc_davinci_device);
-
-	return -ENODEV;
+	return platform_driver_register(&davinci_mmcsd_driver);
 }
 
 static void __exit davinci_mmcsd_exit(void)
 {
 	platform_driver_unregister(&davinci_mmcsd_driver);
-	platform_device_unregister(&mmc_davinci_device);
 }
 
 module_init(davinci_mmcsd_init);
