@@ -66,7 +66,6 @@ extern void davinci_clean_channel(int ch_no);
  */
 #define MULTIPILER_TO_HZ 1
 
-struct device mmc_dev;
 static struct mmcsd_config_def mmcsd_cfg = {
 /* read write thresholds (in bytes) can be any power of 2 from 2 to 64 */
 	32,
@@ -86,7 +85,7 @@ static inline void wait_on_data(struct mmc_davinci_host *host)
 		udelay(1);
 	}
 	if (!cnt)
-		dev_warn(&mmc_dev, "ERROR: TOUT waiting for BUSY\n");
+		dev_warn(mmc_dev(host->mmc), "ERROR: TOUT waiting for BUSY\n");
 }
 
 static void mmc_davinci_start_command(struct mmc_davinci_host *host,
@@ -99,22 +98,22 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	unsigned long flags;
 
 #ifdef CONFIG_MMC_DEBUG
-	dev_dbg(&mmc_dev, "\nMMCSD : CMD%d, argument 0x%08x",
+	dev_dbg(mmc_dev(host->mmc), "\nMMCSD : CMD%d, argument 0x%08x",
 		cmd->opcode, cmd->arg);
 	switch (RSP_TYPE(mmc_resp_type(cmd))) {
 	case RSP_TYPE(MMC_RSP_R1):
-		dev_dbg(&mmc_dev, ", R1/R1b response");
+		dev_dbg(mmc_dev(host->mmc), ", R1/R1b response");
 		break;
 	case RSP_TYPE(MMC_RSP_R2):
-		dev_dbg(&mmc_dev, ", R2 response");
+		dev_dbg(mmc_dev(host->mmc), ", R2 response");
 		break;
 	case RSP_TYPE(MMC_RSP_R3):
-		dev_dbg(&mmc_dev, ", R3 response");
+		dev_dbg(mmc_dev(host->mmc), ", R3 response");
 		break;
 	default:
 		break;
 	}
-	dev_dbg(&mmc_dev, "\n");
+	dev_dbg(mmc_dev(host->mmc), "\n");
 #endif
 	host->cmd = cmd;
 
@@ -259,7 +258,7 @@ static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
 {
 	if (DMA_COMPLETE != ch_status) {
 		struct mmc_davinci_host *host = (struct mmc_davinci_host *)data;
-		dev_warn(&mmc_dev, "[DMA FAILED]");
+		dev_warn(mmc_dev(host->mmc), "[DMA FAILED]");
 		davinci_abort_dma(host);
 	}
 }
@@ -327,7 +326,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 	struct mmc_data *data = host->data;
 	int block_size = data->blksz;
 
-	host->sg_len = dma_map_sg(&mmc_dev, data->sg, host->sg_len,
+	host->sg_len = dma_map_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
 				((data->flags & MMC_DATA_WRITE)
 				? DMA_TO_DEVICE
 				: DMA_FROM_DEVICE));
@@ -341,7 +340,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 	}
 
 	if (!use_dma) {
-		dma_unmap_sg(&mmc_dev, data->sg, host->sg_len,
+		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
 				  (data->flags & MMC_DATA_WRITE)
 				? DMA_TO_DEVICE
 				: DMA_FROM_DEVICE);
@@ -379,7 +378,7 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	r = davinci_request_dma(DAVINCI_DMA_MMCTXEVT, "MMC_WRITE",
 		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
 	if (r != 0) {
-		dev_warn(&mmc_dev,
+		dev_warn(mmc_dev(host->mmc),
 				"MMC: davinci_request_dma() failed with %d\n",
 				r);
 		return r;
@@ -389,7 +388,7 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	r = davinci_request_dma(DAVINCI_DMA_MMCRXEVT, "MMC_READ",
 		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
 	if (r != 0) {
-		dev_warn(&mmc_dev,
+		dev_warn(mmc_dev(host->mmc),
 				"MMC: davinci_request_dma() failed with %d\n",
 				r);
 		goto free_master_write;
@@ -406,7 +405,7 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	r = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "LINK", NULL, NULL,
 		&edma_chan_num, &sync_dev, queue_no);
 	if (r != 0) {
-		dev_warn(&mmc_dev,
+		dev_warn(mmc_dev(host->mmc),
 			"MMC: davinci_request_dma() failed with %d\n", r);
 		goto free_master_read;
 	}
@@ -600,7 +599,7 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	/* Init idx */
 	host->sg_idx = 0;
 
-	dev_dbg(&mmc_dev,
+	dev_dbg(mmc_dev(host->mmc),
 		"MMCSD : Data xfer (%s %s), "
 		"DTO %d cycles + %d ns, %d blocks of %d bytes\r\n",
 		(req->data->flags & MMC_DATA_STREAM) ? "stream" : "block",
@@ -692,7 +691,7 @@ static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)
 			req->cmd->error = -ETIMEDOUT;
 			mmc_request_done(mmc, req);
 		}
-		dev_dbg(&mmc_dev,
+		dev_dbg(mmc_dev(host->mmc),
 			"From code segment excuted when card removed\n");
 		return;
 	}
@@ -744,15 +743,16 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	struct mmc_davinci_host *host = mmc_priv(mmc);
 
 	cpu_arm_clk = host->mmc_input_clk;
-	dev_dbg(&mmc_dev, "clock %dHz busmode %d powermode %d Vdd %d.%02d\r\n",
+	dev_dbg(mmc_dev(host->mmc),
+		"clock %dHz busmode %d powermode %d Vdd %d.%02d\r\n",
 		ios->clock, ios->bus_mode, ios->power_mode,
 		ios->vdd / 100, ios->vdd % 100);
 	if (ios->bus_width == MMC_BUS_WIDTH_4) {
-		dev_dbg(&mmc_dev, "\nEnabling 4 bit mode\n");
+		dev_dbg(mmc_dev(host->mmc), "\nEnabling 4 bit mode\n");
 		writel(readl(host->base + DAVINCI_MMCCTL) | MMCCTL_WIDTH_4_BIT,
 			host->base + DAVINCI_MMCCTL);
 	} else {
-		dev_dbg(&mmc_dev, "Disabling 4 bit mode\n");
+		dev_dbg(mmc_dev(host->mmc), "Disabling 4 bit mode\n");
 		writel(readl(host->base + DAVINCI_MMCCTL) & ~MMCCTL_WIDTH_4_BIT,
 			host->base + DAVINCI_MMCCTL);
 	}
@@ -806,7 +806,7 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 	if (host->do_dma) {
 		davinci_abort_dma(host);
 
-		dma_unmap_sg(&mmc_dev, data->sg, host->sg_len,
+		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
 			     (data->flags & MMC_DATA_WRITE)
 			     ? DMA_TO_DEVICE
 			     : DMA_FROM_DEVICE);
@@ -838,7 +838,8 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 	host->cmd = NULL;
 
 	if (!cmd) {
-		dev_warn(&mmc_dev, "%s(): No cmd ptr\n", __FUNCTION__);
+		dev_warn(mmc_dev(host->mmc),
+			"%s(): No cmd ptr\n", __FUNCTION__);
 		return;
 	}
 
@@ -877,8 +878,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 	if (host->is_core_command) {
 		if (host->cmd == NULL && host->data == NULL) {
 			status = readl(host->base + DAVINCI_MMCST0);
-			dev_dbg(&mmc_dev, "Spurious interrupt 0x%04x\r\n",
-				status);
+			dev_dbg(mmc_dev(host->mmc),
+				"Spurious interrupt 0x%04x\r\n", status);
 			/* Disable the interrupt from mmcsd */
 			writel(0, host->base + DAVINCI_MMCIM);
 			return IRQ_HANDLED;
@@ -898,7 +899,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					host->cmd->error = -ETIMEDOUT;
 					mmc_davinci_cmd_done(host, host->cmd);
 				}
-				dev_dbg(&mmc_dev,
+				dev_dbg(mmc_dev(host->mmc),
 					"From code segment executed "
 					"when card removed\n");
 				return IRQ_HANDLED;
@@ -936,7 +937,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 						end_transfer = 1;
 					}
 				} else {
-					dev_warn(&mmc_dev,
+					dev_warn(mmc_dev(host->mmc),
 						 "TC:host->data is NULL\n");
 				}
 			}
@@ -951,7 +952,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					host->is_card_initialized = 0;
 					spin_unlock_irqrestore(&host->lock,
 						flags);
-					dev_dbg(&mmc_dev,
+					dev_dbg(mmc_dev(host->mmc),
 						"MMCSD: Data timeout, "
 						"CMD%d and status is %x\r\n",
 						host->cmd->opcode, status);
@@ -980,13 +981,13 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 				/* Data CRC error */
 				if (host->data) {
 					host->data->error = -EILSEQ;
-					dev_dbg(&mmc_dev,
+					dev_dbg(mmc_dev(host->mmc),
 						"MMCSD: Data CRC error, "
 						"bytes left %d\r\n",
 						host->bytes_left);
 					end_transfer = 1;
 				} else {
-					dev_dbg(&mmc_dev,
+					dev_dbg(mmc_dev(host->mmc),
 						"MMCSD: Data CRC error\r\n");
 				}
 			}
@@ -1003,7 +1004,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					 */
 					if (host->cmd->opcode !=
 							MMC_ALL_SEND_CID) {
-						dev_dbg(&mmc_dev,
+						dev_dbg(mmc_dev(host->mmc),
 							"MMCSD: CMD%d timeout,"
 							" status %x\r\n",
 							host->cmd->opcode,
@@ -1023,7 +1024,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 
 			if (status & MMCSD_EVENT_ERROR_CMDCRC) {
 				/* Command CRC error */
-				dev_dbg(&mmc_dev, "Command CRC error\r\n");
+				dev_dbg(mmc_dev(host->mmc),
+					"Command CRC error\r\n");
 				if (host->cmd) {
 					/* Ignore CMD CRC errors during
 					 * high speed operation */
@@ -1041,7 +1043,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 			status = readl(host->base + DAVINCI_MMCST0);
 			if (host->data == NULL) {
 				if (status != 0) {
-					dev_dbg(&mmc_dev,
+					dev_dbg(mmc_dev(host->mmc),
 						"Status is %x at end of ISR "
 						"when host->data is NULL\n",
 						status);
@@ -1136,7 +1138,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 						host->base + DAVINCI_MMCCMD);
 				}
 
-				dev_dbg(&mmc_dev,
+				dev_dbg(mmc_dev(host->mmc),
 					"MMC-Probing mmc with cmd%d\n",
 					host->cmd_code);
 			} else {
@@ -1280,10 +1282,10 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	init_mmcsd_host(host);
 
 	if (mmcsd_cfg.use_4bit_mode) {
-		dev_warn(&mmc_dev, "Supporting 4-bit mode\n");
+		dev_warn(mmc_dev(host->mmc), "Supporting 4-bit mode\n");
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 	} else
-		dev_warn(&mmc_dev, "Not Supporting 4-bit mode\n");
+		dev_warn(mmc_dev(host->mmc), "Not Supporting 4-bit mode\n");
 
 	mmc->ops = &mmc_davinci_ops;
 	mmc->f_min = 312500;
@@ -1301,18 +1303,18 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	mmc->max_req_size  = mmc->max_blk_size * mmc->max_blk_count;
 	mmc->max_seg_size  = mmc->max_req_size;
 
-	dev_dbg(&mmc_dev, "max_phys_segs=%d\n", mmc->max_phys_segs);
-	dev_dbg(&mmc_dev, "max_hw_segs=%d\n", mmc->max_hw_segs);
-	dev_dbg(&mmc_dev, "max_blk_size=%d\n", mmc->max_blk_size);
-	dev_dbg(&mmc_dev, "max_req_size=%d\n", mmc->max_req_size);
-	dev_dbg(&mmc_dev, "max_seg_size=%d\n", mmc->max_seg_size);
+	dev_dbg(mmc_dev(host->mmc), "max_phys_segs=%d\n", mmc->max_phys_segs);
+	dev_dbg(mmc_dev(host->mmc), "max_hw_segs=%d\n", mmc->max_hw_segs);
+	dev_dbg(mmc_dev(host->mmc), "max_blk_size=%d\n", mmc->max_blk_size);
+	dev_dbg(mmc_dev(host->mmc), "max_req_size=%d\n", mmc->max_req_size);
+	dev_dbg(mmc_dev(host->mmc), "max_seg_size=%d\n", mmc->max_seg_size);
 
 	if (mmcsd_cfg.use_dma) {
-		dev_dbg(&mmc_dev, "Using DMA mode\n");
+		dev_dbg(mmc_dev(host->mmc), "Using DMA mode\n");
 		if (davinci_acquire_dma_channels(host) != 0)
 			goto out;
 	} else
-		dev_dbg(&mmc_dev, "Not Using DMA mode\n");
+		dev_dbg(mmc_dev(host->mmc), "Not Using DMA mode\n");
 
 	host->use_dma = mmcsd_cfg.use_dma;
 	host->irq = MMCINT_INTERRUPT;
