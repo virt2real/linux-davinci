@@ -67,8 +67,7 @@ extern void davinci_clean_channel(int ch_no);
 #define MULTIPILER_TO_HZ 1
 
 struct device mmc_dev;
-struct clk *mmc_clkp;
-struct mmcsd_config_def mmcsd_cfg = {
+static struct mmcsd_config_def mmcsd_cfg = {
 /* read write thresholds (in bytes) can be any power of 2 from 2 to 64 */
 	32,
 /* To use the DMA or not-- 1- Use DMA, 0-Interrupt mode */
@@ -77,33 +76,9 @@ struct mmcsd_config_def mmcsd_cfg = {
 	1
 };
 
-static unsigned int mmc_input_clk;
-
-/* Used to identify whether card being used currently by linux core or not */
-static unsigned int is_card_busy;
-/* used to identify whether card probe(detection) is currently in progress */
-static unsigned int is_card_detect_progress;
-/* used to identify whether core is icurrently initilizing the card or not */
-static unsigned int is_init_progress;
-/* used to identify whether core request has been queue up or
- * not because request has come when card detection/probe was in progress
- */
-static unsigned int is_req_queued_up;
-/* data struture to queue one request */
-static struct mmc_host *que_mmc_host;
-/* data structure to queue one request */
-static struct mmc_request *que_mmc_request;
-
-/* tells whether card is initizlzed or not */
-static unsigned int is_card_initialized;
-static unsigned int new_card_state;	/* tells current state of card */
-static unsigned int is_card_removed;
-
-static DEFINE_SPINLOCK(mmc_lock);
-
 #define RSP_TYPE(x)	((x) & ~(MMC_RSP_BUSY|MMC_RSP_OPCODE))
 
-static inline void wait_on_data(void)
+static inline void wait_on_data(struct mmc_davinci_host *host)
 {
 	int cnt = 900000;
 	while ((readl(host->base + DAVINCI_MMCST1) & MMCST1_BUSY) && cnt) {
@@ -260,19 +235,19 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		davinci_fifo_data_trans(host);
 
 	if (cmd->opcode == 7) {
-		spin_lock_irqsave(&mmc_lock, flags);
-		is_card_removed = 0;
-		new_card_state = 1;
-		is_card_initialized = 1;
-		host->old_card_state = new_card_state;
-		is_init_progress = 0;
-		spin_unlock_irqrestore(&mmc_lock, flags);
+		spin_lock_irqsave(&host->lock, flags);
+		host->is_card_removed = 0;
+		host->new_card_state = 1;
+		host->is_card_initialized = 1;
+		host->old_card_state = host->new_card_state;
+		host->is_init_progress = 0;
+		spin_unlock_irqrestore(&host->lock, flags);
 	}
 	if (cmd->opcode == 1 || cmd->opcode == 41) {
-		spin_lock_irqsave(&mmc_lock, flags);
-		is_card_initialized = 0;
-		is_init_progress = 1;
-		spin_unlock_irqrestore(&mmc_lock, flags);
+		spin_lock_irqsave(&host->lock, flags);
+		host->is_card_initialized = 0;
+		host->is_init_progress = 1;
+		spin_unlock_irqrestore(&host->lock, flags);
 	}
 
 	host->is_core_command = 1;
@@ -352,7 +327,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 	struct mmc_data *data = host->data;
 	int block_size = data->blksz;
 
-	host->sg_len = dma_map_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
+	host->sg_len = dma_map_sg(&mmc_dev, data->sg, host->sg_len,
 				((data->flags & MMC_DATA_WRITE)
 				? DMA_TO_DEVICE
 				: DMA_FROM_DEVICE));
@@ -366,7 +341,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 	}
 
 	if (!use_dma) {
-		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
+		dma_unmap_sg(&mmc_dev, data->sg, host->sg_len,
 				  (data->flags & MMC_DATA_WRITE)
 				? DMA_TO_DEVICE
 				: DMA_FROM_DEVICE);
@@ -712,7 +687,7 @@ static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)
 	struct mmc_davinci_host *host = mmc_priv(mmc);
 	unsigned long flags;
 
-	if (is_card_removed) {
+	if (host->is_card_removed) {
 		if (req->cmd) {
 			req->cmd->error = -ETIMEDOUT;
 			mmc_request_done(mmc, req);
@@ -722,30 +697,31 @@ static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)
 		return;
 	}
 
-	wait_on_data();
+	wait_on_data(host);
 
-	if (!is_card_detect_progress) {
-		spin_lock_irqsave(&mmc_lock, flags);
-		is_card_busy = 1;
-		spin_unlock_irqrestore(&mmc_lock, flags);
+	if (!host->is_card_detect_progress) {
+		spin_lock_irqsave(&host->lock, flags);
+		host->is_card_busy = 1;
+		spin_unlock_irqrestore(&host->lock, flags);
 		host->do_dma = 0;
 		mmc_davinci_prepare_data(host, req);
 		mmc_davinci_start_command(host, req->cmd);
 	} else {
 		/* Queue up the request as card dectection is being excuted */
-		que_mmc_host = mmc;
-		que_mmc_request = req;
-		spin_lock_irqsave(&mmc_lock, flags);
-		is_req_queued_up = 1;
-		spin_unlock_irqrestore(&mmc_lock, flags);
+		host->que_mmc_host = mmc;
+		host->que_mmc_request = req;
+		spin_lock_irqsave(&host->lock, flags);
+		host->is_req_queued_up = 1;
+		spin_unlock_irqrestore(&host->lock, flags);
 	}
 }
 
-static unsigned int calculate_freq_for_card(unsigned int mmc_req_freq)
+static unsigned int calculate_freq_for_card(struct mmc_davinci_host *host,
+	unsigned int mmc_req_freq)
 {
 	unsigned int mmc_freq = 0, cpu_arm_clk = 0, mmc_push_pull = 0;
 
-	cpu_arm_clk = mmc_input_clk;
+	cpu_arm_clk = host->mmc_input_clk;
 	if (cpu_arm_clk > (2 * mmc_req_freq))
 		mmc_push_pull = ((unsigned int)cpu_arm_clk
 				/ (2 * mmc_req_freq)) - 1;
@@ -767,7 +743,7 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	unsigned int mmc_push_pull_freq = 0;
 	struct mmc_davinci_host *host = mmc_priv(mmc);
 
-	cpu_arm_clk = mmc_input_clk;
+	cpu_arm_clk = host->mmc_input_clk;
 	dev_dbg(&mmc_dev, "clock %dHz busmode %d powermode %d Vdd %d.%02d\r\n",
 		ios->clock, ios->bus_mode, ios->power_mode,
 		ios->vdd / 100, ios->vdd % 100);
@@ -790,7 +766,7 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		writel(temp, host->base + DAVINCI_MMCCLK);
 	} else {
 		u32 temp;
-		mmc_push_pull_freq = calculate_freq_for_card(ios->clock);
+		mmc_push_pull_freq = calculate_freq_for_card(host, ios->clock);
 
 		temp = readl(host->base + DAVINCI_MMCCLK) & ~MMCCLK_CLKEN;
 		writel(temp, host->base + DAVINCI_MMCCLK);
@@ -830,25 +806,25 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 	if (host->do_dma) {
 		davinci_abort_dma(host);
 
-		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
+		dma_unmap_sg(&mmc_dev, data->sg, host->sg_len,
 			     (data->flags & MMC_DATA_WRITE)
 			     ? DMA_TO_DEVICE
 			     : DMA_FROM_DEVICE);
 	}
 
 	if (data->error == -ETIMEDOUT) {
-		spin_lock_irqsave(&mmc_lock, flags);
-		is_card_busy = 0;
-		spin_unlock_irqrestore(&mmc_lock, flags);
+		spin_lock_irqsave(&host->lock, flags);
+		host->is_card_busy = 0;
+		spin_unlock_irqrestore(&host->lock, flags);
 		mmc_request_done(host->mmc, data->mrq);
 		return;
 	}
 
 	if (!data->stop) {
 		host->req = NULL;
-		spin_lock_irqsave(&mmc_lock, flags);
-		is_card_busy = 0;
-		spin_unlock_irqrestore(&mmc_lock, flags);
+		spin_lock_irqsave(&host->lock, flags);
+		host->is_card_busy = 0;
+		spin_unlock_irqrestore(&host->lock, flags);
 		mmc_request_done(host->mmc, data->mrq);
 		return;
 	}
@@ -883,9 +859,9 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 		host->req = NULL;
 		if (cmd->error == -ETIMEDOUT)
 			cmd->mrq->cmd->retries = 0;
-		spin_lock_irqsave(&mmc_lock, flags);
-		is_card_busy = 0;
-		spin_unlock_irqrestore(&mmc_lock, flags);
+		spin_lock_irqsave(&host->lock, flags);
+		host->is_card_busy = 0;
+		spin_unlock_irqrestore(&host->lock, flags);
 		mmc_request_done(host->mmc, cmd->mrq);
 	}
 }
@@ -916,8 +892,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 		return IRQ_HANDLED;
 
 	if (host->is_core_command) {
-		if (is_card_initialized) {
-			if (new_card_state == 0) {
+		if (host->is_card_initialized) {
+			if (host->new_card_state == 0) {
 				if (host->cmd) {
 					host->cmd->error = -ETIMEDOUT;
 					mmc_davinci_cmd_done(host, host->cmd);
@@ -967,13 +943,13 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 
 			if (status & MMCSD_EVENT_ERROR_DATATIMEOUT) {
 				/* Data timeout */
-				if ((host->data) && (new_card_state != 0)) {
+				if (host->data && host->new_card_state != 0) {
 					host->data->error = -ETIMEDOUT;
-					spin_lock_irqsave(&mmc_lock, flags);
-					is_card_removed = 1;
-					new_card_state = 0;
-					is_card_initialized = 0;
-					spin_unlock_irqrestore(&mmc_lock,
+					spin_lock_irqsave(&host->lock, flags);
+					host->is_card_removed = 1;
+					host->new_card_state = 0;
+					host->is_card_initialized = 0;
+					spin_unlock_irqrestore(&host->lock,
 						flags);
 					dev_dbg(&mmc_dev,
 						"MMCSD: Data timeout, "
@@ -1032,12 +1008,12 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 							" status %x\r\n",
 							host->cmd->opcode,
 							status);
-						spin_lock_irqsave(&mmc_lock,
+						spin_lock_irqsave(&host->lock,
 							flags);
-						new_card_state = 0;
-						is_card_initialized = 0;
+						host->new_card_state = 0;
+						host->is_card_initialized = 0;
 						spin_unlock_irqrestore(
-							&mmc_lock, flags);
+							&host->lock, flags);
 					}
 					host->cmd->error = -ETIMEDOUT;
 					end_command = 1;
@@ -1082,58 +1058,58 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 	} else {
 		if (host->cmd_code == 13) {
 			if (status & MMCSD_EVENT_EOFCMD) {
-				spin_lock_irqsave(&mmc_lock, flags);
-				new_card_state = 1;
-				spin_unlock_irqrestore(&mmc_lock, flags);
+				spin_lock_irqsave(&host->lock, flags);
+				host->new_card_state = 1;
+				spin_unlock_irqrestore(&host->lock, flags);
 
 			} else {
-				spin_lock_irqsave(&mmc_lock, flags);
-				is_card_removed = 1;
-				new_card_state = 0;
-				is_card_initialized = 0;
-				spin_unlock_irqrestore(&mmc_lock, flags);
+				spin_lock_irqsave(&host->lock, flags);
+				host->is_card_removed = 1;
+				host->new_card_state = 0;
+				host->is_card_initialized = 0;
+				spin_unlock_irqrestore(&host->lock, flags);
 			}
 
-			spin_lock_irqsave(&mmc_lock, flags);
-			is_card_detect_progress = 0;
-			spin_unlock_irqrestore(&mmc_lock, flags);
+			spin_lock_irqsave(&host->lock, flags);
+			host->is_card_detect_progress = 0;
+			spin_unlock_irqrestore(&host->lock, flags);
 
-			if (is_req_queued_up) {
-				mmc_davinci_request(que_mmc_host,
-						que_mmc_request);
-				spin_lock_irqsave(&mmc_lock, flags);
-				is_req_queued_up = 0;
-				spin_unlock_irqrestore(&mmc_lock, flags);
+			if (host->is_req_queued_up) {
+				mmc_davinci_request(host->que_mmc_host,
+					host->que_mmc_request);
+				spin_lock_irqsave(&host->lock, flags);
+				host->is_req_queued_up = 0;
+				spin_unlock_irqrestore(&host->lock, flags);
 			}
 
 		}
 
 		if (host->cmd_code == 1 || host->cmd_code == 55) {
 			if (status & MMCSD_EVENT_EOFCMD) {
-				spin_lock_irqsave(&mmc_lock, flags);
-				is_card_removed = 0;
-				new_card_state = 1;
-				is_card_initialized = 0;
-				spin_unlock_irqrestore(&mmc_lock, flags);
+				spin_lock_irqsave(&host->lock, flags);
+				host->is_card_removed = 0;
+				host->new_card_state = 1;
+				host->is_card_initialized = 0;
+				spin_unlock_irqrestore(&host->lock, flags);
 			} else {
 
-				spin_lock_irqsave(&mmc_lock, flags);
-				is_card_removed = 1;
-				new_card_state = 0;
-				is_card_initialized = 0;
-				spin_unlock_irqrestore(&mmc_lock, flags);
+				spin_lock_irqsave(&host->lock, flags);
+				host->is_card_removed = 1;
+				host->new_card_state = 0;
+				host->is_card_initialized = 0;
+				spin_unlock_irqrestore(&host->lock, flags);
 			}
 
-			spin_lock_irqsave(&mmc_lock, flags);
-			is_card_detect_progress = 0;
-			spin_unlock_irqrestore(&mmc_lock, flags);
+			spin_lock_irqsave(&host->lock, flags);
+			host->is_card_detect_progress = 0;
+			spin_unlock_irqrestore(&host->lock, flags);
 
-			if (is_req_queued_up) {
-				mmc_davinci_request(que_mmc_host,
-						que_mmc_request);
-				spin_lock_irqsave(&mmc_lock, flags);
-				is_req_queued_up = 0;
-				spin_unlock_irqrestore(&mmc_lock, flags);
+			if (host->is_req_queued_up) {
+				mmc_davinci_request(host->que_mmc_host,
+					host->que_mmc_request);
+				spin_lock_irqsave(&host->lock, flags);
+				host->is_req_queued_up = 0;
+				spin_unlock_irqrestore(&host->lock, flags);
 			}
 		}
 
@@ -1164,11 +1140,11 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					"MMC-Probing mmc with cmd%d\n",
 					host->cmd_code);
 			} else {
-				spin_lock_irqsave(&mmc_lock, flags);
-				new_card_state = 0;
-				is_card_initialized = 0;
-				is_card_detect_progress = 0;
-				spin_unlock_irqrestore(&mmc_lock, flags);
+				spin_lock_irqsave(&host->lock, flags);
+				host->new_card_state = 0;
+				host->is_card_initialized = 0;
+				host->is_card_detect_progress = 0;
+				spin_unlock_irqrestore(&host->lock, flags);
 			}
 		}
 
@@ -1196,13 +1172,13 @@ static void mmc_check_card(unsigned long data)
 	if (host->mmc && host->mmc->card)
 		card = host->mmc->card;
 
-	if ((!is_card_detect_progress) || (!is_init_progress)) {
-		if (is_card_initialized) {
+	if ((!host->is_card_detect_progress) || (!host->is_init_progress)) {
+		if (host->is_card_initialized) {
 			host->is_core_command = 0;
 			host->cmd_code = 13;
-			spin_lock_irqsave(&mmc_lock, flags);
-			is_card_detect_progress = 1;
-			spin_unlock_irqrestore(&mmc_lock, flags);
+			spin_lock_irqsave(&host->lock, flags);
+			host->is_card_detect_progress = 1;
+			spin_unlock_irqrestore(&host->lock, flags);
 
 			/* Issue cmd13 */
 			writel((card && mmc_card_sd(card))
@@ -1213,9 +1189,9 @@ static void mmc_check_card(unsigned long data)
 		} else {
 			host->is_core_command = 0;
 			host->cmd_code = 0;
-			spin_lock_irqsave(&mmc_lock, flags);
-			is_card_detect_progress = 1;
-			spin_unlock_irqrestore(&mmc_lock, flags);
+			spin_lock_irqsave(&host->lock, flags);
+			host->is_card_detect_progress = 1;
+			spin_unlock_irqrestore(&host->lock, flags);
 
 			/* Issue cmd0 */
 			writel(0, host->base + DAVINCI_MMCARGHL);
@@ -1235,21 +1211,21 @@ static void davinci_mmc_check_status(unsigned long data)
 	unsigned long flags;
 	struct mmc_davinci_host *host = (struct mmc_davinci_host *)data;
 
-	if (!is_card_busy) {
-		if (host->old_card_state ^ new_card_state) {
+	if (!host->is_card_busy) {
+		if (host->old_card_state ^ host->new_card_state) {
 			davinci_reinit_chan();
-			init_mmcsd_host();
+			init_mmcsd_host(host);
 			mmc_detect_change(host->mmc, 0);
-			spin_lock_irqsave(&mmc_lock, flags);
-			host->old_card_state = new_card_state;
-			spin_unlock_irqrestore(&mmc_lock, flags);
+			spin_lock_irqsave(&host->lock, flags);
+			host->old_card_state = host->new_card_state;
+			spin_unlock_irqrestore(&host->lock, flags);
 		} else
 			mmc_check_card(data);
 	}
 	mod_timer(&host->timer, jiffies + MULTIPILER_TO_HZ * HZ);
 }
 
-static void init_mmcsd_host()
+static void init_mmcsd_host(struct mmc_davinci_host *host)
 {
 	/* DAT line portion is diabled and in reset state */
 	writel(readl(host->base + DAVINCI_MMCCTL) | MMCCTL_DATRST,
@@ -1287,9 +1263,21 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 		goto out;
 	}
 
+	host = mmc_priv(mmc);
+	host->mmc = mmc;	/* Important */
+
 	host->base = (void __iomem *)IO_ADDRESS(MMCSD_REGS_BASE_ADDR);
 
-	init_mmcsd_host();
+	spin_lock_init(&host->lock);
+
+	host->clk = clk_get(NULL, "MMCSDCLK");
+	if (host->clk) {
+		clk_enable(host->clk);
+		host->mmc_input_clk = clk_get_rate(host->clk);
+	} else
+		goto out;
+
+	init_mmcsd_host(host);
 
 	if (mmcsd_cfg.use_4bit_mode) {
 		dev_warn(&mmc_dev, "Supporting 4-bit mode\n");
@@ -1318,9 +1306,6 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	dev_dbg(&mmc_dev, "max_blk_size=%d\n", mmc->max_blk_size);
 	dev_dbg(&mmc_dev, "max_req_size=%d\n", mmc->max_req_size);
 	dev_dbg(&mmc_dev, "max_seg_size=%d\n", mmc->max_seg_size);
-
-	host = mmc_priv(mmc);
-	host->mmc = mmc;	/* Important */
 
 	if (mmcsd_cfg.use_dma) {
 		dev_dbg(&mmc_dev, "Using DMA mode\n");
@@ -1365,11 +1350,14 @@ static int davinci_mmcsd_remove(struct platform_device *pdev)
 		mmc_remove_host(host->mmc);
 		free_irq(host->irq, host);
 
-		spin_lock_irqsave(&mmc_lock, flags);
+		spin_lock_irqsave(&host->lock, flags);
 		del_timer(&host->timer);
-		spin_unlock_irqrestore(&mmc_lock, flags);
+		spin_unlock_irqrestore(&host->lock, flags);
 
 		davinci_release_dma_channels(host);
+
+		clk_disable(host->clk);
+		clk_put(host->clk);
 	}
 
 	return 0;
@@ -1445,46 +1433,27 @@ static struct platform_device mmc_davinci_device = {
 static int davinci_mmcsd_init(void)
 {
 	int ret = 0;
-	struct clk *clkp = NULL;
 
-	clkp = clk_get(NULL, "MMCSDCLK");
-	if (clkp != NULL) {
-		mmc_clkp = clkp;
-		clk_enable(mmc_clkp);
-		mmc_input_clk = clk_get_rate(mmc_clkp);
+	ret = platform_device_register(&mmc_davinci_device);
+	if (ret != 0)
+		goto free1;
 
-		ret = platform_device_register(&mmc_davinci_device);
-		if (ret != 0)
-			goto free1;
+	ret = platform_driver_register(&davinci_mmcsd_driver);
+	if (ret != 0)
+		goto free1;
 
-		ret = platform_driver_register(&davinci_mmcsd_driver);
-		if (ret == 0)
-			return 0;
+	return 0;
 
 free1:
-		platform_device_unregister(&mmc_davinci_device);
-	}
-
-	if (clkp) {
-		mmc_clkp = NULL;
-		clk_put(clkp);
-	}
+	platform_device_unregister(&mmc_davinci_device);
 
 	return -ENODEV;
 }
 
 static void __exit davinci_mmcsd_exit(void)
 {
-	struct clk *clkp;
-
 	platform_driver_unregister(&davinci_mmcsd_driver);
 	platform_device_unregister(&mmc_davinci_device);
-
-	clkp = mmc_clkp;
-	mmc_clkp = NULL;
-
-	clk_disable(clkp);
-	clk_put(clkp);
 }
 
 module_init(davinci_mmcsd_init);
