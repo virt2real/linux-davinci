@@ -30,7 +30,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/version.h>
 #include <linux/tty.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
@@ -41,11 +40,11 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/mmc.h>
-#include <asm/io.h>
-#include <asm/irq.h>
-#include <asm/hardware.h>
+#include <linux/io.h>
+#include <linux/irq.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
+#include <asm/hardware.h>
 #include <asm/arch/irqs.h>
 #include <asm/arch/hardware.h>
 
@@ -68,8 +67,8 @@ extern void davinci_clean_channel(int ch_no);
 #define MULTIPILER_TO_HZ 1
 
 struct device mmc_dev;
-struct clk *mmc_clkp = NULL;
-mmcsd_config_def mmcsd_cfg = {
+struct clk *mmc_clkp;
+struct mmcsd_config_def mmcsd_cfg = {
 /* read write thresholds (in bytes) can be any power of 2 from 2 to 64 */
 	32,
 /* To use the DMA or not-- 1- Use DMA, 0-Interrupt mode */
@@ -78,28 +77,28 @@ mmcsd_config_def mmcsd_cfg = {
 	1
 };
 
-volatile mmcsd_regs_base *mmcsd_regs;
-static unsigned int mmc_input_clk = 0;
+volatile struct mmcsd_regs_base *mmcsd_regs;
+static unsigned int mmc_input_clk;
 
 /* Used to identify whether card being used currently by linux core or not */
-static unsigned int is_card_busy = 0;
+static unsigned int is_card_busy;
 /* used to identify whether card probe(detection) is currently in progress */
-static unsigned int is_card_detect_progress = 0;
+static unsigned int is_card_detect_progress;
 /* used to identify whether core is icurrently initilizing the card or not */
-static unsigned int is_init_progress = 0;
+static unsigned int is_init_progress;
 /* used to identify whether core request has been queue up or
  * not because request has come when card detection/probe was in progress
  */
-static unsigned int is_req_queued_up = 0;
+static unsigned int is_req_queued_up;
 /* data struture to queue one request */
-static struct mmc_host *que_mmc_host = NULL;
+static struct mmc_host *que_mmc_host;
 /* data structure to queue one request */
-static struct mmc_request *que_mmc_request = NULL;
+static struct mmc_request *que_mmc_request;
 
 /* tells whether card is initizlzed or not */
-static unsigned int is_card_initialized = 0;
-static unsigned int new_card_state = 0;	/* tells current state of card */
-static unsigned int is_card_removed = 0;
+static unsigned int is_card_initialized;
+static unsigned int new_card_state;	/* tells current state of card */
+static unsigned int is_card_removed;
 
 static DEFINE_SPINLOCK(mmc_lock);
 
@@ -113,9 +112,8 @@ static inline void wait_on_data(void)
 		cnt--;
 		udelay(1);
 	}
-	if (!cnt) {
+	if (!cnt)
 		dev_warn(&mmc_dev, "ERROR: TOUT waiting for BUSY\n");
-	}
 }
 
 static void mmc_davinci_start_command(struct mmc_davinci_host *host,
@@ -427,9 +425,9 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	enum dma_event_q queue_no = EVENTQ_0;
 
 	/* Acquire master DMA write channel */
-	if ((r = davinci_request_dma(DAVINCI_DMA_MMCTXEVT, "MMC_WRITE",
-			mmc_davinci_dma_cb, host, &edma_chan_num, &tcc,
-			queue_no)) != 0) {
+	r = davinci_request_dma(DAVINCI_DMA_MMCTXEVT, "MMC_WRITE",
+		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
+	if (r != 0) {
 		dev_warn(&mmc_dev,
 				"MMC: davinci_request_dma() failed with %d\n",
 				r);
@@ -437,9 +435,9 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	}
 
 	/* Acquire master DMA read channel */
-	if ((r = davinci_request_dma(DAVINCI_DMA_MMCRXEVT, "MMC_READ",
-			mmc_davinci_dma_cb, host, &edma_chan_num, &tcc,
-			queue_no)) != 0) {
+	r = davinci_request_dma(DAVINCI_DMA_MMCRXEVT, "MMC_READ",
+		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
+	if (r != 0) {
 		dev_warn(&mmc_dev,
 				"MMC: davinci_request_dma() failed with %d\n",
 				r);
@@ -454,9 +452,9 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	/* Create a DMA slave read channel
 	 * (assuming max segments handled is 2) */
 	sync_dev = DAVINCI_DMA_MMCRXEVT;
-	if ((r = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "LINK",
-			NULL, NULL, &edma_chan_num, &sync_dev,
-			queue_no)) != 0) {
+	r = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "LINK", NULL, NULL,
+		&edma_chan_num, &sync_dev, queue_no);
+	if (r != 0) {
 		dev_warn(&mmc_dev,
 			"MMC: davinci_request_dma() failed with %d\n", r);
 		goto free_master_read;
@@ -490,8 +488,6 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	enum sync_dimension sync_mode;
 	edmacc_paramentry_regs temp;
 	int edma_chan_num;
-	static unsigned int option_read = 0;
-	static unsigned int option_write = 0;
 	struct mmc_data *data = host->data;
 	struct scatterlist *sg = &data->sg[0];
 	unsigned int count;
@@ -502,9 +498,8 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	frame = data->blksz;
 	count = sg_dma_len(sg);
 
-	if ((data->blocks == 1) && (count > data->blksz)) {
+	if ((data->blocks == 1) && (count > data->blksz))
 		count = frame;
-	}
 
 	if (count % 32 == 0) {
 		acnt = 4;
@@ -569,18 +564,18 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 	davinci_get_dma_params(sync_dev, &temp);
 	if (sync_dev == DAVINCI_DMA_MMCTXEVT) {
-		if (option_write == 0) {
-			option_write = temp.opt;
+		if (host->option_write == 0) {
+			host->option_write = temp.opt;
 		} else {
-			temp.opt = option_write;
+			temp.opt = host->option_write;
 			davinci_set_dma_params(sync_dev, &temp);
 		}
 	}
 	if (sync_dev == DAVINCI_DMA_MMCRXEVT) {
-		if (option_read == 0) {
-			option_read = temp.opt;
+		if (host->option_read == 0) {
+			host->option_read = temp.opt;
 		} else {
-			temp.opt = option_read;
+			temp.opt = host->option_read;
 			davinci_set_dma_params(sync_dev, &temp);
 		}
 	}
@@ -717,9 +712,8 @@ static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
 	sg = host->data->sg + host->sg_idx;
 	host->buffer_bytes_left = sg->length;
 	host->buffer = sg_virt(sg);
-	if (host->buffer_bytes_left > host->bytes_left) {
+	if (host->buffer_bytes_left > host->bytes_left)
 		host->buffer_bytes_left = host->bytes_left;
-	}
 }
 
 static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)
@@ -814,9 +808,8 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		mmcsd_regs->mmc_arghl = 0x0;
 		mmcsd_regs->mmc_cmd = 0x4000;
 		status = 0;
-		while (!(status & (MMCSD_EVENT_EOFCMD))) {
+		while (!(status & (MMCSD_EVENT_EOFCMD)))
 			status = mmcsd_regs->mmc_st0;
-		}
 	}
 }
 
@@ -834,9 +827,9 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 		davinci_abort_dma(host);
 
 		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
-			     (data->
-			      flags & MMC_DATA_WRITE) ? DMA_TO_DEVICE :
-			     DMA_FROM_DEVICE);
+			     (data->flags & MMC_DATA_WRITE)
+			     ? DMA_TO_DEVICE
+			     : DMA_FROM_DEVICE);
 	}
 
 	if (data->error == -ETIMEDOUT) {
@@ -926,7 +919,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					mmc_davinci_cmd_done(host, host->cmd);
 				}
 				dev_dbg(&mmc_dev,
-					"From code segment excuted when card removed\n");
+					"From code segment executed "
+					"when card removed\n");
 				return IRQ_HANDLED;
 			}
 		}
@@ -954,11 +948,11 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					if (host->do_dma == 1) {
 						end_transfer = 1;
 					} else {
-						/* if datasize<32 no RX ints are generated */
-						if (host->bytes_left > 0) {
-							davinci_fifo_data_trans
-							    (host);
-						}
+						/* if datasize < 32 no RX ints
+						 * are generated */
+						if (host->bytes_left > 0)
+							davinci_fifo_data_trans(
+								host);
 						end_transfer = 1;
 					}
 				} else {
@@ -978,19 +972,20 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					spin_unlock_irqrestore(&mmc_lock,
 						flags);
 					dev_dbg(&mmc_dev,
-						"MMCSD: Data timeout, CMD%d and status is %x\r\n",
+						"MMCSD: Data timeout, "
+						"CMD%d and status is %x\r\n",
 						host->cmd->opcode, status);
 
-					if (host->cmd) {
+					if (host->cmd)
 						host->cmd->error =
 						    -ETIMEDOUT;
-					}
 					end_transfer = 1;
 				}
 			}
 
 			if (status & MMCSD_EVENT_ERROR_DATACRC) {
-				/* DAT line portion is diabled and in reset state */
+				/* DAT line portion is disabled
+				 * and in reset state */
 				mmcsd_regs->mmc_ctl =
 				    mmcsd_regs->mmc_ctl | (1 << 1);
 				udelay(10);
@@ -1001,7 +996,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 				if (host->data) {
 					host->data->error = -EILSEQ;
 					dev_dbg(&mmc_dev,
-						"MMCSD: Data CRC error, bytes left %d\r\n",
+						"MMCSD: Data CRC error, "
+						"bytes left %d\r\n",
 						host->bytes_left);
 					end_transfer = 1;
 				} else {
@@ -1044,10 +1040,10 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 				/* Command CRC error */
 				dev_dbg(&mmc_dev, "Command CRC error\r\n");
 				if (host->cmd) {
-					/* Ignore CMD CRC errors during high speed operation */
-					if (host->mmc->ios.clock <= 25000000) {
+					/* Ignore CMD CRC errors during
+					 * high speed operation */
+					if (host->mmc->ios.clock <= 25000000)
 						host->cmd->error = -EILSEQ;
-					}
 					end_command = 1;
 				}
 			}
@@ -1061,7 +1057,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 				status = mmcsd_regs->mmc_st0;
 				if (status != 0) {
 					dev_dbg(&mmc_dev,
-						"Status is %x at end of ISR when host->data is NULL",
+						"Status is %x at end of ISR "
+						"when host->data is NULL\n",
 						status);
 					status = 0;
 
@@ -1269,8 +1266,8 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	mmcsd_regs =
-		(volatile mmcsd_regs_base *)IO_ADDRESS(MMCSD_REGS_BASE_ADDR);
+	mmcsd_regs = (volatile struct mmcsd_regs_base *)
+		IO_ADDRESS(MMCSD_REGS_BASE_ADDR);
 
 	init_mmcsd_host();
 

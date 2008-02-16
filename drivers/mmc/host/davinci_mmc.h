@@ -40,7 +40,7 @@
 * Register Overlay Structure
 \**************************************************************************/
 
-typedef struct {
+struct mmcsd_regs_base {
 	unsigned short mmc_ctl;
 	unsigned char rsvd0[2];
 	unsigned short mmc_clk;
@@ -92,7 +92,7 @@ typedef struct {
 	unsigned short sdio_st;
 	unsigned char rsvd20[2];
 	unsigned short mmc_fifo_ctl;
-} mmcsd_regs_base;
+};
 
 /*
  * Command types
@@ -103,13 +103,12 @@ typedef struct {
 #define DAVINCI_MMC_CMDTYPE_ADTC	3
 #define EDMA_MAX_LOGICAL_CHA_ALLOWED 1
 
-typedef struct {
+struct edma_ch_mmcsd {
 	unsigned char cnt_chanel;
 	unsigned int chanel_num[EDMA_MAX_LOGICAL_CHA_ALLOWED];
-} edma_ch_mmcsd;
+};
 
 struct mmc_davinci_host {
-
 	int initialized;
 	int suspended;
 	struct mmc_request *req;
@@ -142,21 +141,25 @@ struct mmc_davinci_host {
 
 	unsigned char sd_support;
 
-	edma_ch_mmcsd edma_ch_details;
+	struct edma_ch_mmcsd edma_ch_details;
 
 	unsigned int sg_len;
 	int sg_idx;
 	unsigned int buffer_bytes_left;
 	unsigned int dma_len;
 	int dma_state;
+
+	unsigned int option_read;
+	unsigned int option_write;
 };
-typedef struct {
+
+struct mmcsd_config_def {
 	unsigned short rw_threshold;
 	unsigned short use_dma;
 	unsigned short use_4bit_mode;
-} mmcsd_config_def;
+};
 
-typedef enum {
+enum mmcsdevent {
 	MMCSD_EVENT_EOFCMD = (1 << 2),
 	MMCSD_EVENT_READ = (1 << 10),
 	MMCSD_EVENT_WRITE = (1 << 9),
@@ -166,14 +169,7 @@ typedef enum {
 	MMCSD_EVENT_ERROR_DATATIMEOUT = (1 << 3),
 	MMCSD_EVENT_CARD_EXITBUSY = (1 << 1),
 	MMCSD_EVENT_BLOCK_XFERRED = (1 << 0)
-} mmcsdevent;
-
-#define MMCSD_EVENT_TIMEOUT_ERROR \
- (MMCSD_EVENT_ERROR_DATATIMEOUT | MMCSD_EVENT_ERROR_CMDTIMEOUT )
-#define MMCSD_EVENT_CRC_ERROR \
- (MMCSD_EVENT_ERROR_DATACRC | MMCSD_EVENT_ERROR_CMDCRC)
-#define MMCSD_EVENT_ERROR \
- (MMCSD_EVENT_TIMEOUT_ERROR | MMCSD_EVENT_CRC_ERROR)
+};
 
 static void init_mmcsd_host(void);
 
