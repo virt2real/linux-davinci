@@ -72,17 +72,6 @@ static struct mmcsd_config_def mmcsd_cfg = {
 
 #define RSP_TYPE(x)	((x) & ~(MMC_RSP_BUSY|MMC_RSP_OPCODE))
 
-static inline void wait_on_data(struct mmc_davinci_host *host)
-{
-	int cnt = 900000;
-	while ((readl(host->base + DAVINCI_MMCST1) & MMCST1_BUSY) && cnt) {
-		cnt--;
-		udelay(1);
-	}
-	if (!cnt)
-		dev_warn(mmc_dev(host->mmc), "ERROR: TOUT waiting for BUSY\n");
-}
-
 static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		struct mmc_command *cmd)
 {
@@ -676,6 +665,20 @@ static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
 		host->buffer_bytes_left = host->bytes_left;
 }
 
+static inline void wait_on_data(struct mmc_davinci_host *host)
+{
+	unsigned long timeout = jiffies + usecs_to_jiffies(900000);
+
+	while (time_before(jiffies, timeout)) {
+		if (!(readl(host->base + DAVINCI_MMCST1) & MMCST1_BUSY))
+			return;
+
+		cpu_relax();
+	}
+
+	dev_warn(mmc_dev(host->mmc), "ERROR: TOUT waiting for BUSY\n");
+}
+
 static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)
 {
 	struct mmc_davinci_host *host = mmc_priv(mmc);
@@ -731,7 +734,6 @@ static unsigned int calculate_freq_for_card(struct mmc_davinci_host *host,
 
 static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 {
-	unsigned short status;
 	unsigned int open_drain_freq = 0, cpu_arm_clk = 0;
 	unsigned int mmc_push_pull_freq = 0;
 	struct mmc_davinci_host *host = mmc_priv(mmc);
@@ -781,9 +783,9 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		/* Send clock cycles, poll completion */
 		writel(0, host->base + DAVINCI_MMCARGHL);
 		writel(MMCCMD_INITCK, host->base + DAVINCI_MMCCMD);
-		status = 0;
-		while (!(status & (MMCSD_EVENT_EOFCMD)))
-			status = readl(host->base + DAVINCI_MMCST0);
+		while (!(readl(host->base + DAVINCI_MMCST0) &
+				MMCSD_EVENT_EOFCMD))
+			cpu_relax();
 	}
 }
 
