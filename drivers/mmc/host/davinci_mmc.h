@@ -36,63 +36,115 @@
 #ifndef DAVINCI_MMC_H_
 #define DAVINCI_MMC_H_
 
-/**************************************************************************\
-* Register Overlay Structure
-\**************************************************************************/
+/**************************************************************************
+ * Register Definitions
+ **************************************************************************/
 
-struct mmcsd_regs_base {
-	unsigned short mmc_ctl;
-	unsigned char rsvd0[2];
-	unsigned short mmc_clk;
-	unsigned char rsvd1[2];
-	unsigned short mmc_st0;
-	unsigned char rsvd2[2];
-	unsigned short mmc_st1;
-	unsigned char rsvd3[2];
-	unsigned short mmc_im;
-	unsigned char rsvd4[2];
-	unsigned short mmc_tor;
-	unsigned char rsvd5[2];
-	unsigned short mmc_tod;
-	unsigned char rsvd6[2];
-	unsigned short mmc_blen;
-	unsigned char rsvd7[2];
-	unsigned short mmc_nblk;
-	unsigned char rsvd8[2];
-	unsigned short mmc_nblc;
-	unsigned char rsvd9[2];
-	unsigned int mmc_drr;
-	unsigned int mmc_dxr;
-	unsigned int mmc_cmd;
-	unsigned int mmc_arghl;
-	unsigned int mmc_rsp01;
-	unsigned int mmc_rsp23;
-	unsigned int mmc_rsp45;
-	unsigned int mmc_rsp67;
-	unsigned short mmc_drsp;
-	unsigned char rsvd10[2];
-	unsigned short mmc_etok;
-	unsigned char rsvd11[2];
-	unsigned short mmc_cidx;
-	unsigned char rsvd12[2];
-	unsigned short mmc_ckc;
-	unsigned char rsvd13[2];
-	unsigned short mmc_torc;
-	unsigned char rsvd14[2];
-	unsigned short mmc_todc;
-	unsigned char rsvd15[2];
-	unsigned short mmc_blnc;
-	unsigned char rsvd16[2];
-	unsigned short sdio_ctl;
-	unsigned char rsvd17[2];
-	unsigned short sdio_st0;
-	unsigned char rsvd18[2];
-	unsigned short sdio_en;
-	unsigned char rsvd19[2];
-	unsigned short sdio_st;
-	unsigned char rsvd20[2];
-	unsigned short mmc_fifo_ctl;
-};
+#define DAVINCI_MMCCTL       0x00 /* Control Register                  */
+#define DAVINCI_MMCCLK       0x04 /* Memory Clock Control Register     */
+#define DAVINCI_MMCST0       0x08 /* Status Register 0                 */
+#define DAVINCI_MMCST1       0x0C /* Status Register 1                 */
+#define DAVINCI_MMCIM        0x10 /* Interrupt Mask Register           */
+#define DAVINCI_MMCTOR       0x14 /* Response Time-Out Register        */
+#define DAVINCI_MMCTOD       0x18 /* Data Read Time-Out Register       */
+#define DAVINCI_MMCBLEN      0x1C /* Block Length Register             */
+#define DAVINCI_MMCNBLK      0x20 /* Number of Blocks Register         */
+#define DAVINCI_MMCNBLC      0x24 /* Number of Blocks Counter Register */
+#define DAVINCI_MMCDRR       0x28 /* Data Receive Register             */
+#define DAVINCI_MMCDXR       0x2C /* Data Transmit Register            */
+#define DAVINCI_MMCCMD       0x30 /* Command Register                  */
+#define DAVINCI_MMCARGHL     0x34 /* Argument Register                 */
+#define DAVINCI_MMCRSP01     0x38 /* Response Register 0 and 1         */
+#define DAVINCI_MMCRSP23     0x3C /* Response Register 0 and 1         */
+#define DAVINCI_MMCRSP45     0x40 /* Response Register 0 and 1         */
+#define DAVINCI_MMCRSP67     0x44 /* Response Register 0 and 1         */
+#define DAVINCI_MMCDRSP      0x48 /* Data Response Register            */
+#define DAVINCI_MMCETOK      0x4C
+#define DAVINCI_MMCCIDX      0x50 /* Command Index Register            */
+#define DAVINCI_MMCCKC       0x54
+#define DAVINCI_MMCTORC      0x58
+#define DAVINCI_MMCTODC      0x5C
+#define DAVINCI_MMCBLNC      0x60
+#define DAVINCI_SDIOCTL      0x64
+#define DAVINCI_SDIOST0      0x68
+#define DAVINCI_SDIOEN       0x6C
+#define DAVINCI_SDIOST       0x70
+#define DAVINCI_MMCFIFOCTL   0x74 /* FIFO Control Register             */
+
+/* DAVINCI_MMCCTL definitions */
+#define MMCCTL_DATRST         (1 << 0)
+#define MMCCTL_CMDRST         (1 << 1)
+#define MMCCTL_WIDTH_4_BIT    (1 << 2)
+#define MMCCTL_DATEG_DISABLED (0 << 6)
+#define MMCCTL_DATEG_RISING   (1 << 6)
+#define MMCCTL_DATEG_FALLING  (2 << 6)
+#define MMCCTL_DATEG_BOTH     (3 << 6)
+#define MMCCTL_PERMDR_LE      (0 << 9)
+#define MMCCTL_PERMDR_BE      (1 << 9)
+#define MMCCTL_PERMDX_LE      (0 << 10)
+#define MMCCTL_PERMDX_BE      (1 << 10)
+
+/* DAVINCI_MMCCLK definitions */
+#define MMCCLK_CLKEN          (1 << 8)
+#define MMCCLK_CLKRT_MASK     (0xFF << 0)
+
+/* DAVINCI_MMCST0 definitions */
+#define MMCST0_DATDNE         (1 << 0)
+#define MMCST0_BSYDNE         (1 << 1)
+#define MMCST0_RSPDNE         (1 << 2)
+#define MMCST0_TOUTRD         (1 << 3)
+#define MMCST0_TOUTRS         (1 << 4)
+#define MMCST0_CRCWR          (1 << 5)
+#define MMCST0_CRCRD          (1 << 6)
+#define MMCST0_CRCRS          (1 << 7)
+#define MMCST0_DXRDY          (1 << 9)
+#define MMCST0_DRRDY          (1 << 10)
+#define MMCST0_DATED          (1 << 11)
+#define MMCST0_TRNDNE         (1 << 12)
+
+/* DAVINCI_MMCST1 definitions */
+#define MMCST1_BUSY           (1 << 0)
+
+/* DAVINCI_MMCIM definitions */
+#define MMCIM_EDATDNE         (1 << 0)
+#define MMCIM_EBSYDNE         (1 << 1)
+#define MMCIM_ERSPDNE         (1 << 2)
+#define MMCIM_ETOUTRD         (1 << 3)
+#define MMCIM_ETOUTRS         (1 << 4)
+#define MMCIM_ECRCWR          (1 << 5)
+#define MMCIM_ECRCRD          (1 << 6)
+#define MMCIM_ECRCRS          (1 << 7)
+#define MMCIM_EDXRDY          (1 << 9)
+#define MMCIM_EDRRDY          (1 << 10)
+#define MMCIM_EDATED          (1 << 11)
+#define MMCIM_ETRNDNE         (1 << 12)
+
+/* DAVINCI_MMCCMD definitions */
+#define MMCCMD_CMD_MASK       (0x3F << 0)
+#define MMCCMD_PPLEN          (1 << 7)
+#define MMCCMD_BSYEXP         (1 << 8)
+#define MMCCMD_RSPFMT_MASK    (3 << 9)
+#define MMCCMD_RSPFMT_NONE    (0 << 9)
+#define MMCCMD_RSPFMT_R1456   (1 << 9)
+#define MMCCMD_RSPFMT_R2      (2 << 9)
+#define MMCCMD_RSPFMT_R3      (3 << 9)
+#define MMCCMD_DTRW           (1 << 11)
+#define MMCCMD_STRMTP         (1 << 12)
+#define MMCCMD_WDATX          (1 << 13)
+#define MMCCMD_INITCK         (1 << 14)
+#define MMCCMD_DCLR           (1 << 15)
+#define MMCCMD_DMATRIG        (1 << 16)
+
+/* DAVINCI_MMCFIFOCTL definitions */
+#define MMCFIFOCTL_FIFORST    (1 << 0)
+#define MMCFIFOCTL_FIFODIR_WR (1 << 1)
+#define MMCFIFOCTL_FIFODIR_RD (0 << 1)
+#define MMCFIFOCTL_FIFOLEV    (1 << 2) /* 0 = 128 bits, 1 = 256 bits */
+#define MMCFIFOCTL_ACCWD_4    (0 << 3) /* access width of 4 bytes    */
+#define MMCFIFOCTL_ACCWD_3    (1 << 3) /* access width of 3 bytes    */
+#define MMCFIFOCTL_ACCWD_2    (2 << 3) /* access width of 2 bytes    */
+#define MMCFIFOCTL_ACCWD_1    (3 << 3) /* access width of 1 byte     */
+
 
 /*
  * Command types
@@ -118,7 +170,7 @@ struct mmc_davinci_host {
 	struct device *dev;
 	unsigned char id;
 	struct clk *clk;
-	u32 base;
+	void __iomem *base;
 	int irq;
 	unsigned char bus_mode;
 

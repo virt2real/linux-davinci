@@ -77,7 +77,6 @@ struct mmcsd_config_def mmcsd_cfg = {
 	1
 };
 
-static void __iomem *mmcsd_base;
 static unsigned int mmc_input_clk;
 
 /* Used to identify whether card being used currently by linux core or not */
@@ -107,7 +106,7 @@ static DEFINE_SPINLOCK(mmc_lock);
 static inline void wait_on_data(void)
 {
 	int cnt = 900000;
-	while ((readl(mmcsd_base + DAVINCI_MMCST1) & MMCST1_BUSY) && cnt) {
+	while ((readl(host->base + DAVINCI_MMCST1) & MMCST1_BUSY) && cnt) {
 		cnt--;
 		udelay(1);
 	}
@@ -229,7 +228,7 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		cmd_reg = cmd_reg | (1 << 7);
 
 	/* set Command timeout */
-	writel(0xFFFF, mmcsd_base + DAVINCI_MMCTOR);
+	writel(0xFFFF, host->base + DAVINCI_MMCTOR);
 
 	/* Enable interrupt */
 	im_val =  MMCSD_EVENT_EOFCMD
@@ -248,7 +247,7 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		if (!host->do_dma)
 			im_val |= MMCSD_EVENT_READ;
 	}
-	writel(im_val, mmcsd_base + DAVINCI_MMCIM);
+	writel(im_val, host->base + DAVINCI_MMCIM);
 
 	/*
 	 * It is required by controoler b4 WRITE command that
@@ -277,8 +276,8 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	}
 
 	host->is_core_command = 1;
-	writel(cmd->arg, mmcsd_base + DAVINCI_MMCARGHL);
-	writel(cmd_reg,  mmcsd_base + DAVINCI_MMCCMD);
+	writel(cmd->arg, host->base + DAVINCI_MMCARGHL);
+	writel(cmd_reg,  host->base + DAVINCI_MMCCMD);
 }
 
 static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
@@ -308,12 +307,12 @@ static void davinci_fifo_data_trans(struct mmc_davinci_host *host)
 
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
 		for (i = 0; i < (n / 4); i++) {
-			writel(*host->buffer, mmcsd_base + DAVINCI_MMCDXR);
+			writel(*host->buffer, host->base + DAVINCI_MMCDXR);
 			host->buffer++;
 		}
 	} else {
 		for (i = 0; i < (n / 4); i++) {
-			*host->buffer = readl(mmcsd_base + DAVINCI_MMCDRR);
+			*host->buffer = readl(host->base + DAVINCI_MMCDRR);
 			host->buffer++;
 		}
 	}
@@ -618,8 +617,8 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	host->data = req->data;
 	if (req->data == NULL) {
 		host->data_dir = DAVINCI_MMC_DATADIR_NONE;
-		writel(0, mmcsd_base + DAVINCI_MMCBLEN);
-		writel(0, mmcsd_base + DAVINCI_MMCNBLK);
+		writel(0, host->base + DAVINCI_MMCBLEN);
+		writel(0, host->base + DAVINCI_MMCNBLK);
 		return;
 	}
 
@@ -641,9 +640,9 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	if (timeout > 0xffff)
 		timeout = 0xffff;
 
-	writel(timeout, mmcsd_base + DAVINCI_MMCTOD);
-	writel(req->data->blocks, mmcsd_base + DAVINCI_MMCNBLK);
-	writel(req->data->blksz, mmcsd_base + DAVINCI_MMCBLEN);
+	writel(timeout, host->base + DAVINCI_MMCTOD);
+	writel(req->data->blocks, host->base + DAVINCI_MMCNBLK);
+	writel(req->data->blksz, host->base + DAVINCI_MMCBLEN);
 	host->data_dir = (req->data->flags & MMC_DATA_WRITE)
 			? DAVINCI_MMC_DATADIR_WRITE
 			: DAVINCI_MMC_DATADIR_READ;
@@ -652,28 +651,28 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	switch (host->data_dir) {
 	case DAVINCI_MMC_DATADIR_WRITE:
 		/* Reset FIFO */
-		writel(MMCFIFOCTL_FIFORST, mmcsd_base + DAVINCI_MMCFIFOCTL);
-		writel(0, mmcsd_base + DAVINCI_MMCFIFOCTL);
+		writel(MMCFIFOCTL_FIFORST, host->base + DAVINCI_MMCFIFOCTL);
+		writel(0, host->base + DAVINCI_MMCFIFOCTL);
 
 		/* Set FIFO parameters */
 		writel(
 			MMCFIFOCTL_FIFODIR_WR |
 			MMCFIFOCTL_FIFOLEV    |
 			MMCFIFOCTL_ACCWD_4,
-			mmcsd_base + DAVINCI_MMCFIFOCTL);
+			host->base + DAVINCI_MMCFIFOCTL);
 		break;
 
 	case DAVINCI_MMC_DATADIR_READ:
 		/* Reset FIFO */
-		writel(MMCFIFOCTL_FIFORST, mmcsd_base + DAVINCI_MMCFIFOCTL);
-		writel(0, mmcsd_base + DAVINCI_MMCFIFOCTL);
+		writel(MMCFIFOCTL_FIFORST, host->base + DAVINCI_MMCFIFOCTL);
+		writel(0, host->base + DAVINCI_MMCFIFOCTL);
 
 		/* Set FIFO parameters */
 		writel(
 			MMCFIFOCTL_FIFODIR_RD |
 			MMCFIFOCTL_FIFOLEV    |
 			MMCFIFOCTL_ACCWD_4,
-			mmcsd_base + DAVINCI_MMCFIFOCTL);
+			host->base + DAVINCI_MMCFIFOCTL);
 		break;
 	default:
 		break;
@@ -774,35 +773,35 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		ios->vdd / 100, ios->vdd % 100);
 	if (ios->bus_width == MMC_BUS_WIDTH_4) {
 		dev_dbg(&mmc_dev, "\nEnabling 4 bit mode\n");
-		writel(readl(mmcsd_base + DAVINCI_MMCCTL) | MMCCTL_WIDTH_4_BIT,
-			mmcsd_base + DAVINCI_MMCCTL);
+		writel(readl(host->base + DAVINCI_MMCCTL) | MMCCTL_WIDTH_4_BIT,
+			host->base + DAVINCI_MMCCTL);
 	} else {
 		dev_dbg(&mmc_dev, "Disabling 4 bit mode\n");
-		writel(readl(mmcsd_base + DAVINCI_MMCCTL) & ~MMCCTL_WIDTH_4_BIT,
-			mmcsd_base + DAVINCI_MMCCTL);
+		writel(readl(host->base + DAVINCI_MMCCTL) & ~MMCCTL_WIDTH_4_BIT,
+			host->base + DAVINCI_MMCCTL);
 	}
 
 	if (ios->bus_mode == MMC_BUSMODE_OPENDRAIN) {
 		u32 temp;
 		open_drain_freq = ((unsigned int)cpu_arm_clk
 				/ (2 * MMCSD_INIT_CLOCK)) - 1;
-		temp = readl(mmcsd_base + DAVINCI_MMCCLK) & ~0xFF;
+		temp = readl(host->base + DAVINCI_MMCCLK) & ~0xFF;
 		temp |= open_drain_freq;
-		writel(temp, mmcsd_base + DAVINCI_MMCCLK);
+		writel(temp, host->base + DAVINCI_MMCCLK);
 	} else {
 		u32 temp;
 		mmc_push_pull_freq = calculate_freq_for_card(ios->clock);
 
-		temp = readl(mmcsd_base + DAVINCI_MMCCLK) & ~MMCCLK_CLKEN;
-		writel(temp, mmcsd_base + DAVINCI_MMCCLK);
+		temp = readl(host->base + DAVINCI_MMCCLK) & ~MMCCLK_CLKEN;
+		writel(temp, host->base + DAVINCI_MMCCLK);
 
 		udelay(10);
 
-		temp = readl(mmcsd_base + DAVINCI_MMCCLK) & ~MMCCLK_CLKRT_MASK;
+		temp = readl(host->base + DAVINCI_MMCCLK) & ~MMCCLK_CLKRT_MASK;
 		temp |= mmc_push_pull_freq;
-		writel(temp, mmcsd_base + DAVINCI_MMCCLK);
+		writel(temp, host->base + DAVINCI_MMCCLK);
 
-		writel(temp | MMCCLK_CLKEN, mmcsd_base + DAVINCI_MMCCLK);
+		writel(temp | MMCCLK_CLKEN, host->base + DAVINCI_MMCCLK);
 
 		udelay(10);
 	}
@@ -810,11 +809,11 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	host->bus_mode = ios->bus_mode;
 	if (ios->power_mode == MMC_POWER_UP) {
 		/* Send clock cycles, poll completion */
-		writel(0, mmcsd_base + DAVINCI_MMCARGHL);
-		writel(MMCCMD_INITCK, mmcsd_base + DAVINCI_MMCCMD);
+		writel(0, host->base + DAVINCI_MMCARGHL);
+		writel(MMCCMD_INITCK, host->base + DAVINCI_MMCCMD);
 		status = 0;
 		while (!(status & (MMCSD_EVENT_EOFCMD)))
-			status = readl(mmcsd_base + DAVINCI_MMCST0);
+			status = readl(host->base + DAVINCI_MMCST0);
 	}
 }
 
@@ -870,13 +869,13 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 	if (cmd->flags & MMC_RSP_PRESENT) {
 		if (cmd->flags & MMC_RSP_136) {
 			/* response type 2 */
-			cmd->resp[3] = readl(mmcsd_base + DAVINCI_MMCRSP01);
-			cmd->resp[2] = readl(mmcsd_base + DAVINCI_MMCRSP23);
-			cmd->resp[1] = readl(mmcsd_base + DAVINCI_MMCRSP45);
-			cmd->resp[0] = readl(mmcsd_base + DAVINCI_MMCRSP67);
+			cmd->resp[3] = readl(host->base + DAVINCI_MMCRSP01);
+			cmd->resp[2] = readl(host->base + DAVINCI_MMCRSP23);
+			cmd->resp[1] = readl(host->base + DAVINCI_MMCRSP45);
+			cmd->resp[0] = readl(host->base + DAVINCI_MMCRSP67);
 		} else {
 			/* response types 1, 1b, 3, 4, 5, 6 */
-			cmd->resp[0] = readl(mmcsd_base + DAVINCI_MMCRSP67);
+			cmd->resp[0] = readl(host->base + DAVINCI_MMCRSP67);
 		}
 	}
 
@@ -901,18 +900,18 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 
 	if (host->is_core_command) {
 		if (host->cmd == NULL && host->data == NULL) {
-			status = readl(mmcsd_base + DAVINCI_MMCST0);
+			status = readl(host->base + DAVINCI_MMCST0);
 			dev_dbg(&mmc_dev, "Spurious interrupt 0x%04x\r\n",
 				status);
 			/* Disable the interrupt from mmcsd */
-			writel(0, mmcsd_base + DAVINCI_MMCIM);
+			writel(0, host->base + DAVINCI_MMCIM);
 			return IRQ_HANDLED;
 		}
 	}
 	end_command = 0;
 	end_transfer = 0;
 
-	status = readl(mmcsd_base + DAVINCI_MMCST0);
+	status = readl(host->base + DAVINCI_MMCST0);
 	if (status == 0)
 		return IRQ_HANDLED;
 
@@ -992,15 +991,15 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 				u32 temp;
 				/* DAT line portion is disabled
 				 * and in reset state */
-				temp = readl(mmcsd_base + DAVINCI_MMCCTL);
+				temp = readl(host->base + DAVINCI_MMCCTL);
 
 				writel(temp | MMCCTL_CMDRST,
-					mmcsd_base + DAVINCI_MMCCTL);
+					host->base + DAVINCI_MMCCTL);
 
 				udelay(10);
 
 				writel(temp & ~MMCCTL_CMDRST,
-					mmcsd_base + DAVINCI_MMCCTL);
+					host->base + DAVINCI_MMCCTL);
 
 				/* Data CRC error */
 				if (host->data) {
@@ -1063,7 +1062,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 				end_command = 1;
 			}
 
-			status = readl(mmcsd_base + DAVINCI_MMCST0);
+			status = readl(host->base + DAVINCI_MMCST0);
 			if (host->data == NULL) {
 				if (status != 0) {
 					dev_dbg(&mmc_dev,
@@ -1148,17 +1147,17 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 					host->cmd_code = 1;
 					/* Issue cmd1 */
 					writel(0x80300000,
-						mmcsd_base + DAVINCI_MMCARGHL);
+						host->base + DAVINCI_MMCARGHL);
 					writel(MMCCMD_RSPFMT_R3 | 1,
-						mmcsd_base + DAVINCI_MMCCMD);
+						host->base + DAVINCI_MMCCMD);
 				} else {
 					flag_sd_mmc = 1;
 					host->cmd_code = 55;
 					/* Issue cmd55 */
 					writel(0x0,
-						mmcsd_base + DAVINCI_MMCARGHL);
+						host->base + DAVINCI_MMCARGHL);
 					writel(MMCCMD_RSPFMT_R1456 | 55,
-						mmcsd_base + DAVINCI_MMCCMD);
+						host->base + DAVINCI_MMCCMD);
 				}
 
 				dev_dbg(&mmc_dev,
@@ -1208,9 +1207,9 @@ static void mmc_check_card(unsigned long data)
 			/* Issue cmd13 */
 			writel((card && mmc_card_sd(card))
 				? (card->rca << 16) : 0x10000,
-				mmcsd_base + DAVINCI_MMCARGHL);
+				host->base + DAVINCI_MMCARGHL);
 			writel(MMCCMD_RSPFMT_R1456 | MMCCMD_PPLEN | 13,
-				mmcsd_base + DAVINCI_MMCCMD);
+				host->base + DAVINCI_MMCCMD);
 		} else {
 			host->is_core_command = 0;
 			host->cmd_code = 0;
@@ -1219,15 +1218,15 @@ static void mmc_check_card(unsigned long data)
 			spin_unlock_irqrestore(&mmc_lock, flags);
 
 			/* Issue cmd0 */
-			writel(0, mmcsd_base + DAVINCI_MMCARGHL);
-			writel(MMCCMD_INITCK, mmcsd_base + DAVINCI_MMCCMD);
+			writel(0, host->base + DAVINCI_MMCARGHL);
+			writel(MMCCMD_INITCK, host->base + DAVINCI_MMCCMD);
 		}
 		writel(MMCSD_EVENT_EOFCMD
 			| MMCSD_EVENT_ERROR_CMDCRC
 			| MMCSD_EVENT_ERROR_DATACRC
 			| MMCSD_EVENT_ERROR_CMDTIMEOUT
 			| MMCSD_EVENT_ERROR_DATATIMEOUT,
-			mmcsd_base + DAVINCI_MMCIM);
+			host->base + DAVINCI_MMCIM);
 	}
 }
 
@@ -1253,25 +1252,25 @@ static void davinci_mmc_check_status(unsigned long data)
 static void init_mmcsd_host()
 {
 	/* DAT line portion is diabled and in reset state */
-	writel(readl(mmcsd_base + DAVINCI_MMCCTL) | MMCCTL_DATRST,
-		mmcsd_base + DAVINCI_MMCCTL);
+	writel(readl(host->base + DAVINCI_MMCCTL) | MMCCTL_DATRST,
+		host->base + DAVINCI_MMCCTL);
 
 	/* CMD line portion is diabled and in reset state */
-	writel(readl(mmcsd_base + DAVINCI_MMCCTL) | MMCCTL_CMDRST,
-		mmcsd_base + DAVINCI_MMCCTL);
+	writel(readl(host->base + DAVINCI_MMCCTL) | MMCCTL_CMDRST,
+		host->base + DAVINCI_MMCCTL);
 
 	udelay(10);
 
-	writel(0, mmcsd_base + DAVINCI_MMCCLK);
-	writel(MMCCLK_CLKEN, mmcsd_base + DAVINCI_MMCCLK);
+	writel(0, host->base + DAVINCI_MMCCLK);
+	writel(MMCCLK_CLKEN, host->base + DAVINCI_MMCCLK);
 
-	writel(0xFFFF, mmcsd_base + DAVINCI_MMCTOR);
-	writel(0xFFFF, mmcsd_base + DAVINCI_MMCTOD);
+	writel(0xFFFF, host->base + DAVINCI_MMCTOR);
+	writel(0xFFFF, host->base + DAVINCI_MMCTOD);
 
-	writel(readl(mmcsd_base + DAVINCI_MMCCTL) & ~MMCCTL_DATRST,
-		mmcsd_base + DAVINCI_MMCCTL);
-	writel(readl(mmcsd_base + DAVINCI_MMCCTL) & ~MMCCTL_CMDRST,
-		mmcsd_base + DAVINCI_MMCCTL);
+	writel(readl(host->base + DAVINCI_MMCCTL) & ~MMCCTL_DATRST,
+		host->base + DAVINCI_MMCCTL);
+	writel(readl(host->base + DAVINCI_MMCCTL) & ~MMCCTL_CMDRST,
+		host->base + DAVINCI_MMCCTL);
 
 	udelay(10);
 }
@@ -1288,7 +1287,7 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	mmcsd_base = (void __iomem *)IO_ADDRESS(MMCSD_REGS_BASE_ADDR);
+	host->base = (void __iomem *)IO_ADDRESS(MMCSD_REGS_BASE_ADDR);
 
 	init_mmcsd_host();
 
