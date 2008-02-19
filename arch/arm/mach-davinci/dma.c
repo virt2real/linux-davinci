@@ -817,6 +817,8 @@ int davinci_request_dma(int dev_id, const char *dev_name,
 
 			map_dmach_queue(dev_id, eventq_no);
 			ret_val = 0;
+			/* ensure no events are pending */
+			davinci_stop_dma(dev_id);
 		} else
 			ret_val = -EINVAL;
 	}
@@ -1076,18 +1078,21 @@ void davinci_set_dma_src_params(int lch, unsigned long src_port,
 		lch = temp_ch;
 	}
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
+		unsigned int i = ptr_edmacc_regs->
+					paramentry[dma_chan[lch].param_no].opt;
+		if (mode) {
+			/* set SAM and program FWID */
+			i = (i & ~(EDMA_FWID)) | (SAM | ((width & 0x7) << 8));
+		} else {
+			/* clear SAM */
+			i &= ~SAM;
+		}
+		ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].opt = i;
+
 		/* set the source port address
 		   in source register of param structure */
 		ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].src =
 		    src_port;
-		/* set the fifo addressing mode */
-		if (mode) {	/* reset SAM and FWID */
-			ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].opt
-			    &= (~(SAM | EDMA_FWID));
-			/* set SAM and program FWID */
-			ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].opt
-			    |= (mode | ((width & 0x7) << 8));
-		}
 	}
 }
 
@@ -1110,19 +1115,20 @@ void davinci_set_dma_dest_params(int lch, unsigned long dest_port,
 		lch = temp_ch;
 	}
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
+		unsigned int i = ptr_edmacc_regs->
+					paramentry[dma_chan[lch].param_no].opt;
+		if (mode) {
+			/* set DAM and program FWID */
+			i = (i & ~(EDMA_FWID)) | (DAM | ((width & 0x7) << 8));
+		} else {
+			/* clear DAM */
+			i &= ~DAM;
+		}
+		ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].opt = i;
 		/* set the destination port address
 		   in dest register of param structure */
 		ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].dst =
 		    dest_port;
-		/* set the fifo addressing mode */
-		if (mode) {	/* reset DAM and FWID */
-
-			ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].opt
-			    &= (~(DAM | EDMA_FWID));
-			/* set DAM and program FWID */
-			ptr_edmacc_regs->paramentry[dma_chan[lch].param_no].opt
-			    |= ((mode << 1) | ((width & 0x7) << 8));
-		}
 	}
 }
 
