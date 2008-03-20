@@ -72,11 +72,7 @@
 #define in_softirq()		(softirq_count())
 #define in_interrupt()		(irq_count())
 
-#if defined(CONFIG_PREEMPT) && !defined(CONFIG_PREEMPT_BKL)
-# define in_atomic()	((preempt_count() & ~PREEMPT_ACTIVE) != kernel_locked())
-#else
-# define in_atomic()	((preempt_count() & ~PREEMPT_ACTIVE) != 0)
-#endif
+#define in_atomic()		((preempt_count() & ~PREEMPT_ACTIVE) != 0)
 
 #ifdef CONFIG_PREEMPT
 # define PREEMPT_CHECK_OFFSET 1
@@ -113,6 +109,14 @@ static inline void account_system_vtime(struct task_struct *tsk)
 }
 #endif
 
+#if defined(CONFIG_PREEMPT_RCU) && defined(CONFIG_NO_HZ)
+extern void rcu_irq_enter(void);
+extern void rcu_irq_exit(void);
+#else
+# define rcu_irq_enter() do { } while (0)
+# define rcu_irq_exit() do { } while (0)
+#endif /* CONFIG_PREEMPT_RCU */
+
 /*
  * It is safe to do non-atomic ops on ->hardirq_context,
  * because NMI handlers may not preempt and the ops are
@@ -121,6 +125,7 @@ static inline void account_system_vtime(struct task_struct *tsk)
  */
 #define __irq_enter()					\
 	do {						\
+		rcu_irq_enter();			\
 		account_system_vtime(current);		\
 		add_preempt_count(HARDIRQ_OFFSET);	\
 		trace_hardirq_enter();			\
@@ -139,6 +144,7 @@ extern void irq_enter(void);
 		trace_hardirq_exit();			\
 		account_system_vtime(current);		\
 		sub_preempt_count(HARDIRQ_OFFSET);	\
+		rcu_irq_exit();				\
 	} while (0)
 
 /*

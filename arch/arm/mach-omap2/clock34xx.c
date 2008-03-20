@@ -33,9 +33,9 @@
 #include "clock.h"
 #include "clock34xx.h"
 #include "prm.h"
-#include "prm_regbits_34xx.h"
+#include "prm-regbits-34xx.h"
 #include "cm.h"
-#include "cm_regbits_34xx.h"
+#include "cm-regbits-34xx.h"
 
 /* CM_CLKEN_PLL*.EN* bit values */
 #define DPLL_LOCKED		0x7
@@ -212,10 +212,10 @@ int __init omap2_clk_init(void)
 
 	recalculate_root_clocks();
 
-	printk(KERN_INFO "Clocking rate (Crystal/DPLL/MPU): "
+	printk(KERN_INFO "Clocking rate (Crystal/DPLL/ARM core): "
 	       "%ld.%01ld/%ld/%ld MHz\n",
 	       (osc_sys_ck.rate / 1000000), (osc_sys_ck.rate / 100000) % 10,
-	       (core_ck.rate / 1000000), (dpll1_fck.rate / 1000000)) ;
+	       (core_ck.rate / 1000000), (arm_fck.rate / 1000000));
 
 	/*
 	 * Only enable those clocks we will need, let the drivers

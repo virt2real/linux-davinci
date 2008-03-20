@@ -145,6 +145,8 @@ struct omap_i2c_dev {
 						 */
 	unsigned		rev1:1;
 	unsigned		b_hw:1;		/* bad h/w fixes */
+	unsigned		idle:1;
+	u16			iestate;	/* Saved interrupt register */
 };
 
 static inline void omap_i2c_write_reg(struct omap_i2c_dev *i2c_dev,
@@ -202,18 +204,30 @@ static void omap_i2c_put_clocks(struct omap_i2c_dev *dev)
 	}
 }
 
-static void omap_i2c_enable_clocks(struct omap_i2c_dev *dev)
+static void omap_i2c_unidle(struct omap_i2c_dev *dev)
 {
 	if (dev->iclk != NULL)
 		clk_enable(dev->iclk);
 	clk_enable(dev->fclk);
+	if (dev->iestate)
+		omap_i2c_write_reg(dev, OMAP_I2C_IE_REG, dev->iestate);
+	dev->idle = 0;
 }
 
-static void omap_i2c_disable_clocks(struct omap_i2c_dev *dev)
+static void omap_i2c_idle(struct omap_i2c_dev *dev)
 {
+	u16 iv;
+
+	dev->idle = 1;
+	dev->iestate = omap_i2c_read_reg(dev, OMAP_I2C_IE_REG);
+	omap_i2c_write_reg(dev, OMAP_I2C_IE_REG, 0);
+	if (dev->rev1)
+		iv = omap_i2c_read_reg(dev, OMAP_I2C_IV_REG);
+	else
+		omap_i2c_write_reg(dev, OMAP_I2C_STAT_REG, dev->iestate);
+	clk_disable(dev->fclk);
 	if (dev->iclk != NULL)
 		clk_disable(dev->iclk);
-	clk_disable(dev->fclk);
 }
 
 static int omap_i2c_init(struct omap_i2c_dev *dev)
@@ -474,10 +488,8 @@ omap_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	int i;
 	int r;
 
-	omap_i2c_enable_clocks(dev);
+	omap_i2c_unidle(dev);
 
-	/* REVISIT: initialize and use adap->retries. This is an optional
-	 * feature */
 	if ((r = omap_i2c_wait_for_bb(dev)) < 0)
 		goto out;
 
@@ -490,7 +502,7 @@ omap_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	if (r == 0)
 		r = num;
 out:
-	omap_i2c_disable_clocks(dev);
+	omap_i2c_idle(dev);
 	return r;
 }
 
@@ -522,6 +534,9 @@ omap_i2c_rev1_isr(int this_irq, void *dev_id)
 {
 	struct omap_i2c_dev *dev = dev_id;
 	u16 iv, w;
+
+	if (dev->idle)
+		return IRQ_NONE;
 
 	iv = omap_i2c_read_reg(dev, OMAP_I2C_IV_REG);
 	switch (iv) {
@@ -576,6 +591,9 @@ omap_i2c_isr(int this_irq, void *dev_id)
 	u16 bits;
 	u16 stat, w;
 	int count = 0;
+
+	if (dev->idle)
+		return IRQ_NONE;
 
 	bits = omap_i2c_read_reg(dev, OMAP_I2C_IE_REG);
 	while ((stat = (omap_i2c_read_reg(dev, OMAP_I2C_STAT_REG))) & bits) {
@@ -733,7 +751,7 @@ omap_i2c_probe(struct platform_device *pdev)
 	if ((r = omap_i2c_get_clocks(dev)) != 0)
 		goto err_free_mem;
 
-	omap_i2c_enable_clocks(dev);
+	omap_i2c_unidle(dev);
 
 	if (cpu_is_omap15xx())
 		dev->rev1 = omap_i2c_read_reg(dev, OMAP_I2C_REV_REG) < 0x20;
@@ -781,7 +799,7 @@ omap_i2c_probe(struct platform_device *pdev)
 		goto err_free_irq;
 	}
 
-	omap_i2c_disable_clocks(dev);
+	omap_i2c_idle(dev);
 
 	return 0;
 
@@ -789,7 +807,7 @@ err_free_irq:
 	free_irq(dev->irq, dev);
 err_unuse_clocks:
 	omap_i2c_write_reg(dev, OMAP_I2C_CON_REG, 0);
-	omap_i2c_disable_clocks(dev);
+	omap_i2c_idle(dev);
 	omap_i2c_put_clocks(dev);
 err_free_mem:
 	platform_set_drvdata(pdev, NULL);

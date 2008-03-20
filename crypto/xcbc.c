@@ -19,6 +19,7 @@
  * 	Kazunori Miyazawa <miyazawa@linux-ipv6.org>
  */
 
+#include <crypto/scatterwalk.h>
 #include <linux/crypto.h>
 #include <linux/err.h>
 #include <linux/hardirq.h>
@@ -27,7 +28,6 @@
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
-#include "internal.h"
 
 static u_int32_t ks[12] = {0x01010101, 0x01010101, 0x01010101, 0x01010101,
 			   0x02020202, 0x02020202, 0x02020202, 0x02020202,
@@ -124,6 +124,11 @@ static int crypto_xcbc_digest_update2(struct hash_desc *pdesc,
 		unsigned int offset = sg[i].offset;
 		unsigned int slen = sg[i].length;
 
+		if (unlikely(slen > nbytes))
+			slen = nbytes;
+
+		nbytes -= slen;
+
 		while (slen > 0) {
 			unsigned int len = min(slen, ((unsigned int)(PAGE_SIZE)) - offset);
 			char *p = crypto_kmap(pg, 0) + offset;
@@ -177,7 +182,6 @@ static int crypto_xcbc_digest_update2(struct hash_desc *pdesc,
 			offset = 0;
 			pg++;
 		}
-		nbytes-=sg[i].length;
 		i++;
 	} while (nbytes>0);
 
@@ -301,13 +305,14 @@ static struct crypto_instance *xcbc_alloc(struct rtattr **tb)
 	alg = crypto_get_attr_alg(tb, CRYPTO_ALG_TYPE_CIPHER,
 				  CRYPTO_ALG_TYPE_MASK);
 	if (IS_ERR(alg))
-		return ERR_PTR(PTR_ERR(alg));
+		return ERR_CAST(alg);
 
 	switch(alg->cra_blocksize) {
 	case 16:
 		break;
 	default:
-		return ERR_PTR(PTR_ERR(alg));
+		inst = ERR_PTR(-EINVAL);
+		goto out_put_alg;
 	}
 
 	inst = crypto_alloc_instance("xcbc", alg);
@@ -320,10 +325,7 @@ static struct crypto_instance *xcbc_alloc(struct rtattr **tb)
 	inst->alg.cra_alignmask = alg->cra_alignmask;
 	inst->alg.cra_type = &crypto_hash_type;
 
-	inst->alg.cra_hash.digestsize =
-		(alg->cra_flags & CRYPTO_ALG_TYPE_MASK) ==
-		CRYPTO_ALG_TYPE_HASH ? alg->cra_hash.digestsize :
-				       alg->cra_blocksize;
+	inst->alg.cra_hash.digestsize = alg->cra_blocksize;
 	inst->alg.cra_ctxsize = sizeof(struct crypto_xcbc_ctx) +
 				ALIGN(inst->alg.cra_blocksize * 3, sizeof(void *));
 	inst->alg.cra_init = xcbc_init_tfm;

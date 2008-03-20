@@ -1,19 +1,12 @@
 /*
  *  linux/arch/arm/mach-omap2/clock.c
  *
- *  Copyright (C) 2005 Texas Instruments Inc.
+ *  Copyright (C) 2005-2008 Texas Instruments, Inc.
+ *  Copyright (C) 2004-2008 Nokia Corporation
+ *
+ *  Contacts:
  *  Richard Woodruff <r-woodruff2@ti.com>
- *  Created for OMAP2.
- *
- *  Cleaned up and modified to use omap shared clock framework by
- *  Tony Lindgren <tony@atomide.com>
- *
- *  Copyright (C) 2007 Texas Instruments, Inc.
- *  Copyright (C) 2007 Nokia Corporation
  *  Paul Walmsley
- *
- *  Based on omap1 clock.c, Copyright (C) 2004 - 2005 Nokia corporation
- *  Written by Tuukka Tikkanen <tuukka.tikkanen@elektrobit.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -40,10 +33,10 @@
 #include "sdrc.h"
 #include "clock.h"
 #include "prm.h"
-#include "prm_regbits_24xx.h"
+#include "prm-regbits-24xx.h"
 #include "cm.h"
-#include "cm_regbits_24xx.h"
-#include "cm_regbits_34xx.h"
+#include "cm-regbits-24xx.h"
+#include "cm-regbits-34xx.h"
 
 #define MAX_CLOCK_ENABLE_WAIT		100000
 
@@ -121,14 +114,6 @@ u32 omap2_get_dpll_rate(struct clk *clk)
 
 	dpll_clk = (long long)clk->parent->rate * dpll_mult;
 	do_div(dpll_clk, dpll_div + 1);
-
-	/* 34XX only */
-	if (dd->div2_reg) {
-		dpll = cm_read_reg(dd->div2_reg);
-		dpll_div = dpll & dd->div2_mask;
-		dpll_div >>= mask_to_shift(dd->div2_mask);
-		do_div(dpll_clk, dpll_div + 1);
-	}
 
 	return dpll_clk;
 }

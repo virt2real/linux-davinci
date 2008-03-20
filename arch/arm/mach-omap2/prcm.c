@@ -16,9 +16,10 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/clk.h>
+#include <linux/io.h>
 
 #include "prm.h"
-#include "prm_regbits_24xx.h"
+#include "prm-regbits-24xx.h"
 
 extern void omap2_clk_prepare_for_reboot(void);
 

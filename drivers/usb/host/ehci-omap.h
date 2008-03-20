@@ -2,7 +2,7 @@
  * ehci-omap.h - register definitions for USBHOST in OMAP 34xx
  *
  * Copyright (C) 2007-2008 Texas Instruments, Inc.
- * Copyright (C) 2007-2008 Vikram Pandita <vikram.pandita@ti.com>
+ * 	Author: Vikram Pandita <vikram.pandita@ti.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
 
 #include <asm/hardware.h>
 #include "../../../arch/arm/mach-omap2/cm.h"
-#include "../../../arch/arm/mach-omap2/cm_regbits_34xx.h"
+#include "../../../arch/arm/mach-omap2/cm-regbits-34xx.h"
 
 /*
  * OMAP USBHOST Register addresses: PHYSICAL ADDRESSES
@@ -81,7 +81,12 @@
 #define	OMAP_TLL_ULPI_DEBUG(num)\
 			(OMAP_USBHOST_TLL_BASE + (0x815 + 0x100 * num))
 #define	OMAP_TLL_ULPI_SCRATCH_REGISTER(num)\
-			(OMAP_USBHOST_TLL_BASE + (0x8165 + 0x100 * num))
+			(OMAP_USBHOST_TLL_BASE + (0x816 + 0x100 * num))
+
+#define OMAP_TLL_CHANNEL_COUNT		3
+	#define OMAP_TLL_CHANNEL_1_EN_MASK	1
+	#define OMAP_TLL_CHANNEL_2_EN_MASK	2
+	#define OMAP_TLL_CHANNEL_3_EN_MASK	4
 
 /* UHH Register Set */
 #define	OMAP_USBHOST_UHH_BASE	(OMAP_USBHOST_BASE + 0x4000)
@@ -97,6 +102,10 @@
 #define	OMAP_UHH_SYSSTATUS	(OMAP_USBHOST_UHH_BASE + 0x14)
 #define	OMAP_UHH_HOSTCONFIG	(OMAP_USBHOST_UHH_BASE + 0x40)
 	#define	OMAP_UHH_HOSTCONFIG_ULPI_BYPASS_SHIFT	0
+	#define OMAP_UHH_HOSTCONFIG_INCR4_BURST_EN_SHIFT	2
+	#define OMAP_UHH_HOSTCONFIG_INCR8_BURST_EN_SHIFT	3
+	#define OMAP_UHH_HOSTCONFIG_INCR16_BURST_EN_SHIFT	4
+	#define OMAP_UHH_HOSTCONFIG_INCRX_ALIGN_EN_SHIFT	5
 
 #define	OMAP_UHH_DEBUG_CSR	(OMAP_USBHOST_UHH_BASE + 0x44)
 

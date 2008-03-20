@@ -129,6 +129,7 @@ static struct acpi_ec {
 	struct mutex lock;
 	wait_queue_head_t wait;
 	struct list_head list;
+	atomic_t irq_count;
 	u8 handlers_installed;
 } *boot_ec, *first_ec;
 
@@ -181,6 +182,8 @@ static int acpi_ec_wait(struct acpi_ec *ec, enum ec_event event, int force_poll)
 {
 	int ret = 0;
 
+	atomic_set(&ec->irq_count, 0);
+
 	if (unlikely(event == ACPI_EC_EVENT_OBF_1 &&
 		     test_bit(EC_FLAGS_NO_OBF1_GPE, &ec->flags)))
 		force_poll = 1;
@@ -227,6 +230,7 @@ static int acpi_ec_wait(struct acpi_ec *ec, enum ec_event event, int force_poll)
 		while (time_before(jiffies, delay)) {
 			if (acpi_ec_check_status(ec, event))
 				goto end;
+			msleep(5);
 		}
 	}
 	pr_err(PREFIX "acpi_ec_wait timeout,"
@@ -529,6 +533,13 @@ static u32 acpi_ec_gpe_handler(void *data)
 	struct acpi_ec *ec = data;
 
 	pr_debug(PREFIX "~~~> interrupt\n");
+	atomic_inc(&ec->irq_count);
+	if (atomic_read(&ec->irq_count) > 5) {
+		pr_err(PREFIX "GPE storm detected, disabling EC GPE\n");
+		acpi_disable_gpe(NULL, ec->gpe, ACPI_ISR);
+		clear_bit(EC_FLAGS_GPE_MODE, &ec->flags);
+		return ACPI_INTERRUPT_HANDLED;
+	}
 	clear_bit(EC_FLAGS_WAIT_GPE, &ec->flags);
 	if (test_bit(EC_FLAGS_GPE_MODE, &ec->flags))
 		wake_up(&ec->wait);
@@ -573,7 +584,7 @@ acpi_ec_space_handler(u32 function, acpi_physical_address address,
 		      void *handler_context, void *region_context)
 {
 	struct acpi_ec *ec = handler_context;
-	int result = 0, i = 0;
+	int result = 0, i;
 	u8 temp = 0;
 
 	if ((address > 0xFF) || !value || !handler_context)
@@ -585,7 +596,18 @@ acpi_ec_space_handler(u32 function, acpi_physical_address address,
 	if (bits != 8 && acpi_strict)
 		return AE_BAD_PARAMETER;
 
-	while (bits - i > 0) {
+	acpi_ec_burst_enable(ec);
+
+	if (function == ACPI_READ) {
+		result = acpi_ec_read(ec, address, &temp);
+		*value = temp;
+	} else {
+		temp = 0xff & (*value);
+		result = acpi_ec_write(ec, address, temp);
+	}
+
+	for (i = 8; unlikely(bits - i > 0); i += 8) {
+		++address;
 		if (function == ACPI_READ) {
 			result = acpi_ec_read(ec, address, &temp);
 			(*value) |= ((acpi_integer)temp) << i;
@@ -593,9 +615,9 @@ acpi_ec_space_handler(u32 function, acpi_physical_address address,
 			temp = 0xff & ((*value) >> i);
 			result = acpi_ec_write(ec, address, temp);
 		}
-		i += 8;
-		++address;
 	}
+
+	acpi_ec_burst_disable(ec);
 
 	switch (result) {
 	case -EINVAL:

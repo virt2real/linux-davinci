@@ -1,15 +1,15 @@
 /*
  *  linux/arch/arm/mach-omap2/clock.c
  *
- *  Copyright (C) 2005 Texas Instruments Inc.
+ *  Copyright (C) 2005-2008 Texas Instruments, Inc.
+ *  Copyright (C) 2004-2008 Nokia Corporation
+ *
+ *  Contacts:
  *  Richard Woodruff <r-woodruff2@ti.com>
- *  Created for OMAP2.
+ *  Paul Walmsley
  *
- *  Cleaned up and modified to use omap shared clock framework by
- *  Tony Lindgren <tony@atomide.com>
- *
- *  Based on omap1 clock.c, Copyright (C) 2004 - 2005 Nokia corporation
- *  Written by Tuukka Tikkanen <tuukka.tikkanen@elektrobit.com>
+ *  Based on earlier work by Tuukka Tikkanen, Tony Lindgren,
+ *  Gordon McNutt and RidgeRun, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -36,9 +36,9 @@
 #include "clock.h"
 #include "clock24xx.h"
 #include "prm.h"
-#include "prm_regbits_24xx.h"
+#include "prm-regbits-24xx.h"
 #include "cm.h"
-#include "cm_regbits_24xx.h"
+#include "cm-regbits-24xx.h"
 
 /* CM_CLKEN_PLL.EN_{54,96}M_PLL options (24XX) */
 #define EN_APLL_STOPPED			0
@@ -529,7 +529,7 @@ int __init omap2_clk_init(void)
 			continue;
 		}
 
-		if ((*clkp)->flags & CLOCK_IN_OMAP243X && (cpu_is_omap2430() || cpu_is_omap34xx())) {
+		if ((*clkp)->flags & CLOCK_IN_OMAP243X && cpu_is_omap2430()) {
 			clk_register(*clkp);
 			continue;
 		}

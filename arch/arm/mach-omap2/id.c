@@ -60,9 +60,6 @@ static struct omap_id omap_ids[] __initdata = {
 	{ .hawkeye = 0xb5d9, .dev = 0x4, .type = 0x24220000 },
 	{ .hawkeye = 0xb5d9, .dev = 0x8, .type = 0x24230000 },
 	{ .hawkeye = 0xb68a, .dev = 0x0, .type = 0x24300000 },
-	{ .hawkeye = 0xb7ae, .dev = 0xf, .type = 0x34300000 },
-	{ .hawkeye = 0xb7ae, .dev = 0x0, .type = 0x34301000 },
-	{ .hawkeye = 0xb7ae, .dev = 0xe, .type = 0x34302000 },
 };
 
 static u32 __init read_tap_reg(int reg)
@@ -88,16 +85,6 @@ static u32 __init read_tap_reg(int reg)
 		case OMAP_TAP_DIE_ID_1: regval = 0x1012d687; break;
 		case OMAP_TAP_DIE_ID_2:	regval = 0x00000000; break;
 		case OMAP_TAP_DIE_ID_3:	regval = 0x2d2c0000; break;
-		}
-	} else if ((((cpuid >> 4) & 0xFFF) == 0xC08) && ((cpuid & 0xF) == 0x1)) {
-		switch (reg) {
-		case OMAP_TAP_IDCODE  : regval = 0x1b7ae02f; break;
-		/* Making DevType as 0xE in ES2 to differ from other ESx */
-		case OMAP_TAP_PROD_ID : regval = 0x000E00F0; break;
-		case OMAP_TAP_DIE_ID_0: regval = 0x0400800f; break;
-		case OMAP_TAP_DIE_ID_1: regval = 0x04013d1d; break;
-		case OMAP_TAP_DIE_ID_2: regval = 0x00000000; break;
-		case OMAP_TAP_DIE_ID_3: regval = 0x1fe80001; break;
 		}
 	} else
 		regval = __raw_readl(TAP_BASE + reg);
@@ -138,6 +125,17 @@ void __init omap2_check_revision(void)
 		prod_id, dev_type);
 #endif
 
+	/*
+	 * Detection for 34xx ES2.0 and above can be done with just
+	 * hawkeye and rev. See TRM 1.5.2 Device Identification.
+	 * Note that rev cannot be used directly as ES1.0 uses value 0.
+	 */
+	if (hawkeye == 0xb7ae) {
+		system_rev = 0x34300000 | ((1 + rev) << 12);
+		pr_info("OMAP%04x ES2.%i\n", system_rev >> 16, rev);
+		return;
+	}
+
 	/* Check hawkeye ids */
 	for (i = 0; i < ARRAY_SIZE(omap_ids); i++) {
 		if (hawkeye == omap_ids[i].hawkeye)
@@ -168,10 +166,13 @@ void __init omap2_check_revision(void)
 	 * system_rev & 0xffff0000 -> Omap type (2420/2422/2423/2430/3430)
 	 * system_rev & 0x0000f000 -> Silicon revision (ES1, ES2 )
 	 * system_rev & 0x00000700 -> Device Type ( EMU/HS/GP/BAD )
+	 * system_rev & 0x000000c0 -> IDCODE revision[6:7]
 	 * system_rev & 0x0000003f -> sys_boot[0:5]
 	 */
 	/* Embedding the ES revision info in type field */
 	system_rev = omap_ids[j].type;
+	/* Also add IDCODE revision info only two lower bits */
+	system_rev |= ((rev & 0x3) << 6);
 
 	/* Add in the device type and sys_boot fields (see above) */
 	if (cpu_is_omap24xx()) {

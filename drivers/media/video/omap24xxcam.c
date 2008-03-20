@@ -255,7 +255,7 @@ static void omap24xxcam_vbq_free_mmap_buffers(struct videobuf_queue *vbq)
 {
 	int i;
 
-	mutex_lock(&vbq->lock);
+	mutex_lock(&vbq->vb_lock);
 
 	for (i = 0; i < VIDEO_MAX_FRAME; i++) {
 		if (NULL == vbq->bufs[i])
@@ -268,7 +268,7 @@ static void omap24xxcam_vbq_free_mmap_buffers(struct videobuf_queue *vbq)
 		vbq->bufs[i] = NULL;
 	}
 
-	mutex_unlock(&vbq->lock);
+	mutex_unlock(&vbq->vb_lock);
 
 	videobuf_mmap_free(vbq);
 }
@@ -354,7 +354,7 @@ static int omap24xxcam_vbq_alloc_mmap_buffers(struct videobuf_queue *vbq,
 	struct omap24xxcam_fh *fh =
 		container_of(vbq, struct omap24xxcam_fh, vbq);
 
-	mutex_lock(&vbq->lock);
+	mutex_lock(&vbq->vb_lock);
 
 	for (i = 0; i < count; i++) {
 		err = omap24xxcam_vbq_alloc_mmap_buffer(vbq->bufs[i]);
@@ -364,7 +364,7 @@ static int omap24xxcam_vbq_alloc_mmap_buffers(struct videobuf_queue *vbq,
 			videobuf_to_dma(vbq->bufs[i])->sglen, i);
 	}
 
-	mutex_unlock(&vbq->lock);
+	mutex_unlock(&vbq->vb_lock);
 
 	return 0;
 out:
@@ -373,7 +373,7 @@ out:
 		omap24xxcam_vbq_free_mmap_buffer(vbq->bufs[i]);
 	}
 
-	mutex_unlock(&vbq->lock);
+	mutex_unlock(&vbq->vb_lock);
 
 	return err;
 }
@@ -402,13 +402,13 @@ static void omap24xxcam_vbq_complete(struct omap24xxcam_sgdma *sgdma,
 	do_gettimeofday(&vb->ts);
 	vb->field_count = atomic_add_return(2, &fh->field_count);
 	if (csr & csr_error) {
-		vb->state = STATE_ERROR;
+		vb->state = VIDEOBUF_ERROR;
 		if (!atomic_read(&fh->cam->in_reset)) {
 			dev_dbg(cam->dev, "resetting camera, csr 0x%x\n", csr);
 			omap24xxcam_reset(cam);
 		}
 	} else
-		vb->state = STATE_DONE;
+		vb->state = VIDEOBUF_DONE;
 	wake_up(&vb->done);
 }
 
@@ -428,7 +428,7 @@ static void omap24xxcam_vbq_release(struct videobuf_queue *vbq,
 		videobuf_dma_free(videobuf_to_dma(vb));
 	}
 
-	vb->state = STATE_NEEDS_INIT;
+	vb->state = VIDEOBUF_NEEDS_INIT;
 }
 
 /*
@@ -491,7 +491,7 @@ static int omap24xxcam_vbq_prepare(struct videobuf_queue *vbq,
 		} else
 			vb->size = fh->pix.sizeimage;
 	} else {
-		if (vb->state != STATE_NEEDS_INIT) {
+		if (vb->state != VIDEOBUF_NEEDS_INIT) {
 			/*
 			 * We have a kernel bounce buffer that has
 			 * already been allocated.
@@ -519,7 +519,7 @@ static int omap24xxcam_vbq_prepare(struct videobuf_queue *vbq,
 	vb->height = fh->pix.height;
 	vb->field = field;
 
-	if (vb->state == STATE_NEEDS_INIT) {
+	if (vb->state == VIDEOBUF_NEEDS_INIT) {
 		if (vb->memory == V4L2_MEMORY_MMAP)
 			/*
 			 * we have built the scatter-gather list by ourself so
@@ -531,7 +531,7 @@ static int omap24xxcam_vbq_prepare(struct videobuf_queue *vbq,
 	}
 
 	if (!err)
-		vb->state = STATE_PREPARED;
+		vb->state = VIDEOBUF_PREPARED;
 	else
 		omap24xxcam_vbq_release(vbq, vb);
 
@@ -552,7 +552,7 @@ static void omap24xxcam_vbq_queue(struct videobuf_queue *vbq,
 	 * pretty way of marking it active exactly when the
 	 * scatter-gather transfer starts.
 	 */
-	vb->state = STATE_ACTIVE;
+	vb->state = VIDEOBUF_ACTIVE;
 
 	err = omap24xxcam_sgdma_queue(&fh->cam->sgdma,
 				      videobuf_to_dma(vb)->sglist,
@@ -1041,9 +1041,9 @@ out:
 	mutex_unlock(&cam->mutex);
 
 	if (!rval) {
-		mutex_lock(&ofh->vbq.lock);
+		mutex_lock(&ofh->vbq.vb_lock);
 		ofh->pix = f->fmt.pix;
-		mutex_unlock(&ofh->vbq.lock);
+		mutex_unlock(&ofh->vbq.vb_lock);
 	}
 
 	memset(f, 0, sizeof(*f));
@@ -1121,6 +1121,7 @@ static int vidioc_dqbuf(struct file *file, void *fh, struct v4l2_buffer *b)
 	struct videobuf_buffer *vb;
 	int rval;
 
+videobuf_dqbuf_again:
 	rval = videobuf_dqbuf(&ofh->vbq, b, file->f_flags & O_NONBLOCK);
 	if (rval)
 		goto out;
@@ -1138,12 +1139,20 @@ static int vidioc_dqbuf(struct file *file, void *fh, struct v4l2_buffer *b)
 
 out:
 	/*
-	 * This is a hack. User space won't get the index of this
-	 * buffer and does not want to requeue it so we requeue it
-	 * here.
+	 * This is a hack. We don't want to show -EIO to the user
+	 * space. Requeue the buffer and try again if we're not doing
+	 * this in non-blocking mode.
 	 */
-	if (rval == -EIO)
+	if (rval == -EIO) {
 		videobuf_qbuf(&ofh->vbq, b);
+		if (!(file->f_flags & O_NONBLOCK))
+			goto videobuf_dqbuf_again;
+		/*
+		 * We don't have a videobuf_buffer now --- maybe next
+		 * time...
+		 */
+		rval = -EAGAIN;
+	}
 
 	return rval;
 }
@@ -1345,17 +1354,17 @@ static unsigned int omap24xxcam_poll(struct file *file,
 	}
 	mutex_unlock(&cam->mutex);
 
-	mutex_lock(&fh->vbq.lock);
+	mutex_lock(&fh->vbq.vb_lock);
 	if (list_empty(&fh->vbq.stream)) {
-		mutex_unlock(&fh->vbq.lock);
+		mutex_unlock(&fh->vbq.vb_lock);
 		return POLLERR;
 	}
 	vb = list_entry(fh->vbq.stream.next, struct videobuf_buffer, stream);
-	mutex_unlock(&fh->vbq.lock);
+	mutex_unlock(&fh->vbq.vb_lock);
 
 	poll_wait(file, &vb->done, wait);
 
-	if (vb->state == STATE_DONE || vb->state == STATE_ERROR)
+	if (vb->state == VIDEOBUF_DONE || vb->state == VIDEOBUF_ERROR)
 		return POLLIN | POLLRDNORM;
 
 	return 0;
@@ -1376,7 +1385,7 @@ static int omap24xxcam_mmap_buffers(struct file *file,
 		return -EBUSY;
 	}
 	mutex_unlock(&cam->mutex);
-	mutex_lock(&vbq->lock);
+	mutex_lock(&vbq->vb_lock);
 
 	/* look for first buffer to map */
 	for (first = 0; first < VIDEO_MAX_FRAME; first++) {
@@ -1415,7 +1424,7 @@ static int omap24xxcam_mmap_buffers(struct file *file,
 	}
 
 out:
-	mutex_unlock(&vbq->lock);
+	mutex_unlock(&vbq->vb_lock);
 
 	return err;
 }

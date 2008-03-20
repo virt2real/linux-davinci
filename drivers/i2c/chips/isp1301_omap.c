@@ -35,6 +35,7 @@
 #include <linux/workqueue.h>
 #include <asm/arch/usb.h>
 
+#include <asm/mach-types.h> /* FIXME: Move machine_is_* to board-*.c files */
 
 #ifndef	DEBUG
 #undef	VERBOSE
@@ -93,7 +94,7 @@ struct isp1301 {
 
 #if	defined(CONFIG_TPS65010) || defined(CONFIG_TPS65010_MODULE)
 
-#include <asm/arch/tps65010.h>
+#include <linux/i2c/tps65010.h>
 
 #else
 
@@ -257,12 +258,6 @@ static inline const char *state_name(struct isp1301 *isp)
 {
 	return state_string(isp->otg.state);
 }
-
-#ifdef	VERBOSE
-#define	dev_vdbg			dev_dbg
-#else
-#define	dev_vdbg(dev, fmt, arg...)	do{}while(0)
-#endif
 
 /*-------------------------------------------------------------------------*/
 

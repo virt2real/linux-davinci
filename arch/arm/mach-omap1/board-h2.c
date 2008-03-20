@@ -23,16 +23,20 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
+#include <linux/i2c.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/input.h>
+#include <linux/i2c/tps65010.h>
 #include <linux/workqueue.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/tsc2101.h>
 #include <linux/clk.h>
 
 #include <asm/hardware.h>
+#include <asm/gpio.h>
+
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/flash.h>
@@ -208,7 +212,7 @@ static struct resource h2_smc91x_resources[] = {
 	[1] = {
 		.start	= OMAP_GPIO_IRQ(0),
 		.end	= OMAP_GPIO_IRQ(0),
-		.flags	= IORESOURCE_IRQ,
+		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_LOWEDGE,
 	},
 };
 
@@ -436,6 +440,10 @@ static void __init h2_init_smc91x(void)
 
 static struct i2c_board_info __initdata h2_i2c_board_info[] = {
 	{
+		I2C_BOARD_INFO("tps65010", 0x48),
+		.type           = "tps65010",
+		.irq            = OMAP_GPIO_IRQ(58),
+	}, {
 		I2C_BOARD_INFO("isp1301_omap", 0x2d),
 		.type		= "isp1301_omap",
 		.irq		= OMAP_GPIO_IRQ(2),

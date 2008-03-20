@@ -12,12 +12,12 @@ struct tsc2301_platform_data {
 	s16	keyb_int;
 	s16	keymap[16];	/* Set a key to a negative value if not used */
 	unsigned kp_rep:1;	/* Enable keypad repeating */
+	char    *keyb_name;     /* Keyboard device name */
 
 	/*
 	 * Touchscreen
 	 */
-	s16	dav_gpio;
-	s16	pen_int_gpio;
+	s16	dav_int;
 	u16	ts_x_plate_ohm;
 	u32	ts_stab_time;	/* voltage settling time */
 	u8	ts_hw_avg;	/* HW assiseted averaging. Can be
@@ -28,7 +28,11 @@ struct tsc2301_platform_data {
 	u32	ts_touch_pressure;	/* Pressure limit until we report a
 					   touch event. After that we switch
 					   to ts_max_pressure. */
-	unsigned ts_ignore_last : 1;
+	u32	ts_pressure_fudge;
+	u32	ts_x_max;
+	u32	ts_x_fudge;
+	u32	ts_y_max;
+	u32	ts_y_fudge;
 
 	/*
 	 * Audio
@@ -50,7 +54,6 @@ struct tsc2301_platform_data {
 	void (* codec_cleanup)(struct device *tsc2301_dev);
 	int	(*enable_clock)(struct device *dev);
 	void	(*disable_clock)(struct device *dev);
-	int	(*get_keyb_irq_state)(struct device *dev);
 
 	const struct tsc2301_mixer_gpio {
 		const char	*name;

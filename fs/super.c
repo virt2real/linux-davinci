@@ -105,6 +105,7 @@ static inline void destroy_super(struct super_block *s)
 {
 	security_sb_free(s);
 	kfree(s->s_subtype);
+	kfree(s->s_options);
 	kfree(s);
 }
 
@@ -603,6 +604,7 @@ int do_remount_sb(struct super_block *sb, int flags, void *data, int force)
 			mark_files_ro(sb);
 		else if (!fs_may_remount_ro(sb))
 			return -EBUSY;
+		DQUOT_OFF(sb);
 	}
 
 	if (sb->s_op->remount_fs) {
@@ -868,12 +870,12 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	if (!mnt)
 		goto out;
 
-	if (data) {
+	if (data && !(type->fs_flags & FS_BINARY_MOUNTDATA)) {
 		secdata = alloc_secdata();
 		if (!secdata)
 			goto out_mnt;
 
-		error = security_sb_copy_data(type, data, secdata);
+		error = security_sb_copy_data(data, secdata);
 		if (error)
 			goto out_free_secdata;
 	}

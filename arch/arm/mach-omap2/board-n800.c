@@ -45,6 +45,8 @@
 #define N800_BLIZZARD_POWERDOWN_GPIO	15
 #define N800_STI_GPIO			62
 #define N800_KEYB_IRQ_GPIO		109
+#define N800_DAV_IRQ_GPIO		103
+#define N800_TSC2301_RESET_GPIO		118
 
 void __init nokia_n800_init_irq(void)
 {
@@ -209,16 +211,8 @@ static struct omap_board_config_kernel n800_config[] __initdata = {
 	{ OMAP_TAG_MMC,				&n800_mmc_config },
 };
 
-
-static int n800_get_keyb_irq_state(struct device *dev)
-{
-	return !omap_get_gpio_datain(N800_KEYB_IRQ_GPIO);
-}
-
 static struct tsc2301_platform_data tsc2301_config = {
-	.reset_gpio	= 118,
-	.dav_gpio	= 103,
-	.pen_int_gpio	= 106,
+	.reset_gpio	= N800_TSC2301_RESET_GPIO,
 	.keymap = {
 		-1,		/* Event for bit 0 */
 		KEY_UP,		/* Event for bit 1 (up) */
@@ -238,19 +232,30 @@ static struct tsc2301_platform_data tsc2301_config = {
 		-1,		/* Event for bit 15 */
 	},
 	.kp_rep 	= 0,
-	.get_keyb_irq_state = n800_get_keyb_irq_state,
+	.keyb_name	= "Internal keypad",
 };
 
 static void tsc2301_dev_init(void)
 {
+	int r;
 	int gpio = N800_KEYB_IRQ_GPIO;
 
-	if (omap_request_gpio(gpio) < 0) {
-		printk(KERN_ERR "can't get KBIRQ GPIO\n");
-		return;
+	r = gpio_request(gpio, "tsc2301 KBD IRQ");
+	if (r >= 0) {
+		gpio_direction_input(gpio);
+		tsc2301_config.keyb_int = OMAP_GPIO_IRQ(gpio);
+	} else {
+		printk(KERN_ERR "unable to get KBD GPIO");
 	}
-	omap_set_gpio_direction(gpio, 1);
-	tsc2301_config.keyb_int = OMAP_GPIO_IRQ(gpio);
+
+	gpio = N800_DAV_IRQ_GPIO;
+	r = gpio_request(gpio, "tsc2301 DAV IRQ");
+	if (r >= 0) {
+		gpio_direction_input(gpio);
+		tsc2301_config.dav_int = OMAP_GPIO_IRQ(gpio);
+	} else {
+		printk(KERN_ERR "unable to get DAV GPIO");
+	}
 }
 
 static struct omap2_mcspi_device_config tsc2301_mcspi_config = {
@@ -331,16 +336,26 @@ static void __init n800_ts_set_config(void)
 	if (conf != NULL) {
 		if (strcmp(conf->panel_name, "lph8923") == 0) {
 			tsc2301_config.ts_x_plate_ohm	= 180;
-			tsc2301_config.ts_hw_avg	= 4;
-			tsc2301_config.ts_ignore_last	= 1;
-			tsc2301_config.ts_max_pressure	= 255;
+			tsc2301_config.ts_hw_avg	= 8;
+			tsc2301_config.ts_max_pressure	= 2048;
+			tsc2301_config.ts_touch_pressure = 400;
 			tsc2301_config.ts_stab_time	= 100;
+			tsc2301_config.ts_pressure_fudge = 2;
+			tsc2301_config.ts_x_max		= 4096;
+			tsc2301_config.ts_x_fudge	= 4;
+			tsc2301_config.ts_y_max		= 4096;
+			tsc2301_config.ts_y_fudge	= 7;
 		} else if (strcmp(conf->panel_name, "ls041y3") == 0) {
 			tsc2301_config.ts_x_plate_ohm	= 280;
-			tsc2301_config.ts_hw_avg	= 16;
-			tsc2301_config.ts_touch_pressure= 215;
-			tsc2301_config.ts_max_pressure	= 255;
-			tsc2301_config.ts_ignore_last	= 1;
+			tsc2301_config.ts_hw_avg	= 8;
+			tsc2301_config.ts_touch_pressure = 400;
+			tsc2301_config.ts_max_pressure	= 2048;
+			tsc2301_config.ts_stab_time	= 1000;
+			tsc2301_config.ts_pressure_fudge = 2;
+			tsc2301_config.ts_x_max		= 4096;
+			tsc2301_config.ts_x_fudge	= 4;
+			tsc2301_config.ts_y_max		= 4096;
+			tsc2301_config.ts_y_fudge	= 7;
 		} else {
 			printk(KERN_ERR "Unknown panel type, set default "
 			       "touchscreen configuration\n");
