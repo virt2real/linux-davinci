@@ -202,6 +202,25 @@ static struct platform_device rtc_dev = {
 	.id             = -1,
 };
 
+static struct resource ide_resources[] = {
+	{
+		.start          = IO_ADDRESS(DAVINCI_CFC_ATA_BASE),
+		.end            = IO_ADDRESS(DAVINCI_CFC_ATA_BASE) + SZ_4K,
+		.flags          = IORESOURCE_MEM,
+	},
+	{
+		.start          = IRQ_IDE,
+		.flags          = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device ide_dev = {
+	.name           = "palm_bk3710",
+	.id             = -1,
+	.resource       = ide_resources,
+	.num_resources  = ARRAY_SIZE(ide_resources),
+};
+
 static struct platform_device *davinci_evm_devices[] __initdata = {
 	&davinci_evm_norflash_device,
 #if defined(CONFIG_MTD_NAND_DAVINCI) || defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
@@ -214,6 +233,7 @@ static struct platform_device *davinci_evm_devices[] __initdata = {
 	&usb_dev,
 #endif
 	&rtc_dev,
+	&ide_dev,
 };
 
 static void __init
@@ -226,7 +246,8 @@ static __init void davinci_evm_init(void)
 {
 	davinci_psc_init();
 
-#if defined(CONFIG_BLK_DEV_DAVINCI) || defined(CONFIG_BLK_DEV_DAVINCI_MODULE)
+#if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
+    defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
 	printk(KERN_WARNING "WARNING: both IDE and NOR flash are enabled, "
 	       "but share pins.\n\t Disable IDE for NOR support.\n");
 #endif

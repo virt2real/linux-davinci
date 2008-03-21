@@ -462,6 +462,7 @@ config ARCH_DAVINCI
 	select GENERIC_TIME
 	select GENERIC_CLOCKEVENTS
 	select GENERIC_GPIO
+	select HAVE_IDE
 	help
 	  Support for TI's DaVinci platform.
 
