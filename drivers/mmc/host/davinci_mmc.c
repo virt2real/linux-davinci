@@ -188,7 +188,7 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	/* set Command timeout */
 	writel(0xFFFF, host->base + DAVINCI_MMCTOR);
 
-	/* Enable interrupt */
+	/* Enable interrupt (calculate here, defer until FIFO is stuffed). */
 	im_val =  MMCSD_EVENT_EOFCMD
 		| MMCSD_EVENT_ERROR_CMDCRC
 		| MMCSD_EVENT_ERROR_DATACRC
@@ -205,7 +205,6 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		if (!host->do_dma)
 			im_val |= MMCSD_EVENT_READ;
 	}
-	writel(im_val, host->base + DAVINCI_MMCIM);
 
 	/*
 	 * It is required by controoler b4 WRITE command that
@@ -236,6 +235,7 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	host->is_core_command = 1;
 	writel(cmd->arg, host->base + DAVINCI_MMCARGHL);
 	writel(cmd_reg,  host->base + DAVINCI_MMCCMD);
+	writel(im_val, host->base + DAVINCI_MMCIM);
 }
 
 static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
