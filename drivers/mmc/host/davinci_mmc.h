@@ -246,7 +246,7 @@ enum mmcsdevent {
 
 static void init_mmcsd_host(struct mmc_davinci_host *host);
 
-static void davinci_fifo_data_trans(struct mmc_davinci_host *host);
+static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n);
 
 static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host);
 
