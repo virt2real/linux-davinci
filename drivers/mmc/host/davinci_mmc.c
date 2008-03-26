@@ -358,7 +358,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 {
 	int use_dma = 1, i;
 	struct mmc_data *data = host->data;
-	int block_size = data->blksz;
+	int mask = mmcsd_cfg.rw_threshold-1;
 
 	host->sg_len = dma_map_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
 				((data->flags & MMC_DATA_WRITE)
@@ -367,7 +367,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 
 	/* Decide if we can use DMA */
 	for (i = 0; i < host->sg_len; i++) {
-		if ((data->sg[i].length % block_size) != 0) {
+		if (data->sg[i].length & mask) {
 			use_dma = 0;
 			break;
 		}
@@ -483,14 +483,30 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	if ((data->blocks == 1) && (count > data->blksz))
 		count = frame;
 
-	if (count % 32 == 0) {
+	if ((count & (mmcsd_cfg.rw_threshold-1)) == 0) {
+		/* This should always be true due to an earlier check */
 		acnt = 4;
-		bcnt = 8;
-		num_frames = count / 32;
-	} else {
-		acnt = count;
-		bcnt = 1;
+		bcnt = mmcsd_cfg.rw_threshold>>2;
+		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32)? 5 : 4);
+	} else if (count < mmcsd_cfg.rw_threshold) {
+		if ((count&3) == 0) {
+			acnt = 4;
+			bcnt = count>>2;
+		} else if ((count&1) == 0) {
+			acnt = 2;
+			bcnt = count>>1;
+		} else {
+			acnt = 1;
+			bcnt = count;
+		}
 		num_frames = 1;
+	} else {
+		acnt = 4;
+		bcnt = mmcsd_cfg.rw_threshold>>2;
+		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32)? 5 : 4);
+		dev_warn(mmc_dev(host->mmc),
+			"MMC: count of 0x%x unsupported, truncating transfer\n",
+			count);
 	}
 
 	if (num_frames > MAX_C_CNT) {
@@ -512,6 +528,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		src_cidx = acnt * bcnt;
 		dst_port = (unsigned int)(host->mem_res->start +
 				DAVINCI_MMCDXR);
+		/* cannot be FIFO, address not aligned on 32 byte boundary */
 		mode_dst = INCR;
 		fifo_width_dst = W8BIT;	/* It's not cared as modeDsr is INCR */
 		dst_bidx = 0;
@@ -524,6 +541,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 		src_port = (unsigned int)(host->mem_res->start +
 				DAVINCI_MMCDRR);
+		/* cannot be FIFO, address not aligned on 32 byte boundary */
 		mode_src = INCR;
 		fifo_width_src = W8BIT;
 		src_bidx = 0;
@@ -591,7 +609,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 			if ((data->blocks == 1) && (count > data->blksz))
 				count = frame;
 
-			ccnt = count / 32;
+			ccnt = count >> ((mmcsd_cfg.rw_threshold == 32)? 5 : 4);
 
 			if (sync_dev == DAVINCI_DMA_MMCTXEVT)
 				temp.src = (unsigned int)sg_dma_address(sg);
@@ -620,6 +638,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 static void
 mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 {
+	int fifo_lev = (mmcsd_cfg.rw_threshold == 32)? MMCFIFOCTL_FIFOLEV : 0;
 	int timeout, sg_len;
 
 	host->data = req->data;
@@ -658,28 +677,16 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	/* Configure the FIFO */
 	switch (host->data_dir) {
 	case DAVINCI_MMC_DATADIR_WRITE:
-		/* Reset FIFO */
-		writel(MMCFIFOCTL_FIFORST, host->base + DAVINCI_MMCFIFOCTL);
-		writel(0, host->base + DAVINCI_MMCFIFOCTL);
-
-		/* Set FIFO parameters */
-		writel(
-			MMCFIFOCTL_FIFODIR_WR |
-			MMCFIFOCTL_FIFOLEV    |
-			MMCFIFOCTL_ACCWD_4,
+		writel(fifo_lev | MMCFIFOCTL_FIFODIR_WR | MMCFIFOCTL_FIFORST,
+			host->base + DAVINCI_MMCFIFOCTL);
+		writel(fifo_lev | MMCFIFOCTL_FIFODIR_WR,
 			host->base + DAVINCI_MMCFIFOCTL);
 		break;
 
 	case DAVINCI_MMC_DATADIR_READ:
-		/* Reset FIFO */
-		writel(MMCFIFOCTL_FIFORST, host->base + DAVINCI_MMCFIFOCTL);
-		writel(0, host->base + DAVINCI_MMCFIFOCTL);
-
-		/* Set FIFO parameters */
-		writel(
-			MMCFIFOCTL_FIFODIR_RD |
-			MMCFIFOCTL_FIFOLEV    |
-			MMCFIFOCTL_ACCWD_4,
+		writel(fifo_lev | MMCFIFOCTL_FIFODIR_RD | MMCFIFOCTL_FIFORST,
+			host->base + DAVINCI_MMCFIFOCTL);
+		writel(fifo_lev | MMCFIFOCTL_FIFODIR_RD,
 			host->base + DAVINCI_MMCFIFOCTL);
 		break;
 	default:
@@ -691,8 +698,9 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 
 	host->bytes_left = req->data->blocks * req->data->blksz;
 
-	if ((host->use_dma == 1) && (host->bytes_left % 32 == 0)
-	    && (mmc_davinci_start_dma_transfer(host, req) == 0)) {
+	if ((host->use_dma == 1) &&
+		  ((host->bytes_left & (mmcsd_cfg.rw_threshold-1)) == 0) &&
+	      (mmc_davinci_start_dma_transfer(host, req) == 0)) {
 		host->buffer = NULL;
 		host->bytes_left = 0;
 	} else {
