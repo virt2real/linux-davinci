@@ -77,7 +77,7 @@ int davinci_i2c_expander_op(u16 client_addr, u35_expander_ops pin, u8 val)
 
 	err = davinci_i2c_expander_read(1, &data_to_u35, 0x3A);
 	if (err < 0)
-		return err;
+		goto out;
 
 	if (client_addr == 0x3A) {
 		switch (pin) {
@@ -128,13 +128,14 @@ int davinci_i2c_expander_op(u16 client_addr, u35_expander_ops pin, u8 val)
 			break;
 		}
 	} else {
-		printk("Only IO Expander at address 0x3A is suuported\n");
-		mutex_unlock(&expander_lock);
-		return -EINVAL;
+		printk("Only IO Expander at address 0x3A is supported\n");
+		err = -EINVAL;
+		goto out;
 	}
 
 	err = davinci_i2c_expander_write(1, &data_to_u35, 0x3A);
 
+out:
 	mutex_unlock(&expander_lock);
 
 	return err;
