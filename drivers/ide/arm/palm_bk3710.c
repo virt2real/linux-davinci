@@ -34,6 +34,10 @@
 #include <linux/clk.h>
 #include <linux/platform_device.h>
 
+#ifdef CONFIG_MACH_DAVINCI_EVM
+#include <asm/arch/i2c-client.h>
+#endif /* CONFIG_MACH_DAVINCI_EVM */
+
 /* Offset of the primary interface registers */
 #define IDE_PALM_ATA_PRI_REG_OFFSET 0x1F0
 
@@ -351,6 +355,26 @@ static int __devinit palm_bk3710_probe(struct platform_device *pdev)
 	clk_enable(ideclkp);
 	ide_palm_clk = clk_get_rate(ideclkp)/100000;
 	ide_palm_clk = (10000/ide_palm_clk) + 1;
+
+#ifdef CONFIG_MACH_DAVINCI_EVM
+	/*
+	 * FIXME: This should no longer live here...
+	 *
+	 * ATA_SEL is 1 -> Disable 0 -> Enable
+	 * CF_SEL  is 1 -> Disable 0 -> Enable
+	 *
+	 * Ensure both are not Enabled.
+	 */
+#ifdef CONFIG_DAVINCI_BLK_DEV_CF
+	davinci_i2c_expander_op (0x3A, ATA_SEL, 1);
+	davinci_i2c_expander_op (0x3A, CF_RESET, 1);
+	davinci_i2c_expander_op (0x3A, CF_SEL, 0);
+#else
+	davinci_i2c_expander_op (0x3A, CF_SEL, 1);
+	davinci_i2c_expander_op (0x3A, ATA_SEL, 0);
+#endif
+#endif /* CONFIG_MACH_DAVINCI_EVM */
+
 	/* Register the IDE interface with Linux ATA Interface */
 	memset(&hw, 0, sizeof(hw));
 
