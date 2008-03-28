@@ -113,6 +113,7 @@ struct davinci_i2c_dev {
 	u8			*buf;
 	size_t			buf_len;
 	int			irq;
+	int			stop;
 	u8			terminate;
 	struct i2c_adapter	adapter;
 };
@@ -245,9 +246,6 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	u16 w;
 	int r;
 
-	if (msg->len == 0)
-		return -EINVAL;
-
 	if (!pdata)
 		pdata = &davinci_i2c_platform_data_default;
 	/* Introduce a delay, required for some boards (e.g Davinci EVM) */
@@ -259,6 +257,7 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 
 	dev->buf = msg->buf;
 	dev->buf_len = msg->len;
+	dev->stop = stop;
 
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_CNT_REG, dev->buf_len);
 
@@ -276,6 +275,10 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 		flag |= DAVINCI_I2C_MDR_TRX;
 	if (stop)
 		flag |= DAVINCI_I2C_MDR_STP;
+	if (msg->len == 0) {
+		flag |= DAVINCI_I2C_MDR_RM;
+		flag &= ~DAVINCI_I2C_MDR_STP;
+	}
 
 	/* Enable receive or transmit interrupts */
 	w = davinci_i2c_read_reg(dev, DAVINCI_I2C_IMR_REG);
@@ -286,6 +289,16 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_IMR_REG, w);
 
 	dev->terminate = 0;
+
+	/* First byte should be set here, not after interrupt,
+	 * because transmit-data-ready interrupt can come before
+	 * NACK-interrupt during sending of previous message and
+	 * ICDXR may have wrong data */
+	if ((!(msg->flags & I2C_M_RD)) && dev->buf_len) {
+		davinci_i2c_write_reg(dev, DAVINCI_I2C_DXR_REG, *dev->buf++);
+		dev->buf_len--;
+	}
+
 	/* write the data into mode register */
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, flag);
 
@@ -324,11 +337,6 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	if (dev->cmd_err & DAVINCI_I2C_STR_NACK) {
 		if (msg->flags & I2C_M_IGNORE_NAK)
 			return msg->len;
-		if (stop) {
-			w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
-			MOD_REG_BIT(w, DAVINCI_I2C_MDR_STP, 1);
-			davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
-		}
 		return -EREMOTEIO;
 	}
 	return -EIO;
@@ -363,7 +371,7 @@ i2c_davinci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 static u32 i2c_davinci_func(struct i2c_adapter *adap)
 {
-	return I2C_FUNC_I2C | (I2C_FUNC_SMBUS_EMUL & ~I2C_FUNC_SMBUS_QUICK);
+	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
 }
 
 static inline void terminate_read(struct davinci_i2c_dev *dev)
@@ -379,15 +387,6 @@ static inline void terminate_read(struct davinci_i2c_dev *dev)
 	davinci_i2c_read_reg(dev, DAVINCI_I2C_DRR_REG);
 	if (!dev->terminate)
 		dev_err(dev->dev, "RDR IRQ while no data requested\n");
-}
-static inline void terminate_write(struct davinci_i2c_dev *dev)
-{
-	u16 w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
-	w |= DAVINCI_I2C_MDR_RM|DAVINCI_I2C_MDR_STP;
-	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
-
-	if (!dev->terminate)
-		dev_err(dev->dev, "TDR IRQ while no data to send\n");
 }
 
 /*
@@ -425,6 +424,14 @@ static irqreturn_t i2c_davinci_isr(int this_irq, void *dev_id)
 		case DAVINCI_I2C_IVR_ARDY:
 			davinci_i2c_write_reg(dev,
 				DAVINCI_I2C_STR_REG, DAVINCI_I2C_STR_ARDY);
+			if (((dev->buf_len == 0) && (dev->stop != 0)) ||
+			    (dev->cmd_err & DAVINCI_I2C_STR_NACK)) {
+				w = davinci_i2c_read_reg(dev,
+							 DAVINCI_I2C_MDR_REG);
+				MOD_REG_BIT(w, DAVINCI_I2C_MDR_STP, 1);
+				davinci_i2c_write_reg(dev,
+						      DAVINCI_I2C_MDR_REG, w);
+			}
 			complete(&dev->cmd_complete);
 			break;
 
@@ -460,9 +467,6 @@ static irqreturn_t i2c_davinci_isr(int this_irq, void *dev_id)
 				davinci_i2c_write_reg(dev,
 						      DAVINCI_I2C_IMR_REG,
 						      w);
-			} else {
-				/* signal can terminate transfer */
-				terminate_write(dev);
 			}
 			break;
 
