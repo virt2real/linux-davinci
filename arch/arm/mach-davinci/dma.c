@@ -919,7 +919,7 @@ int davinci_request_dma(int dev_id, const char *dev_name,
 				} else {
 					dma_chan[*lch].tcc = -1;
 				}
-				map_dmach_queue(dev_id, eventq_no);
+				map_dmach_queue(*lch, eventq_no);
 				ret_val = 0;
 				break;
 			}
