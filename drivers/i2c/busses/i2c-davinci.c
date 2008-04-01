@@ -41,11 +41,6 @@
 
 #include <asm/arch/i2c.h>
 
-/* Hack to enable zero length transfers and smbus quick until clean fix
- * is available
- */
-#define DAVINCI_HACK
-
 /* ----- global defines ----------------------------------------------- */
 
 #define DAVINCI_I2C_TIMEOUT	(1*HZ)
@@ -249,14 +244,9 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	u32 flag;
 	u16 w;
 	int r;
-#ifdef DAVINCI_HACK
-	u8 zero_byte = 0;
-#endif
 
-#ifndef DAVINCI_HACK
 	if (msg->len == 0)
 		return -EINVAL;
-#endif
 
 	if (!pdata)
 		pdata = &davinci_i2c_platform_data_default;
@@ -267,18 +257,8 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	/* set the slave address */
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_SAR_REG, msg->addr);
 
-#ifndef DAVINCI_HACK
 	dev->buf = msg->buf;
 	dev->buf_len = msg->len;
-#else
-	if (msg->len == 0) {
-		dev->buf = &zero_byte;
-		dev->buf_len = 1;
-	} else {
-		dev->buf = msg->buf;
-		dev->buf_len = msg->len;
-	}
-#endif
 
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_CNT_REG, dev->buf_len);
 
@@ -383,11 +363,7 @@ i2c_davinci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 static u32 i2c_davinci_func(struct i2c_adapter *adap)
 {
-#ifndef DAVINCI_HACK
 	return I2C_FUNC_I2C | (I2C_FUNC_SMBUS_EMUL & ~I2C_FUNC_SMBUS_QUICK);
-#else
-	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
-#endif
 }
 
 static inline void terminate_read(struct davinci_i2c_dev *dev)
