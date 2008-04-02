@@ -26,8 +26,8 @@ static int davinci_i2c_expander_read(u8 size, u8 * val, u16 addr)
 	int err;
 	struct i2c_msg msg[1];
 
-	adap = i2c_get_adapter(1);
-	if (!adap)
+        adap = i2c_get_adapter(0);
+        if (!adap)
 		return -ENODEV;
 
 	msg->addr = addr;
@@ -48,7 +48,7 @@ static int davinci_i2c_expander_write(u8 size, u8 * val, u16 addr)
 	int err;
 	struct i2c_msg msg[1];
 
-	adap = i2c_get_adapter(1);
+        adap = i2c_get_adapter(0);
         if (!adap)
 		return -ENODEV;
 
@@ -76,10 +76,8 @@ int davinci_i2c_expander_op(u16 client_addr, u35_expander_ops pin, u8 val)
 	mutex_lock(&expander_lock);
 
 	err = davinci_i2c_expander_read(1, &data_to_u35, 0x3A);
-	if (err < 0) {
-		mutex_unlock(&expander_lock);
+	if (err < 0)
 		return err;
-	}
 
 	if (client_addr == 0x3A) {
 		switch (pin) {
