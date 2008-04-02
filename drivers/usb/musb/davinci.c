@@ -377,6 +377,11 @@ static irqreturn_t davinci_interrupt(int irq, void *__hci)
 	return IRQ_HANDLED;
 }
 
+void musb_platform_set_mode(struct musb *musb, u8 musb_mode)
+{
+	WARN("FIXME: %d not implemented\n", __func__);
+}
+
 int __init musb_platform_init(struct musb *musb)
 {
 	void __iomem	*tibase = musb->ctrl_base;
