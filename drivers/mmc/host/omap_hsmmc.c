@@ -146,7 +146,7 @@ static void omap_mmc_stop_clock(struct mmc_omap_host *host)
 	OMAP_HSMMC_WRITE(host->base, SYSCTL,
 		OMAP_HSMMC_READ(host->base, SYSCTL) & ~CEN);
 	if ((OMAP_HSMMC_READ(host->base, SYSCTL) & CEN) != 0x0)
-		dev_dbg(mmc_dev(host->mmc), "MMC Clock is not stoped");
+		dev_dbg(mmc_dev(host->mmc), "MMC Clock is not stoped\n");
 }
 
 /*
@@ -388,8 +388,12 @@ static int omap_mmc_switch_opcond(struct mmc_omap_host *host, int vdd)
 	 * If a MMC dual voltage card is detected, the set_ios fn calls
 	 * this fn with VDD bit set for 1.8V. Upon card removal from the
 	 * slot, mmc_omap_detect fn sets the VDD back to 3V.
+	 *
+	 * Only MMC1 supports 3.0V.  MMC2 will not function if SDVS30 is
+	 * set in HCTL.
 	 */
-	if (((1 << vdd) == MMC_VDD_32_33) || ((1 << vdd) == MMC_VDD_33_34))
+	if (host->id == OMAP_MMC1_DEVID && (((1 << vdd) == MMC_VDD_32_33) ||
+				((1 << vdd) == MMC_VDD_33_34)))
 		reg_val |= SDVS30;
 	if ((1 << vdd) == MMC_VDD_165_195)
 		reg_val |= SDVS18;
@@ -401,7 +405,7 @@ static int omap_mmc_switch_opcond(struct mmc_omap_host *host, int vdd)
 
 	return 0;
 err:
-	dev_dbg(mmc_dev(host->mmc), "Unable to switch operating voltage \n");
+	dev_dbg(mmc_dev(host->mmc), "Unable to switch operating voltage\n");
 	return ret;
 }
 
@@ -517,10 +521,16 @@ mmc_omap_start_dma_transfer(struct mmc_omap_host *host, struct mmc_request *req)
 
 	if (!(data->flags & MMC_DATA_WRITE)) {
 		host->dma_dir = DMA_FROM_DEVICE;
-		sync_dev = OMAP24XX_DMA_MMC1_RX;
+		if (host->id == OMAP_MMC1_DEVID)
+			sync_dev = OMAP24XX_DMA_MMC1_RX;
+		else
+			sync_dev = OMAP24XX_DMA_MMC2_RX;
 	} else {
 		host->dma_dir = DMA_TO_DEVICE;
-		sync_dev = OMAP24XX_DMA_MMC1_TX;
+		if (host->id == OMAP_MMC1_DEVID)
+			sync_dev = OMAP24XX_DMA_MMC1_TX;
+		else
+			sync_dev = OMAP24XX_DMA_MMC2_TX;
 	}
 
 	ret = omap_request_dma(sync_dev, "MMC/SD", mmc_omap_dma_cb,
@@ -692,6 +702,7 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	struct mmc_omap_host *host = NULL;
 	struct resource *res;
 	int ret = 0, irq;
+	u32 hctl, capa;
 
 	if (pdata == NULL) {
 		dev_err(&pdev->dev, "Platform Data is missing\n");
@@ -763,11 +774,11 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	 * MMC can still work without debounce clock.
 	 */
 	if (IS_ERR(host->dbclk))
-		dev_dbg(mmc_dev(host->mmc), "Failed to get debounce clock \n");
+		dev_dbg(mmc_dev(host->mmc), "Failed to get debounce clock\n");
 	else
 		if (clk_enable(host->dbclk) != 0)
 			dev_dbg(mmc_dev(host->mmc), "Enabling debounce"
-							"clk failed\n");
+							" clk failed\n");
 		else
 			host->dbclk_enabled = 1;
 
@@ -778,11 +789,20 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	if (pdata->conf.wire4)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
-	OMAP_HSMMC_WRITE(host->base, HCTL,
-			OMAP_HSMMC_READ(host->base, HCTL) | SDVS30);
+	/* Only MMC1 supports 3.0V */
+	if (host->id == OMAP_MMC1_DEVID) {
+		hctl = SDVS30;
+		capa = VS30 | VS18;
+	} else {
+		hctl = SDVS18;
+		capa = VS18;
+	}
 
-	OMAP_HSMMC_WRITE(host->base, CAPA, OMAP_HSMMC_READ(host->base,
-							CAPA) | VS30 | VS18);
+	OMAP_HSMMC_WRITE(host->base, HCTL,
+			OMAP_HSMMC_READ(host->base, HCTL) | hctl);
+
+	OMAP_HSMMC_WRITE(host->base, CAPA,
+			OMAP_HSMMC_READ(host->base, CAPA) | capa);
 
 	/* Set the controller to AUTO IDLE mode */
 	OMAP_HSMMC_WRITE(host->base, SYSCONFIG,
@@ -796,7 +816,7 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	ret = request_irq(host->irq, mmc_omap_irq, IRQF_DISABLED, pdev->name,
 			 host);
 	if (ret) {
-		dev_dbg(mmc_dev(host->mmc), "Unable to grab HSMMC IRQ");
+		dev_dbg(mmc_dev(host->mmc), "Unable to grab HSMMC IRQ\n");
 		goto irq_err;
 	}
 
@@ -837,7 +857,7 @@ err:
 	return ret;
 
 irq_err:
-	dev_dbg(mmc_dev(host->mmc), "Unable to configure MMC IRQs");
+	dev_dbg(mmc_dev(host->mmc), "Unable to configure MMC IRQs\n");
 	clk_disable(host->fclk);
 	clk_disable(host->iclk);
 	clk_put(host->fclk);
@@ -900,7 +920,7 @@ static int omap_mmc_suspend(struct platform_device *pdev, pm_message_t state)
 			if (ret)
 				dev_dbg(mmc_dev(host->mmc),
 					"Unable to handle MMC board"
-					"level suspend\n");
+					" level suspend\n");
 
 			if (!(OMAP_HSMMC_READ(host->base, HCTL) & SDVSDET)) {
 				OMAP_HSMMC_WRITE(host->base, HCTL,

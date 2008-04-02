@@ -851,7 +851,7 @@ static struct clk omap_120m_fck = {
 	.parent		= &dpll5_m2_ck,
 	.init           = &omap2_init_clksel_parent,
 	.clksel_reg     = OMAP_CM_REGADDR(PLL_MOD, CM_IDLEST2),
-	.clksel_mask    = OMAP3430_ST_PERIPH2_CLK,
+	.clksel_mask    = OMAP3430ES2_ST_PERIPH2_CLK_MASK,
 	.clksel         = omap_120m_fck_clksel,
 	.flags		= CLOCK_IN_OMAP3430ES2 | RATE_PROPAGATES |
 				PARENT_CONTROLS_CLOCK,
@@ -1046,12 +1046,13 @@ static struct clk iva2_ck = {
 	.name		= "iva2_ck",
 	.parent		= &dpll2_m2_ck,
 	.init		= &omap2_init_clksel_parent,
+	.enable_reg	= OMAP_CM_REGADDR(OMAP3430_IVA2_MOD, CM_FCLKEN),
+	.enable_bit	= OMAP3430_CM_FCLKEN_IVA2_EN_IVA2_SHIFT,
 	.clksel_reg	= OMAP_CM_REGADDR(OMAP3430_IVA2_MOD,
 					  OMAP3430_CM_IDLEST_PLL),
 	.clksel_mask	= OMAP3430_ST_IVA2_CLK_MASK,
 	.clksel		= iva2_clksel,
-	.flags		= CLOCK_IN_OMAP343X | RATE_PROPAGATES |
-				PARENT_CONTROLS_CLOCK,
+	.flags		= CLOCK_IN_OMAP343X | RATE_PROPAGATES,
 	.recalc		= &omap2_clksel_recalc,
 };
 
@@ -2343,7 +2344,7 @@ static struct clk gpio6_fck = {
 	.name		= "gpio6_fck",
 	.parent		= &per_32k_alwon_fck,
 	.enable_reg	= OMAP_CM_REGADDR(OMAP3430_PER_MOD, CM_FCLKEN),
-	.enable_bit	= OMAP3430_EN_GPT6_SHIFT,
+	.enable_bit	= OMAP3430_EN_GPIO6_SHIFT,
 	.flags		= CLOCK_IN_OMAP343X,
 	.recalc		= &followparent_recalc,
 };
@@ -2352,7 +2353,7 @@ static struct clk gpio5_fck = {
 	.name		= "gpio5_fck",
 	.parent		= &per_32k_alwon_fck,
 	.enable_reg	= OMAP_CM_REGADDR(OMAP3430_PER_MOD, CM_FCLKEN),
-	.enable_bit	= OMAP3430_EN_GPT5_SHIFT,
+	.enable_bit	= OMAP3430_EN_GPIO5_SHIFT,
 	.flags		= CLOCK_IN_OMAP343X,
 	.recalc		= &followparent_recalc,
 };
@@ -2361,7 +2362,7 @@ static struct clk gpio4_fck = {
 	.name		= "gpio4_fck",
 	.parent		= &per_32k_alwon_fck,
 	.enable_reg	= OMAP_CM_REGADDR(OMAP3430_PER_MOD, CM_FCLKEN),
-	.enable_bit	= OMAP3430_EN_GPT4_SHIFT,
+	.enable_bit	= OMAP3430_EN_GPIO4_SHIFT,
 	.flags		= CLOCK_IN_OMAP343X,
 	.recalc		= &followparent_recalc,
 };
@@ -2370,7 +2371,7 @@ static struct clk gpio3_fck = {
 	.name		= "gpio3_fck",
 	.parent		= &per_32k_alwon_fck,
 	.enable_reg	= OMAP_CM_REGADDR(OMAP3430_PER_MOD, CM_FCLKEN),
-	.enable_bit	= OMAP3430_EN_GPT3_SHIFT,
+	.enable_bit	= OMAP3430_EN_GPIO3_SHIFT,
 	.flags		= CLOCK_IN_OMAP343X,
 	.recalc		= &followparent_recalc,
 };
@@ -2379,7 +2380,7 @@ static struct clk gpio2_fck = {
 	.name		= "gpio2_fck",
 	.parent		= &per_32k_alwon_fck,
 	.enable_reg	= OMAP_CM_REGADDR(OMAP3430_PER_MOD, CM_FCLKEN),
-	.enable_bit	= OMAP3430_EN_GPT2_SHIFT,
+	.enable_bit	= OMAP3430_EN_GPIO2_SHIFT,
 	.flags		= CLOCK_IN_OMAP343X,
 	.recalc		= &followparent_recalc,
 };

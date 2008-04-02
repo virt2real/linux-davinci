@@ -192,30 +192,36 @@ static int omap_set_power(struct otg_transceiver *x, unsigned mA)
 	return 0;
 }
 
-static int omap_set_suspend(struct otg_transceiver *x, int suspend)
-{
-	if (suspend)
-		twl4030_phy_suspend(1);
-	else
-		twl4030_phy_resume();
-	return 0;
-}
-
 int musb_platform_resume(struct musb *musb);
+
+void musb_platform_set_mode(struct musb *musb, u8 musb_mode)
+{
+	u8	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+
+	devctl |= MUSB_DEVCTL_SESSION;
+	musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+
+	switch (musb_mode) {
+	case MUSB_HOST:
+		otg_set_host(&musb->xceiv, musb->xceiv.host);
+		break;
+	case MUSB_PERIPHERAL:
+		otg_set_peripheral(&musb->xceiv, musb->xceiv.gadget);
+		break;
+	case MUSB_OTG:
+		break;
+	}
+}
 
 int __init musb_platform_init(struct musb *musb)
 {
+	struct otg_transceiver *xceiv = otg_get_transceiver();
+
 #if defined(CONFIG_ARCH_OMAP2430)
 	omap_cfg_reg(AE5_2430_USB0HS_STP);
-	/* get the clock */
-	musb->clock = clk_get((struct device *)musb->controller, "usbhs_ick");
-#else
-	musb->clock = clk_get((struct device *)musb->controller, "hsotgusb_ick");
 #endif
-	if(IS_ERR(musb->clock))
-		return PTR_ERR(musb->clock);
 
-	musb->xceiv.set_suspend = omap_set_suspend;
+	musb->xceiv = *xceiv;
 	musb_platform_resume(musb);
 
 	OTG_INTERFSEL_REG |= ULPI_12PIN;
@@ -226,7 +232,6 @@ int __init musb_platform_init(struct musb *musb)
 			OTG_INTERFSEL_REG, OTG_SIMENABLE_REG);
 
 	omap_vbus_power(musb, musb->board_mode == MUSB_HOST, 1);
-
 
 	if (is_host_enabled(musb))
 		musb->board_set_vbus = omap_set_vbus;
@@ -249,15 +254,16 @@ int musb_platform_suspend(struct musb *musb)
 	OTG_FORCESTDBY_REG |= ENABLEFORCE; /* enable MSTANDBY */
 	OTG_SYSCONFIG_REG |= AUTOIDLE;		/* enable auto idle */
 
-	musb->xceiv.set_suspend(&musb->xceiv, 1);
-	clk_disable(musb->clock);
+	if (musb->xceiv.set_suspend)
+		musb->xceiv.set_suspend(&musb->xceiv, 1);
+
 	return 0;
 }
 
 int musb_platform_resume(struct musb *musb)
 {
-	clk_enable(musb->clock);
-	musb->xceiv.set_suspend(&musb->xceiv, 0);
+	if (musb->xceiv.set_suspend)
+		musb->xceiv.set_suspend(&musb->xceiv, 0);
 
 	OTG_FORCESTDBY_REG &= ~ENABLEFORCE; /* disable MSTANDBY */
 	OTG_SYSCONFIG_REG |= SMARTSTDBY;	/* enable smart standby */
