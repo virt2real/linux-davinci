@@ -13,6 +13,11 @@
 #include <linux/init.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
+#include <linux/i2c.h>
+#include <linux/gpio.h>
+#include <linux/i2c/pcf857x.h>
+#include <linux/leds.h>
+
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
@@ -221,6 +226,189 @@ static struct platform_device ide_dev = {
 	.num_resources  = ARRAY_SIZE(ide_resources),
 };
 
+/*----------------------------------------------------------------------*/
+
+/*
+ * I2C GPIO expanders
+ */
+
+#define PCF_Uxx_BASE(x)	(DAVINCI_N_GPIO + ((x) * 8))
+
+
+/* U2 -- LEDs */
+
+static struct gpio_led evm_leds[] = {
+	{ .name = "DS8", .active_low = 1,
+		.default_trigger = "heartbeat", },
+	{ .name = "DS7", .active_low = 1, },
+	{ .name = "DS6", .active_low = 1, },
+	{ .name = "DS5", .active_low = 1, },
+	{ .name = "DS4", .active_low = 1, },
+	{ .name = "DS3", .active_low = 1, },
+	{ .name = "DS2", .active_low = 1,
+		.default_trigger = "mmc0", },
+	{ .name = "DS1", .active_low = 1,
+		.default_trigger = "ide-disk", },
+};
+
+static const struct gpio_led_platform_data evm_led_data = {
+	.num_leds	= ARRAY_SIZE(evm_leds),
+	.leds		= evm_leds,
+};
+
+static struct platform_device *evm_led_dev;
+
+static int
+evm_led_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
+{
+	struct gpio_led *leds = evm_leds;
+	int status;
+
+	while (ngpio--) {
+		leds->gpio = gpio++;
+		leds++;
+	}
+
+	/* what an extremely annoying way to be forced to handle
+	 * device unregistration ...
+	 */
+	evm_led_dev = platform_device_alloc("leds-gpio", 0);
+	platform_device_add_data(evm_led_dev,
+			&evm_led_data, sizeof evm_led_data);
+
+	evm_led_dev->dev.parent = &client->dev;
+	status = platform_device_add(evm_led_dev);
+	if (status < 0) {
+		platform_device_put(evm_led_dev);
+		evm_led_dev = NULL;
+	}
+	return status;
+}
+
+static int
+evm_led_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
+{
+	if (evm_led_dev) {
+		platform_device_unregister(evm_led_dev);
+		evm_led_dev = NULL;
+	}
+	return 0;
+}
+
+static struct pcf857x_platform_data pcf_data_u2 = {
+	.gpio_base	= PCF_Uxx_BASE(0),
+	.setup		= evm_led_setup,
+	.teardown	= evm_led_teardown,
+};
+
+
+/* U18 - A/V clock generator and user switch */
+
+static int sw_gpio;
+
+static ssize_t
+sw_show(struct device *d, struct device_attribute *a, char *buf)
+{
+	char *s = gpio_get_value_cansleep(sw_gpio) ? "on\n" : "off\n";
+
+	strcpy(buf, s);
+	return strlen(s);
+}
+
+static DEVICE_ATTR(user_sw, S_IRUGO, sw_show, NULL);
+
+static int
+evm_u18_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
+{
+	int	status;
+
+	/* export dip switch option */
+	sw_gpio = gpio + 7;
+	status = gpio_request(sw_gpio, "user_sw");
+	if (status == 0)
+		status = gpio_direction_input(sw_gpio);
+	if (status == 0)
+		status = device_create_file(&client->dev, &dev_attr_user_sw);
+	else
+		gpio_free(sw_gpio);
+	if (status != 0)
+		sw_gpio = -EINVAL;
+
+	/* audio PLL:  48 kHz (vs 44.1 or 32), single rate (vs double) */
+	gpio_request(gpio + 3, "pll_fs2");
+	gpio_direction_output(gpio + 3, 0);
+
+	gpio_request(gpio + 2, "pll_fs1");
+	gpio_direction_output(gpio + 2, 0);
+
+	gpio_request(gpio + 1, "pll_sr");
+	gpio_direction_output(gpio + 1, 0);
+
+	return 0;
+}
+
+static int
+evm_u18_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
+{
+	gpio_free(gpio + 1);
+	gpio_free(gpio + 2);
+	gpio_free(gpio + 3);
+
+	if (sw_gpio > 0) {
+		device_remove_file(&client->dev, &dev_attr_user_sw);
+		gpio_free(sw_gpio);
+	}
+	return 0;
+}
+
+static struct pcf857x_platform_data pcf_data_u18 = {
+	.gpio_base	= PCF_Uxx_BASE(1),
+	.n_latch	= (1 << 3) | (1 << 2) | (1 << 1),
+	.setup		= evm_u18_setup,
+	.teardown	= evm_u18_teardown,
+};
+
+
+/* U35 - various I/O signals used to manage USB, CF, ATA, etc */
+
+#if 0
+static struct pcf857x_platform_data pcf_data_u35 = {
+	.gpio_base = PCF_Uxx_BASE(2),
+};
+#endif
+
+/*----------------------------------------------------------------------*/
+
+static struct i2c_board_info __initdata i2c_info[] =  {
+	{
+		I2C_BOARD_INFO("pcf857x", 0x38),
+		.type		= "pcf8574",
+		.platform_data	= &pcf_data_u2,
+	},
+	{
+		I2C_BOARD_INFO("pcf857x", 0x39),
+		.type		= "pcf8574",
+		.platform_data	= &pcf_data_u18,
+	},
+#if 0
+/* don't clash with mach-davinci/i2c-client.c
+ * or drivers/i2c/chips/gpio_expander_davinci.c
+ * ... eventually both should vanish
+ */
+	{
+		I2C_BOARD_INFO("pcf857x", 0x3a),
+		.type		= "pcf8574a",
+		.platform_data	= &pcf_data_u35,
+	},
+#endif
+	/* ALSO:
+	 * - tvl320aic33 audio codec (0x1b)
+	 * - msp430 microcontroller (0x23)
+	 * - 24wc256 eeprom (0x50)
+	 * - tvp5146 video decoder (0x5d)
+	 */
+};
+
 static struct platform_device *davinci_evm_devices[] __initdata = {
 	&davinci_evm_norflash_device,
 #if defined(CONFIG_MTD_NAND_DAVINCI) || defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
@@ -254,7 +442,7 @@ static __init void davinci_evm_init(void)
 
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));
-
+	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
 	setup_usb();
 }
 
