@@ -808,7 +808,7 @@ config LEDS
 config LEDS_TIMER
 	bool "Timer LED" if (!ARCH_CDB89712 && !ARCH_OMAP) || \
 			    OMAP_OSK_MISTRAL || MACH_OMAP_H2 \
-			    || MACH_OMAP_PERSEUS2 || MACH_DAVINCI_EVM
+			    || MACH_OMAP_PERSEUS2
 
 	depends on LEDS
 	depends on !GENERIC_CLOCKEVENTS
