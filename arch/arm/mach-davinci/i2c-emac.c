@@ -20,7 +20,7 @@
 #include <asm/arch/i2c-client.h>
 
 /* Get Ethernet address from kernel boot params */
-static unsigned char cpmac_eth_string[20] = "deadbeaf";
+static unsigned char cpmac_eth_string[20] = "deadbeef";
 
 /* This function gets the Ethernet MAC address from EEPROM
  * Input buffer to be of atlease 20 bytes in length

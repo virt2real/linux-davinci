@@ -1606,7 +1606,7 @@ static struct clk *emac_clk;
 static unsigned long emac_bus_frequency;
 
 /* MAC ethernet address string in 00:00:00:00:00:00 format */
-static unsigned char emac_eth_string[20] = "deadbeaf";
+static unsigned char emac_eth_string[20] = "deadbeef";
 
 static const char emac_ddcversion_string[] = "EMAC DDC version 0.5";
 
@@ -3379,7 +3379,7 @@ static int emac_dev_init(struct net_device *netdev)
 		emac_eth_setup();
 
 		/* we are getting default MAC address from bootloader */
-		if (strcmp(emac_eth_string, "deadbeaf") == 0) {
+		if (strcmp(emac_eth_string, "deadbeef") == 0) {
 			default_mac_string = "08.00.28.32.06.08";
 		} else {
 			default_mac_string = &emac_eth_string[0];
