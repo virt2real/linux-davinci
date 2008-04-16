@@ -388,6 +388,15 @@ static inline void terminate_read(struct davinci_i2c_dev *dev)
 	if (!dev->terminate)
 		dev_err(dev->dev, "RDR IRQ while no data requested\n");
 }
+static inline void terminate_write(struct davinci_i2c_dev *dev)
+{
+	u16 w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
+	w |= DAVINCI_I2C_MDR_RM|DAVINCI_I2C_MDR_STP;
+	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
+
+	if (!dev->terminate)
+		dev_err(dev->dev, "TDR IRQ while no data to send\n");
+}
 
 /*
  * Interrupt service routine. This gets called whenever an I2C interrupt
@@ -467,6 +476,9 @@ static irqreturn_t i2c_davinci_isr(int this_irq, void *dev_id)
 				davinci_i2c_write_reg(dev,
 						      DAVINCI_I2C_IMR_REG,
 						      w);
+			} else {
+				/* signal can terminate transfer */
+				terminate_write(dev);
 			}
 			break;
 
