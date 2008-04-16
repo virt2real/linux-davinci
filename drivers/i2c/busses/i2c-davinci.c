@@ -121,7 +121,7 @@ struct davinci_i2c_dev {
 /* default platform data to use if not supplied in the platform_device */
 static struct davinci_i2c_platform_data davinci_i2c_platform_data_default = {
 	.bus_freq	= 100,
-	.bus_delay	= 100,
+	.bus_delay	= 0,
 };
 
 static inline void davinci_i2c_write_reg(struct davinci_i2c_dev *i2c_dev,
