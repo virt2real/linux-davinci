@@ -42,11 +42,18 @@ static inline unsigned int davinci_serial_in(struct plat_serial8250_port *up,
 	return (unsigned int)__raw_readb(up->membase + offset);
 }
 
-static inline void davinci_serial_outp(struct plat_serial8250_port *p, 
+static inline void davinci_serial_outb(struct plat_serial8250_port *p,
 				       int offset, int value)
 {
 	offset <<= p->regshift;
 	__raw_writeb(value, p->membase + offset);
+}
+
+static inline void davinci_serial_outs(struct plat_serial8250_port *p,
+				       int offset, int value)
+{
+	offset <<= p->regshift;
+	__raw_writew(value, p->membase + offset);
 }
 
 static struct plat_serial8250_port serial_platform_data[] = {
@@ -77,14 +84,14 @@ static void __init davinci_serial_reset(struct plat_serial8250_port *p)
 	/* reset both transmitter and receiver: bits 14,13 = UTRST, URRST */
 	unsigned int pwremu = 0;
 
-	davinci_serial_outp(p, UART_IER, 0);  /* disable all interrupts */
+	davinci_serial_outb(p, UART_IER, 0);  /* disable all interrupts */
 
-	davinci_serial_outp(p, UART_DAVINCI_PWREMU, pwremu);
+	davinci_serial_outs(p, UART_DAVINCI_PWREMU, pwremu);
 	mdelay(10);
 
 	pwremu |= (0x3 << 13);
 	pwremu |= 0x1;
-	davinci_serial_outp(p, UART_DAVINCI_PWREMU, pwremu);
+	davinci_serial_outs(p, UART_DAVINCI_PWREMU, pwremu);
 }
 
 static int __init davinci_init(void)
