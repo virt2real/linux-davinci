@@ -124,7 +124,7 @@ static int mpc52xx_fec_mdio_probe(struct of_device *of, const struct of_device_i
 		goto out_free;
 	}
 
-	bus->id = res.start;
+	snprintf(bus->id, MII_BUS_ID_SIZE, "%x", res.start);
 	bus->priv = priv;
 
 	bus->dev = dev;
@@ -179,6 +179,7 @@ static int mpc52xx_fec_mdio_remove(struct of_device *of)
 
 static struct of_device_id mpc52xx_fec_mdio_match[] = {
 	{ .compatible = "fsl,mpc5200b-mdio", },
+	{ .compatible = "fsl,mpc5200-mdio", },
 	{ .compatible = "mpc5200b-fec-phy", },
 	{}
 };

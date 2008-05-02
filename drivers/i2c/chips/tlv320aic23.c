@@ -54,6 +54,7 @@ I2C_CLIENT_INSMOD;
 static struct i2c_driver aic23_driver;
 static struct i2c_client *new_client;
 static int selftest;
+static struct platform_device audio_i2c_device;
 
 static struct aic23_info {
 	u16 volume_reg_left;
@@ -110,6 +111,40 @@ int tlv320aic33_write_value(u8 reg, u16 value)
 EXPORT_SYMBOL(tlv320aic33_write_value);
 #endif /* CONFIG_SENSORS_TLV320AIC33 */
 
+#ifdef CONFIG_ARCH_OMAP
+/*
+ * Configures the McBSP3 which is used to send clock to the AIC23 codec.
+ * The input clock rate from DSP is 12MHz.
+ * The DSP clock must be on before this is called.
+ */
+static int omap_mcbsp3_aic23_clock_init(void)
+{
+	u16 w;
+
+	/* enable 12MHz clock to mcbsp 1 & 3 */
+	__raw_writew(__raw_readw(DSP_IDLECT2) | (1<<1), DSP_IDLECT2);
+	__raw_writew(__raw_readw(DSP_RSTCT2) | 1 | 1<<1, DSP_RSTCT2);
+
+	/* disable sample rate generator */
+	OMAP_MCBSP_WRITE(OMAP1610_MCBSP3_BASE, SPCR1, 0x0000);
+	OMAP_MCBSP_WRITE(OMAP1610_MCBSP3_BASE, SPCR2, 0x0000);
+
+	/* pin control register */
+	OMAP_MCBSP_WRITE(OMAP1610_MCBSP3_BASE, PCR0,(CLKXM | CLKXP | CLKRP));
+
+	/* configure srg to send 12MHz pulse from dsp peripheral clock */
+	OMAP_MCBSP_WRITE(OMAP1610_MCBSP3_BASE, SRGR1, 0x0000);
+	OMAP_MCBSP_WRITE(OMAP1610_MCBSP3_BASE, SRGR2, CLKSM);
+
+	/* enable sample rate generator */
+	w = OMAP_MCBSP_READ(OMAP1610_MCBSP3_BASE, SPCR2);
+	OMAP_MCBSP_WRITE(OMAP1610_MCBSP3_BASE, SPCR2, (w | FREE | GRST));
+	printk("Clock enabled to MCBSP1 & 3 \n");
+
+	return 0;
+}
+#endif /* CONFIG_ARCH_OMAP */
+
 static int aic23_detect_client(struct i2c_adapter *adapter, int address,
 				     int kind)
 {
@@ -118,7 +153,7 @@ static int aic23_detect_client(struct i2c_adapter *adapter, int address,
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA |
 				     I2C_FUNC_SMBUS_WRITE_BYTE)) {
-		printk(KERN_WARNING "%s functinality check failed\n",
+		printk(KERN_WARNING "%s functionality check failed\n",
 		       client_name);
 		return err;
 	}
@@ -143,12 +178,29 @@ static int aic23_detect_client(struct i2c_adapter *adapter, int address,
 		kfree(new_client);
 		return err;
 	}
+
+	if (platform_device_register(&audio_i2c_device)) {
+		printk(KERN_WARNING "Failed to register audio i2c device\n");
+		selftest = -ENODEV;
+		return selftest;
+	}
+#ifdef CONFIG_ARCH_OMAP
+	/* FIXME: Do in board-specific file */
+	omap_mcbsp3_aic23_clock_init();
+
+	if (!aic23_info_l.power_down)
+		aic23_power_up();
+#endif
+	aic23_info_l.initialized = 1;
+
 	return 0;
 }
 
 static int aic23_detach_client(struct i2c_client *client)
 {
 	int err;
+
+	platform_device_unregister(&audio_i2c_device);
 
 	if ((err = i2c_detach_client(client))) {
 		printk("aic23.o: Client deregistration failed, \
@@ -650,19 +702,6 @@ static int __init aic23_init(void)
 		return selftest;
 	}
 
-	if (platform_device_register(&audio_i2c_device)) {
-		printk(KERN_WARNING "Failed to register audio i2c device\n");
-		platform_driver_unregister(&audio_i2c_driver);
-		selftest = -ENODEV;
-		return selftest;
-	}
-#ifdef CONFIG_ARCH_OMAP
-	/* FIXME: Do in board-specific file */
-	omap_mcbsp3_aic23_clock_init();
-	if (!aic23_info_l.power_down)
-		aic23_power_up();
-#endif
-	aic23_info_l.initialized = 1;
 	printk("TLV320AIC23 I2C version %s (%s)\n",
 	       TLV320AIC23_VERSION, TLV320AIC23_DATE);
 
@@ -674,7 +713,6 @@ static void __exit aic23_exit(void)
 	aic23_power_down();
 	i2c_del_driver(&aic23_driver);
 
-	platform_device_unregister(&audio_i2c_device);
 	platform_driver_unregister(&audio_i2c_driver);
 }
 

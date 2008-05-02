@@ -1,6 +1,6 @@
 /*
  * sound/arm/omap-alsa-aic23.h
- * 
+ *
  * Alsa Driver for AIC23 codec on OSK5912 platform board
  *
  * Copyright (C) 2005 Instituto Nokia de Tecnologia - INdT - Manaus Brazil
@@ -18,7 +18,6 @@
 #ifndef __OMAP_ALSA_AIC23_H
 #define __OMAP_ALSA_AIC23_H
 
-#include <sound/driver.h>
 #include <asm/arch/dma.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -60,7 +59,8 @@
 #define SIDETONE_12			0x080
 #define SIDETONE_18			0x0c0
 
-#define DEFAULT_ANALOG_AUDIO_CONTROL  DAC_SELECTED | STE_ENABLED | BYPASS_ON | INSEL_MIC | MICB_20DB
+#define DEFAULT_ANALOG_AUDIO_CONTROL  (DAC_SELECTED | STE_ENABLED | \
+					BYPASS_ON | INSEL_MIC | MICB_20DB)
 
 struct aic23_samplerate_reg_info {
 	u32 sample_rate;
@@ -68,10 +68,13 @@ struct aic23_samplerate_reg_info {
 	u8 divider;		/* if 0 CLKIN = MCLK, if 1 CLKIN = MCLK/2 */
 };
 
+extern int aic23_write_value(u8 reg, u16 value);
+
 /*
- * Defines codec specific functions pointers that can be used from the 
- * common omap-alse base driver for all omap codecs. (tsc2101 and aic23)
+ * Defines codec specific function pointers that can be used from the
+ * common omap-alsa base driver for all omap codecs. (tsc2101 and aic23)
  */
+void audio_aic23_write(u8 address, u16 data);
 void define_codec_functions(struct omap_alsa_codec_config *codec_config);
 inline void aic23_configure(void);
 void aic23_set_samplerate(long rate);

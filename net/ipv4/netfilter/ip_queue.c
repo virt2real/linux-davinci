@@ -481,7 +481,7 @@ ipq_rcv_dev_event(struct notifier_block *this,
 {
 	struct net_device *dev = ptr;
 
-	if (dev->nd_net != &init_net)
+	if (dev_net(dev) != &init_net)
 		return NOTIFY_DONE;
 
 	/* Drop any packets associated with the downed device */
@@ -588,11 +588,9 @@ static int __init ip_queue_init(void)
 	}
 
 #ifdef CONFIG_PROC_FS
-	proc = create_proc_entry(IPQ_PROC_FS_NAME, 0, init_net.proc_net);
-	if (proc) {
-		proc->owner = THIS_MODULE;
-		proc->proc_fops = &ip_queue_proc_fops;
-	} else {
+	proc = proc_create(IPQ_PROC_FS_NAME, 0, init_net.proc_net,
+			   &ip_queue_proc_fops);
+	if (!proc) {
 		printk(KERN_ERR "ip_queue: failed to create proc entry\n");
 		goto cleanup_ipqnl;
 	}

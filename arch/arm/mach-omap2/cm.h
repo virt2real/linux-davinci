@@ -14,6 +14,8 @@
  * published by the Free Software Foundation.
  */
 
+#include <asm/io.h>
+
 #include "prcm-common.h"
 
 #ifndef __ASSEMBLER__
@@ -41,19 +43,21 @@
 #define OMAP3430_CM_CLKOUT_CTRL		OMAP_CM_REGADDR(OMAP3430_CCR_MOD, 0x0070)
 
 #ifndef __ASSEMBLER__
-/* Clock management global register get/set */
 
-static void __attribute__((unused)) cm_write_reg(u32 val, void __iomem *addr)
+/* Read-modify-write bits in a CM register */
+static __inline__ u32 __attribute__((unused)) cm_rmw_reg_bits(u32 mask,
+						u32 bits, void __iomem *va)
 {
-	pr_debug("cm_write_reg: writing 0x%0x to 0x%0x\n", val, (u32)addr);
+	u32 v;
 
-	__raw_writel(val, addr);
+	v = __raw_readl(va);
+	v &= ~mask;
+	v |= bits;
+	__raw_writel(v, va);
+
+	return v;
 }
 
-static u32 __attribute__((unused)) cm_read_reg(void __iomem *addr)
-{
-	return __raw_readl(addr);
-}
 #endif
 
 /*
@@ -83,7 +87,6 @@ static u32 __attribute__((unused)) cm_read_reg(void __iomem *addr)
 #define CM_CLKSEL2					0x0044
 #define CM_CLKSTCTRL					0x0048
 
-
 /* Architecture-specific registers */
 
 #define OMAP24XX_CM_FCLKEN2				0x0004
@@ -97,6 +100,7 @@ static u32 __attribute__((unused)) cm_read_reg(void __iomem *addr)
 #define OMAP3430ES2_CM_FCLKEN3				0x0008
 #define OMAP3430_CM_IDLEST_PLL				CM_IDLEST2
 #define OMAP3430_CM_AUTOIDLE_PLL			CM_AUTOIDLE2
+#define OMAP3430ES2_CM_AUTOIDLE2_PLL			CM_AUTOIDLE2
 #define OMAP3430_CM_CLKSEL1				CM_CLKSEL
 #define OMAP3430_CM_CLKSEL1_PLL				CM_CLKSEL
 #define OMAP3430_CM_CLKSEL2_PLL				CM_CLKSEL2
@@ -112,16 +116,37 @@ static u32 __attribute__((unused)) cm_read_reg(void __iomem *addr)
 /* Clock management domain register get/set */
 
 #ifndef __ASSEMBLER__
-static void __attribute__((unused)) cm_write_mod_reg(u32 val, s16 module,
-							s16 idx)
+static __inline__ void __attribute__((unused)) cm_write_mod_reg(u32 val,
+							s16 module, s16 idx)
 {
-	cm_write_reg(val, OMAP_CM_REGADDR(module, idx));
+	__raw_writel(val, OMAP_CM_REGADDR(module, idx));
 }
 
-static u32 __attribute__((unused)) cm_read_mod_reg(s16 module, s16 idx)
+static __inline__ u32 __attribute__((unused)) cm_read_mod_reg(s16 module,
+							s16 idx)
 {
-	return cm_read_reg(OMAP_CM_REGADDR(module, idx));
+	return __raw_readl(OMAP_CM_REGADDR(module, idx));
 }
+
+/* Read-modify-write bits in a CM register (by domain) */
+static __inline__ u32 __attribute__((unused)) cm_rmw_mod_reg_bits(u32 mask,
+						u32 bits, s16 module, s16 idx)
+{
+	return cm_rmw_reg_bits(mask, bits, OMAP_CM_REGADDR(module, idx));
+}
+
+static __inline__ u32 __attribute__((unused)) cm_set_mod_reg_bits(u32 bits,
+							s16 module, s16 idx)
+{
+	return cm_rmw_mod_reg_bits(bits, bits, module, idx);
+}
+
+static __inline__ u32 __attribute__((unused)) cm_clear_mod_reg_bits(u32 bits,
+							s16 module, s16 idx)
+{
+	return cm_rmw_mod_reg_bits(bits, 0x0, module, idx);
+}
+
 #endif
 
 /* CM register bits shared between 24XX and 3430 */

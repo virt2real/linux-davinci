@@ -15,6 +15,8 @@
 #ifndef __ARCH_ARM_OMAP_CLOCK_H
 #define __ARCH_ARM_OMAP_CLOCK_H
 
+#include <asm/arch/clockdomain.h>
+
 struct module;
 struct clk;
 
@@ -35,12 +37,25 @@ struct dpll_data {
 	void __iomem		*mult_div1_reg;
 	u32			mult_mask;
 	u32			div1_mask;
+	u16			last_rounded_m;
+	u8			last_rounded_n;
+	unsigned long		last_rounded_rate;
+	unsigned int		rate_tolerance;
+	u16			max_multiplier;
+	u8			max_divider;
+	u32			max_tolerance;
 #  if defined(CONFIG_ARCH_OMAP3)
+	u32			freqsel_mask;
+	u8			modes;
 	void __iomem		*control_reg;
 	u32			enable_mask;
 	u8			auto_recal_bit;
 	u8			recal_en_bit;
 	u8			recal_st_bit;
+	void __iomem		*autoidle_reg;
+	u32			autoidle_mask;
+	void __iomem		*idlest_reg;
+	u8			idlest_bit;
 #  endif
 };
 
@@ -68,10 +83,15 @@ struct clk {
 	void __iomem		*clksel_reg;
 	u32			clksel_mask;
 	const struct clksel	*clksel;
-	const struct dpll_data	*dpll_data;
+	struct dpll_data	*dpll_data;
+	const char              *clkdm_name;
+	struct clockdomain      *clkdm;
 #else
 	__u8			rate_offset;
 	__u8			src_offset;
+#endif
+#if defined(CONFIG_PM_DEBUG) && defined(CONFIG_DEBUG_FS)
+	struct dentry		*dent;	/* For visible tree hierarchy */
 #endif
 };
 

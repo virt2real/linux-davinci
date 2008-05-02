@@ -4495,9 +4495,9 @@ static void ipw_rx_notification(struct ipw_priv *priv,
 								       priv->
 								       essid_len),
 							  print_mac(mac, priv->bssid),
-							  ntohs(auth->status),
+							  le16_to_cpu(auth->status),
 							  ipw_get_status_code
-							  (ntohs
+							  (le16_to_cpu
 							   (auth->status)));
 
 						priv->status &=
@@ -4532,9 +4532,9 @@ static void ipw_rx_notification(struct ipw_priv *priv,
 							  IPW_DL_STATE |
 							  IPW_DL_ASSOC,
 							  "association failed (0x%04X): %s\n",
-							  ntohs(resp->status),
+							  le16_to_cpu(resp->status),
 							  ipw_get_status_code
-							  (ntohs
+							  (le16_to_cpu
 							   (resp->status)));
 					}
 
@@ -4591,8 +4591,8 @@ static void ipw_rx_notification(struct ipw_priv *priv,
 					IPW_DEBUG(IPW_DL_NOTIF | IPW_DL_STATE |
 						  IPW_DL_ASSOC,
 						  "authentication failed (0x%04X): %s\n",
-						  ntohs(auth->status),
-						  ipw_get_status_code(ntohs
+						  le16_to_cpu(auth->status),
+						  ipw_get_status_code(le16_to_cpu
 								      (auth->
 								       status)));
 				}
@@ -10192,7 +10192,6 @@ static int ipw_tx_skb(struct ipw_priv *priv, struct ieee80211_txb *txb,
 	u8 id, hdr_len, unicast;
 	u16 remaining_bytes;
 	int fc;
-	DECLARE_MAC_BUF(mac);
 
 	hdr_len = ieee80211_get_hdrlen(le16_to_cpu(hdr->frame_ctl));
 	switch (priv->ieee->iw_mode) {
@@ -10203,8 +10202,10 @@ static int ipw_tx_skb(struct ipw_priv *priv, struct ieee80211_txb *txb,
 			id = ipw_add_station(priv, hdr->addr1);
 			if (id == IPW_INVALID_STATION) {
 				IPW_WARNING("Attempt to send data to "
-					    "invalid cell: %s\n",
-					    print_mac(mac, hdr->addr1));
+					    "invalid cell: " MAC_FMT "\n",
+					    hdr->addr1[0], hdr->addr1[1],
+					    hdr->addr1[2], hdr->addr1[3],
+					    hdr->addr1[4], hdr->addr1[5]);
 				goto drop;
 			}
 		}
@@ -10349,9 +10350,7 @@ static int ipw_tx_skb(struct ipw_priv *priv, struct ieee80211_txb *txb,
 					 remaining_bytes,
 					 PCI_DMA_TODEVICE));
 
-			tfd->u.data.num_chunks =
-			    cpu_to_le32(le32_to_cpu(tfd->u.data.num_chunks) +
-					1);
+			le32_add_cpu(&tfd->u.data.num_chunks, 1);
 		}
 	}
 
@@ -11576,6 +11575,7 @@ static int ipw_prom_alloc(struct ipw_priv *priv)
 	priv->prom_priv->priv = priv;
 
 	strcpy(priv->prom_net_dev->name, "rtap%d");
+	memcpy(priv->prom_net_dev->dev_addr, priv->mac_addr, ETH_ALEN);
 
 	priv->prom_net_dev->type = ARPHRD_IEEE80211_RADIOTAP;
 	priv->prom_net_dev->open = ipw_prom_open;

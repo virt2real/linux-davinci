@@ -77,24 +77,17 @@ static u32 omap2_get_dpll_rate_24xx(struct clk *tclk)
 
 static int omap2_enable_osc_ck(struct clk *clk)
 {
-	u32 pcc;
 
-	pcc = prm_read_reg(OMAP24XX_PRCM_CLKSRC_CTRL);
-
-	prm_write_reg(pcc & ~OMAP_AUTOEXTCLKMODE_MASK,
-		      OMAP24XX_PRCM_CLKSRC_CTRL);
+	prm_rmw_reg_bits(OMAP_AUTOEXTCLKMODE_MASK, 0,
+			 OMAP24XX_PRCM_CLKSRC_CTRL);
 
 	return 0;
 }
 
 static void omap2_disable_osc_ck(struct clk *clk)
 {
-	u32 pcc;
-
-	pcc = prm_read_reg(OMAP24XX_PRCM_CLKSRC_CTRL);
-
-	prm_write_reg(pcc | OMAP_AUTOEXTCLKMODE_MASK,
-		      OMAP24XX_PRCM_CLKSRC_CTRL);
+	prm_rmw_reg_bits(OMAP_AUTOEXTCLKMODE_MASK, OMAP_AUTOEXTCLKMODE_MASK,
+			 OMAP24XX_PRCM_CLKSRC_CTRL);
 }
 
 /* Enable an APLL if off */
@@ -142,7 +135,7 @@ static void omap2_clk_fixed_disable(struct clk *clk)
  * Uses the current prcm set to tell if a rate is valid.
  * You can go slower, but not faster within a given rate set.
  */
-static u32 omap2_dpll_round_rate(unsigned long target_rate)
+long omap2_dpllcore_round_rate(unsigned long target_rate)
 {
 	u32 high, low, core_clk_src;
 
@@ -171,14 +164,14 @@ static u32 omap2_dpll_round_rate(unsigned long target_rate)
 
 }
 
-static void omap2_dpll_recalc(struct clk *clk)
+static void omap2_dpllcore_recalc(struct clk *clk)
 {
 	clk->rate = omap2_get_dpll_rate_24xx(clk);
 
 	propagate_rate(clk);
 }
 
-static int omap2_reprogram_dpll(struct clk *clk, unsigned long rate)
+static int omap2_reprogram_dpllcore(struct clk *clk, unsigned long rate)
 {
 	u32 cur_rate, low, mult, div, valid_rate, done_rate;
 	u32 bypass = 0;
@@ -197,7 +190,7 @@ static int omap2_reprogram_dpll(struct clk *clk, unsigned long rate)
 	} else if ((rate == (cur_rate * 2)) && (mult == 1)) {
 		omap2_reprogram_sdrc(CORE_CLK_SRC_DPLL_X2, 1);
 	} else if (rate != cur_rate) {
-		valid_rate = omap2_dpll_round_rate(rate);
+		valid_rate = omap2_dpllcore_round_rate(rate);
 		if (valid_rate != rate)
 			goto dpll_exit;
 
@@ -210,7 +203,7 @@ static int omap2_reprogram_dpll(struct clk *clk, unsigned long rate)
 		if (!dd)
 			goto dpll_exit;
 
-		tmpset.cm_clksel1_pll = cm_read_reg(dd->mult_div1_reg);
+		tmpset.cm_clksel1_pll = __raw_readl(dd->mult_div1_reg);
 		tmpset.cm_clksel1_pll &= ~(dd->mult_mask |
 					   dd->div1_mask);
 		div = ((curr_prcm_set->xtal_speed / 1000000) - 1);
@@ -244,7 +237,7 @@ static int omap2_reprogram_dpll(struct clk *clk, unsigned long rate)
 		omap2_init_memory_params(omap2_dll_force_needed());
 		omap2_reprogram_sdrc(done_rate, 0);
 	}
-	omap2_dpll_recalc(&dpll_ck);
+	omap2_dpllcore_recalc(&dpll_ck);
 	ret = 0;
 
 dpll_exit:
@@ -371,7 +364,7 @@ static int omap2_select_table_rate(struct clk *clk, unsigned long rate)
 
 		local_irq_restore(flags);
 	}
-	omap2_dpll_recalc(&dpll_ck);
+	omap2_dpllcore_recalc(&dpll_ck);
 
 	return 0;
 }
@@ -449,7 +442,7 @@ static u32 omap2_get_sysclkdiv(void)
 {
 	u32 div;
 
-	div = prm_read_reg(OMAP24XX_PRCM_CLKSRC_CTRL);
+	div = __raw_readl(OMAP24XX_PRCM_CLKSRC_CTRL);
 	div &= OMAP_SYSCLKDIV_MASK;
 	div >>= OMAP_SYSCLKDIV_SHIFT;
 

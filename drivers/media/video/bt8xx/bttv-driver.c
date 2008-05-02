@@ -1990,7 +1990,7 @@ static int bttv_g_frequency(struct file *file, void *priv,
 	if (0 != err)
 		return err;
 
-	f->type = V4L2_TUNER_ANALOG_TV;
+	f->type = btv->radio_user ? V4L2_TUNER_RADIO : V4L2_TUNER_ANALOG_TV;
 	f->frequency = btv->freq;
 
 	return 0;
@@ -2009,7 +2009,8 @@ static int bttv_s_frequency(struct file *file, void *priv,
 
 	if (unlikely(f->tuner != 0))
 		return -EINVAL;
-	if (unlikely(f->type != V4L2_TUNER_ANALOG_TV))
+	if (unlikely(f->type != (btv->radio_user
+		? V4L2_TUNER_RADIO : V4L2_TUNER_ANALOG_TV)))
 		return -EINVAL;
 	mutex_lock(&btv->lock);
 	btv->freq = f->frequency;
@@ -2371,7 +2372,7 @@ static int setup_window(struct bttv_fh *fh, struct bttv *btv,
 	if (check_btres(fh, RESOURCE_OVERLAY)) {
 		struct bttv_buffer *new;
 
-		new = videobuf_pci_alloc(sizeof(*new));
+		new = videobuf_sg_alloc(sizeof(*new));
 		new->crop = btv->crop[!!fh->do_crop].rect;
 		bttv_overlay_risc(btv, &fh->ov, fh->ovfmt, new);
 		retval = bttv_switch_overlay(btv,fh,new);
@@ -2759,7 +2760,7 @@ static int bttv_overlay(struct file *file, void *f, unsigned int on)
 	mutex_lock(&fh->cap.vb_lock);
 	if (on) {
 		fh->ov.tvnorm = btv->tvnorm;
-		new = videobuf_pci_alloc(sizeof(*new));
+		new = videobuf_sg_alloc(sizeof(*new));
 		new->crop = btv->crop[!!fh->do_crop].rect;
 		bttv_overlay_risc(btv, &fh->ov, fh->ovfmt, new);
 	} else {
@@ -2833,7 +2834,7 @@ static int bttv_s_fbuf(struct file *file, void *f,
 		if (check_btres(fh, RESOURCE_OVERLAY)) {
 			struct bttv_buffer *new;
 
-			new = videobuf_pci_alloc(sizeof(*new));
+			new = videobuf_sg_alloc(sizeof(*new));
 			new->crop = btv->crop[!!fh->do_crop].rect;
 			bttv_overlay_risc(btv, &fh->ov, fh->ovfmt, new);
 			retval = bttv_switch_overlay(btv, fh, new);
@@ -3116,12 +3117,18 @@ static int bttv_s_crop(struct file *file, void *f, struct v4l2_crop *crop)
 
 static int bttv_g_audio(struct file *file, void *priv, struct v4l2_audio *a)
 {
+	if (unlikely(a->index))
+		return -EINVAL;
+
 	strcpy(a->name, "audio");
 	return 0;
 }
 
 static int bttv_s_audio(struct file *file, void *priv, struct v4l2_audio *a)
 {
+	if (unlikely(a->index))
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -3183,7 +3190,7 @@ static unsigned int bttv_poll(struct file *file, poll_table *wait)
 			/* need to capture a new frame */
 			if (locked_btres(fh->btv,RESOURCE_VIDEO_STREAM))
 				goto err;
-			fh->cap.read_buf = videobuf_pci_alloc(fh->cap.msize);
+			fh->cap.read_buf = videobuf_sg_alloc(fh->cap.msize);
 			if (NULL == fh->cap.read_buf)
 				goto err;
 			fh->cap.read_buf->memory = V4L2_MEMORY_USERPTR;
@@ -3250,14 +3257,14 @@ static int bttv_open(struct inode *inode, struct file *file)
 	fh->ov.setup_ok = 0;
 	v4l2_prio_open(&btv->prio,&fh->prio);
 
-	videobuf_queue_pci_init(&fh->cap, &bttv_video_qops,
-			    btv->c.pci, &btv->s_lock,
+	videobuf_queue_sg_init(&fh->cap, &bttv_video_qops,
+			    &btv->c.pci->dev, &btv->s_lock,
 			    V4L2_BUF_TYPE_VIDEO_CAPTURE,
 			    V4L2_FIELD_INTERLACED,
 			    sizeof(struct bttv_buffer),
 			    fh);
-	videobuf_queue_pci_init(&fh->vbi, &bttv_vbi_qops,
-			    btv->c.pci, &btv->s_lock,
+	videobuf_queue_sg_init(&fh->vbi, &bttv_vbi_qops,
+			    &btv->c.pci->dev, &btv->s_lock,
 			    V4L2_BUF_TYPE_VBI_CAPTURE,
 			    V4L2_FIELD_SEQ_TB,
 			    sizeof(struct bttv_buffer),
@@ -3415,6 +3422,7 @@ static int radio_open(struct inode *inode, struct file *file)
 {
 	int minor = iminor(inode);
 	struct bttv *btv = NULL;
+	struct bttv_fh *fh;
 	unsigned int i;
 
 	dprintk("bttv: open minor=%d\n",minor);
@@ -3429,11 +3437,18 @@ static int radio_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 
 	dprintk("bttv%d: open called (radio)\n",btv->c.nr);
+
+	/* allocate per filehandle data */
+	fh = kmalloc(sizeof(*fh), GFP_KERNEL);
+	if (NULL == fh)
+		return -ENOMEM;
+	file->private_data = fh;
+	*fh = btv->init;
+	v4l2_prio_open(&btv->prio, &fh->prio);
+
 	mutex_lock(&btv->lock);
 
 	btv->radio_user++;
-
-	file->private_data = btv;
 
 	bttv_call_i2c_clients(btv,AUDC_SET_RADIO,NULL);
 	audio_input(btv,TVAUDIO_INPUT_RADIO);
@@ -3444,8 +3459,12 @@ static int radio_open(struct inode *inode, struct file *file)
 
 static int radio_release(struct inode *inode, struct file *file)
 {
-	struct bttv *btv = file->private_data;
+	struct bttv_fh *fh = file->private_data;
+	struct bttv *btv = fh->btv;
 	struct rds_command cmd;
+
+	file->private_data = NULL;
+	kfree(fh);
 
 	btv->radio_user--;
 
@@ -3500,7 +3519,7 @@ static int radio_enum_input(struct file *file, void *priv,
 		return -EINVAL;
 
 	strcpy(i->name, "Radio");
-	 i->type = V4L2_INPUT_TYPE_TUNER;
+	i->type = V4L2_INPUT_TYPE_TUNER;
 
 	return 0;
 }
@@ -3508,8 +3527,11 @@ static int radio_enum_input(struct file *file, void *priv,
 static int radio_g_audio(struct file *file, void *priv,
 					struct v4l2_audio *a)
 {
-	memset(a, 0, sizeof(*a));
+	if (unlikely(a->index))
+		return -EINVAL;
+
 	strcpy(a->name, "Radio");
+
 	return 0;
 }
 
@@ -3529,11 +3551,17 @@ static int radio_s_tuner(struct file *file, void *priv,
 static int radio_s_audio(struct file *file, void *priv,
 					struct v4l2_audio *a)
 {
+	if (unlikely(a->index))
+		return -EINVAL;
+
 	return 0;
 }
 
 static int radio_s_input(struct file *filp, void *priv, unsigned int i)
 {
+	if (unlikely(i))
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -3569,7 +3597,8 @@ static int radio_g_input(struct file *filp, void *priv, unsigned int *i)
 static ssize_t radio_read(struct file *file, char __user *data,
 			 size_t count, loff_t *ppos)
 {
-	struct bttv    *btv = file->private_data;
+	struct bttv_fh *fh = file->private_data;
+	struct bttv *btv = fh->btv;
 	struct rds_command cmd;
 	cmd.block_count = count/3;
 	cmd.buffer = data;
@@ -3583,7 +3612,8 @@ static ssize_t radio_read(struct file *file, char __user *data,
 
 static unsigned int radio_poll(struct file *file, poll_table *wait)
 {
-	struct bttv    *btv = file->private_data;
+	struct bttv_fh *fh = file->private_data;
+	struct bttv *btv = fh->btv;
 	struct rds_command cmd;
 	cmd.instance = file;
 	cmd.event_list = wait;
@@ -3599,6 +3629,7 @@ static const struct file_operations radio_fops =
 	.open	  = radio_open,
 	.read     = radio_read,
 	.release  = radio_release,
+	.compat_ioctl	= v4l_compat_ioctl32,
 	.ioctl	  = video_ioctl2,
 	.llseek	  = no_llseek,
 	.poll     = radio_poll,

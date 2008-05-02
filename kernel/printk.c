@@ -44,6 +44,10 @@ void __attribute__((weak)) early_printk(const char *fmt, ...)
 
 #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
 
+#ifdef CONFIG_DEBUG_LL
+extern void printascii(char *);
+#endif
+
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL 4 /* KERN_WARNING */
 
@@ -643,8 +647,21 @@ static int acquire_console_semaphore_for_printk(unsigned int cpu)
 {
 	int retval = 0;
 
-	if (can_use_console(cpu))
-		retval = !try_acquire_console_sem();
+	if (!try_acquire_console_sem()) {
+		retval = 1;
+
+		/*
+		 * If we can't use the console, we need to release
+		 * the console semaphore by hand to avoid flushing
+		 * the buffer. We need to hold the console semaphore
+		 * in order to do this test safely.
+		 */
+		if (!can_use_console(cpu)) {
+			console_locked = 0;
+			up(&console_sem);
+			retval = 0;
+		}
+	}
 	printk_cpu = UINT_MAX;
 	spin_unlock(&logbuf_lock);
 	return retval;
@@ -701,6 +718,10 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	/* Emit the output into the temporary buffer */
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
+
+#ifdef	CONFIG_DEBUG_LL
+	printascii(printk_buf);
+#endif
 
 	/*
 	 * Copy the output into log_buf.  If the caller didn't provide

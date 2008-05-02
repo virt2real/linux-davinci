@@ -31,7 +31,7 @@
 
 unsigned rxrpc_debug;
 module_param_named(debug, rxrpc_debug, uint, S_IWUSR | S_IRUGO);
-MODULE_PARM_DESC(rxrpc_debug, "rxkad debugging mask");
+MODULE_PARM_DESC(debug, "rxkad debugging mask");
 
 struct rxkad_level1_hdr {
 	__be32	data_size;	/* true data size (excluding padding) */
@@ -493,8 +493,8 @@ static int rxkad_verify_packet(const struct rxrpc_call *call,
 		__be32 x[2];
 	} tmpbuf __attribute__((aligned(8))); /* must all be in same page */
 	__be32 x;
-	u16 y;
 	__be16 cksum;
+	u32 y;
 	int ret;
 
 	sp = rxrpc_skb(skb);

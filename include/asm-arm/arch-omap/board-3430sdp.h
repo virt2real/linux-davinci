@@ -30,7 +30,6 @@
 #define __ASM_ARCH_OMAP_3430SDP_H
 
 extern void sdp3430_usb_init(void);
-extern void sdp_mmc_init(void);
 
 #define DEBUG_BASE			0x08000000  /* debug board */
 
@@ -67,23 +66,7 @@ extern void sdp_mmc_init(void);
 #define FLASH_SIZE_SDPV1	SZ_64M
 #define FLASH_SIZE_SDPV2	SZ_128M
 
-#ifdef CONFIG_TWL4030_CORE
-
 #define TWL4030_IRQNUM INT_34XX_SYS_NIRQ
 
-/* TWL4030 Primary Interrupt Handler (PIH) interrupts */
-#define	IH_TWL4030_BASE		IH_BOARD_BASE
-#define	IH_TWL4030_END		(IH_TWL4030_BASE+8)
-
-#ifdef CONFIG_TWL4030_GPIO
-
-/* TWL4030 GPIO Interrupts */
-#define IH_TWL4030_GPIO_BASE	(IH_TWL4030_END)
-#define IH_TWL4030_GPIO_END	(IH_TWL4030_BASE+18)
-#define NR_IRQS			(IH_TWL4030_GPIO_END)
-#else
-#define NR_IRQS			(IH_TWL4030_END)
-#endif /* CONFIG_I2C_TWL4030_GPIO */
-#endif /* End of support for TWL4030 */
-#endif /*  __ASM_ARCH_OMAP_3430SDP_H */
+#endif /* __ASM_ARCH_OMAP_3430SDP_H */
 

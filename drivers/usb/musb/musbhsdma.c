@@ -172,7 +172,7 @@ static void configure_channel(struct dma_channel *pChannel,
 	struct musb_dma_channel *pImplChannel =
 		(struct musb_dma_channel *) pChannel->private_data;
 	struct musb_dma_controller *controller = pImplChannel->controller;
-	u8 *mbase = controller->pCoreBase;
+	void __iomem *mbase = controller->pCoreBase;
 	u8 bChannel = pImplChannel->bIndex;
 	u16 csr = 0;
 
@@ -216,7 +216,7 @@ static void configure_channel(struct dma_channel *pChannel,
 		csr);
 }
 
-static int dma_channel_program(struct dma_channel * pChannel,
+static int dma_channel_program(struct dma_channel *pChannel,
 				u16 packet_sz, u8 mode,
 				dma_addr_t dma_addr, u32 len)
 {
@@ -250,29 +250,28 @@ static int dma_channel_abort(struct dma_channel *pChannel)
 	struct musb_dma_channel *pImplChannel =
 		(struct musb_dma_channel *) pChannel->private_data;
 	u8 bChannel = pImplChannel->bIndex;
-	u8 *mbase = pImplChannel->controller->pCoreBase;
+	void __iomem *mbase = pImplChannel->controller->pCoreBase;
 	u16 csr;
 
 	if (pChannel->status == MUSB_DMA_STATUS_BUSY) {
 		if (pImplChannel->transmit) {
 
 			csr = musb_readw(mbase,
-				MUSB_EP_OFFSET(pImplChannel->epnum,MUSB_TXCSR));
+				MUSB_EP_OFFSET(pImplChannel->epnum, MUSB_TXCSR));
 			csr &= ~(MUSB_TXCSR_AUTOSET |
 				 MUSB_TXCSR_DMAENAB |
 				 MUSB_TXCSR_DMAMODE);
 			musb_writew(mbase,
-				MUSB_EP_OFFSET(pImplChannel->epnum,MUSB_TXCSR),
+				MUSB_EP_OFFSET(pImplChannel->epnum, MUSB_TXCSR),
 				csr);
-		}
-		else {
+		} else {
 			csr = musb_readw(mbase,
-				MUSB_EP_OFFSET(pImplChannel->epnum,MUSB_RXCSR));
+				MUSB_EP_OFFSET(pImplChannel->epnum, MUSB_RXCSR));
 			csr &= ~(MUSB_RXCSR_AUTOCLEAR |
 				 MUSB_RXCSR_DMAENAB |
 				 MUSB_RXCSR_DMAMODE);
 			musb_writew(mbase,
-				MUSB_EP_OFFSET(pImplChannel->epnum,MUSB_RXCSR),
+				MUSB_EP_OFFSET(pImplChannel->epnum, MUSB_RXCSR),
 				csr);
 		}
 
@@ -297,7 +296,7 @@ static irqreturn_t dma_controller_irq(int irq, void *private_data)
 		(struct musb_dma_controller *)private_data;
 	struct musb_dma_channel *pImplChannel;
 	struct musb *musb = controller->pDmaPrivate;
-	u8 *mbase = controller->pCoreBase;
+	void __iomem *mbase = controller->pCoreBase;
 	struct dma_channel *pChannel;
 	u8 bChannel;
 	u16 csr;
@@ -402,8 +401,8 @@ dma_controller_create(struct musb *musb, void __iomem *pCoreBase)
 		return NULL;
 	}
 
-	if (!(controller = kzalloc(sizeof(struct musb_dma_controller),
-				GFP_KERNEL)))
+	controller = kzalloc(sizeof(struct musb_dma_controller), GFP_KERNEL);
+	if (!controller)
 		return NULL;
 
 	controller->bChannelCount = MUSB_HSDMA_CHANNELS;

@@ -56,12 +56,22 @@
 #include <asm/arch/irqs.h>
 /* TWL4030 interrupts */
 
-#define TWL4030_MODIRQ_GPIO		(IH_TWL4030_BASE + 0)
-#define TWL4030_MODIRQ_KEYPAD		(IH_TWL4030_BASE + 1)
-#define TWL4030_MODIRQ_BCI		(IH_TWL4030_BASE + 2)
-#define TWL4030_MODIRQ_MADC		(IH_TWL4030_BASE + 3)
-#define TWL4030_MODIRQ_USB		(IH_TWL4030_BASE + 4)
-#define TWL4030_MODIRQ_PWR		(IH_TWL4030_BASE + 5)
+#define TWL4030_MODIRQ_GPIO		(TWL4030_IRQ_BASE + 0)
+#define TWL4030_MODIRQ_KEYPAD		(TWL4030_IRQ_BASE + 1)
+#define TWL4030_MODIRQ_BCI		(TWL4030_IRQ_BASE + 2)
+#define TWL4030_MODIRQ_MADC		(TWL4030_IRQ_BASE + 3)
+#define TWL4030_MODIRQ_USB		(TWL4030_IRQ_BASE + 4)
+#define TWL4030_MODIRQ_PWR		(TWL4030_IRQ_BASE + 5)
+
+#define TWL4030_PWRIRQ_PWRBTN		(TWL4030_PWR_IRQ_BASE + 0)
+#define TWL4030_PWRIRQ_CHG_PRES		(TWL4030_PWR_IRQ_BASE + 1)
+#define TWL4030_PWRIRQ_USB_PRES		(TWL4030_PWR_IRQ_BASE + 2)
+#define TWL4030_PWRIRQ_RTC		(TWL4030_PWR_IRQ_BASE + 3)
+#define TWL4030_PWRIRQ_HOT_DIE		(TWL4030_PWR_IRQ_BASE + 4)
+#define TWL4030_PWRIRQ_PWROK_TIMEOUT	(TWL4030_PWR_IRQ_BASE + 5)
+#define TWL4030_PWRIRQ_MBCHG		(TWL4030_PWR_IRQ_BASE + 6)
+#define TWL4030_PWRIRQ_SC_DETECT	(TWL4030_PWR_IRQ_BASE + 7)
+
 /* Rest are unsued currently*/
 
 /* Offsets to Power Registers */
@@ -77,7 +87,7 @@
 #define TWL4030_GPIO_MIN		0
 #define TWL4030_GPIO_MAX		18
 #define TWL4030_GPIO_MAX_CD		2
-#define TWL4030_GPIO_IRQ_NO(n)		(IH_TWL4030_GPIO_BASE+n)
+#define TWL4030_GPIO_IRQ_NO(n)		(TWL4030_GPIO_IRQ_BASE + (n))
 #define TWL4030_GPIO_IS_INPUT		1
 #define TWL4030_GPIO_IS_OUTPUT		0
 #define TWL4030_GPIO_IS_ENABLE		1
@@ -97,14 +107,14 @@
  * It is the caller's responsibility to ensure sane values
  */
 int twl4030_i2c_write_u8(u8 mod_no, u8 val, u8 reg);
-int twl4030_i2c_read_u8(u8 mod_no, u8* val, u8 reg);
+int twl4030_i2c_read_u8(u8 mod_no, u8 *val, u8 reg);
 
  /*
   * i2c_write: IMPORTANT - Allocate value num_bytes+1 and valid data starts at
   *		Offset 1.
   */
-int twl4030_i2c_write(u8 mod_no, u8 * value, u8 reg, u8 num_bytes);
-int twl4030_i2c_read(u8 mod_no, u8 * value, u8 reg, u8 num_bytes);
+int twl4030_i2c_write(u8 mod_no, u8 *value, u8 reg, u8 num_bytes);
+int twl4030_i2c_read(u8 mod_no, u8 *value, u8 reg, u8 num_bytes);
 
 /*
  * Exported TWL4030 GPIO APIs

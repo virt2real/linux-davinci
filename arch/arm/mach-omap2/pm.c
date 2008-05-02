@@ -4,7 +4,7 @@
  * OMAP2 Power Management Routines
  *
  * Copyright (C) 2005 Texas Instruments, Inc.
- * Copyright (C) 2006 Nokia Corporation
+ * Copyright (C) 2006-2008 Nokia Corporation
  *
  * Written by:
  * Richard Woodruff <r-woodruff2@ti.com>
@@ -162,7 +162,6 @@ static void pm_init_serial_console(void)
 {
 	const struct omap_serial_console_config *conf;
 	char name[16];
-	u32 l;
 
 	conf = omap_get_config(OMAP_TAG_SERIAL_CONSOLE,
 			       struct omap_serial_console_config);
@@ -185,19 +184,13 @@ static void pm_init_serial_console(void)
 	}
 	switch (serial_console_uart) {
 	case 1:
-		l = prm_read_mod_reg(CORE_MOD, PM_WKEN1);
-		l |= OMAP24XX_ST_UART1;
-		prm_write_mod_reg(l, CORE_MOD, PM_WKEN1);
+		prm_set_mod_reg_bits(OMAP24XX_ST_UART1, CORE_MOD, PM_WKEN1);
 		break;
 	case 2:
-		l = prm_read_mod_reg(CORE_MOD, PM_WKEN1);
-		l |= OMAP24XX_ST_UART2;
-		prm_write_mod_reg(l, CORE_MOD, PM_WKEN1);
+		prm_set_mod_reg_bits(OMAP24XX_ST_UART2, CORE_MOD, PM_WKEN1);
 		break;
 	case 3:
-		l = prm_read_mod_reg(CORE_MOD, OMAP24XX_PM_WKEN2);
-		l |= OMAP24XX_ST_UART3;
-		prm_write_mod_reg(l, CORE_MOD, OMAP24XX_PM_WKEN2);
+		prm_set_mod_reg_bits(OMAP24XX_ST_UART3, CORE_MOD, OMAP24XX_PM_WKEN2);
 		break;
 	}
 }
@@ -210,10 +203,10 @@ static void pm_init_serial_console(void)
 	regs[reg_count++].val = cm_read_mod_reg(mod, reg)
 #define DUMP_PRM_REG(reg) \
 	regs[reg_count].name = #reg; \
-	regs[reg_count++].val = prm_read_reg(reg)
+	regs[reg_count++].val = __raw_readl(reg)
 #define DUMP_CM_REG(reg) \
 	regs[reg_count].name = #reg; \
-	regs[reg_count++].val = cm_read_reg(reg)
+	regs[reg_count++].val = __raw_readl(reg)
 #define DUMP_INTC_REG(reg, off) \
 	regs[reg_count].name = #reg; \
 	regs[reg_count++].val = __raw_readl(IO_ADDRESS(0x480fe000 + (off)))
@@ -445,20 +438,18 @@ no_sleep:
 	prm_write_mod_reg(0xffffffff, CORE_MOD, PM_WKST1);
 	prm_write_mod_reg(0xffffffff, CORE_MOD, OMAP24XX_PM_WKST2);
 
-	/* wakeup domain events */
-	l = prm_read_mod_reg(WKUP_MOD, PM_WKST);
-	l &= 0x5;  /* bit 1: GPT1, bit5 GPIO */
-	prm_write_mod_reg(l, WKUP_MOD, PM_WKST);
+	/* wakeup domain events - bit 1: GPT1, bit5 GPIO */
+	prm_clear_mod_reg_bits(0x4 | 0x1, WKUP_MOD, PM_WKST);
 
 	/* MPU domain wake events */
-	l = prm_read_reg(OMAP24XX_PRCM_IRQSTATUS_MPU);
+	l = __raw_readl(OMAP24XX_PRCM_IRQSTATUS_MPU);
 	if (l & 0x01)
-		prm_write_reg(0x01, OMAP24XX_PRCM_IRQSTATUS_MPU);
+		__raw_writel(0x01, OMAP24XX_PRCM_IRQSTATUS_MPU);
 	if (l & 0x20)
-		prm_write_reg(0x20, OMAP24XX_PRCM_IRQSTATUS_MPU);
+		__raw_writel(0x20, OMAP24XX_PRCM_IRQSTATUS_MPU);
 
 	/* Mask future PRCM-to-MPU interrupts */
-	prm_write_reg(0x0, OMAP24XX_PRCM_IRQSTATUS_MPU);
+	__raw_writel(0x0, OMAP24XX_PRCM_IRQSTATUS_MPU);
 }
 
 static int omap2_i2c_active(void)
@@ -657,10 +648,10 @@ static void __init prcm_setup_regs(void)
 	u32 l;
 
 	/* Enable autoidle */
-	prm_write_reg(OMAP24XX_AUTOIDLE, OMAP24XX_PRCM_SYSCONFIG);
+	__raw_writel(OMAP24XX_AUTOIDLE, OMAP24XX_PRCM_SYSCONFIG);
 
 	/* Set all domain wakeup dependencies */
-	prm_write_mod_reg(OMAP_EN_WKUP, MPU_MOD, PM_WKDEP);
+	prm_write_mod_reg(OMAP_EN_WKUP_MASK, MPU_MOD, PM_WKDEP);
 	prm_write_mod_reg(0, OMAP24XX_DSP_MOD, PM_WKDEP);
 	prm_write_mod_reg(0, GFX_MOD, PM_WKDEP);
 	prm_write_mod_reg(0, CORE_MOD, PM_WKDEP);
@@ -688,12 +679,14 @@ static void __init prcm_setup_regs(void)
 			  GFX_MOD, PM_PWSTCTRL);
 
 	/* Enable clock auto control for all domains */
-	cm_write_mod_reg(OMAP24XX_AUTOSTATE_MPU, MPU_MOD, CM_CLKSTCTRL);
-	cm_write_mod_reg(OMAP24XX_AUTOSTATE_DSS | OMAP24XX_AUTOSTATE_L4 |
-			 OMAP24XX_AUTOSTATE_L3,
+	cm_write_mod_reg(OMAP24XX_AUTOSTATE_MPU_MASK, MPU_MOD, CM_CLKSTCTRL);
+	cm_write_mod_reg(OMAP24XX_AUTOSTATE_DSS_MASK |
+			 OMAP24XX_AUTOSTATE_L4_MASK |
+			 OMAP24XX_AUTOSTATE_L3_MASK,
 			 CORE_MOD, CM_CLKSTCTRL);
-	cm_write_mod_reg(OMAP24XX_AUTOSTATE_GFX, GFX_MOD, CM_CLKSTCTRL);
-	cm_write_mod_reg(OMAP2420_AUTOSTATE_IVA | OMAP24XX_AUTOSTATE_DSP,
+	cm_write_mod_reg(OMAP24XX_AUTOSTATE_GFX_MASK, GFX_MOD, CM_CLKSTCTRL);
+	cm_write_mod_reg(OMAP2420_AUTOSTATE_IVA_MASK |
+			 OMAP24XX_AUTOSTATE_DSP_MASK,
 			 OMAP24XX_DSP_MOD, CM_CLKSTCTRL);
 
 	/* Enable clock autoidle for all domains */
@@ -761,11 +754,11 @@ static void __init prcm_setup_regs(void)
 
 	/* REVISIT: Configure number of 32 kHz clock cycles for sys_clk
 	 * stabilisation */
-	prm_write_reg(15 << OMAP_SETUP_TIME_SHIFT, OMAP24XX_PRCM_CLKSSETUP);
+	__raw_writel(15 << OMAP_SETUP_TIME_SHIFT, OMAP24XX_PRCM_CLKSSETUP);
 
 	/* Configure automatic voltage transition */
-	prm_write_reg(2 << OMAP_SETUP_TIME_SHIFT, OMAP24XX_PRCM_VOLTSETUP);
-	prm_write_reg(OMAP24XX_AUTO_EXTVOLT |
+	__raw_writel(2 << OMAP_SETUP_TIME_SHIFT, OMAP24XX_PRCM_VOLTSETUP);
+	__raw_writel(OMAP24XX_AUTO_EXTVOLT |
 		      (0x1 << OMAP24XX_SETOFF_LEVEL_SHIFT) |
 		      OMAP24XX_MEMRETCTRL |
 		      (0x1 << OMAP24XX_SETRET_LEVEL_SHIFT) |
@@ -783,7 +776,7 @@ int __init omap2_pm_init(void)
 	int error;
 
 	printk(KERN_INFO "Power Management for OMAP2 initializing\n");
-	l = prm_read_reg(OMAP24XX_PRCM_REVISION);
+	l = __raw_readl(OMAP24XX_PRCM_REVISION);
 	printk(KERN_INFO "PRCM revision %d.%d\n", (l >> 4) & 0x0f, l & 0x0f);
 
 	osc_ck = clk_get(NULL, "osc_ck");

@@ -34,13 +34,13 @@
 #include <linux/random.h>
 #include <linux/syscalls.h>
 #include <linux/kthread.h>
+#include <linux/irq.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c/twl4030.h>
 #include <linux/slab.h>
 
 #include <asm/arch/irqs.h>
-#include <asm/irq.h>
 #include <asm/mach/irq.h>
 #include <asm/arch/gpio.h>
 #include <asm/arch/mux.h>
@@ -145,16 +145,16 @@
 #define GPIO_BANK_MAX			GET_GPIO_CTL_BANK(TWL4030_GPIO_MAX)
 
 /* GPIOPUPDCTRx Fields 5 banks of 4 gpios each */
-#define BIT_GPIOPUPDCTR1_GPIOxPD(x)	(2 *(x))
-#define MASK_GPIOPUPDCTR1_GPIOxPD(x)	(0x01 << (2*(x)))
+#define BIT_GPIOPUPDCTR1_GPIOxPD(x)	(2 * (x))
+#define MASK_GPIOPUPDCTR1_GPIOxPD(x)	(0x01 << (2 * (x)))
 #define BIT_GPIOPUPDCTR1_GPIOxPU(x)	((x) + 1)
-#define MASK_GPIOPUPDCTR1_GPIOxPU(x)	(0x01 << (((2*(x)) + 1)))
+#define MASK_GPIOPUPDCTR1_GPIOxPU(x)	(0x01 << (((2 * (x)) + 1)))
 
 /* GPIO_EDR1 Fields */
-#define BIT_GPIO_EDR1_GPIOxFALLING(x)	(2 *(x))
-#define MASK_GPIO_EDR1_GPIOxFALLING(x)	(0x01 << (2*(x)))
+#define BIT_GPIO_EDR1_GPIOxFALLING(x)	(2 * (x))
+#define MASK_GPIO_EDR1_GPIOxFALLING(x)	(0x01 << (2 * (x)))
 #define BIT_GPIO_EDR1_GPIOxRISING(x)	((x) + 1)
-#define MASK_GPIO_EDR1_GPIOxRISING(x)	(0x01 << (((2*(x)) + 1)))
+#define MASK_GPIO_EDR1_GPIOxRISING(x)	(0x01 << (((2 * (x)) + 1)))
 
 /* GPIO_SIH_CTRL Fields */
 #define BIT_GPIO_SIH_CTRL_EXCLEN	(0x000)
@@ -189,9 +189,6 @@ static unsigned int gpio_pending_unmask;
 
 /* pointer to gpio unmask thread struct */
 static struct task_struct *gpio_unmask_thread;
-
-static inline int gpio_twl4030_read(u8 address);
-static inline int gpio_twl4030_write(u8 address, u8 data);
 
 /*
  * Helper functions to read and write the GPIO ISR and IMR registers as
@@ -246,7 +243,7 @@ static int gpio_write_imr(unsigned int imr)
  */
 static void twl4030_gpio_mask_and_ack(unsigned int irq)
 {
-	int gpio = irq - IH_TWL4030_GPIO_BASE;
+	int gpio = irq - TWL4030_GPIO_IRQ_BASE;
 
 	down(&gpio_sem);
 	/* mask */
@@ -259,7 +256,7 @@ static void twl4030_gpio_mask_and_ack(unsigned int irq)
 
 static void twl4030_gpio_unmask(unsigned int irq)
 {
-	int gpio = irq - IH_TWL4030_GPIO_BASE;
+	int gpio = irq - TWL4030_GPIO_IRQ_BASE;
 
 	down(&gpio_sem);
 	gpio_imr_shadow &= ~(1 << gpio);
@@ -283,7 +280,7 @@ static void twl4030_gpio_mask_irqchip(unsigned int irq) {}
 
 static void twl4030_gpio_unmask_irqchip(unsigned int irq)
 {
-	int gpio = irq - IH_TWL4030_GPIO_BASE;
+	int gpio = irq - TWL4030_GPIO_IRQ_BASE;
 
 	gpio_pending_unmask |= (1 << gpio);
 	if (gpio_unmask_thread && gpio_unmask_thread->state != TASK_RUNNING)
@@ -310,6 +307,31 @@ static struct irq_chip twl4030_gpio_module_irq_chip = {
 	.mask	= twl4030_gpio_module_mask,
 	.unmask	= twl4030_gpio_module_unmask,
 };
+
+/*
+ * To configure TWL4030 GPIO module registers
+ */
+static inline int gpio_twl4030_write(u8 address, u8 data)
+{
+	int ret = 0;
+
+	ret = twl4030_i2c_write_u8(TWL4030_MODULE_GPIO, data, address);
+	return ret;
+}
+
+/*
+ * To read a TWL4030 GPIO module register
+ */
+static inline int gpio_twl4030_read(u8 address)
+{
+	u8 data;
+	int ret = 0;
+
+	ret = twl4030_i2c_read_u8(TWL4030_MODULE_GPIO, &data, address);
+	if (ret >= 0)
+		ret = data;
+	return ret;
+}
 
 /*
  * twl4030 GPIO request function
@@ -343,6 +365,7 @@ int twl4030_request_gpio(int gpio)
 	up(&gpio_sem);
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_request_gpio);
 
 /*
  * TWL4030 GPIO free module
@@ -368,6 +391,7 @@ int twl4030_free_gpio(int gpio)
 	up(&gpio_sem);
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_free_gpio);
 
 /*
  * Set direction for TWL4030 GPIO
@@ -399,6 +423,7 @@ int twl4030_set_gpio_direction(int gpio, int is_input)
 	up(&gpio_sem);
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_set_gpio_direction);
 
 /*
  * To enable/disable GPIO pin on TWL4030
@@ -424,6 +449,7 @@ int twl4030_set_gpio_dataout(int gpio, int enable)
 	up(&gpio_sem);
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_set_gpio_dataout);
 
 /*
  * To get the status of a GPIO pin on TWL4030
@@ -448,6 +474,7 @@ int twl4030_get_gpio_datain(int gpio)
 
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_get_gpio_datain);
 
 /*
  * Configure PULL type for a GPIO pin on TWL4030
@@ -484,6 +511,7 @@ int twl4030_set_gpio_pull(int gpio, int pull_dircn)
 	up(&gpio_sem);
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_set_gpio_pull);
 
 /*
  * Configure Edge control for a GPIO pin on TWL4030
@@ -523,6 +551,7 @@ int twl4030_set_gpio_edge_ctrl(int gpio, int edge)
 	up(&gpio_sem);
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_set_gpio_edge_ctrl);
 
 /*
  * Configure debounce timing value for a GPIO pin on TWL4030
@@ -553,6 +582,7 @@ int twl4030_set_gpio_debounce(int gpio, int enable)
 	up(&gpio_sem);
 	return ret;
 }
+EXPORT_SYMBOL(twl4030_set_gpio_debounce);
 
 /*
  * Configure Card detect for GPIO pin on TWL4030
@@ -583,33 +613,9 @@ int twl4030_set_gpio_card_detect(int gpio, int enable)
 	up(&gpio_sem);
 	return (ret);
 }
+EXPORT_SYMBOL(twl4030_set_gpio_card_detect);
 
 /* MODULE FUNCTIONS */
-
-/*
- * To configure TWL4030 GPIO module registers
- */
-static inline int gpio_twl4030_write(u8 address, u8 data)
-{
-	int ret = 0;
-
-	ret = twl4030_i2c_write_u8(TWL4030_MODULE_GPIO, data, address);
-	return ret;
-}
-
-/*
- * To read a TWL4030 GPIO module register
- */
-static inline int gpio_twl4030_read(u8 address)
-{
-	u8 data;
-	int ret = 0;
-
-	ret = twl4030_i2c_read_u8(TWL4030_MODULE_GPIO, &data, address);
-	if (ret >= 0)
-		ret = data;
-	return ret;
-}
 
 /*
  * gpio_unmask_thread() runs as a kernel thread.  It is awakened by the unmask
@@ -635,7 +641,7 @@ static int twl4030_gpio_unmask_thread(void *data)
 		gpio_pending_unmask = 0;
 		local_irq_enable();
 
-		for (irq = IH_TWL4030_GPIO_BASE; 0 != gpio_unmask;
+		for (irq = TWL4030_GPIO_IRQ_BASE; 0 != gpio_unmask;
 				gpio_unmask >>= 1, irq++) {
 			if (gpio_unmask & 0x1)
 				twl4030_gpio_unmask(irq);
@@ -727,7 +733,7 @@ static void do_twl4030_gpio_module_irq(unsigned int irq, irq_desc_t *desc)
 			gpio_isr = 0;
 		up(&gpio_sem);
 
-		for (gpio_irq = IH_TWL4030_GPIO_BASE; 0 != gpio_isr;
+		for (gpio_irq = TWL4030_GPIO_IRQ_BASE; 0 != gpio_isr;
 			gpio_isr >>= 1, gpio_irq++) {
 			if (gpio_isr & 0x1) {
 				irq_desc_t *d = irq_desc + gpio_irq;
@@ -765,15 +771,15 @@ static int __init gpio_twl4030_init(void)
 			NULL, "twl4030 gpio");
 		if (!gpio_unmask_thread) {
 			printk(KERN_ERR
-				"%s: could not create twl4030 gpio unmask thread!\n",
-				__FUNCTION__);
+				"%s: could not create twl4030 gpio unmask"
+				" thread!\n", __func__);
 			ret = -ENOMEM;
 		}
 	}
 
 	if (!ret) {
 		/* install an irq handler for each of the gpio interrupts */
-		for (irq = IH_TWL4030_GPIO_BASE; irq < IH_TWL4030_GPIO_END;
+		for (irq = TWL4030_GPIO_IRQ_BASE; irq < TWL4030_GPIO_IRQ_END;
 			irq++) {
 			set_irq_chip(irq, &twl4030_gpio_irq_chip);
 			set_irq_handler(irq, do_twl4030_gpio_irq);
@@ -791,8 +797,8 @@ static int __init gpio_twl4030_init(void)
 	}
 
 	printk(KERN_INFO "TWL4030 GPIO Demux: IRQ Range %d to %d,"
-		" Initialization %s\n", IH_TWL4030_GPIO_BASE,
-		IH_TWL4030_GPIO_END, (ret) ? "Failed" : "Success");
+		" Initialization %s\n", TWL4030_GPIO_IRQ_BASE,
+		TWL4030_GPIO_IRQ_END, (ret) ? "Failed" : "Success");
 	return ret;
 }
 
@@ -806,7 +812,7 @@ static void __exit gpio_twl4030_exit(void)
 	set_irq_flags(TWL4030_MODIRQ_GPIO, 0);
 
 	/* uninstall the irq handler for each of the gpio interrupts */
-	for (irq = IH_TWL4030_GPIO_BASE; irq < IH_TWL4030_GPIO_END; irq++) {
+	for (irq = TWL4030_GPIO_IRQ_BASE; irq < TWL4030_GPIO_IRQ_END; irq++) {
 		set_irq_handler(irq, NULL);
 		set_irq_flags(irq, 0);
 	}
@@ -820,16 +826,6 @@ static void __exit gpio_twl4030_exit(void)
 
 module_init(gpio_twl4030_init);
 module_exit(gpio_twl4030_exit);
-
-EXPORT_SYMBOL(twl4030_request_gpio);
-EXPORT_SYMBOL(twl4030_free_gpio);
-EXPORT_SYMBOL(twl4030_set_gpio_direction);
-EXPORT_SYMBOL(twl4030_set_gpio_dataout);
-EXPORT_SYMBOL(twl4030_get_gpio_datain);
-EXPORT_SYMBOL(twl4030_set_gpio_pull);
-EXPORT_SYMBOL(twl4030_set_gpio_edge_ctrl);
-EXPORT_SYMBOL(twl4030_set_gpio_debounce);
-EXPORT_SYMBOL(twl4030_set_gpio_card_detect);
 
 MODULE_AUTHOR("Texas Instruments, Inc.");
 MODULE_DESCRIPTION("GPIO interface for TWL4030");

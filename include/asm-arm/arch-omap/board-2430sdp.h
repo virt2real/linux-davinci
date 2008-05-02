@@ -36,18 +36,8 @@
 
 #define TWL4030_IRQNUM			INT_24XX_SYS_NIRQ
 
-/* TWL4030 Primary Interrupt Handler (PIH) interrupts */
-#define IH_TWL4030_BASE			IH_BOARD_BASE
-#define IH_TWL4030_END			(IH_TWL4030_BASE+8)
-
-/* TWL4030 GPIO Interrupts */
-#define IH_TWL4030_GPIO_BASE		(IH_TWL4030_END)
-#define IH_TWL4030_GPIO_END		(IH_TWL4030_BASE+18)
-#define NR_IRQS				(IH_TWL4030_GPIO_END)
-
 /* Function prototypes */
 extern void sdp2430_flash_init(void);
 extern void sdp2430_usb_init(void);
-extern void sdp_mmc_init(void);
 
 #endif /* __ASM_ARCH_OMAP_2430SDP_H */

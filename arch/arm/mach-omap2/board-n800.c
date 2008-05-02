@@ -18,11 +18,13 @@
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/tsc2301.h>
+#include <linux/spi/tsc2005.h>
 #include <linux/input.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/i2c.h>
+#include <linux/i2c/lm8323.h>
 #include <asm/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -47,6 +49,76 @@
 #define N800_KEYB_IRQ_GPIO		109
 #define N800_DAV_IRQ_GPIO		103
 #define N800_TSC2301_RESET_GPIO		118
+
+#ifdef CONFIG_MACH_NOKIA_N810
+static s16 rx44_keymap[LM8323_KEYMAP_SIZE] = {
+	[0x01] = KEY_Q,
+	[0x02] = KEY_K,
+	[0x03] = KEY_O,
+	[0x04] = KEY_P,
+	[0x05] = KEY_BACKSPACE,
+	[0x06] = KEY_A,
+	[0x07] = KEY_S,
+	[0x08] = KEY_D,
+	[0x09] = KEY_F,
+	[0x0a] = KEY_G,
+	[0x0b] = KEY_H,
+	[0x0c] = KEY_J,
+
+	[0x11] = KEY_W,
+	[0x12] = KEY_F4,
+	[0x13] = KEY_L,
+	[0x14] = KEY_APOSTROPHE,
+	[0x16] = KEY_Z,
+	[0x17] = KEY_X,
+	[0x18] = KEY_C,
+	[0x19] = KEY_V,
+	[0x1a] = KEY_B,
+	[0x1b] = KEY_N,
+	[0x1c] = KEY_LEFTSHIFT, /* Actually, this is both shift keys */
+	[0x1f] = KEY_F7,
+
+	[0x21] = KEY_E,
+	[0x22] = KEY_SEMICOLON,
+	[0x23] = KEY_MINUS,
+	[0x24] = KEY_EQUAL,
+	[0x2b] = KEY_FN,
+	[0x2c] = KEY_M,
+	[0x2f] = KEY_F8,
+
+	[0x31] = KEY_R,
+	[0x32] = KEY_RIGHTCTRL,
+	[0x34] = KEY_SPACE,
+	[0x35] = KEY_COMMA,
+	[0x37] = KEY_UP,
+	[0x3c] = KEY_COMPOSE,
+	[0x3f] = KEY_F6,
+
+	[0x41] = KEY_T,
+	[0x44] = KEY_DOT,
+	[0x46] = KEY_RIGHT,
+	[0x4f] = KEY_F5,
+	[0x51] = KEY_Y,
+	[0x53] = KEY_DOWN,
+	[0x55] = KEY_ENTER,
+	[0x5f] = KEY_ESC,
+
+	[0x61] = KEY_U,
+	[0x64] = KEY_LEFT,
+
+	[0x71] = KEY_I,
+	[0x75] = KEY_KPENTER,
+};
+
+static struct lm8323_platform_data lm8323_pdata = {
+	.repeat = 0, /* Repeat is handled in userspace for now. */
+	.keymap = rx44_keymap,
+
+	.name = "Internal keyboard",
+	.pwm1_name = "keyboard",
+	.pwm2_name = "cover",
+};
+#endif
 
 void __init nokia_n800_init_irq(void)
 {
@@ -300,21 +372,34 @@ static struct omap2_mcspi_device_config cx3110x_mcspi_config = {
 	.single_channel = 1,
 };
 
+#ifdef CONFIG_TOUCHSCREEN_TSC2005
+static struct tsc2005_platform_data tsc2005_config = {
+	.reset_gpio = 94,
+	.dav_gpio = 106
+};
+
+static struct omap2_mcspi_device_config tsc2005_mcspi_config = {
+	.turbo_mode	= 0,
+	.single_channel = 1,
+};
+#endif
+
 static struct spi_board_info n800_spi_board_info[] __initdata = {
-	[0] = {
+	{
 		.modalias	= "lcd_mipid",
 		.bus_num	= 1,
 		.chip_select	= 1,
 		.max_speed_hz	= 4000000,
 		.controller_data= &mipid_mcspi_config,
 		.platform_data	= &n800_mipid_platform_data,
-	}, [1] = {
+	}, {
 		.modalias	= "cx3110x",
 		.bus_num	= 2,
 		.chip_select	= 0,
 		.max_speed_hz   = 48000000,
 		.controller_data= &cx3110x_mcspi_config,
-	}, [2] = {
+	},
+	{
 		.modalias	= "tsc2301",
 		.bus_num	= 1,
 		.chip_select	= 0,
@@ -323,6 +408,73 @@ static struct spi_board_info n800_spi_board_info[] __initdata = {
 		.platform_data  = &tsc2301_config,
 	},
 };
+
+static struct spi_board_info n810_spi_board_info[] __initdata = {
+	{
+		.modalias	 = "lcd_mipid",
+		.bus_num	 = 1,
+		.chip_select	 = 1,
+		.max_speed_hz	 = 4000000,
+		.controller_data = &mipid_mcspi_config,
+		.platform_data	 = &n800_mipid_platform_data,
+	},
+	{
+		.modalias	 = "cx3110x",
+		.bus_num	 = 2,
+		.chip_select	 = 0,
+		.max_speed_hz    = 48000000,
+		.controller_data = &cx3110x_mcspi_config,
+	},
+	{
+		.modalias	 = "tsc2005",
+		.bus_num	 = 1,
+		.chip_select	 = 0,
+		.max_speed_hz    = 6000000,
+		.controller_data = &tsc2005_mcspi_config,
+		.platform_data   = &tsc2005_config,
+	},
+};
+
+static void __init tsc2005_set_config(void)
+{
+	const struct omap_lcd_config *conf;
+
+	conf = omap_get_config(OMAP_TAG_LCD, struct omap_lcd_config);
+	if (conf != NULL) {
+#ifdef CONFIG_TOUCHSCREEN_TSC2005
+		if (strcmp(conf->panel_name, "lph8923") == 0) {
+			tsc2005_config.ts_x_plate_ohm = 180;
+			tsc2005_config.ts_hw_avg = 0;
+			tsc2005_config.ts_ignore_last = 0;
+			tsc2005_config.ts_touch_pressure = 1500;
+			tsc2005_config.ts_stab_time = 100;
+			tsc2005_config.ts_pressure_max = 2048;
+			tsc2005_config.ts_pressure_fudge = 2;
+			tsc2005_config.ts_x_max = 4096;
+			tsc2005_config.ts_x_fudge = 4;
+			tsc2005_config.ts_y_max = 4096;
+			tsc2005_config.ts_y_fudge = 7;
+		} else if (strcmp(conf->panel_name, "ls041y3") == 0) {
+			tsc2005_config.ts_x_plate_ohm = 280;
+			tsc2005_config.ts_hw_avg = 0;
+			tsc2005_config.ts_ignore_last = 0;
+			tsc2005_config.ts_touch_pressure = 1500;
+			tsc2005_config.ts_stab_time = 1000;
+			tsc2005_config.ts_pressure_max = 2048;
+			tsc2005_config.ts_pressure_fudge = 2;
+			tsc2005_config.ts_x_max = 4096;
+			tsc2005_config.ts_x_fudge = 4;
+			tsc2005_config.ts_y_max = 4096;
+			tsc2005_config.ts_y_fudge = 7;
+		} else {
+			printk(KERN_ERR "Unknown panel type, set default "
+			       "touchscreen configuration\n");
+			tsc2005_config.ts_x_plate_ohm = 200;
+			tsc2005_config.ts_stab_time = 100;
+		}
+#endif
+	}
+}
 
 #if defined(CONFIG_CBUS_RETU) && defined(CONFIG_LEDS_OMAP_PWM)
 
@@ -502,6 +654,20 @@ static struct i2c_board_info __initdata n800_i2c_board_info_2[] = {
 		I2C_BOARD_INFO("tea5761", 0x10),
 	},
 #endif
+	{
+		I2C_BOARD_INFO("lm8323", 0x45),
+		.type		= "lm8323",
+		.irq		= OMAP_GPIO_IRQ(109),
+		.platform_data	= &lm8323_pdata,
+	},
+	{
+		I2C_BOARD_INFO("tsl2563", 0x29),
+		.type		= "tsl2563",
+	},
+	{
+		I2C_BOARD_INFO("lp5521", 0x32),
+		.type		= "lp5521",
+	},
 };
 
 void __init nokia_n800_common_init(void)
@@ -514,8 +680,14 @@ void __init nokia_n800_common_init(void)
 	n800_dsp_init();
 	n800_usb_init();
 	n800_cam_init();
-	spi_register_board_info(n800_spi_board_info,
+	if (machine_is_nokia_n800())
+		spi_register_board_info(n800_spi_board_info,
 				ARRAY_SIZE(n800_spi_board_info));
+	if (machine_is_nokia_n810()) {
+		tsc2005_set_config();
+		spi_register_board_info(n810_spi_board_info,
+				ARRAY_SIZE(n810_spi_board_info));
+	}
 	omap_serial_init();
 	omap_register_i2c_bus(1, 400, n800_i2c_board_info_1,
 			      ARRAY_SIZE(n800_i2c_board_info_1));

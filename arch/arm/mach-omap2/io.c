@@ -27,6 +27,13 @@
 #include <asm/arch/mux.h>
 #include <asm/arch/omapfb.h>
 
+#include <asm/arch/powerdomain.h>
+
+#include "powerdomains.h"
+
+#include <asm/arch/clockdomain.h>
+#include "clockdomains.h"
+
 extern void omap_sram_init(void);
 extern int omap2_clk_init(void);
 extern void omap2_check_revision(void);
@@ -188,6 +195,8 @@ void __init omap2_map_common_io(void)
 void __init omap2_init_common_hw(void)
 {
 	omap2_mux_init();
+	pwrdm_init(powerdomains_omap);
+	clkdm_init(clockdomains_omap, clkdm_pwrdm_autodeps);
 	omap2_clk_init();
 	omap2_init_memory();
 	gpmc_init();
