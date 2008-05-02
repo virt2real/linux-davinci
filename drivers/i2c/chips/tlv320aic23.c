@@ -95,7 +95,9 @@ int aic23_write_value(u8 reg, u16 value)
 	return 0;
 }
 
-#ifdef CONFIG_SENSORS_TLV320AIC33
+#if defined CONFIG_SENSORS_TLV320AIC33 || \
+    defined(CONFIG_SENSORS_TLV320AIC33_MODULE)
+
 int tlv320aic33_write_value(u8 reg, u16 value)
 {
 	static struct i2c_client *client;
@@ -105,6 +107,7 @@ int tlv320aic33_write_value(u8 reg, u16 value)
 
 	return i2c_smbus_write_byte_data(client, reg, val);
 }
+EXPORT_SYMBOL(tlv320aic33_write_value);
 #endif /* CONFIG_SENSORS_TLV320AIC33 */
 
 static int aic23_detect_client(struct i2c_adapter *adapter, int address,
