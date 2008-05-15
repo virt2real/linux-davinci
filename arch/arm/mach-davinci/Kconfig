@@ -35,6 +35,18 @@ config DAVINCI_MCBSP
 	---help---
 	DaVinci McBSP driver.  Auto-enabled by DaVinci sound driver.
 
+config DAVINCI_RESET_CLOCKS
+	bool "Reset unused clocks during boot"
+	depends on ARCH_DAVINCI
+	help
+	  Say Y if you want to reset unused clocks during boot.
+	  This option saves power, but assumes all drivers are
+	  using the clock framework. Broken drivers that do not
+	  yet use clock framework may not work with this option.
+	  If you are booting from another operating system, you
+	  probably do not want this option enabled until your
+	  device drivers work properly.
+
 config DAVINCI_BOOT_TAG
 	bool "DaVinci bootloader information passing"
         depends on ARCH_DAVINCI644x

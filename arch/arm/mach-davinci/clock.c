@@ -248,6 +248,30 @@ static struct clk davinci_clks[] = {
 	}
 };
 
+#ifdef CONFIG_DAVINCI_RESET_CLOCKS
+/*
+ * Disable any unused clocks left on by the bootloader
+ */
+static int __init clk_disable_unused(void)
+{
+	struct clk *ck;
+	unsigned long flags;
+
+	list_for_each_entry(ck, &clocks, node) {
+		if (ck->usecount > 0 || (ck->flags & ALWAYS_ENABLED))
+			continue;
+
+		printk(KERN_INFO "Clocks: disable unused %s\n", ck->name);
+		spin_lock_irqsave(&clockfw_lock, flags);
+		__clk_disable(ck);
+		spin_unlock_irqrestore(&clockfw_lock, flags);
+	}
+
+	return 0;
+}
+late_initcall(clk_disable_unused);
+#endif
+
 int __init davinci_clk_init(void)
 {
 	struct clk *clkp;
