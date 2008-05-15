@@ -1348,8 +1348,13 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 #endif
 	mmc->ocr_avail = MMC_VDD_32_33;
 
+#ifdef CONFIG_MMC_BLOCK_BOUNCE
+       mmc->max_phys_segs = 1;
+       mmc->max_hw_segs   = 1;
+#else
 	mmc->max_phys_segs = 2;
 	mmc->max_hw_segs   = 2;
+#endif
 	mmc->max_blk_size  = 4095;  /* BLEN is 11 bits */
 	mmc->max_blk_count = 65535; /* NBLK is 16 bits */
 	mmc->max_req_size  = mmc->max_blk_size * mmc->max_blk_count;
