@@ -31,6 +31,7 @@
 #include <asm/irq.h>
 #include <asm/hardware.h>
 #include <asm/arch/serial.h>
+#include <asm/arch/board.h>
 #include <asm/arch/irqs.h>
 
 #define UART_DAVINCI_PWREMU 0x0c
@@ -67,6 +68,24 @@ static struct plat_serial8250_port serial_platform_data[] = {
 		.uartclk	= 27000000,
 	},
 	{
+		.membase	= (char *)IO_ADDRESS(DAVINCI_UART1_BASE),
+		.mapbase	= (unsigned long)DAVINCI_UART1_BASE,
+		.irq		= IRQ_UARTINT1,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
+		.iotype		= UPIO_MEM,
+		.regshift	= 2,
+		.uartclk	= 27000000,
+	},
+	{
+		.membase	= (char *)IO_ADDRESS(DAVINCI_UART2_BASE),
+		.mapbase	= (unsigned long)DAVINCI_UART2_BASE,
+		.irq		= IRQ_UARTINT2,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
+		.iotype		= UPIO_MEM,
+		.regshift	= 2,
+		.uartclk	= 27000000,
+	},
+	{
 		.flags		= 0
 	},
 };
@@ -78,7 +97,7 @@ static struct platform_device serial_device = {
 		.platform_data	= serial_platform_data,
 	},
 };
-  
+
 static void __init davinci_serial_reset(struct plat_serial8250_port *p)
 {
 	/* reset both transmitter and receiver: bits 14,13 = UTRST, URRST */
@@ -94,19 +113,48 @@ static void __init davinci_serial_reset(struct plat_serial8250_port *p)
 	davinci_serial_outs(p, UART_DAVINCI_PWREMU, pwremu);
 }
 
-static int __init davinci_init(void)
+void __init davinci_serial_init(void)
 {
+	int i;
+	const struct davinci_uart_config *info;
+	char name[16];
 	struct clk *uart_clk;
 	struct device *dev = &serial_device.dev;
 
-	uart_clk = clk_get(dev, "UART");
-	if (IS_ERR(uart_clk))
-		printk(KERN_ERR "%s:%d: failed to get UART clock\n",
-		       __FUNCTION__, __LINE__);
-	else
-		clk_enable(uart_clk);
+	/*
+	 * Make sure the serial ports are muxed on at this point.
+	 * You have to mux them off in device drivers later on
+	 * if not needed.
+	 */
 
-	davinci_serial_reset(&serial_platform_data[0]);
+	info = davinci_get_config(DAVINCI_TAG_UART, struct davinci_uart_config);
+
+	if (info == NULL)
+		return;
+
+	for (i = 0; i < DAVINCI_MAX_NR_UARTS; i++) {
+		struct plat_serial8250_port *p = serial_platform_data + i;
+
+		if (!(info->enabled_uarts & (1 << i))) {
+			p->membase = 0;
+			p->mapbase = 0;
+			continue;
+		}
+
+		sprintf(name, "UART%d", i);
+		uart_clk = clk_get(dev, name);
+		if (IS_ERR(uart_clk))
+			printk(KERN_ERR "%s:%d: failed to get UART%d clock\n",
+					__func__, __LINE__, i);
+		else {
+			clk_enable(uart_clk);
+			davinci_serial_reset(p);
+		}
+	}
+}
+
+static int __init davinci_init(void)
+{
 	return platform_device_register(&serial_device);
 }
 

@@ -15,5 +15,6 @@
 struct sys_timer;
 
 extern struct sys_timer davinci_timer;
+extern void davinci_serial_init(void);
 
 #endif /* __ARCH_ARM_MACH_DAVINCI_COMMON_H */
