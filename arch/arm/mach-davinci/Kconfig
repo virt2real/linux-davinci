@@ -35,6 +35,14 @@ config DAVINCI_MCBSP
 	---help---
 	DaVinci McBSP driver.  Auto-enabled by DaVinci sound driver.
 
+config DAVINCI_BOOT_TAG
+	bool "DaVinci bootloader information passing"
+        depends on ARCH_DAVINCI644x
+        default n
+        help
+          Say Y, if you have a bootloader which passes information
+          about your board and its peripheral configuration.
+
 comment "DaVinci Options"
 
 config DAVINCI_BLK_DEV_CF
