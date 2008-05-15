@@ -32,6 +32,7 @@
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
+#include <asm/arch/board.h>
 #include <asm/arch/common.h>
 #include <asm/arch/hardware.h>
 #include <asm/arch/psc.h>
@@ -424,6 +425,14 @@ static struct platform_device *davinci_evm_devices[] __initdata = {
 	&ide_dev,
 };
 
+static struct davinci_uart_config davinci_evm_uart_config __initdata = {
+	.enabled_uarts = (1 << 0),
+};
+
+static struct davinci_board_config_kernel davinci_evm_config[] __initdata = {
+	{ DAVINCI_TAG_UART,	&davinci_evm_uart_config },
+};
+
 static void __init
 davinci_evm_map_io(void)
 {
@@ -443,6 +452,9 @@ static __init void davinci_evm_init(void)
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));
 	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
+	davinci_board_config = davinci_evm_config;
+	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
+	davinci_serial_init();
 	setup_usb();
 }
 
