@@ -86,6 +86,7 @@ void *x86_bios_cpu_apicid_early_ptr;
 
 #ifdef CONFIG_X86_32
 u8 apicid_2_node[MAX_APICID];
+static int low_mappings;
 #endif
 
 /* State of each CPU */
@@ -299,7 +300,7 @@ static void __cpuinit smp_callin(void)
 /*
  * Activate a secondary processor.
  */
-void __cpuinit start_secondary(void *unused)
+static void __cpuinit start_secondary(void *unused)
 {
 	/*
 	 * Don't put *anything* before cpu_init(), SMP booting is too
@@ -325,6 +326,12 @@ void __cpuinit start_secondary(void *unused)
 		enable_NMI_through_LVT0();
 		enable_8259A_irq(0);
 	}
+
+#ifdef CONFIG_X86_32
+	while (low_mappings)
+		cpu_relax();
+	__flush_tlb_all();
+#endif
 
 	/* This must be done before setting cpu_online_map */
 	set_cpu_sibling_map(raw_smp_processor_id());
@@ -1039,15 +1046,21 @@ int __cpuinit native_cpu_up(unsigned int cpu)
 
 #ifdef CONFIG_X86_32
 	/* init low mem mapping */
-	clone_pgd_range(swapper_pg_dir, swapper_pg_dir + USER_PGD_PTRS,
-			min_t(unsigned long, KERNEL_PGD_PTRS, USER_PGD_PTRS));
+	clone_pgd_range(swapper_pg_dir, swapper_pg_dir + KERNEL_PGD_BOUNDARY,
+		min_t(unsigned long, KERNEL_PGD_PTRS, KERNEL_PGD_BOUNDARY));
 	flush_tlb_all();
-#endif
+	low_mappings = 1;
 
 	err = do_boot_cpu(apicid, cpu);
-	if (err < 0) {
+
+	zap_low_mappings();
+	low_mappings = 0;
+#else
+	err = do_boot_cpu(apicid, cpu);
+#endif
+	if (err) {
 		Dprintk("do_boot_cpu failed %d\n", err);
-		return err;
+		return -EIO;
 	}
 
 	/*
@@ -1058,7 +1071,7 @@ int __cpuinit native_cpu_up(unsigned int cpu)
 	check_tsc_sync_source(cpu);
 	local_irq_restore(flags);
 
-	while (!cpu_isset(cpu, cpu_online_map)) {
+	while (!cpu_online(cpu)) {
 		cpu_relax();
 		touch_nmi_watchdog();
 	}
@@ -1149,14 +1162,10 @@ static int __init smp_sanity_check(unsigned max_cpus)
 				 "forcing use of dummy APIC emulation.\n");
 		smpboot_clear_io_apic();
 #ifdef CONFIG_X86_32
-		if (nmi_watchdog == NMI_LOCAL_APIC) {
-			printk(KERN_INFO "activating minimal APIC for"
-					 "NMI watchdog use.\n");
-			connect_bsp_APIC();
-			setup_local_APIC();
-			end_local_APIC_setup();
-		}
+		connect_bsp_APIC();
 #endif
+		setup_local_APIC();
+		end_local_APIC_setup();
 		return -1;
 	}
 
@@ -1168,7 +1177,7 @@ static void __init smp_cpu_index_default(void)
 	int i;
 	struct cpuinfo_x86 *c;
 
-	for_each_cpu_mask(i, cpu_possible_map) {
+	for_each_possible_cpu(i) {
 		c = &cpu_data(i);
 		/* mark all to hotplug */
 		c->cpu_index = NR_CPUS;
@@ -1181,6 +1190,7 @@ static void __init smp_cpu_index_default(void)
  */
 void __init native_smp_prepare_cpus(unsigned int max_cpus)
 {
+	preempt_disable();
 	nmi_watchdog_default();
 	smp_cpu_index_default();
 	current_cpu_data = boot_cpu_data;
@@ -1197,7 +1207,7 @@ void __init native_smp_prepare_cpus(unsigned int max_cpus)
 	if (smp_sanity_check(max_cpus) < 0) {
 		printk(KERN_INFO "SMP disabled\n");
 		disable_smp();
-		return;
+		goto out;
 	}
 
 	preempt_disable();
@@ -1237,6 +1247,8 @@ void __init native_smp_prepare_cpus(unsigned int max_cpus)
 	printk(KERN_INFO "CPU%d: ", 0);
 	print_cpu_info(&cpu_data(0));
 	setup_boot_clock();
+out:
+	preempt_enable();
 }
 /*
  * Early setup to make printk work.
@@ -1263,9 +1275,6 @@ void __init native_smp_cpus_done(unsigned int max_cpus)
 	setup_ioapic_dest();
 #endif
 	check_nmi_watchdog();
-#ifdef CONFIG_X86_32
-	zap_low_mappings();
-#endif
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -1310,7 +1319,7 @@ static void remove_siblinginfo(int cpu)
 	cpu_clear(cpu, cpu_sibling_setup_map);
 }
 
-int additional_cpus __initdata = -1;
+static int additional_cpus __initdata = -1;
 
 static __init int setup_additional_cpus(char *s)
 {

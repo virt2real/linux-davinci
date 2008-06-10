@@ -681,7 +681,7 @@ qla2x00_verify_checksum(scsi_qla_host_t *ha, uint32_t risc_addr)
  * Context:
  *	Kernel context.
  */
-int
+static int
 qla2x00_issue_iocb_timeout(scsi_qla_host_t *ha, void *buffer,
     dma_addr_t phys_addr, size_t size, uint32_t tov)
 {
@@ -784,7 +784,6 @@ qla2x00_abort_command(scsi_qla_host_t *ha, srb_t *sp)
 		DEBUG2_3_11(printk("qla2x00_abort_command(%ld): failed=%x.\n",
 		    ha->host_no, rval));
 	} else {
-		sp->flags |= SRB_ABORT_PENDING;
 		DEBUG11(printk("qla2x00_abort_command(%ld): done.\n",
 		    ha->host_no));
 	}
@@ -1469,7 +1468,7 @@ qla24xx_login_fabric(scsi_qla_host_t *ha, uint16_t loop_id, uint8_t domain,
 	lg->port_id[0] = al_pa;
 	lg->port_id[1] = area;
 	lg->port_id[2] = domain;
-	lg->vp_index = cpu_to_le16(ha->vp_idx);
+	lg->vp_index = ha->vp_idx;
 	rval = qla2x00_issue_iocb(ha, lg, lg_dma, 0);
 	if (rval != QLA_SUCCESS) {
 		DEBUG2_3_11(printk("%s(%ld): failed to issue Login IOCB "
@@ -1724,7 +1723,7 @@ qla24xx_fabric_logout(scsi_qla_host_t *ha, uint16_t loop_id, uint8_t domain,
 	lg->port_id[0] = al_pa;
 	lg->port_id[1] = area;
 	lg->port_id[2] = domain;
-	lg->vp_index = cpu_to_le16(ha->vp_idx);
+	lg->vp_index = ha->vp_idx;
 	rval = qla2x00_issue_iocb(ha, lg, lg_dma, 0);
 	if (rval != QLA_SUCCESS) {
 		DEBUG2_3_11(printk("%s(%ld): failed to issue Logout IOCB "
@@ -2210,7 +2209,6 @@ qla24xx_abort_command(scsi_qla_host_t *ha, srb_t *sp)
 		rval = QLA_FUNCTION_FAILED;
 	} else {
 		DEBUG11(printk("%s(%ld): done.\n", __func__, ha->host_no));
-		sp->flags |= SRB_ABORT_PENDING;
 	}
 
 	dma_pool_free(ha->s_dma_pool, abt, abt_dma);
@@ -2305,8 +2303,6 @@ qla24xx_lun_reset(struct fc_port *fcport, unsigned int l)
 	return __qla24xx_issue_tmf("Lun", TCF_LUN_RESET, fcport, l);
 }
 
-#if 0
-
 int
 qla2x00_system_error(scsi_qla_host_t *ha)
 {
@@ -2314,7 +2310,7 @@ qla2x00_system_error(scsi_qla_host_t *ha)
 	mbx_cmd_t mc;
 	mbx_cmd_t *mcp = &mc;
 
-	if (!IS_FWI2_CAPABLE(ha))
+	if (!IS_QLA23XX(ha) && !IS_FWI2_CAPABLE(ha))
 		return QLA_FUNCTION_FAILED;
 
 	DEBUG11(printk("%s(%ld): entered.\n", __func__, ha->host_no));
@@ -2335,8 +2331,6 @@ qla2x00_system_error(scsi_qla_host_t *ha)
 
 	return rval;
 }
-
-#endif  /*  0  */
 
 /**
  * qla2x00_set_serdes_params() -
@@ -2510,7 +2504,7 @@ qla2x00_enable_fce_trace(scsi_qla_host_t *ha, dma_addr_t fce_dma,
 		if (mb)
 			memcpy(mb, mcp->mb, 8 * sizeof(*mb));
 		if (dwords)
-			*dwords = mcp->mb[6];
+			*dwords = buffers;
 	}
 
 	return rval;
@@ -2644,11 +2638,10 @@ qla24xx_report_id_acquisition(scsi_qla_host_t *ha,
 	struct vp_rpt_id_entry_24xx *rptid_entry)
 {
 	uint8_t vp_idx;
+	uint16_t stat = le16_to_cpu(rptid_entry->vp_idx);
 	scsi_qla_host_t *vha;
 
 	if (rptid_entry->entry_status != 0)
-		return;
-	if (rptid_entry->entry_status != __constant_cpu_to_le16(CS_COMPLETE))
 		return;
 
 	if (rptid_entry->format == 0) {
@@ -2659,17 +2652,17 @@ qla24xx_report_id_acquisition(scsi_qla_host_t *ha,
 			rptid_entry->port_id[2], rptid_entry->port_id[1],
 			rptid_entry->port_id[0]));
 	} else if (rptid_entry->format == 1) {
-		vp_idx = LSB(rptid_entry->vp_idx);
+		vp_idx = LSB(stat);
 		DEBUG15(printk("%s:format 1: scsi(%ld): VP[%d] enabled "
 		    "- status %d - "
 		    "with port id %02x%02x%02x\n",__func__,ha->host_no,
-		    vp_idx, MSB(rptid_entry->vp_idx),
+		    vp_idx, MSB(stat),
 		    rptid_entry->port_id[2], rptid_entry->port_id[1],
 		    rptid_entry->port_id[0]));
 		if (vp_idx == 0)
 			return;
 
-		if (MSB(rptid_entry->vp_idx) == 1)
+		if (MSB(stat) == 1)
 			return;
 
 		list_for_each_entry(vha, &ha->vp_list, vp_list)
@@ -2810,9 +2803,9 @@ qla24xx_control_vp(scsi_qla_host_t *vha, int cmd)
 	 */
 	map = (vp_index - 1) / 8;
 	pos = (vp_index - 1) & 7;
-	down(&ha->vport_sem);
+	mutex_lock(&ha->vport_lock);
 	vce->vp_idx_map[map] |= 1 << pos;
-	up(&ha->vport_sem);
+	mutex_unlock(&ha->vport_lock);
 
 	rval = qla2x00_issue_iocb(ha, vce, vce_dma, 0);
 	if (rval != QLA_SUCCESS) {
@@ -2982,8 +2975,8 @@ qla84xx_verify_chip(struct scsi_qla_host *ha, uint16_t *status)
 	/* We update the firmware with only one data sequence. */
 	options |= VCO_END_OF_DATA;
 
-	retry = 0;
 	do {
+		retry = 0;
 		memset(mn, 0, sizeof(*mn));
 		mn->p.req.entry_type = VERIFY_CHIP_IOCB_TYPE;
 		mn->p.req.entry_count = 1;

@@ -152,10 +152,6 @@ extern int
 qla2x00_issue_iocb(scsi_qla_host_t *, void *, dma_addr_t, size_t);
 
 extern int
-qla2x00_issue_iocb_timeout(scsi_qla_host_t *, void *, dma_addr_t, size_t,
-    uint32_t);
-
-extern int
 qla2x00_abort_command(scsi_qla_host_t *, srb_t *);
 
 extern int
@@ -230,6 +226,9 @@ qla24xx_get_isp_stats(scsi_qla_host_t *, struct link_statistics *,
 extern int qla24xx_abort_command(scsi_qla_host_t *, srb_t *);
 extern int qla24xx_abort_target(struct fc_port *, unsigned int);
 extern int qla24xx_lun_reset(struct fc_port *, unsigned int);
+
+extern int
+qla2x00_system_error(scsi_qla_host_t *);
 
 extern int
 qla2x00_set_serdes_params(scsi_qla_host_t *, uint16_t, uint16_t, uint16_t);

@@ -37,7 +37,6 @@
 #include "lgdt330x.h"
 #include "xc5000.h"
 #include "tda10048.h"
-#include "dvb-pll.h"
 #include "tuner-xc2028.h"
 #include "tuner-simple.h"
 #include "dib7000p.h"
@@ -191,7 +190,7 @@ static struct tda18271_config hauppauge_hvr1200_tuner_config = {
 	.gate    = TDA18271_GATE_ANALOG,
 };
 
-struct dibx000_agc_config xc3028_agc_config = {
+static struct dibx000_agc_config xc3028_agc_config = {
 	BAND_VHF | BAND_UHF,	/* band_caps */
 
 	/* P_agc_use_sd_mod1=0, P_agc_use_sd_mod2=0, P_agc_freq_pwm_div=0,
@@ -237,7 +236,7 @@ struct dibx000_agc_config xc3028_agc_config = {
 
 /* PLL Configuration for COFDM BW_MHz = 8.000000
  * With external clock = 30.000000 */
-struct dibx000_bandwidth_config xc3028_bw_config = {
+static struct dibx000_bandwidth_config xc3028_bw_config = {
 	60000,	/* internal */
 	30000,	/* sampling */
 	1,	/* pll_cfg: prediv */
@@ -385,12 +384,10 @@ static int dvb_register(struct cx23885_tsport *port)
 		port->dvb.frontend = dvb_attach(s5h1409_attach,
 						&hauppauge_hvr1500q_config,
 						&dev->i2c_bus[0].i2c_adap);
-		if (port->dvb.frontend != NULL) {
-			hauppauge_hvr1500q_tunerconfig.priv = i2c_bus;
+		if (port->dvb.frontend != NULL)
 			dvb_attach(xc5000_attach, port->dvb.frontend,
 				&i2c_bus->i2c_adap,
-				&hauppauge_hvr1500q_tunerconfig);
-		}
+				&hauppauge_hvr1500q_tunerconfig, i2c_bus);
 		break;
 	case CX23885_BOARD_HAUPPAUGE_HVR1500:
 		i2c_bus = &dev->i2c_bus[1];

@@ -1,7 +1,7 @@
 /*
  * Copyright(c) 2005 - 2006 Attansic Corporation. All rights reserved.
  * Copyright(c) 2006 - 2007 Chris Snook <csnook@redhat.com>
- * Copyright(c) 2006 Jay Cliburn <jcliburn@gmail.com>
+ * Copyright(c) 2006 - 2008 Jay Cliburn <jcliburn@gmail.com>
  *
  * Derived from Intel e1000 driver
  * Copyright(c) 1999 - 2005 Intel Corporation. All rights reserved.
@@ -36,7 +36,6 @@
  * A very incomplete list of things that need to be dealt with:
  *
  * TODO:
- * Wake on LAN.
  * Add more ethtool functions.
  * Fix abstruse irq enable/disable condition described here:
  *	http://marc.theaimsgroup.com/?l=linux-netdev&m=116398508500553&w=2
@@ -89,6 +88,144 @@
 
 /* Temporary hack for merging atl1 and atl2 */
 #include "atlx.c"
+
+/*
+ * This is the only thing that needs to be changed to adjust the
+ * maximum number of ports that the driver can manage.
+ */
+#define ATL1_MAX_NIC 4
+
+#define OPTION_UNSET    -1
+#define OPTION_DISABLED 0
+#define OPTION_ENABLED  1
+
+#define ATL1_PARAM_INIT { [0 ... ATL1_MAX_NIC] = OPTION_UNSET }
+
+/*
+ * Interrupt Moderate Timer in units of 2 us
+ *
+ * Valid Range: 10-65535
+ *
+ * Default Value: 100 (200us)
+ */
+static int __devinitdata int_mod_timer[ATL1_MAX_NIC+1] = ATL1_PARAM_INIT;
+static int num_int_mod_timer;
+module_param_array_named(int_mod_timer, int_mod_timer, int,
+	&num_int_mod_timer, 0);
+MODULE_PARM_DESC(int_mod_timer, "Interrupt moderator timer");
+
+#define DEFAULT_INT_MOD_CNT	100	/* 200us */
+#define MAX_INT_MOD_CNT		65000
+#define MIN_INT_MOD_CNT		50
+
+struct atl1_option {
+	enum { enable_option, range_option, list_option } type;
+	char *name;
+	char *err;
+	int def;
+	union {
+		struct {	/* range_option info */
+			int min;
+			int max;
+		} r;
+		struct {	/* list_option info */
+			int nr;
+			struct atl1_opt_list {
+				int i;
+				char *str;
+			} *p;
+		} l;
+	} arg;
+};
+
+static int __devinit atl1_validate_option(int *value, struct atl1_option *opt,
+	struct pci_dev *pdev)
+{
+	if (*value == OPTION_UNSET) {
+		*value = opt->def;
+		return 0;
+	}
+
+	switch (opt->type) {
+	case enable_option:
+		switch (*value) {
+		case OPTION_ENABLED:
+			dev_info(&pdev->dev, "%s enabled\n", opt->name);
+			return 0;
+		case OPTION_DISABLED:
+			dev_info(&pdev->dev, "%s disabled\n", opt->name);
+			return 0;
+		}
+		break;
+	case range_option:
+		if (*value >= opt->arg.r.min && *value <= opt->arg.r.max) {
+			dev_info(&pdev->dev, "%s set to %i\n", opt->name,
+				*value);
+			return 0;
+		}
+		break;
+	case list_option:{
+			int i;
+			struct atl1_opt_list *ent;
+
+			for (i = 0; i < opt->arg.l.nr; i++) {
+				ent = &opt->arg.l.p[i];
+				if (*value == ent->i) {
+					if (ent->str[0] != '\0')
+						dev_info(&pdev->dev, "%s\n",
+							ent->str);
+					return 0;
+				}
+			}
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	dev_info(&pdev->dev, "invalid %s specified (%i) %s\n",
+		opt->name, *value, opt->err);
+	*value = opt->def;
+	return -1;
+}
+
+/*
+ * atl1_check_options - Range Checking for Command Line Parameters
+ * @adapter: board private structure
+ *
+ * This routine checks all command line parameters for valid user
+ * input.  If an invalid value is given, or if no user specified
+ * value exists, a default value is used.  The final value is stored
+ * in a variable in the adapter structure.
+ */
+void __devinit atl1_check_options(struct atl1_adapter *adapter)
+{
+	struct pci_dev *pdev = adapter->pdev;
+	int bd = adapter->bd_number;
+	if (bd >= ATL1_MAX_NIC) {
+		dev_notice(&pdev->dev, "no configuration for board#%i\n", bd);
+		dev_notice(&pdev->dev, "using defaults for all values\n");
+	}
+	{			/* Interrupt Moderate Timer */
+		struct atl1_option opt = {
+			.type = range_option,
+			.name = "Interrupt Moderator Timer",
+			.err = "using default of "
+				__MODULE_STRING(DEFAULT_INT_MOD_CNT),
+			.def = DEFAULT_INT_MOD_CNT,
+			.arg = {.r = {.min = MIN_INT_MOD_CNT,
+					.max = MAX_INT_MOD_CNT} }
+		};
+		int val;
+		if (num_int_mod_timer > bd) {
+			val = int_mod_timer[bd];
+			atl1_validate_option(&val, &opt, pdev);
+			adapter->imt = (u16) val;
+		} else
+			adapter->imt = (u16) (opt.def);
+	}
+}
 
 /*
  * atl1_pci_tbl - PCI Device ID Table
@@ -500,21 +637,18 @@ static s32 atl1_phy_leave_power_saving(struct atl1_hw *hw)
 }
 
 /*
- *TODO: do something or get rid of this
+ * Force the PHY into power saving mode using vendor magic.
  */
 #ifdef CONFIG_PM
-static s32 atl1_phy_enter_power_saving(struct atl1_hw *hw)
+static void atl1_phy_enter_power_saving(struct atl1_hw *hw)
 {
-/*    s32 ret_val;
- *    u16 phy_data;
- */
+	atl1_write_phy_reg(hw, MII_DBG_ADDR, 0);
+	atl1_write_phy_reg(hw, MII_DBG_DATA, 0x124E);
+	atl1_write_phy_reg(hw, MII_DBG_ADDR, 2);
+	atl1_write_phy_reg(hw, MII_DBG_DATA, 0x3000);
+	atl1_write_phy_reg(hw, MII_DBG_ADDR, 3);
+	atl1_write_phy_reg(hw, MII_DBG_DATA, 0);
 
-/*
-    ret_val = atl1_write_phy_reg(hw, ...);
-    ret_val = atl1_write_phy_reg(hw, ...);
-    ....
-*/
-	return 0;
 }
 #endif
 
@@ -1889,6 +2023,7 @@ rrd_ok:
 		/* Good Receive */
 		pci_unmap_page(adapter->pdev, buffer_info->dma,
 			       buffer_info->length, PCI_DMA_FROMDEVICE);
+		buffer_info->dma = 0;
 		skb = buffer_info->skb;
 		length = le16_to_cpu(rrd->xsz.xsum_sz.pkt_size);
 
@@ -2001,7 +2136,7 @@ static int atl1_tso(struct atl1_adapter *adapter, struct sk_buff *skb,
 				return -1;
 		}
 
-		if (skb->protocol == ntohs(ETH_P_IP)) {
+		if (skb->protocol == htons(ETH_P_IP)) {
 			struct iphdr *iph = ip_hdr(skb);
 
 			real_len = (((unsigned char *)iph - skb->data) +
@@ -2646,64 +2781,93 @@ static int atl1_suspend(struct pci_dev *pdev, pm_message_t state)
 	struct atl1_hw *hw = &adapter->hw;
 	u32 ctrl = 0;
 	u32 wufc = adapter->wol;
+	u32 val;
+	int retval;
+	u16 speed;
+	u16 duplex;
 
 	netif_device_detach(netdev);
 	if (netif_running(netdev))
 		atl1_down(adapter);
 
+	retval = pci_save_state(pdev);
+	if (retval)
+		return retval;
+
 	atl1_read_phy_reg(hw, MII_BMSR, (u16 *) & ctrl);
 	atl1_read_phy_reg(hw, MII_BMSR, (u16 *) & ctrl);
-	if (ctrl & BMSR_LSTATUS)
+	val = ctrl & BMSR_LSTATUS;
+	if (val)
 		wufc &= ~ATLX_WUFC_LNKC;
 
-	/* reduce speed to 10/100M */
-	if (wufc) {
-		atl1_phy_enter_power_saving(hw);
-		/* if resume, let driver to re- setup link */
-		hw->phy_configured = false;
-		atl1_set_mac_addr(hw);
-		atlx_set_multi(netdev);
+	if (val && wufc) {
+		val = atl1_get_speed_and_duplex(hw, &speed, &duplex);
+		if (val) {
+			if (netif_msg_ifdown(adapter))
+				dev_printk(KERN_DEBUG, &pdev->dev,
+					"error getting speed/duplex\n");
+			goto disable_wol;
+		}
 
 		ctrl = 0;
-		/* turn on magic packet wol */
+
+		/* enable magic packet WOL */
 		if (wufc & ATLX_WUFC_MAG)
-			ctrl = WOL_MAGIC_EN | WOL_MAGIC_PME_EN;
-
-		/* turn on Link change WOL */
-		if (wufc & ATLX_WUFC_LNKC)
-			ctrl |= (WOL_LINK_CHG_EN | WOL_LINK_CHG_PME_EN);
+			ctrl |= (WOL_MAGIC_EN | WOL_MAGIC_PME_EN);
 		iowrite32(ctrl, hw->hw_addr + REG_WOL_CTRL);
+		ioread32(hw->hw_addr + REG_WOL_CTRL);
 
-		/* turn on all-multi mode if wake on multicast is enabled */
-		ctrl = ioread32(hw->hw_addr + REG_MAC_CTRL);
-		ctrl &= ~MAC_CTRL_DBG;
-		ctrl &= ~MAC_CTRL_PROMIS_EN;
-		if (wufc & ATLX_WUFC_MC)
-			ctrl |= MAC_CTRL_MC_ALL_EN;
-		else
-			ctrl &= ~MAC_CTRL_MC_ALL_EN;
-
-		/* turn on broadcast mode if wake on-BC is enabled */
-		if (wufc & ATLX_WUFC_BC)
+		/* configure the mac */
+		ctrl = MAC_CTRL_RX_EN;
+		ctrl |= ((u32)((speed == SPEED_1000) ? MAC_CTRL_SPEED_1000 :
+			MAC_CTRL_SPEED_10_100) << MAC_CTRL_SPEED_SHIFT);
+		if (duplex == FULL_DUPLEX)
+			ctrl |= MAC_CTRL_DUPLX;
+		ctrl |= (((u32)adapter->hw.preamble_len &
+			MAC_CTRL_PRMLEN_MASK) << MAC_CTRL_PRMLEN_SHIFT);
+		if (adapter->vlgrp)
+			ctrl |= MAC_CTRL_RMV_VLAN;
+		if (wufc & ATLX_WUFC_MAG)
 			ctrl |= MAC_CTRL_BC_EN;
-		else
-			ctrl &= ~MAC_CTRL_BC_EN;
-
-		/* enable RX */
-		ctrl |= MAC_CTRL_RX_EN;
 		iowrite32(ctrl, hw->hw_addr + REG_MAC_CTRL);
-		pci_enable_wake(pdev, PCI_D3hot, 1);
-		pci_enable_wake(pdev, PCI_D3cold, 1);
-	} else {
-		iowrite32(0, hw->hw_addr + REG_WOL_CTRL);
-		pci_enable_wake(pdev, PCI_D3hot, 0);
-		pci_enable_wake(pdev, PCI_D3cold, 0);
+		ioread32(hw->hw_addr + REG_MAC_CTRL);
+
+		/* poke the PHY */
+		ctrl = ioread32(hw->hw_addr + REG_PCIE_PHYMISC);
+		ctrl |= PCIE_PHYMISC_FORCE_RCV_DET;
+		iowrite32(ctrl, hw->hw_addr + REG_PCIE_PHYMISC);
+		ioread32(hw->hw_addr + REG_PCIE_PHYMISC);
+
+		pci_enable_wake(pdev, pci_choose_state(pdev, state), 1);
+		goto exit;
 	}
 
-	pci_save_state(pdev);
-	pci_disable_device(pdev);
+	if (!val && wufc) {
+		ctrl |= (WOL_LINK_CHG_EN | WOL_LINK_CHG_PME_EN);
+		iowrite32(ctrl, hw->hw_addr + REG_WOL_CTRL);
+		ioread32(hw->hw_addr + REG_WOL_CTRL);
+		iowrite32(0, hw->hw_addr + REG_MAC_CTRL);
+		ioread32(hw->hw_addr + REG_MAC_CTRL);
+		hw->phy_configured = false;
+		pci_enable_wake(pdev, pci_choose_state(pdev, state), 1);
+		goto exit;
+	}
 
-	pci_set_power_state(pdev, PCI_D3hot);
+disable_wol:
+	iowrite32(0, hw->hw_addr + REG_WOL_CTRL);
+	ioread32(hw->hw_addr + REG_WOL_CTRL);
+	ctrl = ioread32(hw->hw_addr + REG_PCIE_PHYMISC);
+	ctrl |= PCIE_PHYMISC_FORCE_RCV_DET;
+	iowrite32(ctrl, hw->hw_addr + REG_PCIE_PHYMISC);
+	ioread32(hw->hw_addr + REG_PCIE_PHYMISC);
+	atl1_phy_enter_power_saving(hw);
+	hw->phy_configured = false;
+	pci_enable_wake(pdev, pci_choose_state(pdev, state), 0);
+exit:
+	if (netif_running(netdev))
+		pci_disable_msi(adapter->pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, pci_choose_state(pdev, state));
 
 	return 0;
 }
@@ -2717,19 +2881,25 @@ static int atl1_resume(struct pci_dev *pdev)
 	pci_set_power_state(pdev, PCI_D0);
 	pci_restore_state(pdev);
 
-	/* FIXME: check and handle */
 	err = pci_enable_device(pdev);
+	if (err) {
+		if (netif_msg_ifup(adapter))
+			dev_printk(KERN_DEBUG, &pdev->dev,
+				"error enabling pci device\n");
+		return err;
+	}
+
+	pci_set_master(pdev);
+	iowrite32(0, adapter->hw.hw_addr + REG_WOL_CTRL);
 	pci_enable_wake(pdev, PCI_D3hot, 0);
 	pci_enable_wake(pdev, PCI_D3cold, 0);
 
-	iowrite32(0, adapter->hw.hw_addr + REG_WOL_CTRL);
-	atl1_reset(adapter);
+	atl1_reset_hw(&adapter->hw);
+	adapter->cmb.cmb->int_stats = 0;
 
 	if (netif_running(netdev))
 		atl1_up(adapter);
 	netif_device_attach(netdev);
-
-	atl1_via_workaround(adapter);
 
 	return 0;
 }
@@ -2737,6 +2907,13 @@ static int atl1_resume(struct pci_dev *pdev)
 #define atl1_suspend NULL
 #define atl1_resume NULL
 #endif
+
+static void atl1_shutdown(struct pci_dev *pdev)
+{
+#ifdef CONFIG_PM
+	atl1_suspend(pdev, PMSG_SUSPEND);
+#endif
+}
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
 static void atl1_poll_controller(struct net_device *netdev)
@@ -2984,7 +3161,8 @@ static struct pci_driver atl1_driver = {
 	.probe = atl1_probe,
 	.remove = __devexit_p(atl1_remove),
 	.suspend = atl1_suspend,
-	.resume = atl1_resume
+	.resume = atl1_resume,
+	.shutdown = atl1_shutdown
 };
 
 /*

@@ -46,8 +46,8 @@ struct e1000_stats {
 static const struct e1000_stats e1000_gstrings_stats[] = {
 	{ "rx_packets", E1000_STAT(stats.gprc) },
 	{ "tx_packets", E1000_STAT(stats.gptc) },
-	{ "rx_bytes", E1000_STAT(stats.gorcl) },
-	{ "tx_bytes", E1000_STAT(stats.gotcl) },
+	{ "rx_bytes", E1000_STAT(stats.gorc) },
+	{ "tx_bytes", E1000_STAT(stats.gotc) },
 	{ "rx_broadcast", E1000_STAT(stats.bprc) },
 	{ "tx_broadcast", E1000_STAT(stats.bptc) },
 	{ "rx_multicast", E1000_STAT(stats.mprc) },
@@ -83,7 +83,7 @@ static const struct e1000_stats e1000_gstrings_stats[] = {
 	{ "rx_flow_control_xoff", E1000_STAT(stats.xoffrxc) },
 	{ "tx_flow_control_xon", E1000_STAT(stats.xontxc) },
 	{ "tx_flow_control_xoff", E1000_STAT(stats.xofftxc) },
-	{ "rx_long_byte_count", E1000_STAT(stats.gorcl) },
+	{ "rx_long_byte_count", E1000_STAT(stats.gorc) },
 	{ "rx_csum_offload_good", E1000_STAT(hw_csum_good) },
 	{ "rx_csum_offload_errors", E1000_STAT(hw_csum_err) },
 	{ "rx_header_split", E1000_STAT(rx_hdr_split) },
@@ -494,8 +494,12 @@ static int e1000_get_eeprom(struct net_device *netdev,
 		for (i = 0; i < last_word - first_word + 1; i++) {
 			ret_val = e1000_read_nvm(hw, first_word + i, 1,
 						      &eeprom_buff[i]);
-			if (ret_val)
+			if (ret_val) {
+				/* a read error occurred, throw away the
+				 * result */
+				memset(eeprom_buff, 0xff, sizeof(eeprom_buff));
 				break;
+			}
 		}
 	}
 
@@ -803,8 +807,7 @@ static int e1000_reg_test(struct e1000_adapter *adapter, u64 *data)
 	/* restore previous status */
 	ew32(STATUS, before);
 
-	if ((mac->type != e1000_ich8lan) &&
-	    (mac->type != e1000_ich9lan)) {
+	if (!(adapter->flags & FLAG_IS_ICH)) {
 		REG_PATTERN_TEST(E1000_FCAL, 0xFFFFFFFF, 0xFFFFFFFF);
 		REG_PATTERN_TEST(E1000_FCAH, 0x0000FFFF, 0xFFFFFFFF);
 		REG_PATTERN_TEST(E1000_FCT, 0x0000FFFF, 0xFFFFFFFF);
@@ -824,15 +827,13 @@ static int e1000_reg_test(struct e1000_adapter *adapter, u64 *data)
 
 	REG_SET_AND_CHECK(E1000_RCTL, 0xFFFFFFFF, 0x00000000);
 
-	before = (((mac->type == e1000_ich8lan) ||
-		   (mac->type == e1000_ich9lan)) ? 0x06C3B33E : 0x06DFB3FE);
+	before = ((adapter->flags & FLAG_IS_ICH) ? 0x06C3B33E : 0x06DFB3FE);
 	REG_SET_AND_CHECK(E1000_RCTL, before, 0x003FFFFB);
 	REG_SET_AND_CHECK(E1000_TCTL, 0xFFFFFFFF, 0x00000000);
 
 	REG_SET_AND_CHECK(E1000_RCTL, before, 0xFFFFFFFF);
 	REG_PATTERN_TEST(E1000_RDBAL, 0xFFFFFFF0, 0xFFFFFFFF);
-	if ((mac->type != e1000_ich8lan) &&
-	    (mac->type != e1000_ich9lan))
+	if (!(adapter->flags & FLAG_IS_ICH))
 		REG_PATTERN_TEST(E1000_TXCW, 0xC000FFFF, 0x0000FFFF);
 	REG_PATTERN_TEST(E1000_TDBAL, 0xFFFFFFF0, 0xFFFFFFFF);
 	REG_PATTERN_TEST(E1000_TIDV, 0x0000FFFF, 0x0000FFFF);
@@ -911,9 +912,7 @@ static int e1000_intr_test(struct e1000_adapter *adapter, u64 *data)
 
 	/* Test each interrupt */
 	for (i = 0; i < 10; i++) {
-
-		if (((adapter->hw.mac.type == e1000_ich8lan) ||
-		     (adapter->hw.mac.type == e1000_ich9lan)) && i == 8)
+		if ((adapter->flags & FLAG_IS_ICH) && (i == 8))
 			continue;
 
 		/* Interrupt to test */
@@ -1184,6 +1183,7 @@ static int e1000_integrated_phy_loopback(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 	u32 ctrl_reg = 0;
 	u32 stat_reg = 0;
+	u16 phy_reg = 0;
 
 	hw->mac.autoneg = 0;
 
@@ -1211,6 +1211,28 @@ static int e1000_integrated_phy_loopback(struct e1000_adapter *adapter)
 			     E1000_CTRL_SPD_100 |/* Force Speed to 100 */
 			     E1000_CTRL_FD);	 /* Force Duplex to FULL */
 		break;
+	case e1000_phy_bm:
+		/* Set Default MAC Interface speed to 1GB */
+		e1e_rphy(hw, PHY_REG(2, 21), &phy_reg);
+		phy_reg &= ~0x0007;
+		phy_reg |= 0x006;
+		e1e_wphy(hw, PHY_REG(2, 21), phy_reg);
+		/* Assert SW reset for above settings to take effect */
+		e1000e_commit_phy(hw);
+		mdelay(1);
+		/* Force Full Duplex */
+		e1e_rphy(hw, PHY_REG(769, 16), &phy_reg);
+		e1e_wphy(hw, PHY_REG(769, 16), phy_reg | 0x000C);
+		/* Set Link Up (in force link) */
+		e1e_rphy(hw, PHY_REG(776, 16), &phy_reg);
+		e1e_wphy(hw, PHY_REG(776, 16), phy_reg | 0x0040);
+		/* Force Link */
+		e1e_rphy(hw, PHY_REG(769, 16), &phy_reg);
+		e1e_wphy(hw, PHY_REG(769, 16), phy_reg | 0x0040);
+		/* Set Early Link Enable */
+		e1e_rphy(hw, PHY_REG(769, 20), &phy_reg);
+		e1e_wphy(hw, PHY_REG(769, 20), phy_reg | 0x0400);
+		/* fall through */
 	default:
 		/* force 1000, set loopback */
 		e1e_wphy(hw, PHY_CONTROL, 0x4140);
@@ -1224,8 +1246,7 @@ static int e1000_integrated_phy_loopback(struct e1000_adapter *adapter)
 			     E1000_CTRL_SPD_1000 |/* Force Speed to 1000 */
 			     E1000_CTRL_FD);	 /* Force Duplex to FULL */
 
-		if ((adapter->hw.mac.type == e1000_ich8lan) ||
-		    (adapter->hw.mac.type == e1000_ich9lan))
+		if (adapter->flags & FLAG_IS_ICH)
 			ctrl_reg |= E1000_CTRL_SLU;	/* Set Link Up */
 	}
 
@@ -1770,6 +1791,47 @@ static int e1000_phys_id(struct net_device *netdev, u32 data)
 	return 0;
 }
 
+static int e1000_get_coalesce(struct net_device *netdev,
+			      struct ethtool_coalesce *ec)
+{
+	struct e1000_adapter *adapter = netdev_priv(netdev);
+
+	if (adapter->itr_setting <= 3)
+		ec->rx_coalesce_usecs = adapter->itr_setting;
+	else
+		ec->rx_coalesce_usecs = 1000000 / adapter->itr_setting;
+
+	return 0;
+}
+
+static int e1000_set_coalesce(struct net_device *netdev,
+			      struct ethtool_coalesce *ec)
+{
+	struct e1000_adapter *adapter = netdev_priv(netdev);
+	struct e1000_hw *hw = &adapter->hw;
+
+	if ((ec->rx_coalesce_usecs > E1000_MAX_ITR_USECS) ||
+	    ((ec->rx_coalesce_usecs > 3) &&
+	     (ec->rx_coalesce_usecs < E1000_MIN_ITR_USECS)) ||
+	    (ec->rx_coalesce_usecs == 2))
+		return -EINVAL;
+
+	if (ec->rx_coalesce_usecs <= 3) {
+		adapter->itr = 20000;
+		adapter->itr_setting = ec->rx_coalesce_usecs;
+	} else {
+		adapter->itr = (1000000 / ec->rx_coalesce_usecs);
+		adapter->itr_setting = adapter->itr & ~3;
+	}
+
+	if (adapter->itr_setting != 0)
+		ew32(ITR, 1000000000 / (adapter->itr * 256));
+	else
+		ew32(ITR, 0);
+
+	return 0;
+}
+
 static int e1000_nway_reset(struct net_device *netdev)
 {
 	struct e1000_adapter *adapter = netdev_priv(netdev);
@@ -1845,6 +1907,8 @@ static const struct ethtool_ops e1000_ethtool_ops = {
 	.phys_id		= e1000_phys_id,
 	.get_ethtool_stats	= e1000_get_ethtool_stats,
 	.get_sset_count		= e1000e_get_sset_count,
+	.get_coalesce		= e1000_get_coalesce,
+	.set_coalesce		= e1000_set_coalesce,
 };
 
 void e1000e_set_ethtool_ops(struct net_device *netdev)

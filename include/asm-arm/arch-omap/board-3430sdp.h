@@ -30,6 +30,7 @@
 #define __ASM_ARCH_OMAP_3430SDP_H
 
 extern void sdp3430_usb_init(void);
+extern void sdp3430_flash_init(void);
 
 #define DEBUG_BASE			0x08000000  /* debug board */
 
@@ -65,8 +66,6 @@ extern void sdp3430_usb_init(void);
 /* various memory sizes */
 #define FLASH_SIZE_SDPV1	SZ_64M
 #define FLASH_SIZE_SDPV2	SZ_128M
-
-#define TWL4030_IRQNUM INT_34XX_SYS_NIRQ
 
 #endif /* __ASM_ARCH_OMAP_3430SDP_H */
 

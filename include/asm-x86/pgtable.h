@@ -1,7 +1,6 @@
 #ifndef _ASM_X86_PGTABLE_H
 #define _ASM_X86_PGTABLE_H
 
-#define USER_PTRS_PER_PGD	((TASK_SIZE-1)/PGDIR_SIZE+1)
 #define FIRST_USER_ADDRESS	0
 
 #define _PAGE_BIT_PRESENT	0	/* is present */
@@ -58,7 +57,9 @@
 #define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED |	\
 			 _PAGE_DIRTY)
 
-#define _PAGE_CHG_MASK	(PTE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
+/* Set of bits not changed in pte_modify */
+#define _PAGE_CHG_MASK	(PTE_MASK | _PAGE_PCD | _PAGE_PWT |		\
+			 _PAGE_ACCESSED | _PAGE_DIRTY)
 
 #define _PAGE_CACHE_MASK	(_PAGE_PCD | _PAGE_PWT)
 #define _PAGE_CACHE_WB		(0)
@@ -196,6 +197,11 @@ static inline int pte_exec(pte_t pte)
 	return !(pte_val(pte) & _PAGE_NX);
 }
 
+static inline int pte_special(pte_t pte)
+{
+	return 0;
+}
+
 static inline int pmd_large(pmd_t pte)
 {
 	return (pmd_val(pte) & (_PAGE_PSE | _PAGE_PRESENT)) ==
@@ -257,6 +263,11 @@ static inline pte_t pte_clrglobal(pte_t pte)
 	return __pte(pte_val(pte) & ~(pteval_t)_PAGE_GLOBAL);
 }
 
+static inline pte_t pte_mkspecial(pte_t pte)
+{
+	return pte;
+}
+
 extern pteval_t __supported_pte_mask;
 
 static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
@@ -279,15 +290,33 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 	 * Chop off the NX bit (if present), and add the NX portion of
 	 * the newprot (if present):
 	 */
-	val &= _PAGE_CHG_MASK & ~_PAGE_NX;
-	val |= pgprot_val(newprot) & __supported_pte_mask;
+	val &= _PAGE_CHG_MASK;
+	val |= pgprot_val(newprot) & (~_PAGE_CHG_MASK) & __supported_pte_mask;
 
 	return __pte(val);
 }
 
-#define pte_pgprot(x) __pgprot(pte_val(x) & (0xfff | _PAGE_NX))
+/* mprotect needs to preserve PAT bits when updating vm_page_prot */
+#define pgprot_modify pgprot_modify
+static inline pgprot_t pgprot_modify(pgprot_t oldprot, pgprot_t newprot)
+{
+	pgprotval_t preservebits = pgprot_val(oldprot) & _PAGE_CHG_MASK;
+	pgprotval_t addbits = pgprot_val(newprot);
+	return __pgprot(preservebits | addbits);
+}
+
+#define pte_pgprot(x) __pgprot(pte_val(x) & ~PTE_MASK)
 
 #define canon_pgprot(p) __pgprot(pgprot_val(p) & __supported_pte_mask)
+
+#ifndef __ASSEMBLY__
+#define __HAVE_PHYS_MEM_ACCESS_PROT
+struct file;
+pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
+                              unsigned long size, pgprot_t vma_prot);
+int phys_mem_access_prot_allowed(struct file *file, unsigned long pfn,
+                              unsigned long size, pgprot_t *vma_prot);
+#endif
 
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
@@ -329,6 +358,9 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 #else
 # include "pgtable_64.h"
 #endif
+
+#define KERNEL_PGD_BOUNDARY	pgd_index(PAGE_OFFSET)
+#define KERNEL_PGD_PTRS		(PTRS_PER_PGD - KERNEL_PGD_BOUNDARY)
 
 #ifndef __ASSEMBLY__
 
@@ -389,37 +421,17 @@ static inline void native_set_pte_at(struct mm_struct *mm, unsigned long addr,
  * bit at the same time.
  */
 #define  __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-#define ptep_set_access_flags(vma, address, ptep, entry, dirty)		\
-({									\
-	int __changed = !pte_same(*(ptep), entry);			\
-	if (__changed && dirty) {					\
-		*ptep = entry;						\
-		pte_update_defer((vma)->vm_mm, (address), (ptep));	\
-		flush_tlb_page(vma, address);				\
-	}								\
-	__changed;							\
-})
+extern int ptep_set_access_flags(struct vm_area_struct *vma,
+				 unsigned long address, pte_t *ptep,
+				 pte_t entry, int dirty);
 
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-#define ptep_test_and_clear_young(vma, addr, ptep) ({			\
-	int __ret = 0;							\
-	if (pte_young(*(ptep)))						\
-		__ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,		\
-					   &(ptep)->pte);		\
-	if (__ret)							\
-		pte_update((vma)->vm_mm, addr, ptep);			\
-	__ret;								\
-})
+extern int ptep_test_and_clear_young(struct vm_area_struct *vma,
+				     unsigned long addr, pte_t *ptep);
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-#define ptep_clear_flush_young(vma, address, ptep)			\
-({									\
-	int __young;							\
-	__young = ptep_test_and_clear_young((vma), (address), (ptep));	\
-	if (__young)							\
-		flush_tlb_page(vma, address);				\
-	__young;							\
-})
+extern int ptep_clear_flush_young(struct vm_area_struct *vma,
+				  unsigned long address, pte_t *ptep);
 
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR
 static inline pte_t ptep_get_and_clear(struct mm_struct *mm, unsigned long addr,
@@ -455,6 +467,22 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm,
 	clear_bit(_PAGE_BIT_RW, (unsigned long *)&ptep->pte);
 	pte_update(mm, addr, ptep);
 }
+
+/*
+ * clone_pgd_range(pgd_t *dst, pgd_t *src, int count);
+ *
+ *  dst - pointer to pgd range anwhere on a pgd page
+ *  src - ""
+ *  count - the number of pgds to copy.
+ *
+ * dst and src can be on the same page, but the range must not overlap,
+ * and must not cross a page boundary.
+ */
+static inline void clone_pgd_range(pgd_t *dst, pgd_t *src, int count)
+{
+       memcpy(dst, src, count * sizeof(pgd_t));
+}
+
 
 #include <asm-generic/pgtable.h>
 #endif	/* __ASSEMBLY__ */

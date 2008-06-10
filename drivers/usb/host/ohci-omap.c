@@ -169,13 +169,16 @@ static void start_hnp(struct ohci_hcd *ohci)
 {
 	const unsigned	port = ohci_to_hcd(ohci)->self.otg_port - 1;
 	unsigned long	flags;
+	u32 l;
 
 	otg_start_hnp(ohci->transceiver);
 
 	local_irq_save(flags);
 	ohci->transceiver->state = OTG_STATE_A_SUSPEND;
 	writel (RH_PS_PSS, &ohci->regs->roothub.portstatus [port]);
-	OTG_CTRL_REG &= ~OTG_A_BUSREQ;
+	l = omap_readl(OTG_CTRL);
+	l &= ~OTG_A_BUSREQ;
+	omap_writel(l, OTG_CTRL);
 	local_irq_restore(flags);
 }
 
@@ -466,7 +469,6 @@ static const struct hc_driver ohci_omap_hc_driver = {
 	 */
 	.hub_status_data =	ohci_hub_status_data,
 	.hub_control =		ohci_hub_control,
-	.hub_irq_enable =	ohci_rhsc_enable,
 #ifdef	CONFIG_PM
 	.bus_suspend =		ohci_bus_suspend,
 	.bus_resume =		ohci_bus_resume,
@@ -505,21 +507,20 @@ static int ohci_omap_suspend(struct platform_device *dev, pm_message_t message)
 
 	omap_ohci_clock_power(0);
 	ohci_to_hcd(ohci)->state = HC_STATE_SUSPENDED;
-	dev->dev.power.power_state = PMSG_SUSPEND;
 	return 0;
 }
 
 static int ohci_omap_resume(struct platform_device *dev)
 {
-	struct ohci_hcd	*ohci = hcd_to_ohci(platform_get_drvdata(dev));
+	struct usb_hcd	*hcd = platform_get_drvdata(dev);
+	struct ohci_hcd	*ohci = hcd_to_ohci(hcd);
 
 	if (time_before(jiffies, ohci->next_statechange))
 		msleep(5);
 	ohci->next_statechange = jiffies;
 
 	omap_ohci_clock_power(1);
-	dev->dev.power.power_state = PMSG_ON;
-	usb_hcd_resume_root_hub(platform_get_drvdata(dev));
+	ohci_finish_controller_resume(hcd);
 	return 0;
 }
 

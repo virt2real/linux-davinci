@@ -47,6 +47,7 @@
 #include <linux/pfn.h>
 #include <linux/pci.h>
 #include <linux/init_ohci1394_dma.h>
+#include <linux/kvm_para.h>
 
 #include <video/edid.h>
 
@@ -126,7 +127,12 @@ static struct resource standard_io_resources[] = { {
 }, {
 	.name	= "keyboard",
 	.start	= 0x0060,
-	.end	= 0x006f,
+	.end	= 0x0060,
+	.flags	= IORESOURCE_BUSY | IORESOURCE_IO
+}, {
+	.name	= "keyboard",
+	.start	= 0x0064,
+	.end	= 0x0064,
 	.flags	= IORESOURCE_BUSY | IORESOURCE_IO
 }, {
 	.name	= "dma page reg",
@@ -389,7 +395,6 @@ unsigned long __init find_max_low_pfn(void)
 	return max_low_pfn;
 }
 
-#define BIOS_EBDA_SEGMENT 0x40E
 #define BIOS_LOWMEM_KILOBYTES 0x413
 
 /*
@@ -420,8 +425,7 @@ static void __init reserve_ebda_region(void)
 	lowmem <<= 10;
 
 	/* start of EBDA area */
-	ebda_addr = *(unsigned short *)__va(BIOS_EBDA_SEGMENT);
-	ebda_addr <<= 4;
+	ebda_addr = get_bios_ebda();
 
 	/* Fixup: bios puts an EBDA in the top 64K segment */
 	/* of conventional memory, but does not adjust lowmem. */
@@ -822,6 +826,10 @@ void __init setup_arch(char **cmdline_p)
 
 	max_low_pfn = setup_memory();
 
+#ifdef CONFIG_KVM_CLOCK
+	kvmclock_init();
+#endif
+
 #ifdef CONFIG_VMI
 	/*
 	 * Must be after max_low_pfn is determined, and before kernel
@@ -829,6 +837,7 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	vmi_init();
 #endif
+	kvm_guest_init();
 
 	/*
 	 * NOTE: before this point _nobody_ is allowed to allocate

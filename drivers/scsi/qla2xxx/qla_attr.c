@@ -70,6 +70,9 @@ qla2x00_sysfs_write_fw_dump(struct kobject *kobj,
 	case 2:
 		qla2x00_alloc_fw_dump(ha);
 		break;
+	case 3:
+		qla2x00_system_error(ha);
+		break;
 	}
 	return (count);
 }
@@ -609,8 +612,8 @@ qla2x00_pci_info_show(struct device *dev, struct device_attribute *attr,
 }
 
 static ssize_t
-qla2x00_state_show(struct device *dev, struct device_attribute *attr,
-		   char *buf)
+qla2x00_link_state_show(struct device *dev, struct device_attribute *attr,
+			char *buf)
 {
 	scsi_qla_host_t *ha = shost_priv(class_to_shost(dev));
 	int len = 0;
@@ -814,7 +817,7 @@ static DEVICE_ATTR(isp_id, S_IRUGO, qla2x00_isp_id_show, NULL);
 static DEVICE_ATTR(model_name, S_IRUGO, qla2x00_model_name_show, NULL);
 static DEVICE_ATTR(model_desc, S_IRUGO, qla2x00_model_desc_show, NULL);
 static DEVICE_ATTR(pci_info, S_IRUGO, qla2x00_pci_info_show, NULL);
-static DEVICE_ATTR(state, S_IRUGO, qla2x00_state_show, NULL);
+static DEVICE_ATTR(link_state, S_IRUGO, qla2x00_link_state_show, NULL);
 static DEVICE_ATTR(zio, S_IRUGO | S_IWUSR, qla2x00_zio_show, qla2x00_zio_store);
 static DEVICE_ATTR(zio_timer, S_IRUGO | S_IWUSR, qla2x00_zio_timer_show,
 		   qla2x00_zio_timer_store);
@@ -838,7 +841,7 @@ struct device_attribute *qla2x00_host_attrs[] = {
 	&dev_attr_model_name,
 	&dev_attr_model_desc,
 	&dev_attr_pci_info,
-	&dev_attr_state,
+	&dev_attr_link_state,
 	&dev_attr_zio,
 	&dev_attr_zio_timer,
 	&dev_attr_beacon,
@@ -886,9 +889,13 @@ qla2x00_get_host_speed(struct Scsi_Host *shost)
 static void
 qla2x00_get_host_port_type(struct Scsi_Host *shost)
 {
-	scsi_qla_host_t *ha = to_qla_parent(shost_priv(shost));
+	scsi_qla_host_t *ha = shost_priv(shost);
 	uint32_t port_type = FC_PORTTYPE_UNKNOWN;
 
+	if (ha->parent) {
+		fc_host_port_type(shost) = FC_PORTTYPE_NPIV;
+		return;
+	}
 	switch (ha->current_topology) {
 	case ISP_CFG_NL:
 		port_type = FC_PORTTYPE_LPORT;
@@ -1172,10 +1179,10 @@ qla24xx_vport_delete(struct fc_vport *fc_vport)
 	qla24xx_disable_vp(vha);
 	qla24xx_deallocate_vp_id(vha);
 
-	down(&ha->vport_sem);
+	mutex_lock(&ha->vport_lock);
 	ha->cur_vport_count--;
 	clear_bit(vha->vp_idx, ha->vp_idx_map);
-	up(&ha->vport_sem);
+	mutex_unlock(&ha->vport_lock);
 
 	kfree(vha->node_name);
 	kfree(vha->port_name);

@@ -760,6 +760,21 @@ static void device_remove_class_symlinks(struct device *dev)
 }
 
 /**
+ * dev_set_name - set a device name
+ * @dev: device
+ */
+int dev_set_name(struct device *dev, const char *fmt, ...)
+{
+	va_list vargs;
+
+	va_start(vargs, fmt);
+	vsnprintf(dev->bus_id, sizeof(dev->bus_id), fmt, vargs);
+	va_end(vargs);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dev_set_name);
+
+/**
  * device_add - add device to device hierarchy.
  * @dev: device.
  *
@@ -786,6 +801,10 @@ int device_add(struct device *dev)
 
 	parent = get_device(dev->parent);
 	setup_parent(dev, parent);
+
+	/* use parent numa_node */
+	if (parent)
+		set_dev_node(dev, dev_to_node(parent));
 
 	/* first, register with generic layer. */
 	error = kobject_add(&dev->kobj, dev->kobj.parent, "%s", dev->bus_id);
@@ -1080,6 +1099,102 @@ static void device_create_release(struct device *dev)
 }
 
 /**
+ * device_create_vargs - creates a device and registers it with sysfs
+ * @class: pointer to the struct class that this device should be registered to
+ * @parent: pointer to the parent struct device of this new device, if any
+ * @devt: the dev_t for the char device to be added
+ * @drvdata: the data to be added to the device for callbacks
+ * @fmt: string for the device's name
+ * @args: va_list for the device's name
+ *
+ * This function can be used by char device classes.  A struct device
+ * will be created in sysfs, registered to the specified class.
+ *
+ * A "dev" file will be created, showing the dev_t for the device, if
+ * the dev_t is not 0,0.
+ * If a pointer to a parent struct device is passed in, the newly created
+ * struct device will be a child of that device in sysfs.
+ * The pointer to the struct device will be returned from the call.
+ * Any further sysfs files that might be required can be created using this
+ * pointer.
+ *
+ * Note: the struct class passed to this function must have previously
+ * been created with a call to class_create().
+ */
+struct device *device_create_vargs(struct class *class, struct device *parent,
+				   dev_t devt, void *drvdata, const char *fmt,
+				   va_list args)
+{
+	struct device *dev = NULL;
+	int retval = -ENODEV;
+
+	if (class == NULL || IS_ERR(class))
+		goto error;
+
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev) {
+		retval = -ENOMEM;
+		goto error;
+	}
+
+	dev->devt = devt;
+	dev->class = class;
+	dev->parent = parent;
+	dev->release = device_create_release;
+	dev_set_drvdata(dev, drvdata);
+
+	vsnprintf(dev->bus_id, BUS_ID_SIZE, fmt, args);
+	retval = device_register(dev);
+	if (retval)
+		goto error;
+
+	return dev;
+
+error:
+	kfree(dev);
+	return ERR_PTR(retval);
+}
+EXPORT_SYMBOL_GPL(device_create_vargs);
+
+/**
+ * device_create_drvdata - creates a device and registers it with sysfs
+ * @class: pointer to the struct class that this device should be registered to
+ * @parent: pointer to the parent struct device of this new device, if any
+ * @devt: the dev_t for the char device to be added
+ * @drvdata: the data to be added to the device for callbacks
+ * @fmt: string for the device's name
+ *
+ * This function can be used by char device classes.  A struct device
+ * will be created in sysfs, registered to the specified class.
+ *
+ * A "dev" file will be created, showing the dev_t for the device, if
+ * the dev_t is not 0,0.
+ * If a pointer to a parent struct device is passed in, the newly created
+ * struct device will be a child of that device in sysfs.
+ * The pointer to the struct device will be returned from the call.
+ * Any further sysfs files that might be required can be created using this
+ * pointer.
+ *
+ * Note: the struct class passed to this function must have previously
+ * been created with a call to class_create().
+ */
+struct device *device_create_drvdata(struct class *class,
+				     struct device *parent,
+				     dev_t devt,
+				     void *drvdata,
+				     const char *fmt, ...)
+{
+	va_list vargs;
+	struct device *dev;
+
+	va_start(vargs, fmt);
+	dev = device_create_vargs(class, parent, devt, drvdata, fmt, vargs);
+	va_end(vargs);
+	return dev;
+}
+EXPORT_SYMBOL_GPL(device_create_drvdata);
+
+/**
  * device_create - creates a device and registers it with sysfs
  * @class: pointer to the struct class that this device should be registered to
  * @parent: pointer to the parent struct device of this new device, if any
@@ -1103,36 +1218,13 @@ static void device_create_release(struct device *dev)
 struct device *device_create(struct class *class, struct device *parent,
 			     dev_t devt, const char *fmt, ...)
 {
-	va_list args;
-	struct device *dev = NULL;
-	int retval = -ENODEV;
+	va_list vargs;
+	struct device *dev;
 
-	if (class == NULL || IS_ERR(class))
-		goto error;
-
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev) {
-		retval = -ENOMEM;
-		goto error;
-	}
-
-	dev->devt = devt;
-	dev->class = class;
-	dev->parent = parent;
-	dev->release = device_create_release;
-
-	va_start(args, fmt);
-	vsnprintf(dev->bus_id, BUS_ID_SIZE, fmt, args);
-	va_end(args);
-	retval = device_register(dev);
-	if (retval)
-		goto error;
-
+	va_start(vargs, fmt);
+	dev = device_create_vargs(class, parent, devt, NULL, fmt, vargs);
+	va_end(vargs);
 	return dev;
-
-error:
-	kfree(dev);
-	return ERR_PTR(retval);
 }
 EXPORT_SYMBOL_GPL(device_create);
 
@@ -1214,13 +1306,11 @@ int device_rename(struct device *dev, char *new_name)
 	}
 #else
 	if (dev->class) {
-		sysfs_remove_link(&dev->class->subsys.kobj, old_device_name);
 		error = sysfs_create_link(&dev->class->subsys.kobj, &dev->kobj,
 					  dev->bus_id);
-		if (error) {
-			dev_err(dev, "%s: sysfs_create_symlink failed (%d)\n",
-				__func__, error);
-		}
+		if (error)
+			goto out;
+		sysfs_remove_link(&dev->class->subsys.kobj, old_device_name);
 	}
 #endif
 
@@ -1306,8 +1396,11 @@ int device_move(struct device *dev, struct device *new_parent)
 	dev->parent = new_parent;
 	if (old_parent)
 		klist_remove(&dev->knode_parent);
-	if (new_parent)
+	if (new_parent) {
 		klist_add_tail(&dev->knode_parent, &new_parent->klist_children);
+		set_dev_node(dev, dev_to_node(new_parent));
+	}
+
 	if (!dev->class)
 		goto out_put;
 	error = device_move_class_links(dev, old_parent, new_parent);
@@ -1317,9 +1410,12 @@ int device_move(struct device *dev, struct device *new_parent)
 		if (!kobject_move(&dev->kobj, &old_parent->kobj)) {
 			if (new_parent)
 				klist_remove(&dev->knode_parent);
-			if (old_parent)
+			dev->parent = old_parent;
+			if (old_parent) {
 				klist_add_tail(&dev->knode_parent,
 					       &old_parent->klist_children);
+				set_dev_node(dev, dev_to_node(old_parent));
+			}
 		}
 		cleanup_glue_dir(dev, new_parent_kobj);
 		put_device(new_parent);

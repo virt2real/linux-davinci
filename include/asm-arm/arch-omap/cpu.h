@@ -346,9 +346,14 @@ IS_OMAP_TYPE(3430, 0x3430)
 		get_sil_revision(system_rev)
 
 /* Various silicon macros defined here */
+#define OMAP242X_CLASS		0x24200000
 #define OMAP2420_REV_ES1_0	0x24200000
 #define OMAP2420_REV_ES2_0	0x24201000
+
+#define OMAP243X_CLASS		0x24300000
 #define OMAP2430_REV_ES1_0	0x24300000
+
+#define OMAP343X_CLASS		0x34300000
 #define OMAP3430_REV_ES1_0	0x34300000
 #define OMAP3430_REV_ES2_0	0x34301000
 #define OMAP3430_REV_ES2_1	0x34302000
@@ -395,6 +400,8 @@ int omap_chip_is(struct omap_chip_id oci);
 #define is_device_type_gp()	(get_device_type() == DEVICE_TYPE_GP)
 #define is_device_type_bad()	(get_device_type() == DEVICE_TYPE_BAD)
 
-#endif
+void omap2_check_revision(void);
+
+#endif    /* defined(CONFIG_ARCH_OMAP2) || defined(CONFIG_ARCH_OMAP3) */
 
 #endif

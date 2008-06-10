@@ -2537,6 +2537,7 @@ struct fcram_hash_ipv6 {
 
 #define NIU_PHY_ID_MASK			0xfffff0f0
 #define NIU_PHY_ID_BCM8704		0x00206030
+#define NIU_PHY_ID_BCM8706		0x00206035
 #define NIU_PHY_ID_BCM5464R		0x002060b0
 #define NIU_PHY_ID_MRVL88X2011		0x01410020
 
@@ -2937,6 +2938,24 @@ struct rx_ring_info {
 
 #define NIU_MAX_MTU		9216
 
+/* VPD strings */
+#define	NIU_QGC_LP_BM_STR	"501-7606"
+#define	NIU_2XGF_LP_BM_STR	"501-7283"
+#define	NIU_QGC_PEM_BM_STR	"501-7765"
+#define	NIU_2XGF_PEM_BM_STR	"501-7626"
+#define	NIU_ALONSO_BM_STR	"373-0202"
+#define	NIU_FOXXY_BM_STR	"501-7961"
+#define	NIU_2XGF_MRVL_BM_STR	"SK-6E82"
+#define	NIU_QGC_LP_MDL_STR	"SUNW,pcie-qgc"
+#define	NIU_2XGF_LP_MDL_STR	"SUNW,pcie-2xgf"
+#define	NIU_QGC_PEM_MDL_STR	"SUNW,pcie-qgc-pem"
+#define	NIU_2XGF_PEM_MDL_STR	"SUNW,pcie-2xgf-pem"
+#define	NIU_ALONSO_MDL_STR	"SUNW,CP3220"
+#define	NIU_KIMI_MDL_STR	"SUNW,CP3260"
+#define	NIU_MARAMBA_MDL_STR	"SUNW,pcie-neptune"
+#define	NIU_FOXXY_MDL_STR	"SUNW,pcie-rfem"
+#define	NIU_2XGF_MRVL_MDL_STR	"SysKonnect,pcie-2xgf"
+
 #define NIU_VPD_MIN_MAJOR	3
 #define NIU_VPD_MIN_MINOR	4
 
@@ -3199,6 +3218,8 @@ struct niu {
 	struct niu_parent		*parent;
 
 	u32				flags;
+#define NIU_FLAGS_HOTPLUG_PHY_PRESENT	0x02000000 /* Removebale PHY detected*/
+#define NIU_FLAGS_HOTPLUG_PHY		0x01000000 /* Removebale PHY */
 #define NIU_FLAGS_VPD_VALID		0x00800000 /* VPD has valid version */
 #define NIU_FLAGS_MSIX			0x00400000 /* MSI-X in use */
 #define NIU_FLAGS_MCAST			0x00200000 /* multicast filter enabled */

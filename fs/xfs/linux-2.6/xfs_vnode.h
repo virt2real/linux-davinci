@@ -25,12 +25,6 @@ struct attrlist_cursor_kern;
 
 typedef struct inode	bhv_vnode_t;
 
-#define VN_ISLNK(vp)	S_ISLNK((vp)->i_mode)
-#define VN_ISREG(vp)	S_ISREG((vp)->i_mode)
-#define VN_ISDIR(vp)	S_ISDIR((vp)->i_mode)
-#define VN_ISCHR(vp)	S_ISCHR((vp)->i_mode)
-#define VN_ISBLK(vp)	S_ISBLK((vp)->i_mode)
-
 /*
  * Vnode to Linux inode mapping.
  */
@@ -151,24 +145,6 @@ typedef struct bhv_vattr {
 		XFS_AT_TYPE|XFS_AT_BLKSIZE|XFS_AT_NBLOCKS|XFS_AT_VCODE|\
 		XFS_AT_NEXTENTS|XFS_AT_ANEXTENTS|XFS_AT_GENCOUNT)
 
-/*
- *  Modes.
- */
-#define VSUID	S_ISUID		/* set user id on execution */
-#define VSGID	S_ISGID		/* set group id on execution */
-#define VSVTX	S_ISVTX		/* save swapped text even after use */
-#define VREAD	S_IRUSR		/* read, write, execute permissions */
-#define VWRITE	S_IWUSR
-#define VEXEC	S_IXUSR
-
-#define MODEMASK S_IALLUGO	/* mode bits plus permission bits */
-
-/*
- * Check whether mandatory file locking is enabled.
- */
-#define MANDLOCK(vp, mode)	\
-	(VN_ISREG(vp) && ((mode) & (VSGID|(VEXEC>>3))) == VSGID)
-
 extern void	vn_init(void);
 extern int	vn_revalidate(bhv_vnode_t *);
 
@@ -252,14 +228,6 @@ static inline void vn_atime_to_time_t(bhv_vnode_t *vp, time_t *tt)
 #define	ATTR_NONBLOCK	0x100	/* return EAGAIN if operation would block */
 #define ATTR_NOLOCK	0x200	/* Don't grab any conflicting locks */
 #define ATTR_NOSIZETOK	0x400	/* Don't get the SIZE token */
-
-/*
- * Flags to vop_fsync/reclaim.
- */
-#define FSYNC_NOWAIT	0	/* asynchronous flush */
-#define FSYNC_WAIT	0x1	/* synchronous fsync or forced reclaim */
-#define FSYNC_INVAL	0x2	/* flush and invalidate cached data */
-#define FSYNC_DATA	0x4	/* synchronous fsync of data only */
 
 /*
  * Tracking vnode activity.

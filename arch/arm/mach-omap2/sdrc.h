@@ -18,40 +18,32 @@
 #include <asm/arch/sdrc.h>
 
 #ifndef __ASSEMBLER__
-extern unsigned long omap2_sdrc_base;
-extern unsigned long omap2_sms_base;
+extern void __iomem *omap2_sdrc_base;
+extern void __iomem *omap2_sms_base;
 
-#define OMAP_SDRC_REGADDR(reg)						\
-		(void __iomem *)IO_ADDRESS(omap2_sdrc_base + (reg))
-#define OMAP_SMS_REGADDR(reg)						\
-		(void __iomem *)IO_ADDRESS(omap2_sms_base + (reg))
+#define OMAP_SDRC_REGADDR(reg)			(omap2_sdrc_base + (reg))
+#define OMAP_SMS_REGADDR(reg)			(omap2_sms_base + (reg))
 
 /* SDRC global register get/set */
 
-static void __attribute__((unused)) sdrc_write_reg(u32 val, u16 reg)
+static inline void sdrc_write_reg(u32 val, u16 reg)
 {
-	pr_debug("sdrc_write_reg: writing 0x%0x to 0x%0x\n", val,
-		 (u32)OMAP_SDRC_REGADDR(reg));
-
 	__raw_writel(val, OMAP_SDRC_REGADDR(reg));
 }
 
-static u32 __attribute__((unused)) sdrc_read_reg(u16 reg)
+static inline u32 sdrc_read_reg(u16 reg)
 {
 	return __raw_readl(OMAP_SDRC_REGADDR(reg));
 }
 
 /* SMS global register get/set */
 
-static void __attribute__((unused)) sms_write_reg(u32 val, u16 reg)
+static inline void sms_write_reg(u32 val, u16 reg)
 {
-	pr_debug("sms_write_reg: writing 0x%0x to 0x%0x\n", val,
-		 (u32)OMAP_SMS_REGADDR(reg));
-
 	__raw_writel(val, OMAP_SMS_REGADDR(reg));
 }
 
-static u32 __attribute__((unused)) sms_read_reg(u16 reg)
+static inline u32 sms_read_reg(u16 reg)
 {
 	return __raw_readl(OMAP_SMS_REGADDR(reg));
 }

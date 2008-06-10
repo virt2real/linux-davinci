@@ -1,5 +1,4 @@
-/*  $Id: signal.c,v 1.110 2002/02/08 03:57:14 davem Exp $
- *  linux/arch/sparc/kernel/signal.c
+/*  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -32,37 +31,7 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 		   void *fpqueue, unsigned long *fpqdepth);
 extern void fpload(unsigned long *fpregs, unsigned long *fsr);
 
-/* Signal frames: the original one (compatible with SunOS):
- *
- * Set up a signal frame... Make the stack look the way SunOS
- * expects it to look which is basically:
- *
- * ---------------------------------- <-- %sp at signal time
- * Struct sigcontext
- * Signal address
- * Ptr to sigcontext area above
- * Signal code
- * The signal number itself
- * One register window
- * ---------------------------------- <-- New %sp
- */
-struct signal_sframe {
-	struct reg_window	sig_window;
-	int			sig_num;
-	int			sig_code;
-	struct sigcontext __user *sig_scptr;
-	int			sig_address;
-	struct sigcontext	sig_context;
-	unsigned int		extramask[_NSIG_WORDS - 1];
-};
-
-/* 
- * And the new one, intended to be used for Linux applications only
- * (we have enough in there to work with clone).
- * All the interesting bits are in the info field.
- */
-
-struct new_signal_frame {
+struct signal_frame {
 	struct sparc_stackf	ss;
 	__siginfo_t		info;
 	__siginfo_fpu_t __user	*fpu_save;
@@ -85,8 +54,7 @@ struct rt_signal_frame {
 };
 
 /* Align macros */
-#define SF_ALIGNEDSZ  (((sizeof(struct signal_sframe) + 7) & (~7)))
-#define NF_ALIGNEDSZ  (((sizeof(struct new_signal_frame) + 7) & (~7)))
+#define SF_ALIGNEDSZ  (((sizeof(struct signal_frame) + 7) & (~7)))
 #define RT_ALIGNEDSZ  (((sizeof(struct rt_signal_frame) + 7) & (~7)))
 
 static int _sigpause_common(old_sigset_t set)
@@ -141,15 +109,20 @@ restore_fpu_state(struct pt_regs *regs, __siginfo_fpu_t __user *fpu)
 	return err;
 }
 
-static inline void do_new_sigreturn (struct pt_regs *regs)
+asmlinkage void do_sigreturn(struct pt_regs *regs)
 {
-	struct new_signal_frame __user *sf;
+	struct signal_frame __user *sf;
 	unsigned long up_psr, pc, npc;
 	sigset_t set;
 	__siginfo_fpu_t __user *fpu_save;
 	int err;
 
-	sf = (struct new_signal_frame __user *) regs->u_regs[UREG_FP];
+	/* Always make any pending restarted system calls return -EINTR */
+	current_thread_info()->restart_block.fn = do_no_restart_syscall;
+
+	synchronize_user_stack();
+
+	sf = (struct signal_frame __user *) regs->u_regs[UREG_FP];
 
 	/* 1. Make sure we are not getting garbage from the user */
 	if (!access_ok(VERIFY_READ, sf, sizeof(*sf)))
@@ -172,6 +145,9 @@ static inline void do_new_sigreturn (struct pt_regs *regs)
 	regs->psr = (up_psr & ~(PSR_ICC | PSR_EF))
 		  | (regs->psr & (PSR_ICC | PSR_EF));
 
+	/* Prevent syscall restart.  */
+	pt_regs_clear_syscall(regs);
+
 	err |= __get_user(fpu_save, &sf->fpu_save);
 
 	if (fpu_save)
@@ -192,73 +168,6 @@ static inline void do_new_sigreturn (struct pt_regs *regs)
 	current->blocked = set;
 	recalc_sigpending();
 	spin_unlock_irq(&current->sighand->siglock);
-	return;
-
-segv_and_exit:
-	force_sig(SIGSEGV, current);
-}
-
-asmlinkage void do_sigreturn(struct pt_regs *regs)
-{
-	struct sigcontext __user *scptr;
-	unsigned long pc, npc, psr;
-	sigset_t set;
-	int err;
-
-	/* Always make any pending restarted system calls return -EINTR */
-	current_thread_info()->restart_block.fn = do_no_restart_syscall;
-
-	synchronize_user_stack();
-
-	if (current->thread.new_signal) {
-		do_new_sigreturn(regs);
-		return;
-	}
-
-	scptr = (struct sigcontext __user *) regs->u_regs[UREG_I0];
-
-	/* Check sanity of the user arg. */
-	if (!access_ok(VERIFY_READ, scptr, sizeof(struct sigcontext)) ||
-	    (((unsigned long) scptr) & 3))
-		goto segv_and_exit;
-
-	err = __get_user(pc, &scptr->sigc_pc);
-	err |= __get_user(npc, &scptr->sigc_npc);
-
-	if ((pc | npc) & 3)
-		goto segv_and_exit;
-
-	/* This is pretty much atomic, no amount locking would prevent
-	 * the races which exist anyways.
-	 */
-	err |= __get_user(set.sig[0], &scptr->sigc_mask);
-	/* Note that scptr + 1 points to extramask */
-	err |= __copy_from_user(&set.sig[1], scptr + 1,
-				(_NSIG_WORDS - 1) * sizeof(unsigned int));
-	
-	if (err)
-		goto segv_and_exit;
-
-	sigdelsetmask(&set, ~_BLOCKABLE);
-	spin_lock_irq(&current->sighand->siglock);
-	current->blocked = set;
-	recalc_sigpending();
-	spin_unlock_irq(&current->sighand->siglock);
-
-	regs->pc = pc;
-	regs->npc = npc;
-
-	err = __get_user(regs->u_regs[UREG_FP], &scptr->sigc_sp);
-	err |= __get_user(regs->u_regs[UREG_I0], &scptr->sigc_o0);
-	err |= __get_user(regs->u_regs[UREG_G1], &scptr->sigc_g1);
-
-	/* User can only change condition codes in %psr. */
-	err |= __get_user(psr, &scptr->sigc_psr);
-	if (err)
-		goto segv_and_exit;
-		
-	regs->psr &= ~(PSR_ICC);
-	regs->psr |= (psr & PSR_ICC);
 	return;
 
 segv_and_exit:
@@ -292,6 +201,9 @@ asmlinkage void do_rt_sigreturn(struct pt_regs *regs)
 				&sf->regs.u_regs[UREG_G1], 15 * sizeof(u32));
 
 	regs->psr = (regs->psr & ~PSR_ICC) | (psr & PSR_ICC);
+
+	/* Prevent syscall restart.  */
+	pt_regs_clear_syscall(regs);
 
 	err |= __get_user(fpu_save, &sf->fpu_save);
 
@@ -339,139 +251,31 @@ static inline int invalid_frame_pointer(void __user *fp, int fplen)
 
 static inline void __user *get_sigframe(struct sigaction *sa, struct pt_regs *regs, unsigned long framesize)
 {
-	unsigned long sp;
+	unsigned long sp = regs->u_regs[UREG_FP];
 
-	sp = regs->u_regs[UREG_FP];
+	/*
+	 * If we are on the alternate signal stack and would overflow it, don't.
+	 * Return an always-bogus address instead so we will die with SIGSEGV.
+	 */
+	if (on_sig_stack(sp) && !likely(on_sig_stack(sp - framesize)))
+		return (void __user *) -1L;
 
 	/* This is the X/Open sanctioned signal stack switching.  */
 	if (sa->sa_flags & SA_ONSTACK) {
-		if (!on_sig_stack(sp) && !((current->sas_ss_sp + current->sas_ss_size) & 7))
+		if (sas_ss_flags(sp) == 0)
 			sp = current->sas_ss_sp + current->sas_ss_size;
 	}
+
+	/* Always align the stack frame.  This handles two cases.  First,
+	 * sigaltstack need not be mindful of platform specific stack
+	 * alignment.  Second, if we took this signal because the stack
+	 * is not aligned properly, we'd like to take the signal cleanly
+	 * and report that.
+	 */
+	sp &= ~7UL;
+
 	return (void __user *)(sp - framesize);
 }
-
-static inline void
-setup_frame(struct sigaction *sa, struct pt_regs *regs, int signr, sigset_t *oldset, siginfo_t *info)
-{
-	struct signal_sframe __user *sframep;
-	struct sigcontext __user *sc;
-	int window = 0, err;
-	unsigned long pc = regs->pc;
-	unsigned long npc = regs->npc;
-	struct thread_info *tp = current_thread_info();
-	void __user *sig_address;
-	int sig_code;
-
-	synchronize_user_stack();
-	sframep = (struct signal_sframe __user *)
-		get_sigframe(sa, regs, SF_ALIGNEDSZ);
-	if (invalid_frame_pointer(sframep, sizeof(*sframep))){
-		/* Don't change signal code and address, so that
-		 * post mortem debuggers can have a look.
-		 */
-		goto sigill_and_return;
-	}
-
-	sc = &sframep->sig_context;
-
-	/* We've already made sure frame pointer isn't in kernel space... */
-	err  = __put_user((sas_ss_flags(regs->u_regs[UREG_FP]) == SS_ONSTACK),
-			 &sc->sigc_onstack);
-	err |= __put_user(oldset->sig[0], &sc->sigc_mask);
-	err |= __copy_to_user(sframep->extramask, &oldset->sig[1],
-			      (_NSIG_WORDS - 1) * sizeof(unsigned int));
-	err |= __put_user(regs->u_regs[UREG_FP], &sc->sigc_sp);
-	err |= __put_user(pc, &sc->sigc_pc);
-	err |= __put_user(npc, &sc->sigc_npc);
-	err |= __put_user(regs->psr, &sc->sigc_psr);
-	err |= __put_user(regs->u_regs[UREG_G1], &sc->sigc_g1);
-	err |= __put_user(regs->u_regs[UREG_I0], &sc->sigc_o0);
-	err |= __put_user(tp->w_saved, &sc->sigc_oswins);
-	if (tp->w_saved)
-		for (window = 0; window < tp->w_saved; window++) {
-			put_user((char *)tp->rwbuf_stkptrs[window],
-				 &sc->sigc_spbuf[window]);
-			err |= __copy_to_user(&sc->sigc_wbuf[window],
-					      &tp->reg_window[window],
-					      sizeof(struct reg_window));
-		}
-	else
-		err |= __copy_to_user(sframep, (char *) regs->u_regs[UREG_FP],
-				      sizeof(struct reg_window));
-
-	tp->w_saved = 0; /* So process is allowed to execute. */
-
-	err |= __put_user(signr, &sframep->sig_num);
-	sig_address = NULL;
-	sig_code = 0;
-	if (SI_FROMKERNEL (info) && (info->si_code & __SI_MASK) == __SI_FAULT) {
-		sig_address = info->si_addr;
-		switch (signr) {
-		case SIGSEGV:
-			switch (info->si_code) {
-			case SEGV_MAPERR: sig_code = SUBSIG_NOMAPPING; break;
-			default: sig_code = SUBSIG_PROTECTION; break;
-			}
-			break;
-		case SIGILL:
-			switch (info->si_code) {
-			case ILL_ILLOPC: sig_code = SUBSIG_ILLINST; break;
-			case ILL_PRVOPC: sig_code = SUBSIG_PRIVINST; break;
-			case ILL_ILLTRP: sig_code = SUBSIG_BADTRAP(info->si_trapno); break;
-			default: sig_code = SUBSIG_STACK; break;
-			}
-			break;
-		case SIGFPE:
-			switch (info->si_code) {
-			case FPE_INTDIV: sig_code = SUBSIG_IDIVZERO; break;
-			case FPE_INTOVF: sig_code = SUBSIG_FPINTOVFL; break;
-			case FPE_FLTDIV: sig_code = SUBSIG_FPDIVZERO; break;
-			case FPE_FLTOVF: sig_code = SUBSIG_FPOVFLOW; break;
-			case FPE_FLTUND: sig_code = SUBSIG_FPUNFLOW; break;
-			case FPE_FLTRES: sig_code = SUBSIG_FPINEXACT; break;
-			case FPE_FLTINV: sig_code = SUBSIG_FPOPERROR; break;
-			default: sig_code = SUBSIG_FPERROR; break;
-			}
-			break;
-		case SIGBUS:
-			switch (info->si_code) {
-			case BUS_ADRALN: sig_code = SUBSIG_ALIGNMENT; break;
-			case BUS_ADRERR: sig_code = SUBSIG_MISCERROR; break;
-			default: sig_code = SUBSIG_BUSTIMEOUT; break;
-			}
-			break;
-		case SIGEMT:
-			switch (info->si_code) {
-			case EMT_TAGOVF: sig_code = SUBSIG_TAG; break;
-			}
-			break;
-		case SIGSYS:
-			if (info->si_code == (__SI_FAULT|0x100)) {
-				sig_code = info->si_trapno;
-				break;
-			}
-		default:
-			sig_address = NULL;
-		}
-	}
-	err |= __put_user((unsigned long)sig_address, &sframep->sig_address);
-	err |= __put_user(sig_code, &sframep->sig_code);
-	err |= __put_user(sc, &sframep->sig_scptr);
-	if (err)
-		goto sigsegv;
-
-	regs->u_regs[UREG_FP] = (unsigned long) sframep;
-	regs->pc = (unsigned long) sa->sa_handler;
-	regs->npc = (regs->pc + 4);
-	return;
-
-sigill_and_return:
-	do_exit(SIGILL);
-sigsegv:
-	force_sigsegv(signr, current);
-}
-
 
 static inline int
 save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t __user *fpu)
@@ -508,21 +312,20 @@ save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t __user *fpu)
 	return err;
 }
 
-static inline void
-new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
-		int signo, sigset_t *oldset)
+static void setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
+			int signo, sigset_t *oldset)
 {
-	struct new_signal_frame __user *sf;
+	struct signal_frame __user *sf;
 	int sigframe_size, err;
 
 	/* 1. Make sure everything is clean */
 	synchronize_user_stack();
 
-	sigframe_size = NF_ALIGNEDSZ;
+	sigframe_size = SF_ALIGNEDSZ;
 	if (!used_math())
 		sigframe_size -= sizeof(__siginfo_fpu_t);
 
-	sf = (struct new_signal_frame __user *)
+	sf = (struct signal_frame __user *)
 		get_sigframe(&ka->sa, regs, sigframe_size);
 
 	if (invalid_frame_pointer(sf, sigframe_size))
@@ -586,9 +389,8 @@ sigsegv:
 	force_sigsegv(signo, current);
 }
 
-static inline void
-new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
-		   int signo, sigset_t *oldset, siginfo_t *info)
+static void setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
+			   int signo, sigset_t *oldset, siginfo_t *info)
 {
 	struct rt_signal_frame __user *sf;
 	int sigframe_size;
@@ -674,11 +476,9 @@ handle_signal(unsigned long signr, struct k_sigaction *ka,
 	      siginfo_t *info, sigset_t *oldset, struct pt_regs *regs)
 {
 	if (ka->sa.sa_flags & SA_SIGINFO)
-		new_setup_rt_frame(ka, regs, signr, oldset, info);
-	else if (current->thread.new_signal)
-		new_setup_frame(ka, regs, signr, oldset);
+		setup_rt_frame(ka, regs, signr, oldset, info);
 	else
-		setup_frame(&ka->sa, regs, signr, oldset, info);
+		setup_frame(ka, regs, signr, oldset);
 
 	spin_lock_irq(&current->sighand->siglock);
 	sigorsets(&current->blocked,&current->blocked,&ka->sa.sa_mask);
@@ -713,26 +513,36 @@ static inline void syscall_restart(unsigned long orig_i0, struct pt_regs *regs,
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
  * mistake.
  */
-asmlinkage void do_signal(struct pt_regs * regs, unsigned long orig_i0, int restart_syscall)
+asmlinkage void do_signal(struct pt_regs * regs, unsigned long orig_i0)
 {
-	siginfo_t info;
-	struct sparc_deliver_cookie cookie;
 	struct k_sigaction ka;
-	int signr;
+	int restart_syscall;
 	sigset_t *oldset;
+	siginfo_t info;
+	int signr;
 
-	cookie.restart_syscall = restart_syscall;
-	cookie.orig_i0 = orig_i0;
+	if (pt_regs_is_syscall(regs) && (regs->psr & PSR_C))
+		restart_syscall = 1;
+	else
+		restart_syscall = 0;
 
 	if (test_thread_flag(TIF_RESTORE_SIGMASK))
 		oldset = &current->saved_sigmask;
 	else
 		oldset = &current->blocked;
 
-	signr = get_signal_to_deliver(&info, &ka, regs, &cookie);
+	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
+
+	/* If the debugger messes with the program counter, it clears
+	 * the software "in syscall" bit, directing us to not perform
+	 * a syscall restart.
+	 */
+	if (restart_syscall && !pt_regs_is_syscall(regs))
+		restart_syscall = 0;
+
 	if (signr > 0) {
-		if (cookie.restart_syscall)
-			syscall_restart(cookie.orig_i0, regs, &ka.sa);
+		if (restart_syscall)
+			syscall_restart(orig_i0, regs, &ka.sa);
 		handle_signal(signr, &ka, &info, oldset, regs);
 
 		/* a signal was successfully delivered; the saved
@@ -744,16 +554,16 @@ asmlinkage void do_signal(struct pt_regs * regs, unsigned long orig_i0, int rest
 			clear_thread_flag(TIF_RESTORE_SIGMASK);
 		return;
 	}
-	if (cookie.restart_syscall &&
+	if (restart_syscall &&
 	    (regs->u_regs[UREG_I0] == ERESTARTNOHAND ||
 	     regs->u_regs[UREG_I0] == ERESTARTSYS ||
 	     regs->u_regs[UREG_I0] == ERESTARTNOINTR)) {
 		/* replay the system call when we are done */
-		regs->u_regs[UREG_I0] = cookie.orig_i0;
+		regs->u_regs[UREG_I0] = orig_i0;
 		regs->pc -= 4;
 		regs->npc -= 4;
 	}
-	if (cookie.restart_syscall &&
+	if (restart_syscall &&
 	    regs->u_regs[UREG_I0] == ERESTART_RESTARTBLOCK) {
 		regs->u_regs[UREG_G1] = __NR_restart_syscall;
 		regs->pc -= 4;
@@ -804,28 +614,4 @@ do_sys_sigstack(struct sigstack __user *ssptr, struct sigstack __user *ossptr,
 	ret = 0;
 out:
 	return ret;
-}
-
-void ptrace_signal_deliver(struct pt_regs *regs, void *cookie)
-{
-	struct sparc_deliver_cookie *cp = cookie;
-
-	if (cp->restart_syscall &&
-	    (regs->u_regs[UREG_I0] == ERESTARTNOHAND ||
-	     regs->u_regs[UREG_I0] == ERESTARTSYS ||
-	     regs->u_regs[UREG_I0] == ERESTARTNOINTR)) {
-		/* replay the system call when we are done */
-		regs->u_regs[UREG_I0] = cp->orig_i0;
-		regs->pc -= 4;
-		regs->npc -= 4;
-		cp->restart_syscall = 0;
-	}
-
-	if (cp->restart_syscall &&
-	    regs->u_regs[UREG_I0] == ERESTART_RESTARTBLOCK) {
-		regs->u_regs[UREG_G1] = __NR_restart_syscall;
-		regs->pc -= 4;
-		regs->npc -= 4;
-		cp->restart_syscall = 0;
-	}
 }

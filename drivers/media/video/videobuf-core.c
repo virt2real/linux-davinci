@@ -97,7 +97,10 @@ int videobuf_iolock(struct videobuf_queue *q, struct videobuf_buffer *vb,
 void *videobuf_queue_to_vmalloc (struct videobuf_queue *q,
 			   struct videobuf_buffer *buf)
 {
-	return CALL(q, vmalloc, buf);
+	if (q->int_ops->vmalloc)
+		return q->int_ops->vmalloc(buf);
+	else
+		return NULL;
 }
 EXPORT_SYMBOL_GPL(videobuf_queue_to_vmalloc);
 
@@ -328,7 +331,7 @@ int videobuf_mmap_free(struct videobuf_queue *q)
 }
 
 /* Locking: Caller holds q->vb_lock */
-static int __videobuf_mmap_setup(struct videobuf_queue *q,
+int __videobuf_mmap_setup(struct videobuf_queue *q,
 			unsigned int bcount, unsigned int bsize,
 			enum v4l2_memory memory)
 {
@@ -1126,6 +1129,7 @@ EXPORT_SYMBOL_GPL(videobuf_read_stream);
 EXPORT_SYMBOL_GPL(videobuf_read_one);
 EXPORT_SYMBOL_GPL(videobuf_poll_stream);
 
+EXPORT_SYMBOL_GPL(__videobuf_mmap_setup);
 EXPORT_SYMBOL_GPL(videobuf_mmap_setup);
 EXPORT_SYMBOL_GPL(videobuf_mmap_free);
 EXPORT_SYMBOL_GPL(videobuf_mmap_mapper);

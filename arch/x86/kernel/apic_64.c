@@ -360,7 +360,8 @@ static void __init calibrate_APIC_clock(void)
 		result / 1000 / 1000, result / 1000 % 1000);
 
 	/* Calculate the scaled math multiplication factor */
-	lapic_clockevent.mult = div_sc(result, NSEC_PER_SEC, 32);
+	lapic_clockevent.mult = div_sc(result, NSEC_PER_SEC,
+				       lapic_clockevent.shift);
 	lapic_clockevent.max_delta_ns =
 		clockevent_delta2ns(0x7FFFFF, &lapic_clockevent);
 	lapic_clockevent.min_delta_ns =
@@ -533,7 +534,7 @@ int setup_profiling_timer(unsigned int multiplier)
  */
 void clear_local_APIC(void)
 {
-	int maxlvt = lapic_get_maxlvt();
+	int maxlvt;
 	u32 v;
 
 	/* APIC hasn't been mapped yet */

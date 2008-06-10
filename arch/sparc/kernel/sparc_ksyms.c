@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.107 2001/07/17 16:17:33 anton Exp $
+/*
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -282,3 +282,5 @@ EXPORT_SYMBOL(do_BUG);
 
 /* Sun Power Management Idle Handler */
 EXPORT_SYMBOL(pm_idle);
+
+EXPORT_SYMBOL(empty_zero_page);

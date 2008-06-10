@@ -30,6 +30,7 @@
 #include <linux/capability.h>
 #include <linux/file.h>
 #include <linux/fcntl.h>
+#include <linux/device_cgroup.h>
 #include <asm/namei.h>
 #include <asm/uaccess.h>
 
@@ -278,6 +279,10 @@ int permission(struct inode *inode, int mask, struct nameidata *nd)
 	} else {
 		retval = generic_permission(inode, submask, NULL);
 	}
+	if (retval)
+		return retval;
+
+	retval = devcgroup_inode_permission(inode, mask);
 	if (retval)
 		return retval;
 
@@ -1998,18 +2003,22 @@ struct dentry *lookup_create(struct nameidata *nd, int is_dir)
 	if (IS_ERR(dentry))
 		goto fail;
 
+	if (dentry->d_inode)
+		goto eexist;
 	/*
 	 * Special case - lookup gave negative, but... we had foo/bar/
 	 * From the vfs_mknod() POV we just have a negative dentry -
 	 * all is fine. Let's be bastards - you had / on the end, you've
 	 * been asking for (non-existent) directory. -ENOENT for you.
 	 */
-	if (!is_dir && nd->last.name[nd->last.len] && !dentry->d_inode)
-		goto enoent;
+	if (unlikely(!is_dir && nd->last.name[nd->last.len])) {
+		dput(dentry);
+		dentry = ERR_PTR(-ENOENT);
+	}
 	return dentry;
-enoent:
+eexist:
 	dput(dentry);
-	dentry = ERR_PTR(-ENOENT);
+	dentry = ERR_PTR(-EEXIST);
 fail:
 	return dentry;
 }
@@ -2027,6 +2036,10 @@ int vfs_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
 
 	if (!dir->i_op || !dir->i_op->mknod)
 		return -EPERM;
+
+	error = devcgroup_inode_mknod(mode, dev);
+	if (error)
+		return error;
 
 	error = security_inode_mknod(dir, dentry, mode, dev);
 	if (error)

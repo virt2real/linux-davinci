@@ -41,6 +41,7 @@ int pciehp_debug;
 int pciehp_poll_mode;
 int pciehp_poll_time;
 int pciehp_force;
+int pciehp_slot_with_bus;
 struct workqueue_struct *pciehp_wq;
 
 #define DRIVER_VERSION	"0.4"
@@ -55,10 +56,12 @@ module_param(pciehp_debug, bool, 0644);
 module_param(pciehp_poll_mode, bool, 0644);
 module_param(pciehp_poll_time, int, 0644);
 module_param(pciehp_force, bool, 0644);
+module_param(pciehp_slot_with_bus, bool, 0644);
 MODULE_PARM_DESC(pciehp_debug, "Debugging mode enabled or not");
 MODULE_PARM_DESC(pciehp_poll_mode, "Using polling mechanism for hot-plug events or not");
 MODULE_PARM_DESC(pciehp_poll_time, "Polling mechanism frequency, in seconds");
 MODULE_PARM_DESC(pciehp_force, "Force pciehp, even if _OSC and OSHP are missing");
+MODULE_PARM_DESC(pciehp_slot_with_bus, "Use bus number in the slot name");
 
 #define PCIE_MODULE_NAME "pciehp"
 
@@ -193,8 +196,12 @@ static void release_slot(struct hotplug_slot *hotplug_slot)
 
 static void make_slot_name(struct slot *slot)
 {
-	snprintf(slot->hotplug_slot->name, SLOT_NAME_SIZE, "%04d_%04d",
-		 slot->bus, slot->number);
+	if (pciehp_slot_with_bus)
+		snprintf(slot->hotplug_slot->name, SLOT_NAME_SIZE, "%04d_%04d",
+			 slot->bus, slot->number);
+	else
+		snprintf(slot->hotplug_slot->name, SLOT_NAME_SIZE, "%d",
+			 slot->number);
 }
 
 static int init_slots(struct controller *ctrl)
@@ -247,11 +254,15 @@ static int init_slots(struct controller *ctrl)
 		    slot->hp_slot, slot->number, ctrl->slot_device_offset);
 		retval = pci_hp_register(hotplug_slot);
 		if (retval) {
-			err ("pci_hp_register failed with error %d\n", retval);
+			err("pci_hp_register failed with error %d\n", retval);
+			if (retval == -EEXIST)
+				err("Failed to register slot because of name "
+				    "collision. Try \'pciehp_slot_with_bus\' "
+				    "module option.\n");
 			goto error_info;
 		}
 		/* create additional sysfs entries */
-		if (EMI(ctrl->ctrlcap)) {
+		if (EMI(ctrl)) {
 			retval = sysfs_create_file(&hotplug_slot->kobj,
 				&hotplug_slot_attr_lock.attr);
 			if (retval) {
@@ -284,7 +295,7 @@ static void cleanup_slots(struct controller *ctrl)
 	list_for_each_safe(tmp, next, &ctrl->slot_list) {
 		slot = list_entry(tmp, struct slot, slot_list);
 		list_del(&slot->slot_list);
-		if (EMI(ctrl->ctrlcap))
+		if (EMI(ctrl))
 			sysfs_remove_file(&slot->hotplug_slot->kobj,
 				&hotplug_slot_attr_lock.attr);
 		cancel_delayed_work(&slot->work);
@@ -305,7 +316,7 @@ static int set_attention_status(struct hotplug_slot *hotplug_slot, u8 status)
 
 	hotplug_slot->info->attention_status = status;
 
-	if (ATTN_LED(slot->ctrl->ctrlcap))
+	if (ATTN_LED(slot->ctrl))
 		slot->hpc_ops->set_attention_status(slot, status);
 
 	return 0;
@@ -472,7 +483,7 @@ static int pciehp_probe(struct pcie_device *dev, const struct pcie_port_service_
 		if (rc)	/* -ENODEV: shouldn't happen, but deal with it */
 			value = 0;
 	}
-	if ((POWER_CTRL(ctrl->ctrlcap)) && !value) {
+	if ((POWER_CTRL(ctrl)) && !value) {
 		rc = t_slot->hpc_ops->power_off_slot(t_slot); /* Power off slot if not occupied*/
 		if (rc)
 			goto err_out_free_ctrl_slot;

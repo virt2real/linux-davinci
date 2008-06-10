@@ -422,7 +422,11 @@ musb_advance_schedule(struct musb *musb, struct urb *urb,
 		qh = hw_ep->in_qh;
 	else
 		qh = hw_ep->out_qh;
-	qh = musb_giveback(qh, urb, 0);
+
+	if (urb->status == -EINPROGRESS)
+		qh = musb_giveback(qh, urb, 0);
+	else
+		qh = musb_giveback(qh, urb, urb->status);
 
 	if (qh && qh->is_ready && !list_empty(&qh->hep->urb_list)) {
 		DBG(4, "... next ep%d %cX urb %p\n",
@@ -1203,7 +1207,7 @@ void musb_host_tx(struct musb *musb, u8 epnum)
 		 * we have a candidate... NAKing is *NOT* an error
 		 */
 		musb_ep_select(mbase, epnum);
-		musb_writew(epio, MUSB_CSR0,
+		musb_writew(epio, MUSB_TXCSR,
 				MUSB_TXCSR_H_WZC_BITS
 				| MUSB_TXCSR_TXPKTRDY);
 		goto finish;
@@ -1449,7 +1453,7 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 			(void) musb->dma_controller->channel_abort(dma);
 			xfer_len = dma->actual_len;
 		}
-		musb_h_flush_rxfifo(hw_ep, 0);
+		musb_h_flush_rxfifo(hw_ep, MUSB_RXCSR_CLRDATATOG);
 		musb_writeb(epio, MUSB_RXINTERVAL, 0);
 		done = true;
 		goto finish;

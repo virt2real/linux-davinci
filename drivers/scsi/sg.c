@@ -1441,17 +1441,18 @@ sg_add(struct device *cl_dev, struct class_interface *cl_intf)
 	if (sg_sysfs_valid) {
 		struct device *sg_class_member;
 
-		sg_class_member = device_create(sg_sysfs_class, cl_dev->parent,
-						MKDEV(SCSI_GENERIC_MAJOR,
-						      sdp->index),
-						"%s", disk->disk_name);
+		sg_class_member = device_create_drvdata(sg_sysfs_class,
+							cl_dev->parent,
+							MKDEV(SCSI_GENERIC_MAJOR,
+							      sdp->index),
+							sdp,
+							"%s", disk->disk_name);
 		if (IS_ERR(sg_class_member)) {
 			printk(KERN_ERR "sg_add: "
 			       "device_create failed\n");
 			error = PTR_ERR(sg_class_member);
 			goto cdev_add_err;
 		}
-		dev_set_drvdata(sg_class_member, sdp);
 		error = sysfs_create_link(&scsidp->sdev_gendev.kobj,
 					  &sg_class_member->kobj, "generic");
 		if (error)
@@ -2667,7 +2668,6 @@ sg_proc_init(void)
 {
 	int k, mask;
 	int num_leaves = ARRAY_SIZE(sg_proc_leaf_arr);
-	struct proc_dir_entry *pdep;
 	struct sg_proc_leaf * leaf;
 
 	sg_proc_sgp = proc_mkdir(sg_proc_sg_dirname, NULL);
@@ -2676,13 +2676,10 @@ sg_proc_init(void)
 	for (k = 0; k < num_leaves; ++k) {
 		leaf = &sg_proc_leaf_arr[k];
 		mask = leaf->fops->write ? S_IRUGO | S_IWUSR : S_IRUGO;
-		pdep = create_proc_entry(leaf->name, mask, sg_proc_sgp);
-		if (pdep) {
-			leaf->fops->owner = THIS_MODULE,
-			leaf->fops->read = seq_read,
-			leaf->fops->llseek = seq_lseek,
-			pdep->proc_fops = leaf->fops;
-		}
+		leaf->fops->owner = THIS_MODULE;
+		leaf->fops->read = seq_read;
+		leaf->fops->llseek = seq_lseek;
+		proc_create(leaf->name, mask, sg_proc_sgp, leaf->fops);
 	}
 	return 0;
 }

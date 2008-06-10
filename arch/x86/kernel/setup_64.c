@@ -29,6 +29,7 @@
 #include <linux/crash_dump.h>
 #include <linux/root_dev.h>
 #include <linux/pci.h>
+#include <asm/pci-direct.h>
 #include <linux/efi.h>
 #include <linux/acpi.h>
 #include <linux/kallsyms.h>
@@ -40,8 +41,10 @@
 #include <linux/dmi.h>
 #include <linux/dma-mapping.h>
 #include <linux/ctype.h>
+#include <linux/sort.h>
 #include <linux/uaccess.h>
 #include <linux/init_ohci1394_dma.h>
+#include <linux/kvm_para.h>
 
 #include <asm/mtrr.h>
 #include <asm/uaccess.h>
@@ -67,6 +70,7 @@
 #include <asm/ds.h>
 #include <asm/topology.h>
 #include <asm/trampoline.h>
+#include <asm/pat.h>
 
 #include <mach_apic.h>
 #ifdef CONFIG_PARAVIRT
@@ -116,7 +120,7 @@ extern int root_mountflags;
 
 char __initdata command_line[COMMAND_LINE_SIZE];
 
-struct resource standard_io_resources[] = {
+static struct resource standard_io_resources[] = {
 	{ .name = "dma1", .start = 0x00, .end = 0x1f,
 		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
 	{ .name = "pic1", .start = 0x20, .end = 0x21,
@@ -125,7 +129,9 @@ struct resource standard_io_resources[] = {
 		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
 	{ .name = "timer1", .start = 0x50, .end = 0x53,
 		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
-	{ .name = "keyboard", .start = 0x60, .end = 0x6f,
+	{ .name = "keyboard", .start = 0x60, .end = 0x60,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "keyboard", .start = 0x64, .end = 0x64,
 		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
 	{ .name = "dma page reg", .start = 0x80, .end = 0x8f,
 		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
@@ -190,6 +196,7 @@ contig_initmem_init(unsigned long start_pfn, unsigned long end_pfn)
 	bootmap_size = init_bootmem(bootmap >> PAGE_SHIFT, end_pfn);
 	e820_register_active_regions(0, start_pfn, end_pfn);
 	free_bootmem_with_active_regions(0, end_pfn);
+	early_res_to_bootmem(0, end_pfn<<PAGE_SHIFT);
 	reserve_bootmem(bootmap, bootmap_size, BOOTMEM_DEFAULT);
 }
 #endif
@@ -264,6 +271,40 @@ void __attribute__((weak)) __init memory_setup(void)
        machine_specific_memory_setup();
 }
 
+static void __init parse_setup_data(void)
+{
+	struct setup_data *data;
+	unsigned long pa_data;
+
+	if (boot_params.hdr.version < 0x0209)
+		return;
+	pa_data = boot_params.hdr.setup_data;
+	while (pa_data) {
+		data = early_ioremap(pa_data, PAGE_SIZE);
+		switch (data->type) {
+		default:
+			break;
+		}
+#ifndef CONFIG_DEBUG_BOOT_PARAMS
+		free_early(pa_data, pa_data+sizeof(*data)+data->len);
+#endif
+		pa_data = data->next;
+		early_iounmap(data, PAGE_SIZE);
+	}
+}
+
+#ifdef CONFIG_PCI_MMCONFIG
+extern void __cpuinit fam10h_check_enable_mmcfg(void);
+extern void __init check_enable_amd_mmconf_dmi(void);
+#else
+void __cpuinit fam10h_check_enable_mmcfg(void)
+{
+}
+void __init check_enable_amd_mmconf_dmi(void)
+{
+}
+#endif
+
 /*
  * setup_arch - architecture-specific boot-time initializations
  *
@@ -316,6 +357,8 @@ void __init setup_arch(char **cmdline_p)
 	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
 
+	parse_setup_data();
+
 	parse_early_param();
 
 #ifdef CONFIG_PROVIDE_OHCI1394_DMA_INIT
@@ -359,6 +402,10 @@ void __init setup_arch(char **cmdline_p)
 
 	io_delay_init();
 
+#ifdef CONFIG_KVM_CLOCK
+	kvmclock_init();
+#endif
+
 #ifdef CONFIG_SMP
 	/* setup to use the early static init tables during kernel startup */
 	x86_cpu_to_apicid_early_ptr = (void *)x86_cpu_to_apicid_init;
@@ -396,8 +443,6 @@ void __init setup_arch(char **cmdline_p)
 #else
 	contig_initmem_init(0, end_pfn);
 #endif
-
-	early_res_to_bootmem();
 
 	dma32_reserve_bootmem();
 
@@ -465,6 +510,8 @@ void __init setup_arch(char **cmdline_p)
 	init_apic_mappings();
 	ioapic_init_mappings();
 
+	kvm_guest_init();
+
 	/*
 	 * We trust e820 completely. No explicit ROM probing in memory.
 	 */
@@ -485,6 +532,9 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 #endif
+
+	/* do this before identify_cpu for boot cpu */
+	check_enable_amd_mmconf_dmi();
 }
 
 static int __cpuinit get_model_name(struct cpuinfo_x86 *c)
@@ -737,6 +787,9 @@ static void __cpuinit init_amd(struct cpuinfo_x86 *c)
 	/* MFENCE stops RDTSC speculation */
 	set_cpu_cap(c, X86_FEATURE_MFENCE_RDTSC);
 
+	if (c->x86 == 0x10)
+		fam10h_check_enable_mmcfg();
+
 	if (amd_apic_timer_broken())
 		disable_apic_timer = 1;
 
@@ -898,7 +951,7 @@ static void __cpuinit init_intel(struct cpuinfo_x86 *c)
 static void __cpuinit early_init_centaur(struct cpuinfo_x86 *c)
 {
 	if (c->x86 == 0x6 && c->x86_model >= 0xf)
-		set_bit(X86_FEATURE_CONSTANT_TSC, &c->x86_capability);
+		set_cpu_cap(c, X86_FEATURE_CONSTANT_TSC);
 }
 
 static void __cpuinit init_centaur(struct cpuinfo_x86 *c)
@@ -1013,25 +1066,19 @@ static void __cpuinit early_identify_cpu(struct cpuinfo_x86 *c)
 	if (c->extended_cpuid_level >= 0x80000007)
 		c->x86_power = cpuid_edx(0x80000007);
 
-
-	clear_cpu_cap(c, X86_FEATURE_PAT);
-
 	switch (c->x86_vendor) {
 	case X86_VENDOR_AMD:
 		early_init_amd(c);
-		if (c->x86 >= 0xf && c->x86 <= 0x11)
-			set_cpu_cap(c, X86_FEATURE_PAT);
 		break;
 	case X86_VENDOR_INTEL:
 		early_init_intel(c);
-		if (c->x86 == 0xF || (c->x86 == 6 && c->x86_model >= 15))
-			set_cpu_cap(c, X86_FEATURE_PAT);
 		break;
 	case X86_VENDOR_CENTAUR:
 		early_init_centaur(c);
 		break;
 	}
 
+	validate_pat_support(c);
 }
 
 /*

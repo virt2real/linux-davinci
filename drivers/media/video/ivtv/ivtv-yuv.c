@@ -908,7 +908,7 @@ static void ivtv_yuv_init(struct ivtv *itv)
 	}
 
 	/* We need a buffer for blanking when Y plane is offset - non-fatal if we can't get one */
-	yi->blanking_ptr = kzalloc(720 * 16, GFP_KERNEL);
+	yi->blanking_ptr = kzalloc(720 * 16, GFP_KERNEL|__GFP_NOWARN);
 	if (yi->blanking_ptr) {
 		yi->blanking_dmaptr = pci_map_single(itv->dev, yi->blanking_ptr, 720*16, PCI_DMA_TODEVICE);
 	} else {
@@ -1098,8 +1098,8 @@ void ivtv_yuv_setup_stream_frame(struct ivtv *itv)
 	ivtv_yuv_next_free(itv);
 
 	/* Copy V4L2 parameters to an ivtv_dma_frame struct... */
-	dma_args.y_source = 0L;
-	dma_args.uv_source = 0L;
+	dma_args.y_source = NULL;
+	dma_args.uv_source = NULL;
 	dma_args.src.left = 0;
 	dma_args.src.top = 0;
 	dma_args.src.width = yi->v4l2_src_w;

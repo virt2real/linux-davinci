@@ -682,15 +682,6 @@ mem_init (void)
 }
 
 #ifdef CONFIG_MEMORY_HOTPLUG
-void online_page(struct page *page)
-{
-	ClearPageReserved(page);
-	init_page_count(page);
-	__free_page(page);
-	totalram_pages++;
-	num_physpages++;
-}
-
 int arch_add_memory(int nid, u64 start, u64 size)
 {
 	pg_data_t *pgdat;
@@ -728,3 +719,28 @@ out:
 EXPORT_SYMBOL_GPL(remove_memory);
 #endif /* CONFIG_MEMORY_HOTREMOVE */
 #endif
+
+/*
+ * Even when CONFIG_IA32_SUPPORT is not enabled it is
+ * useful to have the Linux/x86 domain registered to
+ * avoid an attempted module load when emulators call
+ * personality(PER_LINUX32). This saves several milliseconds
+ * on each such call.
+ */
+static struct exec_domain ia32_exec_domain;
+
+static int __init
+per_linux32_init(void)
+{
+	ia32_exec_domain.name = "Linux/x86";
+	ia32_exec_domain.handler = NULL;
+	ia32_exec_domain.pers_low = PER_LINUX32;
+	ia32_exec_domain.pers_high = PER_LINUX32;
+	ia32_exec_domain.signal_map = default_exec_domain.signal_map;
+	ia32_exec_domain.signal_invmap = default_exec_domain.signal_invmap;
+	register_exec_domain(&ia32_exec_domain);
+
+	return 0;
+}
+
+__initcall(per_linux32_init);

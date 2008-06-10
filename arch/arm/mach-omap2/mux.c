@@ -26,7 +26,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <asm/system.h>
-#include <asm/io.h>
+#include <linux/io.h>
 #include <linux/spinlock.h>
 
 #include <asm/arch/control.h>
@@ -226,6 +226,24 @@ static struct pin_config __initdata_or_module omap34xx_pins[] = {
  *		mux-mode | [active-mode | off-mode]
  */
 
+/* 34xx I2C */
+MUX_CFG_34XX("K21_34XX_I2C1_SCL", 0x1ba,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+MUX_CFG_34XX("J21_34XX_I2C1_SDA", 0x1bc,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+MUX_CFG_34XX("AF15_34XX_I2C2_SCL", 0x1be,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+MUX_CFG_34XX("AE15_34XX_I2C2_SDA", 0x1c0,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+MUX_CFG_34XX("AF14_34XX_I2C3_SCL", 0x1c2,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+MUX_CFG_34XX("AG14_34XX_I2C3_SDA", 0x1c4,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+MUX_CFG_34XX("AD26_34XX_I2C4_SCL", 0xa00,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+MUX_CFG_34XX("AE26_34XX_I2C4_SDA", 0xa02,
+		OMAP34XX_MUX_MODE0 | OMAP34XX_PIN_INPUT_PULLUP)
+
 /* PHY - HSUSB: 12-pin ULPI PHY: Port 1*/
 MUX_CFG_34XX("Y8_3430_USB1HS_PHY_CLK", 0x5da,
 		OMAP34XX_MUX_MODE3 | OMAP34XX_PIN_OUTPUT)
@@ -365,7 +383,7 @@ MUX_CFG_34XX("AA12_3430_USB3HS_TLL_D7", 0x172,
 #endif	/* CONFIG_ARCH_OMAP34XX */
 
 #if defined(CONFIG_OMAP_MUX_DEBUG) || defined(CONFIG_OMAP_MUX_WARNINGS)
-void __init_or_module omap2_cfg_debug(const struct pin_config *cfg, u16 reg)
+static void __init_or_module omap2_cfg_debug(const struct pin_config *cfg, u16 reg)
 {
 	u16 orig;
 	u8 warn = 0, debug = 0;
@@ -381,7 +399,7 @@ void __init_or_module omap2_cfg_debug(const struct pin_config *cfg, u16 reg)
 	warn = (orig != reg);
 	if (debug || warn)
 		printk(KERN_WARNING
-			"MUX: setup %s (0x%08x): 0x%04x -> 0x%04x\n",
+			"MUX: setup %s (0x%p): 0x%04x -> 0x%04x\n",
 			cfg->name, omap_ctrl_base_get() + cfg->mux_reg,
 			orig, reg);
 }
@@ -409,11 +427,11 @@ int __init_or_module omap24xx_cfg_reg(const struct pin_config *cfg)
 	return 0;
 }
 #else
-#define omap24xx_cfg_reg	0
+#define omap24xx_cfg_reg	NULL
 #endif
 
 #ifdef CONFIG_ARCH_OMAP34XX
-int __init_or_module omap34xx_cfg_reg(const struct pin_config *cfg)
+static int __init_or_module omap34xx_cfg_reg(const struct pin_config *cfg)
 {
 	static DEFINE_SPINLOCK(mux_spin_lock);
 	unsigned long flags;
@@ -428,7 +446,7 @@ int __init_or_module omap34xx_cfg_reg(const struct pin_config *cfg)
 	return 0;
 }
 #else
-#define omap34xx_cfg_reg	0
+#define omap34xx_cfg_reg	NULL
 #endif
 
 int __init omap2_mux_init(void)
@@ -437,9 +455,7 @@ int __init omap2_mux_init(void)
 		arch_mux_cfg.pins	= omap24xx_pins;
 		arch_mux_cfg.size	= OMAP24XX_PINS_SZ;
 		arch_mux_cfg.cfg_reg	= omap24xx_cfg_reg;
-	}
-
-	if (cpu_is_omap34xx()) {
+	} else if (cpu_is_omap34xx()) {
 		arch_mux_cfg.pins	= omap34xx_pins;
 		arch_mux_cfg.size	= OMAP34XX_PINS_SZ;
 		arch_mux_cfg.cfg_reg	= omap34xx_cfg_reg;

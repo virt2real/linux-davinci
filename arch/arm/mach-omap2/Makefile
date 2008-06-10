@@ -7,11 +7,22 @@ obj-y := irq.o id.o io.o memory.o control.o prcm.o clock.o mux.o \
 		devices.o serial.o gpmc.o timer-gp.o powerdomain.o \
 		clockdomain.o
 
+obj-$(CONFIG_OMAP_MCBSP) += mcbsp.o
+
 # Functions loaded to SRAM
-obj-$(CONFIG_ARCH_OMAP2)		+= sram24xx.o
+obj-$(CONFIG_ARCH_OMAP2420)		+= sram242x.o
+obj-$(CONFIG_ARCH_OMAP2430)		+= sram243x.o
+obj-$(CONFIG_ARCH_OMAP3)		+= sram34xx.o
 
 # Power Management
-obj-$(CONFIG_PM) += pm.o sleep.o
+ifeq ($(CONFIG_PM),y)
+obj-y					+= pm.o
+obj-$(CONFIG_ARCH_OMAP2)		+= pm24xx.o
+obj-$(CONFIG_ARCH_OMAP2420)		+= sleep242x.o
+obj-$(CONFIG_ARCH_OMAP2430)		+= sleep243x.o
+obj-$(CONFIG_ARCH_OMAP3)		+= pm34xx.o sleep34xx.o
+obj-$(CONFIG_PM_DEBUG)			+= pm-debug.o
+endif
 
 # Clock framework
 obj-$(CONFIG_ARCH_OMAP2)		+= clock24xx.o
@@ -37,10 +48,16 @@ obj-$(CONFIG_MACH_OMAP_3430SDP)		+= board-3430sdp.o \
 					   usb-musb.o \
 					   usb-ehci.o \
 					   board-3430sdp-flash.o
-obj-$(CONFIG_MACH_OMAP3EVM)		+= board-omap3evm.o
+obj-$(CONFIG_MACH_OMAP3EVM)		+= board-omap3evm.o \
+					   hsmmc.o \
+					   usb-musb.o usb-ehci.o \
+					   board-omap3evm-flash.o
 obj-$(CONFIG_MACH_OMAP3_BEAGLE)		+= board-omap3beagle.o \
 					   usb-musb.o usb-ehci.o \
 					   hsmmc.o
+obj-$(CONFIG_MACH_OMAP_LDP)		+= board-ldp.o \
+					   hsmmc.o \
+					   usb-musb.o
 obj-$(CONFIG_MACH_OMAP_APOLLON)		+= board-apollon.o \
 					   board-apollon-mmc.o	\
 					   board-apollon-keys.o

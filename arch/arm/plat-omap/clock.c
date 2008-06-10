@@ -21,10 +21,10 @@
 #include <linux/clk.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
+#include <linux/cpufreq.h>
 #include <linux/debugfs.h>
 
 #include <asm/io.h>
-#include <asm/semaphore.h>
 
 #include <asm/arch/clock.h>
 

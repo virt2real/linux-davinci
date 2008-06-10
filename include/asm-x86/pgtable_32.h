@@ -48,9 +48,6 @@ void paging_init(void);
 #define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE - 1))
 
-#define USER_PGD_PTRS (PAGE_OFFSET >> PGDIR_SHIFT)
-#define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)
-
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
@@ -91,14 +88,7 @@ extern unsigned long pg0[];
 /* To avoid harmful races, pmd_none(x) should check only the lower when PAE */
 #define pmd_none(x)	(!(unsigned long)pmd_val((x)))
 #define pmd_present(x)	(pmd_val((x)) & _PAGE_PRESENT)
-
-extern int pmd_bad(pmd_t pmd);
-
-#define pmd_bad_v1(x)							\
-	(_KERNPG_TABLE != (pmd_val((x)) & ~(PAGE_MASK | _PAGE_USER)))
-#define	pmd_bad_v2(x)							\
-	(_KERNPG_TABLE != (pmd_val((x)) & ~(PAGE_MASK | _PAGE_USER |	\
-					    _PAGE_PSE | _PAGE_NX)))
+#define pmd_bad(x) ((pmd_val(x) & (~PTE_MASK & ~_PAGE_USER)) != _KERNPG_TABLE)
 
 #define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))
 
@@ -107,21 +97,6 @@ extern int pmd_bad(pmd_t pmd);
 #else
 # include <asm/pgtable-2level.h>
 #endif
-
-/*
- * clone_pgd_range(pgd_t *dst, pgd_t *src, int count);
- *
- *  dst - pointer to pgd range anwhere on a pgd page
- *  src - ""
- *  count - the number of pgds to copy.
- *
- * dst and src can be on the same page, but the range must not overlap,
- * and must not cross a page boundary.
- */
-static inline void clone_pgd_range(pgd_t *dst, pgd_t *src, int count)
-{
-       memcpy(dst, src, count * sizeof(pgd_t));
-}
 
 /*
  * Macro to mark a page protection value as "uncacheable".
@@ -184,7 +159,7 @@ static inline int pud_large(pud_t pud) { return 0; }
 #define pmd_page(pmd) (pfn_to_page(pmd_val((pmd)) >> PAGE_SHIFT))
 
 #define pmd_page_vaddr(pmd)					\
-	((unsigned long)__va(pmd_val((pmd)) & PAGE_MASK))
+	((unsigned long)__va(pmd_val((pmd)) & PTE_MASK))
 
 #if defined(CONFIG_HIGHPTE)
 #define pte_offset_map(dir, address)					\
@@ -216,16 +191,16 @@ do {						\
  */
 #define update_mmu_cache(vma, address, pte) do { } while (0)
 
-void native_pagetable_setup_start(pgd_t *base);
-void native_pagetable_setup_done(pgd_t *base);
+extern void native_pagetable_setup_start(pgd_t *base);
+extern void native_pagetable_setup_done(pgd_t *base);
 
 #ifndef CONFIG_PARAVIRT
-static inline void paravirt_pagetable_setup_start(pgd_t *base)
+static inline void __init paravirt_pagetable_setup_start(pgd_t *base)
 {
 	native_pagetable_setup_start(base);
 }
 
-static inline void paravirt_pagetable_setup_done(pgd_t *base)
+static inline void __init paravirt_pagetable_setup_done(pgd_t *base)
 {
 	native_pagetable_setup_done(base);
 }

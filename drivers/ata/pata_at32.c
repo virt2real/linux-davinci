@@ -291,8 +291,6 @@ static int __init pata_at32_probe(struct platform_device *pdev)
 	if (!info)
 		return -ENOMEM;
 
-	memset(info, 0, sizeof(struct at32_ide_info));
-
 	info->irq = irq;
 	info->cs  = board->cs;
 
@@ -380,6 +378,9 @@ static int __exit pata_at32_remove(struct platform_device *pdev)
 
 	return 0;
 }
+
+/* work with hotplug and coldplug */
+MODULE_ALIAS("platform:at32_ide");
 
 static struct platform_driver pata_at32_driver = {
 	.remove	       = __exit_p(pata_at32_remove),

@@ -24,6 +24,7 @@
 
 #include <asm/io.h>
 
+#include <asm/arch/common.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/sram.h>
 
@@ -32,8 +33,8 @@
 #include "memory.h"
 #include "sdrc.h"
 
-unsigned long omap2_sdrc_base;
-unsigned long omap2_sms_base;
+void __iomem *omap2_sdrc_base;
+void __iomem *omap2_sms_base;
 
 static struct memory_timings mem_timings;
 static u32 curr_perf_level = CORE_CLK_SRC_DPLL_X2;
@@ -93,7 +94,8 @@ u32 omap2_reprogram_sdrc(u32 level, u32 force)
 	m_type = omap2_memory_get_type();
 
 	local_irq_save(flags);
-	__raw_writel(0xffff, OMAP24XX_PRCM_VOLTSETUP);
+	prm_write_mod_reg(0xffff, OMAP24XX_GR_MOD,
+					OMAP24XX_PRCM_VOLTSETUP_OFFSET);
 	omap2_sram_reprogram_sdrc(level, dll_ctrl, m_type);
 	curr_perf_level = level;
 	local_irq_restore(flags);
@@ -152,6 +154,12 @@ void omap2_init_memory_params(u32 force_lock_to_unlock_mode)
 
 	/* 90 degree phase for anything below 133Mhz + disable DLL filter */
 	mem_timings.slow_dll_ctrl |= ((1 << 1) | (3 << 8));
+}
+
+void __init omap2_set_globals_memory(struct omap_globals *omap2_globals)
+{
+	omap2_sdrc_base = omap2_globals->sdrc;
+	omap2_sms_base = omap2_globals->sms;
 }
 
 /* turn on smart idle modes for SDRAM scheduler and controller */

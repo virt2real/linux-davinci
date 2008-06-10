@@ -197,7 +197,7 @@ static int ip6mr_vif_seq_show(struct seq_file *seq, void *v)
 		const char *name = vif->dev ? vif->dev->name : "none";
 
 		seq_printf(seq,
-			   "%2Zd %-10s %8ld %7ld  %8ld %7ld %05X\n",
+			   "%2td %-10s %8ld %7ld  %8ld %7ld %05X\n",
 			   vif - vif6_table,
 			   name, vif->bytes_in, vif->pkt_in,
 			   vif->bytes_out, vif->pkt_out,
@@ -358,7 +358,7 @@ static int pim6_rcv(struct sk_buff *skb)
 	if (pim->type != ((PIM_VERSION << 4) | PIM_REGISTER) ||
 	    (pim->flags & PIM_NULL_REGISTER) ||
 	    (ip_compute_csum((void *)pim, sizeof(*pim)) != 0 &&
-	     (u16)csum_fold(skb_checksum(skb, 0, skb->len, 0))))
+	     csum_fold(skb_checksum(skb, 0, skb->len, 0))))
 		goto drop;
 
 	/* check if the inner packet is destined to mcast group */

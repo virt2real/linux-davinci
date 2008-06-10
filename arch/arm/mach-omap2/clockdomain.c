@@ -134,7 +134,7 @@ static void _clkdm_del_autodeps(struct clockdomain *clkdm)
 }
 
 
-struct clockdomain *_clkdm_lookup(const char *name)
+static struct clockdomain *_clkdm_lookup(const char *name)
 {
 	struct clockdomain *clkdm, *temp_clkdm;
 
@@ -167,7 +167,8 @@ struct clockdomain *_clkdm_lookup(const char *name)
  * pointer to an array of clockdomain-powerdomain autodependencies was
  * provided, register those.  No return value.
  */
-void clkdm_init(struct clockdomain **clkdms, struct clkdm_pwrdm_autodep *init_autodeps)
+void clkdm_init(struct clockdomain **clkdms,
+		struct clkdm_pwrdm_autodep *init_autodeps)
 {
 	struct clockdomain **c = NULL;
 	struct clkdm_pwrdm_autodep *autodep = NULL;
@@ -311,6 +312,22 @@ int clkdm_for_each(int (*fn)(struct clockdomain *clkdm))
 	mutex_unlock(&clkdm_mutex);
 
 	return ret;
+}
+
+
+/**
+ * clkdm_get_pwrdm - return a ptr to the pwrdm that this clkdm resides in
+ * @clkdm: struct clockdomain *
+ *
+ * Return a pointer to the struct powerdomain that the specified clockdomain
+ * 'clkdm' exists in, or returns NULL if clkdm argument is NULL.
+ */
+struct powerdomain *clkdm_get_pwrdm(struct clockdomain *clkdm)
+{
+	if (!clkdm)
+		return NULL;
+
+	return clkdm->pwrdm;
 }
 
 

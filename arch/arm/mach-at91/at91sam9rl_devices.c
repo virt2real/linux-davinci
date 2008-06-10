@@ -332,13 +332,6 @@ static struct resource lcdc_resources[] = {
 		.end	= AT91SAM9RL_ID_LCDC,
 		.flags	= IORESOURCE_IRQ,
 	},
-#if defined(CONFIG_FB_INTSRAM)
-	[2] = {
-		.start	= AT91SAM9RL_SRAM_BASE,
-		.end	= AT91SAM9RL_SRAM_BASE + AT91SAM9RL_SRAM_SIZE - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-#endif
 };
 
 static struct platform_device at91_lcdc_device = {

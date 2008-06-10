@@ -80,6 +80,15 @@ config VT_HW_CONSOLE_BINDING
 	 information. For framebuffer console users, please refer to
 	 <file:Documentation/fb/fbcon.txt>.
 
+config DEVKMEM
+	bool "/dev/kmem virtual device support"
+	default y
+	help
+	  Say Y here if you want to support the /dev/kmem device. The
+	  /dev/kmem device is rarely used, but can be used for certain
+	  kind of kernel debugging operations.
+	  When in doubt, say "N".
+
 config SERIAL_NONSTANDARD
 	bool "Non-standard serial port support"
 	depends on HAS_IOMEM
@@ -187,6 +196,7 @@ config ESPSERIAL
 config MOXA_INTELLIO
 	tristate "Moxa Intellio support"
 	depends on SERIAL_NONSTANDARD && (ISA || EISA || PCI)
+	select FW_LOADER
 	help
 	  Say Y here if you have a Moxa Intellio multiport serial card.
 
@@ -732,9 +742,16 @@ config NVRAM
 	  To compile this driver as a module, choose M here: the
 	  module will be called nvram.
 
+#
+# These legacy RTC drivers just cause too many conflicts with the generic
+# RTC framework ... let's not even try to coexist any more.
+#
+if RTC_LIB=n
+
 config RTC
 	tristate "Enhanced Real Time Clock Support"
-	depends on !PPC && !PARISC && !IA64 && !M68K && !SPARC && !FRV && !ARM && !SUPERH && !S390 && !AVR32
+	depends on !PPC && !PARISC && !IA64 && !M68K && !SPARC && !FRV \
+			&& !ARM && !SUPERH && !S390 && !AVR32
 	---help---
 	  If you say Y here and create a character special file /dev/rtc with
 	  major number 10 and minor number 135 using mknod ("man mknod"), you
@@ -845,6 +862,8 @@ config DAVINCI_RTC
 	depends on ARCH_DAVINCI && MACH_DAVINCI_EVM && I2C_DAVINCI
 	help
 	  Support for TI DaVinci RTC
+
+endif # RTC_LIB
 
 config COBALT_LCD
 	bool "Support for Cobalt LCD"

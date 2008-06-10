@@ -13,9 +13,9 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/io.h>
 
 #include <asm/hardware.h>
-#include <asm/io.h>
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
 
@@ -92,7 +92,9 @@ static inline void omap_init_mbox(void) { }
 
 #if defined(CONFIG_OMAP_STI)
 
-#define OMAP2_STI_BASE		IO_ADDRESS(0x48068000)
+#if defined(CONFIG_ARCH_OMAP2)
+
+#define OMAP2_STI_BASE		0x48068000
 #define OMAP2_STI_CHANNEL_BASE	0x54000000
 #define OMAP2_STI_IRQ		4
 
@@ -112,6 +114,25 @@ static struct resource sti_resources[] = {
 		.flags		= IORESOURCE_IRQ,
 	}
 };
+#elif defined(CONFIG_ARCH_OMAP3)
+
+#define OMAP3_SDTI_BASE		0x54500000
+#define OMAP3_SDTI_CHANNEL_BASE	0x54600000
+
+static struct resource sti_resources[] = {
+	{
+		.start		= OMAP3_SDTI_BASE,
+		.end		= OMAP3_SDTI_BASE + 0xFFF,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= OMAP3_SDTI_CHANNEL_BASE,
+		.end		= OMAP3_SDTI_CHANNEL_BASE + SZ_1M - 1,
+		.flags		= IORESOURCE_MEM,
+	}
+};
+
+#endif
 
 static struct platform_device sti_device = {
 	.name		= "sti",
@@ -149,7 +170,7 @@ static struct resource omap2_mcspi1_resources[] = {
 	},
 };
 
-struct platform_device omap2_mcspi1 = {
+static struct platform_device omap2_mcspi1 = {
 	.name		= "omap2_mcspi",
 	.id		= 1,
 	.num_resources	= ARRAY_SIZE(omap2_mcspi1_resources),
@@ -171,7 +192,7 @@ static struct resource omap2_mcspi2_resources[] = {
 	},
 };
 
-struct platform_device omap2_mcspi2 = {
+static struct platform_device omap2_mcspi2 = {
 	.name		= "omap2_mcspi",
 	.id		= 2,
 	.num_resources	= ARRAY_SIZE(omap2_mcspi2_resources),
@@ -194,7 +215,7 @@ static struct resource omap2_mcspi3_resources[] = {
 	},
 };
 
-struct platform_device omap2_mcspi3 = {
+static struct platform_device omap2_mcspi3 = {
 	.name		= "omap2_mcspi",
 	.id		= 3,
 	.num_resources	= ARRAY_SIZE(omap2_mcspi3_resources),
@@ -218,7 +239,7 @@ static struct resource omap2_mcspi4_resources[] = {
 	},
 };
 
-struct platform_device omap2_mcspi4 = {
+static struct platform_device omap2_mcspi4 = {
 	.name		= "omap2_mcspi",
 	.id		= 4,
 	.num_resources	= ARRAY_SIZE(omap2_mcspi4_resources),

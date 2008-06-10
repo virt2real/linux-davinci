@@ -23,13 +23,10 @@
 #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 1)
 /* Technically wrong, but this avoids compilation errors on some gcc
    versions. */
-#define ADDR "=m" (*(volatile long *)addr)
-#define BIT_ADDR "=m" (((volatile int *)addr)[nr >> 5])
+#define ADDR "=m" (*(volatile long *) addr)
 #else
 #define ADDR "+m" (*(volatile long *) addr)
-#define BIT_ADDR "+m" (((volatile int *)addr)[nr >> 5])
 #endif
-#define BASE_ADDR "m" (*(volatile int *)addr)
 
 /**
  * set_bit - Atomically set a bit in memory
@@ -62,11 +59,8 @@ static inline void set_bit(int nr, volatile void *addr)
  */
 static inline void __set_bit(int nr, volatile void *addr)
 {
-	asm volatile("bts %1,%0"
-		     : ADDR
-		     : "Ir" (nr) : "memory");
+	asm volatile("bts %1,%0" : ADDR : "Ir" (nr) : "memory");
 }
-
 
 /**
  * clear_bit - Clears a bit in memory
@@ -80,7 +74,7 @@ static inline void __set_bit(int nr, volatile void *addr)
  */
 static inline void clear_bit(int nr, volatile void *addr)
 {
-	asm volatile(LOCK_PREFIX "btr %1,%2" : BIT_ADDR : "Ir" (nr), BASE_ADDR);
+	asm volatile(LOCK_PREFIX "btr %1,%0" : ADDR : "Ir" (nr));
 }
 
 /*
@@ -99,7 +93,7 @@ static inline void clear_bit_unlock(unsigned nr, volatile void *addr)
 
 static inline void __clear_bit(int nr, volatile void *addr)
 {
-	asm volatile("btr %1,%2" : BIT_ADDR : "Ir" (nr), BASE_ADDR);
+	asm volatile("btr %1,%0" : ADDR : "Ir" (nr));
 }
 
 /*
@@ -134,7 +128,7 @@ static inline void __clear_bit_unlock(unsigned nr, volatile void *addr)
  */
 static inline void __change_bit(int nr, volatile void *addr)
 {
-	asm volatile("btc %1,%2" : BIT_ADDR : "Ir" (nr), BASE_ADDR);
+	asm volatile("btc %1,%0" : ADDR : "Ir" (nr));
 }
 
 /**
@@ -148,7 +142,7 @@ static inline void __change_bit(int nr, volatile void *addr)
  */
 static inline void change_bit(int nr, volatile void *addr)
 {
-	asm volatile(LOCK_PREFIX "btc %1,%2" : BIT_ADDR : "Ir" (nr), BASE_ADDR);
+	asm volatile(LOCK_PREFIX "btc %1,%0" : ADDR : "Ir" (nr));
 }
 
 /**
@@ -194,9 +188,10 @@ static inline int __test_and_set_bit(int nr, volatile void *addr)
 {
 	int oldbit;
 
-	asm volatile("bts %2,%3\n\t"
-		     "sbb %0,%0"
-		     : "=r" (oldbit), BIT_ADDR : "Ir" (nr), BASE_ADDR);
+	asm("bts %2,%1\n\t"
+	    "sbb %0,%0"
+	    : "=r" (oldbit), ADDR
+	    : "Ir" (nr));
 	return oldbit;
 }
 
@@ -232,9 +227,10 @@ static inline int __test_and_clear_bit(int nr, volatile void *addr)
 {
 	int oldbit;
 
-	asm volatile("btr %2,%3\n\t"
+	asm volatile("btr %2,%1\n\t"
 		     "sbb %0,%0"
-		     : "=r" (oldbit), BIT_ADDR : "Ir" (nr), BASE_ADDR);
+		     : "=r" (oldbit), ADDR
+		     : "Ir" (nr));
 	return oldbit;
 }
 
@@ -243,9 +239,10 @@ static inline int __test_and_change_bit(int nr, volatile void *addr)
 {
 	int oldbit;
 
-	asm volatile("btc %2,%3\n\t"
+	asm volatile("btc %2,%1\n\t"
 		     "sbb %0,%0"
-		     : "=r" (oldbit), BIT_ADDR : "Ir" (nr), BASE_ADDR);
+		     : "=r" (oldbit), ADDR
+		     : "Ir" (nr) : "memory");
 
 	return oldbit;
 }
@@ -279,11 +276,10 @@ static inline int variable_test_bit(int nr, volatile const void *addr)
 {
 	int oldbit;
 
-	asm volatile("bt %2,%3\n\t"
+	asm volatile("bt %2,%1\n\t"
 		     "sbb %0,%0"
 		     : "=r" (oldbit)
-		     : "m" (((volatile const int *)addr)[nr >> 5]),
-		       "Ir" (nr), BASE_ADDR);
+		     : "m" (*(unsigned long *)addr), "Ir" (nr));
 
 	return oldbit;
 }
@@ -297,19 +293,143 @@ static inline int variable_test_bit(int nr, volatile const void *addr)
 static int test_bit(int nr, const volatile unsigned long *addr);
 #endif
 
-#define test_bit(nr,addr)			\
-	(__builtin_constant_p(nr) ?		\
-	 constant_test_bit((nr),(addr)) :	\
-	 variable_test_bit((nr),(addr)))
+#define test_bit(nr, addr)			\
+	(__builtin_constant_p((nr))		\
+	 ? constant_test_bit((nr), (addr))	\
+	 : variable_test_bit((nr), (addr)))
 
-#undef BASE_ADDR
-#undef BIT_ADDR
+/**
+ * __ffs - find first set bit in word
+ * @word: The word to search
+ *
+ * Undefined if no bit exists, so code should check against 0 first.
+ */
+static inline unsigned long __ffs(unsigned long word)
+{
+	asm("bsf %1,%0"
+		: "=r" (word)
+		: "rm" (word));
+	return word;
+}
+
+/**
+ * ffz - find first zero bit in word
+ * @word: The word to search
+ *
+ * Undefined if no zero exists, so code should check against ~0UL first.
+ */
+static inline unsigned long ffz(unsigned long word)
+{
+	asm("bsf %1,%0"
+		: "=r" (word)
+		: "r" (~word));
+	return word;
+}
+
+/*
+ * __fls: find last set bit in word
+ * @word: The word to search
+ *
+ * Undefined if no zero exists, so code should check against ~0UL first.
+ */
+static inline unsigned long __fls(unsigned long word)
+{
+	asm("bsr %1,%0"
+	    : "=r" (word)
+	    : "rm" (word));
+	return word;
+}
+
+#ifdef __KERNEL__
+/**
+ * ffs - find first set bit in word
+ * @x: the word to search
+ *
+ * This is defined the same way as the libc and compiler builtin ffs
+ * routines, therefore differs in spirit from the other bitops.
+ *
+ * ffs(value) returns 0 if value is 0 or the position of the first
+ * set bit if value is nonzero. The first (least significant) bit
+ * is at position 1.
+ */
+static inline int ffs(int x)
+{
+	int r;
+#ifdef CONFIG_X86_CMOV
+	asm("bsfl %1,%0\n\t"
+	    "cmovzl %2,%0"
+	    : "=r" (r) : "rm" (x), "r" (-1));
+#else
+	asm("bsfl %1,%0\n\t"
+	    "jnz 1f\n\t"
+	    "movl $-1,%0\n"
+	    "1:" : "=r" (r) : "rm" (x));
+#endif
+	return r + 1;
+}
+
+/**
+ * fls - find last set bit in word
+ * @x: the word to search
+ *
+ * This is defined in a similar way as the libc and compiler builtin
+ * ffs, but returns the position of the most significant set bit.
+ *
+ * fls(value) returns 0 if value is 0 or the position of the last
+ * set bit if value is nonzero. The last (most significant) bit is
+ * at position 32.
+ */
+static inline int fls(int x)
+{
+	int r;
+#ifdef CONFIG_X86_CMOV
+	asm("bsrl %1,%0\n\t"
+	    "cmovzl %2,%0"
+	    : "=&r" (r) : "rm" (x), "rm" (-1));
+#else
+	asm("bsrl %1,%0\n\t"
+	    "jnz 1f\n\t"
+	    "movl $-1,%0\n"
+	    "1:" : "=r" (r) : "rm" (x));
+#endif
+	return r + 1;
+}
+#endif /* __KERNEL__ */
+
 #undef ADDR
 
-#ifdef CONFIG_X86_32
-# include "bitops_32.h"
-#else
-# include "bitops_64.h"
-#endif
+static inline void set_bit_string(unsigned long *bitmap,
+		unsigned long i, int len)
+{
+	unsigned long end = i + len;
+	while (i < end) {
+		__set_bit(i, bitmap);
+		i++;
+	}
+}
 
+#ifdef __KERNEL__
+
+#include <asm-generic/bitops/sched.h>
+
+#define ARCH_HAS_FAST_MULTIPLIER 1
+
+#include <asm-generic/bitops/hweight.h>
+
+#endif /* __KERNEL__ */
+
+#include <asm-generic/bitops/fls64.h>
+
+#ifdef __KERNEL__
+
+#include <asm-generic/bitops/ext2-non-atomic.h>
+
+#define ext2_set_bit_atomic(lock, nr, addr)			\
+	test_and_set_bit((nr), (unsigned long *)(addr))
+#define ext2_clear_bit_atomic(lock, nr, addr)			\
+	test_and_clear_bit((nr), (unsigned long *)(addr))
+
+#include <asm-generic/bitops/minix.h>
+
+#endif /* __KERNEL__ */
 #endif	/* _ASM_X86_BITOPS_H */

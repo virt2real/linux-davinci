@@ -642,7 +642,7 @@ static struct i2c_board_info __initdata n800_i2c_board_info_1[] = {
 
 extern struct tcm825x_platform_data n800_tcm825x_platform_data;
 
-static struct i2c_board_info __initdata n800_i2c_board_info_2[] = {
+static struct i2c_board_info __initdata_or_module n800_i2c_board_info_2[] = {
 #if defined (CONFIG_VIDEO_TCM825X) || defined (CONFIG_VIDEO_TCM825X_MODULE)
 	{
 		I2C_BOARD_INFO(TCM825X_NAME, TCM825X_I2C_ADDR),
@@ -654,19 +654,18 @@ static struct i2c_board_info __initdata n800_i2c_board_info_2[] = {
 		I2C_BOARD_INFO("tea5761", 0x10),
 	},
 #endif
+#ifdef CONFIG_MACH_NOKIA_N810
 	{
 		I2C_BOARD_INFO("lm8323", 0x45),
-		.type		= "lm8323",
 		.irq		= OMAP_GPIO_IRQ(109),
 		.platform_data	= &lm8323_pdata,
 	},
+#endif
 	{
 		I2C_BOARD_INFO("tsl2563", 0x29),
-		.type		= "tsl2563",
 	},
 	{
 		I2C_BOARD_INFO("lp5521", 0x32),
-		.type		= "lp5521",
 	},
 };
 

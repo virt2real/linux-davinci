@@ -166,7 +166,7 @@
 #define OMAP34XX_PIN_OFF_INPUT_PULLDOWN	(OMAP3_OFF_EN | OMAP3_OFF_PULL_EN)
 #define OMAP34XX_PIN_OFF_WAKEUPENABLE	OMAP3_WAKEUP_EN
 
-#define MUX_CFG_34XX(desc, reg_offset, mux_value){		\
+#define MUX_CFG_34XX(desc, reg_offset, mux_value) {		\
 	.name		= desc,					\
 	.debug		= 0,					\
 	.mux_reg	= reg_offset,				\
@@ -644,6 +644,15 @@ enum omap24xx_index {
 };
 
 enum omap34xx_index {
+	/* 34xx I2C */
+	K21_34XX_I2C1_SCL,
+	J21_34XX_I2C1_SDA,
+	AF15_34XX_I2C2_SCL,
+	AE15_34XX_I2C2_SDA,
+	AF14_34XX_I2C3_SCL,
+	AG14_34XX_I2C3_SDA,
+	AD26_34XX_I2C4_SCL,
+	AE26_34XX_I2C4_SDA,
 
 	/* PHY - HSUSB: 12-pin ULPI PHY: Port 1*/
 	Y8_3430_USB1HS_PHY_CLK,

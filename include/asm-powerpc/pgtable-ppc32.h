@@ -209,6 +209,13 @@ extern int icache_44x_need_flush;
  *   0  1  2  3  4  ... 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
  *   -  -  -  -  -    - U0 U1 U2 U3 W  I  M  G  E   - UX UW UR SX SW SR
  *
+ * Newer 440 cores (440x6 as used on AMCC 460EX/460GT) have additional
+ * TLB2 storage attibute fields. Those are:
+ *
+ *   TLB2:
+ *   0...10    11   12   13   14   15   16...31
+ *   no change WL1  IL1I IL1D IL2I IL2D no change
+ *
  * There are some constrains and options, to decide mapping software bits
  * into TLB entry.
  *
@@ -504,6 +511,7 @@ static inline int pte_write(pte_t pte)		{ return pte_val(pte) & _PAGE_RW; }
 static inline int pte_dirty(pte_t pte)		{ return pte_val(pte) & _PAGE_DIRTY; }
 static inline int pte_young(pte_t pte)		{ return pte_val(pte) & _PAGE_ACCESSED; }
 static inline int pte_file(pte_t pte)		{ return pte_val(pte) & _PAGE_FILE; }
+static inline int pte_special(pte_t pte)	{ return 0; }
 
 static inline void pte_uncache(pte_t pte)       { pte_val(pte) |= _PAGE_NO_CACHE; }
 static inline void pte_cache(pte_t pte)         { pte_val(pte) &= ~_PAGE_NO_CACHE; }
@@ -521,6 +529,8 @@ static inline pte_t pte_mkdirty(pte_t pte) {
 	pte_val(pte) |= _PAGE_DIRTY; return pte; }
 static inline pte_t pte_mkyoung(pte_t pte) {
 	pte_val(pte) |= _PAGE_ACCESSED; return pte; }
+static inline pte_t pte_mkspecial(pte_t pte) {
+	return pte; }
 
 static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 {

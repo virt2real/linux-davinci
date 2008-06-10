@@ -20,7 +20,7 @@
 #define OMAP_MMC_MAX_SLOTS	2
 
 struct omap_mmc_platform_data {
-	struct omap_mmc_conf    conf;
+	struct omap_mmc_conf	conf;
 
 	/* number of slots on board */
 	unsigned nr_slots:2;
@@ -70,5 +70,9 @@ extern void omap_set_mmc_info(int host, const struct omap_mmc_platform_data *inf
 
 /* called from board-specific card detection service routine */
 extern void omap_mmc_notify_cover_event(struct device *dev, int slot, int is_closed);
+
+#if defined(CONFIG_MMC_OMAP_HS) || defined(CONFIG_MMC_OMAP_HS_MODULE)
+void __init hsmmc_init(void);
+#endif
 
 #endif

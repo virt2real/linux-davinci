@@ -729,6 +729,7 @@ static void b43_synchronize_irq(struct b43_wldev *dev)
  */
 void b43_dummy_transmission(struct b43_wldev *dev)
 {
+	struct b43_wl *wl = dev->wl;
 	struct b43_phy *phy = &dev->phy;
 	unsigned int i, max_loop;
 	u16 value;
@@ -754,6 +755,9 @@ void b43_dummy_transmission(struct b43_wldev *dev)
 		B43_WARN_ON(1);
 		return;
 	}
+
+	spin_lock_irq(&wl->irq_lock);
+	write_lock(&wl->tx_lock);
 
 	for (i = 0; i < 5; i++)
 		b43_ram_write(dev, i * 4, buffer[i]);
@@ -795,6 +799,9 @@ void b43_dummy_transmission(struct b43_wldev *dev)
 	}
 	if (phy->radio_ver == 0x2050 && phy->radio_rev <= 0x5)
 		b43_radio_write16(dev, 0x0051, 0x0037);
+
+	write_unlock(&wl->tx_lock);
+	spin_unlock_irq(&wl->irq_lock);
 }
 
 static void key_write(struct b43_wldev *dev,
@@ -1537,6 +1544,30 @@ static void b43_write_probe_resp_template(struct b43_wldev *dev,
 	kfree(probe_resp_data);
 }
 
+static void b43_upload_beacon0(struct b43_wldev *dev)
+{
+	struct b43_wl *wl = dev->wl;
+
+	if (wl->beacon0_uploaded)
+		return;
+	b43_write_beacon_template(dev, 0x68, 0x18);
+	/* FIXME: Probe resp upload doesn't really belong here,
+	 *        but we don't use that feature anyway. */
+	b43_write_probe_resp_template(dev, 0x268, 0x4A,
+				      &__b43_ratetable[3]);
+	wl->beacon0_uploaded = 1;
+}
+
+static void b43_upload_beacon1(struct b43_wldev *dev)
+{
+	struct b43_wl *wl = dev->wl;
+
+	if (wl->beacon1_uploaded)
+		return;
+	b43_write_beacon_template(dev, 0x468, 0x1A);
+	wl->beacon1_uploaded = 1;
+}
+
 static void handle_irq_beacon(struct b43_wldev *dev)
 {
 	struct b43_wl *wl = dev->wl;
@@ -1561,24 +1592,27 @@ static void handle_irq_beacon(struct b43_wldev *dev)
 		return;
 	}
 
-	if (!beacon0_valid) {
-		if (!wl->beacon0_uploaded) {
-			b43_write_beacon_template(dev, 0x68, 0x18);
-			b43_write_probe_resp_template(dev, 0x268, 0x4A,
-						      &__b43_ratetable[3]);
-			wl->beacon0_uploaded = 1;
-		}
+	if (unlikely(wl->beacon_templates_virgin)) {
+		/* We never uploaded a beacon before.
+		 * Upload both templates now, but only mark one valid. */
+		wl->beacon_templates_virgin = 0;
+		b43_upload_beacon0(dev);
+		b43_upload_beacon1(dev);
 		cmd = b43_read32(dev, B43_MMIO_MACCMD);
 		cmd |= B43_MACCMD_BEACON0_VALID;
 		b43_write32(dev, B43_MMIO_MACCMD, cmd);
-	} else if (!beacon1_valid) {
-		if (!wl->beacon1_uploaded) {
-			b43_write_beacon_template(dev, 0x468, 0x1A);
-			wl->beacon1_uploaded = 1;
+	} else {
+		if (!beacon0_valid) {
+			b43_upload_beacon0(dev);
+			cmd = b43_read32(dev, B43_MMIO_MACCMD);
+			cmd |= B43_MACCMD_BEACON0_VALID;
+			b43_write32(dev, B43_MMIO_MACCMD, cmd);
+		} else if (!beacon1_valid) {
+			b43_upload_beacon1(dev);
+			cmd = b43_read32(dev, B43_MMIO_MACCMD);
+			cmd |= B43_MACCMD_BEACON1_VALID;
+			b43_write32(dev, B43_MMIO_MACCMD, cmd);
 		}
-		cmd = b43_read32(dev, B43_MMIO_MACCMD);
-		cmd |= B43_MACCMD_BEACON1_VALID;
-		b43_write32(dev, B43_MMIO_MACCMD, cmd);
 	}
 }
 
@@ -2171,7 +2205,7 @@ static int b43_write_initvals(struct b43_wldev *dev,
 				goto err_format;
 			array_size -= sizeof(iv->data.d32);
 
-			value = be32_to_cpu(get_unaligned(&iv->data.d32));
+			value = get_unaligned_be32(&iv->data.d32);
 			b43_write32(dev, offset, value);
 
 			iv = (const struct b43_iv *)((const uint8_t *)iv +
@@ -2840,24 +2874,31 @@ static int b43_op_tx(struct ieee80211_hw *hw,
 {
 	struct b43_wl *wl = hw_to_b43_wl(hw);
 	struct b43_wldev *dev = wl->current_dev;
-	int err = -ENODEV;
+	unsigned long flags;
+	int err;
 
 	if (unlikely(skb->len < 2 + 2 + 6)) {
 		/* Too short, this can't be a valid frame. */
-		return -EINVAL;
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
 	}
 	B43_WARN_ON(skb_shinfo(skb)->nr_frags);
-
 	if (unlikely(!dev))
-		goto out;
-	if (unlikely(b43_status(dev) < B43_STAT_STARTED))
-		goto out;
-	/* TX is done without a global lock. */
-	if (b43_using_pio_transfers(dev))
-		err = b43_pio_tx(dev, skb, ctl);
-	else
-		err = b43_dma_tx(dev, skb, ctl);
-out:
+		return NETDEV_TX_BUSY;
+
+	/* Transmissions on seperate queues can run concurrently. */
+	read_lock_irqsave(&wl->tx_lock, flags);
+
+	err = -ENODEV;
+	if (likely(b43_status(dev) >= B43_STAT_STARTED)) {
+		if (b43_using_pio_transfers(dev))
+			err = b43_pio_tx(dev, skb, ctl);
+		else
+			err = b43_dma_tx(dev, skb, ctl);
+	}
+
+	read_unlock_irqrestore(&wl->tx_lock, flags);
+
 	if (unlikely(err))
 		return NETDEV_TX_BUSY;
 	return NETDEV_TX_OK;
@@ -3476,7 +3517,9 @@ static void b43_wireless_core_stop(struct b43_wldev *dev)
 	spin_unlock_irqrestore(&wl->irq_lock, flags);
 	b43_synchronize_irq(dev);
 
+	write_lock_irqsave(&wl->tx_lock, flags);
 	b43_set_status(dev, B43_STAT_INITIALIZED);
+	write_unlock_irqrestore(&wl->tx_lock, flags);
 
 	b43_pio_stop(dev);
 	mutex_unlock(&wl->mutex);
@@ -3484,8 +3527,6 @@ static void b43_wireless_core_stop(struct b43_wldev *dev)
 	 * Cancel the possibly running self-rearming periodic work. */
 	cancel_delayed_work_sync(&dev->periodic_work);
 	mutex_lock(&wl->mutex);
-
-	ieee80211_stop_queues(wl->hw);	//FIXME this could cause a deadlock, as mac80211 seems buggy.
 
 	b43_mac_suspend(dev);
 	free_irq(dev->dev->irq, dev);
@@ -4059,6 +4100,9 @@ static int b43_op_start(struct ieee80211_hw *hw)
 	wl->filter_flags = 0;
 	wl->radiotap_enabled = 0;
 	b43_qos_clear(wl);
+	wl->beacon0_uploaded = 0;
+	wl->beacon1_uploaded = 0;
+	wl->beacon_templates_virgin = 1;
 
 	/* First register RFkill.
 	 * LEDs that are registered later depend on it. */
@@ -4227,7 +4271,9 @@ static void b43_chip_reset(struct work_struct *work)
 			goto out;
 		}
 	}
-      out:
+out:
+	if (err)
+		wl->current_dev = NULL; /* Failed to init the dev. */
 	mutex_unlock(&wl->mutex);
 	if (err)
 		b43err(wl, "Controller restart FAILED\n");
@@ -4326,6 +4372,14 @@ static int b43_wireless_core_attach(struct b43_wldev *dev)
 		err = -EOPNOTSUPP;
 		goto err_powerdown;
 	}
+	if (1 /* disable A-PHY */) {
+		/* FIXME: For now we disable the A-PHY on multi-PHY devices. */
+		if (dev->phy.type != B43_PHYTYPE_N) {
+			have_2ghz_phy = 1;
+			have_5ghz_phy = 0;
+		}
+	}
+
 	dev->phy.gmode = have_2ghz_phy;
 	tmp = dev->phy.gmode ? B43_TMSLOW_GMODE : 0;
 	b43_wireless_core_reset(dev, tmp);
@@ -4360,9 +4414,11 @@ static void b43_one_core_detach(struct ssb_device *dev)
 	struct b43_wldev *wldev;
 	struct b43_wl *wl;
 
+	/* Do not cancel ieee80211-workqueue based work here.
+	 * See comment in b43_remove(). */
+
 	wldev = ssb_get_drvdata(dev);
 	wl = wldev->wl;
-	cancel_work_sync(&wldev->restart_work);
 	b43_debugfs_remove_device(wldev);
 	b43_wireless_core_detach(wldev);
 	list_del(&wldev->list);
@@ -4490,6 +4546,7 @@ static int b43_wireless_init(struct ssb_device *dev)
 	memset(wl, 0, sizeof(*wl));
 	wl->hw = hw;
 	spin_lock_init(&wl->irq_lock);
+	rwlock_init(&wl->tx_lock);
 	spin_lock_init(&wl->leds_lock);
 	spin_lock_init(&wl->shm_lock);
 	mutex_init(&wl->mutex);
@@ -4545,6 +4602,10 @@ static void b43_remove(struct ssb_device *dev)
 {
 	struct b43_wl *wl = ssb_get_devtypedata(dev);
 	struct b43_wldev *wldev = ssb_get_drvdata(dev);
+
+	/* We must cancel any work here before unregistering from ieee80211,
+	 * as the ieee80211 unreg will destroy the workqueue. */
+	cancel_work_sync(&wldev->restart_work);
 
 	B43_WARN_ON(!wl);
 	if (wl->current_dev == wldev)

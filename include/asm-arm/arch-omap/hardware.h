@@ -41,7 +41,6 @@
 #include <asm/types.h>
 #include <asm/arch/cpu.h>
 #endif
-#include <asm/arch/io.h>
 #include <asm/arch/serial.h>
 
 /*
@@ -341,6 +340,10 @@
 
 #ifdef CONFIG_MACH_OMAP3_BEAGLE
 #include "board-omap3beagle.h"
+#endif
+
+#ifdef CONFIG_MACH_OMAP_LDP
+#include "board-ldp.h"
 #endif
 
 #ifdef CONFIG_MACH_OMAP_APOLLON

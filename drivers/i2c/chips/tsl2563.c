@@ -595,7 +595,8 @@ static void tsl2563_unregister_sysfs(struct i2c_client *client)
 /*--------------------------------------------------------------*/
 static struct i2c_driver tsl2563_i2c_driver;
 
-static int tsl2563_probe(struct i2c_client *client)
+static int tsl2563_probe(struct i2c_client *client,
+		const struct i2c_device_id *device_id)
 {
 	struct tsl2563_chip *chip;
 	int err = 0;
@@ -703,6 +704,12 @@ out:
 	return ret;
 }
 
+static const struct i2c_device_id tsl2563_id[] = {
+	{ DRIVER_NAME, 0 },
+	{ },
+};
+MODULE_DEVICE_TABLE(i2c, tsl2563_id);
+
 static struct i2c_driver tsl2563_i2c_driver = {
 	.driver = {
 		.name	 = DRIVER_NAME,
@@ -710,7 +717,8 @@ static struct i2c_driver tsl2563_i2c_driver = {
 	.suspend	= tsl2563_suspend,
 	.resume		= tsl2563_resume,
 	.probe		= tsl2563_probe,
-	.remove		= __exit_p(tsl2563_remove),
+	.remove		= __devexit_p(tsl2563_remove),
+	.id_table	= tsl2563_id,
 };
 
 static int __init tsl2563_init(void)

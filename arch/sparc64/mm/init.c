@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.209 2002/02/09 19:49:31 davem Exp $
+/*
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -160,6 +160,7 @@ extern unsigned int sparc_ramdisk_image;
 extern unsigned int sparc_ramdisk_size;
 
 struct page *mem_map_zero __read_mostly;
+EXPORT_SYMBOL(mem_map_zero);
 
 unsigned int sparc64_highest_unlocked_tlb_ent __read_mostly;
 
@@ -609,8 +610,6 @@ static void __init remap_kernel(void)
 
 static void __init inherit_prom_mappings(void)
 {
-	read_obp_translations();
-
 	/* Now fixup OBP's idea about where we really are mapped. */
 	printk("Remapping the kernel... ");
 	remap_kernel();
@@ -769,7 +768,10 @@ static void __init find_ramdisk(unsigned long phys_base)
 		initrd_start = ramdisk_image;
 		initrd_end = ramdisk_image + sparc_ramdisk_size;
 
-		lmb_reserve(initrd_start, initrd_end);
+		lmb_reserve(initrd_start, sparc_ramdisk_size);
+
+		initrd_start += PAGE_OFFSET;
+		initrd_end += PAGE_OFFSET;
 	}
 #endif
 }
@@ -1699,9 +1701,21 @@ void __init paging_init(void)
 	 * functions like clear_dcache_dirty_cpu use the cpu mask
 	 * in 13-bit signed-immediate instruction fields.
 	 */
-	BUILD_BUG_ON(FLAGS_RESERVED != 32);
+
+	/*
+	 * Page flags must not reach into upper 32 bits that are used
+	 * for the cpu number
+	 */
+	BUILD_BUG_ON(NR_PAGEFLAGS > 32);
+
+	/*
+	 * The bit fields placed in the high range must not reach below
+	 * the 32 bit boundary. Otherwise we cannot place the cpu field
+	 * at the 32 bit boundary.
+	 */
 	BUILD_BUG_ON(SECTIONS_WIDTH + NODES_WIDTH + ZONES_WIDTH +
-		     ilog2(roundup_pow_of_two(NR_CPUS)) > FLAGS_RESERVED);
+		ilog2(roundup_pow_of_two(NR_CPUS)) > 32);
+
 	BUILD_BUG_ON(NR_CPUS > 4096);
 
 	kern_base = (prom_boot_mapping_phys_low >> 22UL) << 22UL;
@@ -1731,7 +1745,17 @@ void __init paging_init(void)
 
 	lmb_init();
 
-	/* Find available physical memory... */
+	/* Find available physical memory...
+	 *
+	 * Read it twice in order to work around a bug in openfirmware.
+	 * The call to grab this table itself can cause openfirmware to
+	 * allocate memory, which in turn can take away some space from
+	 * the list of available memory.  Reading it twice makes sure
+	 * we really do get the final value.
+	 */
+	read_obp_translations();
+	read_obp_memory("reg", &pall[0], &pall_ents);
+	read_obp_memory("available", &pavail[0], &pavail_ents);
 	read_obp_memory("available", &pavail[0], &pavail_ents);
 
 	phys_base = 0xffffffffffffffffUL;
@@ -1772,8 +1796,6 @@ void __init paging_init(void)
 	
 	inherit_prom_mappings();
 	
-	read_obp_memory("reg", &pall[0], &pall_ents);
-
 	init_kpte_bitmap();
 
 	/* Ok, we can use our TLB miss and window trap handlers safely.  */
@@ -2349,16 +2371,3 @@ void __flush_tlb_all(void)
 	__asm__ __volatile__("wrpr	%0, 0, %%pstate"
 			     : : "r" (pstate));
 }
-
-#ifdef CONFIG_MEMORY_HOTPLUG
-
-void online_page(struct page *page)
-{
-	ClearPageReserved(page);
-	init_page_count(page);
-	__free_page(page);
-	totalram_pages++;
-	num_physpages++;
-}
-
-#endif /* CONFIG_MEMORY_HOTPLUG */

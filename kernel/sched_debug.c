@@ -167,11 +167,6 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 #endif
 	SEQ_printf(m, "  .%-30s: %ld\n", "nr_spread_over",
 			cfs_rq->nr_spread_over);
-#ifdef CONFIG_FAIR_GROUP_SCHED
-#ifdef CONFIG_SMP
-	SEQ_printf(m, "  .%-30s: %lu\n", "shares", cfs_rq->shares);
-#endif
-#endif
 }
 
 static void print_cpu(struct seq_file *m, int cpu)
@@ -204,13 +199,6 @@ static void print_cpu(struct seq_file *m, int cpu)
 	PN(next_balance);
 	P(curr->pid);
 	PN(clock);
-	PN(idle_clock);
-	PN(prev_clock_raw);
-	P(clock_warps);
-	P(clock_overflows);
-	P(clock_underflows);
-	P(clock_deep_idle_events);
-	PN(clock_max_delta);
 	P(cpu_load[0]);
 	P(cpu_load[1]);
 	P(cpu_load[2]);
@@ -277,12 +265,9 @@ static int __init init_sched_debug_procfs(void)
 {
 	struct proc_dir_entry *pe;
 
-	pe = create_proc_entry("sched_debug", 0644, NULL);
+	pe = proc_create("sched_debug", 0644, NULL, &sched_debug_fops);
 	if (!pe)
 		return -ENOMEM;
-
-	pe->proc_fops = &sched_debug_fops;
-
 	return 0;
 }
 
@@ -360,8 +345,8 @@ void proc_sched_show_task(struct task_struct *p, struct seq_file *m)
 
 		avg_per_cpu = p->se.sum_exec_runtime;
 		if (p->se.nr_migrations) {
-			avg_per_cpu = div64_64(avg_per_cpu,
-					       p->se.nr_migrations);
+			avg_per_cpu = div64_u64(avg_per_cpu,
+						p->se.nr_migrations);
 		} else {
 			avg_per_cpu = -1LL;
 		}

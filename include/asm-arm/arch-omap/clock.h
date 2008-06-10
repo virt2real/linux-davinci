@@ -10,15 +10,12 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/cpufreq.h>
-
 #ifndef __ARCH_ARM_OMAP_CLOCK_H
 #define __ARCH_ARM_OMAP_CLOCK_H
 
-#include <asm/arch/clockdomain.h>
-
 struct module;
 struct clk;
+struct clockdomain;
 
 #if defined(CONFIG_ARCH_OMAP2) || defined(CONFIG_ARCH_OMAP3)
 
@@ -95,6 +92,8 @@ struct clk {
 #endif
 };
 
+struct cpufreq_frequency_table;
+
 struct clk_functions {
 	int		(*clk_enable)(struct clk *clk);
 	void		(*clk_disable)(struct clk *clk);
@@ -105,19 +104,19 @@ struct clk_functions {
 	void		(*clk_allow_idle)(struct clk *clk);
 	void		(*clk_deny_idle)(struct clk *clk);
 	void		(*clk_disable_unused)(struct clk *clk);
-#ifdef	CONFIG_CPU_FREQ
-	void		(*clk_init_cpufreq_table)(struct cpufreq_frequency_table **table);
+#ifdef CONFIG_CPU_FREQ
+	void		(*clk_init_cpufreq_table)(struct cpufreq_frequency_table **);
 #endif
 };
 
 extern unsigned int mpurate;
 
-extern int clk_init(struct clk_functions * custom_clocks);
+extern int clk_init(struct clk_functions *custom_clocks);
 extern int clk_register(struct clk *clk);
 extern void clk_unregister(struct clk *clk);
 extern void propagate_rate(struct clk *clk);
 extern void recalculate_root_clocks(void);
-extern void followparent_recalc(struct clk * clk);
+extern void followparent_recalc(struct clk *clk);
 extern void clk_allow_idle(struct clk *clk);
 extern void clk_deny_idle(struct clk *clk);
 extern int clk_get_usecount(struct clk *clk);
@@ -140,7 +139,8 @@ extern void clk_init_cpufreq_table(struct cpufreq_frequency_table **table);
 #define CONFIG_PARTICIPANT	(1 << 10)	/* Fundamental clock */
 #define ENABLE_ON_INIT		(1 << 11)	/* Enable upon framework init */
 #define INVERT_ENABLE           (1 << 12)       /* 0 enables, 1 disables */
-/* bits 13-20 are currently free */
+#define OFFSET_GR_MOD		(1 << 13)	/* 24xx GR_MOD reg as offset */
+/* bits 14-20 are currently free */
 #define CLOCK_IN_OMAP310	(1 << 21)
 #define CLOCK_IN_OMAP730	(1 << 22)
 #define CLOCK_IN_OMAP1510	(1 << 23)

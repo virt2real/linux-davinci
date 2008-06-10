@@ -14,51 +14,27 @@
  * published by the Free Software Foundation.
  */
 
-#include <asm/io.h>
-
 #include "prcm-common.h"
 
-#ifndef __ASSEMBLER__
-#define OMAP_CM_REGADDR(module, reg)					\
-	(void __iomem *)IO_ADDRESS(OMAP2_CM_BASE + (module) + (reg))
-#else
 #define OMAP2420_CM_REGADDR(module, reg)				\
 			IO_ADDRESS(OMAP2420_CM_BASE + (module) + (reg))
 #define OMAP2430_CM_REGADDR(module, reg)				\
 			IO_ADDRESS(OMAP2430_CM_BASE + (module) + (reg))
 #define OMAP34XX_CM_REGADDR(module, reg)				\
 			IO_ADDRESS(OMAP3430_CM_BASE + (module) + (reg))
-#endif
 
 /*
  * Architecture-specific global CM registers
- * Use cm_{read,write}_reg() with these registers.
+ * Use __raw_{read,write}l() with these registers.
  * These registers appear once per CM module.
  */
 
-#define OMAP3430_CM_REVISION		OMAP_CM_REGADDR(OCP_MOD, 0x0000)
-#define OMAP3430_CM_SYSCONFIG		OMAP_CM_REGADDR(OCP_MOD, 0x0010)
-#define OMAP3430_CM_POLCTRL		OMAP_CM_REGADDR(OCP_MOD, 0x009c)
+#define OMAP3430_CM_REVISION		OMAP34XX_CM_REGADDR(OCP_MOD, 0x0000)
+#define OMAP3430_CM_SYSCONFIG		OMAP34XX_CM_REGADDR(OCP_MOD, 0x0010)
+#define OMAP3430_CM_POLCTRL		OMAP34XX_CM_REGADDR(OCP_MOD, 0x009c)
 
-#define OMAP3430_CM_CLKOUT_CTRL		OMAP_CM_REGADDR(OMAP3430_CCR_MOD, 0x0070)
-
-#ifndef __ASSEMBLER__
-
-/* Read-modify-write bits in a CM register */
-static __inline__ u32 __attribute__((unused)) cm_rmw_reg_bits(u32 mask,
-						u32 bits, void __iomem *va)
-{
-	u32 v;
-
-	v = __raw_readl(va);
-	v &= ~mask;
-	v |= bits;
-	__raw_writel(v, va);
-
-	return v;
-}
-
-#endif
+#define OMAP3430_CM_CLKOUT_CTRL						\
+				OMAP34XX_CM_REGADDR(OMAP3430_CCR_MOD, 0x0070)
 
 /*
  * Module specific CM registers from CM_BASE + domain offset
@@ -116,33 +92,17 @@ static __inline__ u32 __attribute__((unused)) cm_rmw_reg_bits(u32 mask,
 /* Clock management domain register get/set */
 
 #ifndef __ASSEMBLER__
-static __inline__ void __attribute__((unused)) cm_write_mod_reg(u32 val,
-							s16 module, s16 idx)
-{
-	__raw_writel(val, OMAP_CM_REGADDR(module, idx));
-}
 
-static __inline__ u32 __attribute__((unused)) cm_read_mod_reg(s16 module,
-							s16 idx)
-{
-	return __raw_readl(OMAP_CM_REGADDR(module, idx));
-}
+extern u32 cm_read_mod_reg(s16 module, u16 idx);
+extern void cm_write_mod_reg(u32 val, s16 module, u16 idx);
+extern u32 cm_rmw_mod_reg_bits(u32 mask, u32 bits, s16 module, s16 idx);
 
-/* Read-modify-write bits in a CM register (by domain) */
-static __inline__ u32 __attribute__((unused)) cm_rmw_mod_reg_bits(u32 mask,
-						u32 bits, s16 module, s16 idx)
-{
-	return cm_rmw_reg_bits(mask, bits, OMAP_CM_REGADDR(module, idx));
-}
-
-static __inline__ u32 __attribute__((unused)) cm_set_mod_reg_bits(u32 bits,
-							s16 module, s16 idx)
+static inline u32 cm_set_mod_reg_bits(u32 bits, s16 module, s16 idx)
 {
 	return cm_rmw_mod_reg_bits(bits, bits, module, idx);
 }
 
-static __inline__ u32 __attribute__((unused)) cm_clear_mod_reg_bits(u32 bits,
-							s16 module, s16 idx)
+static inline u32 cm_clear_mod_reg_bits(u32 bits, s16 module, s16 idx)
 {
 	return cm_rmw_mod_reg_bits(bits, 0x0, module, idx);
 }

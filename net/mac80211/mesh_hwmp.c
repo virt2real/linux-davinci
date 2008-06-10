@@ -7,7 +7,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <asm/unaligned.h>
 #include "mesh.h"
 
 #define TEST_FRAME_LEN	8192
@@ -121,7 +120,7 @@ static int mesh_path_sel_frame_tx(enum mpath_frame_type action, u8 flags,
 		*pos++ = WLAN_EID_PREP;
 		break;
 	default:
-		kfree(skb);
+		kfree_skb(skb);
 		return -ENOTSUPP;
 		break;
 	}

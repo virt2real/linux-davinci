@@ -9,6 +9,8 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#undef DEBUG
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/err.h>
@@ -16,19 +18,14 @@
 #include <linux/ioport.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>
+#include <linux/io.h>
 
-#include <asm/io.h>
 #include <asm/mach-types.h>
 #include <asm/arch/gpmc.h>
 
-#undef DEBUG
+#include "memory.h"
 
-#if defined(CONFIG_ARCH_OMAP2420)
-#define GPMC_BASE		0x6800a000
-#elif defined(CONFIG_ARCH_OMAP2430) || defined(CONFIG_ARCH_OMAP34XX)
-#define GPMC_BASE		0x6e000000
-#endif
-
+/* GPMC register offsets */
 #define GPMC_REVISION		0x00
 #define GPMC_SYSCONFIG		0x10
 #define GPMC_SYSSTATUS		0x14
@@ -41,7 +38,7 @@
 #define GPMC_STATUS		0x54
 #define GPMC_PREFETCH_CONFIG1	0x1e0
 #define GPMC_PREFETCH_CONFIG2	0x1e4
-#define GPMC_PREFETCH_CONTROL	0x1e8
+#define GPMC_PREFETCH_CONTROL	0x1ec
 #define GPMC_PREFETCH_STATUS	0x1f0
 #define GPMC_ECC_CONFIG		0x1f4
 #define GPMC_ECC_CONTROL	0x1f8
@@ -62,10 +59,7 @@ static struct resource	gpmc_cs_mem[GPMC_CS_NUM];
 static DEFINE_SPINLOCK(gpmc_mem_lock);
 static unsigned		gpmc_cs_map;
 
-static void __iomem *gpmc_base =
-	(void __iomem *) IO_ADDRESS(GPMC_BASE);
-static void __iomem *gpmc_cs_base =
-	(void __iomem *) IO_ADDRESS(GPMC_BASE) + GPMC_CS0;
+static u32 gpmc_base;
 
 static struct clk *gpmc_l3_clk;
 
@@ -81,15 +75,15 @@ static u32 gpmc_read_reg(int idx)
 
 void gpmc_cs_write_reg(int cs, int idx, u32 val)
 {
-	void __iomem *reg_addr;
+	u32 reg_addr;
 
-	reg_addr = gpmc_cs_base + (cs * GPMC_CS_SIZE) + idx;
+	reg_addr = gpmc_base + GPMC_CS0 + (cs * GPMC_CS_SIZE) + idx;
 	__raw_writel(val, reg_addr);
 }
 
 u32 gpmc_cs_read_reg(int cs, int idx)
 {
-	return __raw_readl(gpmc_cs_base + (cs * GPMC_CS_SIZE) + idx);
+	return __raw_readl(gpmc_base + GPMC_CS0 + (cs * GPMC_CS_SIZE) + idx);
 }
 
 /* TODO: Add support for gpmc_fck to clock framework and use it */
@@ -381,7 +375,7 @@ void gpmc_cs_free(int cs)
 }
 EXPORT_SYMBOL(gpmc_cs_free);
 
-void __init gpmc_mem_init(void)
+static void __init gpmc_mem_init(void)
 {
 	int cs;
 	unsigned long boot_rom_space = 0;
@@ -412,10 +406,16 @@ void __init gpmc_init(void)
 {
 	u32 l;
 
-	if (cpu_is_omap24xx())
+	if (cpu_is_omap24xx()) {
 		gpmc_l3_clk = clk_get(NULL, "core_l3_ck");
-	else if (cpu_is_omap34xx())
+		if (cpu_is_omap2420())
+			gpmc_base = io_p2v(OMAP2420_GPMC_BASE);
+		else if (cpu_is_omap2430())
+			gpmc_base = io_p2v(OMAP243X_GPMC_BASE);
+	} else if (cpu_is_omap34xx()) {
 		gpmc_l3_clk = clk_get(NULL, "gpmc_fck");
+		gpmc_base = io_p2v(OMAP34XX_GPMC_BASE);
+	}
 
 	BUG_ON(IS_ERR(gpmc_l3_clk));
 

@@ -114,6 +114,7 @@ int rt2x00lib_enable_radio(struct rt2x00_dev *rt2x00dev)
 		return status;
 
 	rt2x00leds_led_radio(rt2x00dev, true);
+	rt2x00led_led_activity(rt2x00dev, true);
 
 	__set_bit(DEVICE_ENABLED_RADIO, &rt2x00dev->flags);
 
@@ -157,6 +158,7 @@ void rt2x00lib_disable_radio(struct rt2x00_dev *rt2x00dev)
 	 * Disable radio.
 	 */
 	rt2x00dev->ops->lib->set_device_state(rt2x00dev, STATE_RADIO_OFF);
+	rt2x00led_led_activity(rt2x00dev, false);
 	rt2x00leds_led_radio(rt2x00dev, false);
 }
 
@@ -481,9 +483,9 @@ void rt2x00lib_beacondone(struct rt2x00_dev *rt2x00dev)
 	if (!test_bit(DEVICE_ENABLED_RADIO, &rt2x00dev->flags))
 		return;
 
-	ieee80211_iterate_active_interfaces(rt2x00dev->hw,
-					    rt2x00lib_beacondone_iter,
-					    rt2x00dev);
+	ieee80211_iterate_active_interfaces_atomic(rt2x00dev->hw,
+						   rt2x00lib_beacondone_iter,
+						   rt2x00dev);
 
 	queue_work(rt2x00dev->hw->workqueue, &rt2x00dev->intf_work);
 }
@@ -505,7 +507,7 @@ void rt2x00lib_txdone(struct queue_entry *entry,
 	 * Update TX statistics.
 	 */
 	rt2x00dev->link.qual.tx_success += success;
-	rt2x00dev->link.qual.tx_failed += txdesc->retry + fail;
+	rt2x00dev->link.qual.tx_failed += fail;
 
 	/*
 	 * Initialize TX status
@@ -1030,8 +1032,10 @@ static int rt2x00lib_initialize(struct rt2x00_dev *rt2x00dev)
 	 * Initialize the device.
 	 */
 	status = rt2x00dev->ops->lib->initialize(rt2x00dev);
-	if (status)
-		goto exit;
+	if (status) {
+		rt2x00queue_uninitialize(rt2x00dev);
+		return status;
+	}
 
 	__set_bit(DEVICE_INITIALIZED, &rt2x00dev->flags);
 
@@ -1041,11 +1045,6 @@ static int rt2x00lib_initialize(struct rt2x00_dev *rt2x00dev)
 	rt2x00rfkill_register(rt2x00dev);
 
 	return 0;
-
-exit:
-	rt2x00lib_uninitialize(rt2x00dev);
-
-	return status;
 }
 
 int rt2x00lib_start(struct rt2x00_dev *rt2x00dev)

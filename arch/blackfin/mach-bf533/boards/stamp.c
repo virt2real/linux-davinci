@@ -45,6 +45,7 @@
 #include <asm/bfin5xx_spi.h>
 #include <asm/reboot.h>
 #include <asm/portmux.h>
+#include <asm/dpmc.h>
 
 /*
  * Name the Board for the /proc/cpuinfo
@@ -110,7 +111,7 @@ static struct platform_device net2272_bfin_device = {
 };
 #endif
 
-#if defined(CONFIG_MTD_BF5xx) || defined(CONFIG_MTD_BF5xx_MODULE)
+#if defined(CONFIG_MTD_BFIN_ASYNC) || defined(CONFIG_MTD_BFIN_ASYNC_MODULE)
 static struct mtd_partition stamp_partitions[] = {
 	{
 		.name   = "Bootloader",
@@ -140,13 +141,17 @@ static struct resource stamp_flash_resource[] = {
 		.end   = 0x203fffff,
 		.flags = IORESOURCE_MEM,
 	}, {
-		.start = CONFIG_ENET_FLASH_PIN,
+		.start = 0x7BB07BB0,	/* AMBCTL0 setting when accessing flash */
+		.end   = 0x7BB07BB0,	/* AMBCTL1 setting when accessing flash */
+		.flags = IORESOURCE_MEM,
+	}, {
+		.start = GPIO_PF0,
 		.flags = IORESOURCE_IRQ,
 	}
 };
 
 static struct platform_device stamp_flash_device = {
-	.name          = "BF5xx-Flash",
+	.name          = "bfin-async-flash",
 	.id            = 0,
 	.dev = {
 		.platform_data = &stamp_flash_data,
@@ -499,27 +504,54 @@ static struct i2c_board_info __initdata bfin_i2c_board_info[] = {
 #if defined(CONFIG_JOYSTICK_AD7142) || defined(CONFIG_JOYSTICK_AD7142_MODULE)
 	{
 		I2C_BOARD_INFO("ad7142_joystick", 0x2C),
-		.type = "ad7142_joystick",
 		.irq = 39,
 	},
 #endif
 #if defined(CONFIG_TWI_LCD) || defined(CONFIG_TWI_LCD_MODULE)
 	{
 		I2C_BOARD_INFO("pcf8574_lcd", 0x22),
-		.type = "pcf8574_lcd",
 	},
 #endif
 #if defined(CONFIG_TWI_KEYPAD) || defined(CONFIG_TWI_KEYPAD_MODULE)
 	{
 		I2C_BOARD_INFO("pcf8574_keypad", 0x27),
-		.type = "pcf8574_keypad",
 		.irq = 39,
 	},
 #endif
 };
 #endif
 
+static const unsigned int cclk_vlev_datasheet[] =
+{
+	VRPAIR(VLEV_085, 250000000),
+	VRPAIR(VLEV_090, 376000000),
+	VRPAIR(VLEV_095, 426000000),
+	VRPAIR(VLEV_100, 426000000),
+	VRPAIR(VLEV_105, 476000000),
+	VRPAIR(VLEV_110, 476000000),
+	VRPAIR(VLEV_115, 476000000),
+	VRPAIR(VLEV_120, 600000000),
+	VRPAIR(VLEV_125, 600000000),
+	VRPAIR(VLEV_130, 600000000),
+};
+
+static struct bfin_dpmc_platform_data bfin_dmpc_vreg_data = {
+	.tuple_tab = cclk_vlev_datasheet,
+	.tabsize = ARRAY_SIZE(cclk_vlev_datasheet),
+	.vr_settling_time = 25 /* us */,
+};
+
+static struct platform_device bfin_dpmc = {
+	.name = "bfin dpmc",
+	.dev = {
+		.platform_data = &bfin_dmpc_vreg_data,
+	},
+};
+
 static struct platform_device *stamp_devices[] __initdata = {
+
+	&bfin_dpmc,
+
 #if defined(CONFIG_RTC_DRV_BFIN) || defined(CONFIG_RTC_DRV_BFIN_MODULE)
 	&rtc_device,
 #endif
@@ -567,7 +599,7 @@ static struct platform_device *stamp_devices[] __initdata = {
 
 	&bfin_gpios_device,
 
-#if defined(CONFIG_MTD_BF5xx) || defined(CONFIG_MTD_BF5xx_MODULE)
+#if defined(CONFIG_MTD_BFIN_ASYNC) || defined(CONFIG_MTD_BFIN_ASYNC_MODULE)
 	&stamp_flash_device,
 #endif
 };
@@ -589,8 +621,8 @@ static int __init stamp_init(void)
 
 #if defined(CONFIG_SMC91X) || defined(CONFIG_SMC91X_MODULE)
 	/* setup BF533_STAMP CPLD to route AMS3 to Ethernet MAC */
-	bfin_write_FIO_DIR(bfin_read_FIO_DIR() | (1 << CONFIG_ENET_FLASH_PIN));
-	bfin_write_FIO_FLAG_S(1 << CONFIG_ENET_FLASH_PIN);
+	bfin_write_FIO_DIR(bfin_read_FIO_DIR() | PF0);
+	bfin_write_FIO_FLAG_S(PF0);
 	SSYNC();
 #endif
 
@@ -608,8 +640,8 @@ arch_initcall(stamp_init);
 
 void native_machine_restart(char *cmd)
 {
-#define BIT_TO_SET (1 << CONFIG_ENET_FLASH_PIN)
-	bfin_write_FIO_INEN(~BIT_TO_SET);
-	bfin_write_FIO_DIR(BIT_TO_SET);
-	bfin_write_FIO_FLAG_C(BIT_TO_SET);
+	/* workaround pull up on cpld / flash pin not being strong enough */
+	bfin_write_FIO_INEN(~PF0);
+	bfin_write_FIO_DIR(PF0);
+	bfin_write_FIO_FLAG_C(PF0);
 }

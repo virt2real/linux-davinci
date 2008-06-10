@@ -333,6 +333,9 @@ static int set_kernel_sq_size(struct mlx4_ib_dev *dev, struct ib_qp_cap *cap,
 		cap->max_inline_data + sizeof (struct mlx4_wqe_inline_seg)) +
 		send_wqe_overhead(type, qp->flags);
 
+	if (s > dev->dev->caps.max_sq_desc_sz)
+		return -EINVAL;
+
 	/*
 	 * Hermon supports shrinking WQEs, such that a single work
 	 * request can include multiple units of 1 << wqe_shift.  This
@@ -372,9 +375,6 @@ static int set_kernel_sq_size(struct mlx4_ib_dev *dev, struct ib_qp_cap *cap,
 		qp->sq.wqe_shift = ilog2(roundup_pow_of_two(s));
 
 	for (;;) {
-		if (1 << qp->sq.wqe_shift > dev->dev->caps.max_sq_desc_sz)
-			return -EINVAL;
-
 		qp->sq_max_wqes_per_wr = DIV_ROUND_UP(s, 1U << qp->sq.wqe_shift);
 
 		/*
@@ -395,7 +395,8 @@ static int set_kernel_sq_size(struct mlx4_ib_dev *dev, struct ib_qp_cap *cap,
 		++qp->sq.wqe_shift;
 	}
 
-	qp->sq.max_gs = ((qp->sq_max_wqes_per_wr << qp->sq.wqe_shift) -
+	qp->sq.max_gs = (min(dev->dev->caps.max_sq_desc_sz,
+			     (qp->sq_max_wqes_per_wr << qp->sq.wqe_shift)) -
 			 send_wqe_overhead(type, qp->flags)) /
 		sizeof (struct mlx4_wqe_data_seg);
 
@@ -411,7 +412,9 @@ static int set_kernel_sq_size(struct mlx4_ib_dev *dev, struct ib_qp_cap *cap,
 
 	cap->max_send_wr  = qp->sq.max_post =
 		(qp->sq.wqe_cnt - qp->sq_spare_wqes) / qp->sq_max_wqes_per_wr;
-	cap->max_send_sge = qp->sq.max_gs;
+	cap->max_send_sge = min(qp->sq.max_gs,
+				min(dev->dev->caps.max_sq_sg,
+				    dev->dev->caps.max_rq_sg));
 	/* We don't support inline sends for kernel QPs (yet) */
 	cap->max_inline_data = 0;
 
@@ -482,7 +485,7 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 			goto err;
 
 		qp->umem = ib_umem_get(pd->uobject->context, ucmd.buf_addr,
-				       qp->buf_size, 0);
+				       qp->buf_size, 0, 0);
 		if (IS_ERR(qp->umem)) {
 			err = PTR_ERR(qp->umem);
 			goto err;
@@ -514,7 +517,7 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 			goto err;
 
 		if (!init_attr->srq) {
-			err = mlx4_ib_db_alloc(dev, &qp->db, 0);
+			err = mlx4_db_alloc(dev->dev, &qp->db, 0);
 			if (err)
 				goto err;
 
@@ -580,7 +583,7 @@ err_buf:
 
 err_db:
 	if (!pd->uobject && !init_attr->srq)
-		mlx4_ib_db_free(dev, &qp->db);
+		mlx4_db_free(dev->dev, &qp->db);
 
 err:
 	return err;
@@ -666,7 +669,7 @@ static void destroy_qp_common(struct mlx4_ib_dev *dev, struct mlx4_ib_qp *qp,
 		kfree(qp->rq.wrid);
 		mlx4_buf_free(dev->dev, qp->buf_size, &qp->buf);
 		if (!qp->ibqp.srq)
-			mlx4_ib_db_free(dev, &qp->db);
+			mlx4_db_free(dev->dev, &qp->db);
 	}
 }
 
@@ -1457,7 +1460,7 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	unsigned ind;
 	int uninitialized_var(stamp);
 	int uninitialized_var(size);
-	unsigned seglen;
+	unsigned uninitialized_var(seglen);
 	int i;
 
 	spin_lock_irqsave(&qp->sq.lock, flags);

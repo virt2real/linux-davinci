@@ -300,6 +300,7 @@
 #define INT_34XX_ST_MCBSP2_IRQ	4
 #define INT_34XX_ST_MCBSP3_IRQ	5
 #define INT_34XX_SYS_NIRQ	7
+#define INT_34XX_PRCM_MPU_IRQ	11
 #define INT_34XX_MCBSP1_IRQ	16
 #define INT_34XX_MCBSP2_IRQ	17
 #define INT_34XX_MCBSP3_IRQ	22
@@ -368,6 +369,7 @@
 
 #ifndef __ASSEMBLY__
 extern void omap_init_irq(void);
+extern int omap_irq_pending(void);
 #endif
 
 #include <asm/hardware.h>

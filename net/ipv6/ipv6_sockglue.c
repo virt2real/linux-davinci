@@ -52,6 +52,7 @@
 #include <net/udp.h>
 #include <net/udplite.h>
 #include <net/xfrm.h>
+#include <net/compat.h>
 
 #include <asm/uaccess.h>
 
@@ -160,9 +161,17 @@ static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 			struct ipv6_txoptions *opt;
 			struct sk_buff *pktopt;
 
-			if (sk->sk_protocol != IPPROTO_UDP &&
-			    sk->sk_protocol != IPPROTO_UDPLITE &&
-			    sk->sk_protocol != IPPROTO_TCP)
+			if (sk->sk_type == SOCK_RAW)
+				break;
+
+			if (sk->sk_protocol == IPPROTO_UDP ||
+			    sk->sk_protocol == IPPROTO_UDPLITE) {
+				struct udp_sock *up = udp_sk(sk);
+				if (up->pending == AF_INET6) {
+					retv = -EBUSY;
+					break;
+				}
+			} else if (sk->sk_protocol != IPPROTO_TCP)
 				break;
 
 			if (sk->sk_state != TCP_ESTABLISHED) {
@@ -415,7 +424,7 @@ sticky_done:
 		msg.msg_controllen = optlen;
 		msg.msg_control = (void*)(opt+1);
 
-		retv = datagram_send_ctl(&msg, &fl, opt, &junk, &junk);
+		retv = datagram_send_ctl(net, &msg, &fl, opt, &junk, &junk);
 		if (retv)
 			goto done;
 update:
@@ -779,6 +788,10 @@ int compat_ipv6_setsockopt(struct sock *sk, int level, int optname,
 	if (level != SOL_IPV6)
 		return -ENOPROTOOPT;
 
+	if (optname >= MCAST_JOIN_GROUP && optname <= MCAST_MSFILTER)
+		return compat_mc_setsockopt(sk, level, optname, optval, optlen,
+			ipv6_setsockopt);
+
 	err = do_ipv6_setsockopt(sk, level, optname, optval, optlen);
 #ifdef CONFIG_NETFILTER
 	/* we need to exclude all possible ENOPROTOOPTs except default case */
@@ -827,7 +840,7 @@ static int ipv6_getsockopt_sticky(struct sock *sk, struct ipv6_txoptions *opt,
 	len = min_t(unsigned int, len, ipv6_optlen(hdr));
 	if (copy_to_user(optval, hdr, len))
 		return -EFAULT;
-	return ipv6_optlen(hdr);
+	return len;
 }
 
 static int do_ipv6_getsockopt(struct sock *sk, int level, int optname,
@@ -970,6 +983,9 @@ static int do_ipv6_getsockopt(struct sock *sk, int level, int optname,
 		len = ipv6_getsockopt_sticky(sk, np->opt,
 					     optname, optval, len);
 		release_sock(sk);
+		/* check if ipv6_getsockopt_sticky() returns err code */
+		if (len < 0)
+			return len;
 		return put_user(len, optlen);
 	}
 
@@ -1121,6 +1137,10 @@ int compat_ipv6_getsockopt(struct sock *sk, int level, int optname,
 
 	if (level != SOL_IPV6)
 		return -ENOPROTOOPT;
+
+	if (optname == MCAST_MSFILTER)
+		return compat_mc_getsockopt(sk, level, optname, optval, optlen,
+			ipv6_getsockopt);
 
 	err = do_ipv6_getsockopt(sk, level, optname, optval, optlen);
 #ifdef CONFIG_NETFILTER

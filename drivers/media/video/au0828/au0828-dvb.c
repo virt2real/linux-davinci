@@ -119,7 +119,7 @@ static int start_urb_transfer(struct au0828_dev *dev)
 		purb->transfer_buffer = kzalloc(URB_BUFSIZE, GFP_KERNEL);
 		if (!purb->transfer_buffer) {
 			usb_free_urb(purb);
-			dev->urbs[i] = 0;
+			dev->urbs[i] = NULL;
 			goto err;
 		}
 
@@ -204,7 +204,7 @@ static int au0828_dvb_stop_feed(struct dvb_demux_feed *feed)
 	return ret;
 }
 
-int dvb_register(struct au0828_dev *dev)
+static int dvb_register(struct au0828_dev *dev)
 {
 	struct au0828_dvb *dvb = &dev->dvb;
 	int result;
@@ -337,12 +337,10 @@ int au0828_dvb_register(struct au0828_dev *dev)
 		dvb->frontend = dvb_attach(au8522_attach,
 				&hauppauge_hvr950q_config,
 				&dev->i2c_adap);
-		if (dvb->frontend != NULL) {
-			hauppauge_hvr950q_tunerconfig.priv = dev;
+		if (dvb->frontend != NULL)
 			dvb_attach(xc5000_attach, dvb->frontend,
 				&dev->i2c_adap,
-				&hauppauge_hvr950q_tunerconfig);
-		}
+				&hauppauge_hvr950q_tunerconfig, dev);
 		break;
 	default:
 		printk(KERN_WARNING "The frontend of your DVB/ATSC card "

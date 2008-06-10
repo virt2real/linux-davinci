@@ -393,6 +393,7 @@ static struct platform_driver corgikbd_driver = {
 	.resume		= corgikbd_resume,
 	.driver		= {
 		.name	= "corgi-keyboard",
+		.owner	= THIS_MODULE,
 	},
 };
 
@@ -411,4 +412,5 @@ module_exit(corgikbd_exit);
 
 MODULE_AUTHOR("Richard Purdie <rpurdie@rpsys.net>");
 MODULE_DESCRIPTION("Corgi Keyboard Driver");
-MODULE_LICENSE("GPLv2");
+MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("platform:corgi-keyboard");
