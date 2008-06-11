@@ -726,7 +726,7 @@ int __init arch_dma_init(void)
  * Return: zero on success, or corresponding error no on failure
  *
  *****************************************************************************/
-int davinci_request_dma(int dev_id, const char *dev_name,
+int davinci_request_dma(int dev_id, const char *name,
 			void (*callback) (int lch, unsigned short ch_status,
 					  void *data),
 			void *data, int *lch,
