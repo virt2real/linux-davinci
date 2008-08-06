@@ -378,7 +378,7 @@ static irqreturn_t davinci_interrupt(int irq, void *__hci)
 
 void musb_platform_set_mode(struct musb *musb, u8 musb_mode)
 {
-	WARN("FIXME: %d not implemented\n", __func__);
+	printk(KERN_WARNING "FIXME: %s not implemented\n", __func__);
 }
 
 int __init musb_platform_init(struct musb *musb)
