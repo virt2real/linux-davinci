@@ -894,7 +894,7 @@ static void emac_set_phymode(struct emac_priv *priv)
 		priv->speed = EMAC_SPEED_AUTO;
 		priv->duplex = EMAC_DUPLEX_UNKNOWN;
 		phy_mode = NWAY_AUTO_ALL;
-	} else if (EMAC_SPEED_10MBPS == priv->speed) {
+	} else if (EMAC_SPEED_10MBPS == cfg_link_speed) {
 		/* Check if bus speed allows 10mbps */
 		if (priv->mdio.mdio_bus_frequency <=
 		    EMAC_MIN_FREQUENCY_FOR_10MBPS) {
@@ -906,14 +906,14 @@ static void emac_set_phymode(struct emac_priv *priv)
 			}
 		}
 		priv->speed = EMAC_SPEED_10MBPS;
-		if (EMAC_DUPLEX_HALF == priv->duplex) {
+		if (EMAC_DUPLEX_HALF == cfg_link_duplex) {
 			phy_mode = NWAY_HD10;
 			priv->duplex = EMAC_DUPLEX_HALF;
 		} else {
 			phy_mode = NWAY_FD10;
 			priv->duplex = EMAC_DUPLEX_FULL;
 		}
-	} else if (EMAC_SPEED_100MBPS == priv->speed) {
+	} else if (EMAC_SPEED_100MBPS == cfg_link_speed) {
 		if (priv->mdio.mdio_bus_frequency <=
 		    EMAC_MIN_FREQUENCY_FOR_100MBPS) {
 			if (netif_msg_drv(priv)) {
@@ -925,17 +925,21 @@ static void emac_set_phymode(struct emac_priv *priv)
 			}
 		}
 		priv->speed = EMAC_SPEED_100MBPS;
-		if (EMAC_DUPLEX_HALF == priv->duplex) {
+		if (EMAC_DUPLEX_HALF == cfg_link_duplex) {
 			phy_mode = NWAY_HD100;
 			priv->duplex = EMAC_DUPLEX_HALF;
 		} else {
 			phy_mode = NWAY_FD100;
 			priv->duplex = EMAC_DUPLEX_FULL;
 		}
-	} else if (EMAC_SPEED_1GBPS == priv->speed) {
+	} else if (EMAC_SPEED_1GBPS == cfg_link_speed) {
 		phy_mode = NWAY_AUTO_ALL; /* Temporarily */
+		priv->speed = EMAC_SPEED_AUTO;
+		priv->duplex = EMAC_DUPLEX_UNKNOWN;
 	} else {
 		phy_mode = NWAY_AUTO_ALL; /* Fall back if wrong params set */
+		priv->speed = EMAC_SPEED_AUTO;
+		priv->duplex = EMAC_DUPLEX_UNKNOWN;
 	}
 	emac_mdio_set_phy_mode(phy_mode);
 	emac_update_phystatus(priv);
