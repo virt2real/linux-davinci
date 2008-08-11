@@ -101,6 +101,8 @@ struct tea5761_priv {
 
 	/* All zero = no test mode */
 
+#define TEA5761_TESTREG_TRIGFR		0x08
+
 /* MANID - Read: bytes 12 and 13 */
 
 	/* First byte - should be 0x10 */
@@ -147,20 +149,21 @@ static int set_radio_freq(struct dvb_frontend *fe,
 
 	if (params->mode == T_STANDBY) {
 		tuner_dbg("TEA5761 set to standby mode\n");
-		buffer[5] |= TEA5761_TNCTRL_MU;
+		buffer[4] |= TEA5761_TNCTRL_MU;
 	} else {
-		buffer[4] |= TEA5761_TNCTRL_PUPD_0;
+		buffer[3] |= TEA5761_TNCTRL_PUPD_0;
 	}
 
+	buffer[5] = TEA5761_TESTREG_TRIGFR;
 
 	if (params->audmode == V4L2_TUNER_MODE_MONO) {
 		tuner_dbg("TEA5761 set to mono\n");
-		buffer[5] |= TEA5761_TNCTRL_MST;
+		buffer[4] |= TEA5761_TNCTRL_MST;
 	} else {
 		tuner_dbg("TEA5761 set to stereo\n");
 	}
 
-	div = (1000 * (frq * 4 / 16 + 700 + 225) ) >> 15;
+	div = (frq * 125 / 2 - 225000) >> 13;
 	buffer[1] = (div >> 8) & 0x3f;
 	buffer[2] = div & 0xff;
 
@@ -171,6 +174,48 @@ static int set_radio_freq(struct dvb_frontend *fe,
 		tuner_warn("i2c i/o error: rc == %d (should be 5)\n", rc);
 
 	priv->frequency = frq * 125 / 2;
+
+	return 0;
+}
+
+static int tea5761_init(struct dvb_frontend *fe)
+{
+	struct tea5761_priv *priv = fe->tuner_priv;
+	unsigned char buffer[] = {0, 0, 0, 0, 0, 0, 0 };
+	int rc;
+
+	tuner_dbg("Power up radio\n");
+
+	buffer[3] = TEA5761_TNCTRL_PUPD_0;
+
+	if (debug)
+		tea5761_status_dump(buffer);
+
+	rc = tuner_i2c_xfer_send(&priv->i2c_props, buffer, ARRAY_SIZE(buffer));
+	if (rc != ARRAY_SIZE(buffer))
+		tuner_warn("i2c i/o error: rc == %d (should be %d)\n", rc,
+				ARRAY_SIZE(buffer));
+
+	return 0;
+}
+
+static int tea5761_sleep(struct dvb_frontend *fe)
+{
+	struct tea5761_priv *priv = fe->tuner_priv;
+	unsigned char buffer[] = {0, 0, 0, 0, 0, 0, 0 };
+	int rc;
+
+	tuner_dbg("Power down radio\n");
+
+	buffer[3] &= ~TEA5761_TNCTRL_PUPD_0;
+
+	if (debug)
+		tea5761_status_dump(buffer);
+
+	rc = tuner_i2c_xfer_send(&priv->i2c_props, buffer, ARRAY_SIZE(buffer));
+	if (rc != ARRAY_SIZE(buffer))
+		tuner_warn("i2c i/o error: rc == %d (should be %d)\n", rc,
+				ARRAY_SIZE(buffer));
 
 	return 0;
 }
@@ -287,6 +332,8 @@ static struct dvb_tuner_ops tea5761_tuner_ops = {
 	.get_frequency     = tea5761_get_frequency,
 	.get_status        = tea5761_get_status,
 	.get_rf_strength   = tea5761_get_rf_strength,
+	.init              = tea5761_init,
+	.sleep             = tea5761_sleep,
 };
 
 struct dvb_frontend *tea5761_attach(struct dvb_frontend *fe,
@@ -295,7 +342,7 @@ struct dvb_frontend *tea5761_attach(struct dvb_frontend *fe,
 {
 	struct tea5761_priv *priv = NULL;
 
-	if (tea5761_autodetection(i2c_adap, i2c_addr) == EINVAL)
+	if (tea5761_autodetection(i2c_adap, i2c_addr) != 0)
 		return NULL;
 
 	priv = kzalloc(sizeof(struct tea5761_priv), GFP_KERNEL);

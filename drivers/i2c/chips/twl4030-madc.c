@@ -367,6 +367,7 @@ static int twl4030_madc_ioctl(struct inode *inode, struct file *filp,
 		req.channels = (1<<par.channel);
 		req.do_avg	= par.average;
 		req.method	= TWL4030_MADC_SW1;
+		req.func_cb	= NULL;
 
 		val = twl4030_madc_conversion(&req);
 		if (val <= 0) {
@@ -448,6 +449,7 @@ static void __exit twl4030_madc_exit(void)
 module_init(twl4030_madc_init);
 module_exit(twl4030_madc_exit);
 
+MODULE_ALIAS("i2c:twl4030-adc");
 MODULE_AUTHOR("Nokia Corporation");
 MODULE_DESCRIPTION("twl4030 ADC driver");
 MODULE_LICENSE("GPL");

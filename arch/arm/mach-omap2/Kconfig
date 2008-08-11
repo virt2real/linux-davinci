@@ -45,6 +45,11 @@ config MACH_NOKIA_N810
 	bool "Nokia N810"
 	depends on MACH_NOKIA_N800
 
+config MACH_NOKIA_N810_WIMAX
+	bool "Nokia N810 WiMAX"
+	depends on MACH_NOKIA_N800
+	select MACH_NOKIA_N810
+
 config MACH_OMAP2_TUSB6010
 	bool
 	depends on ARCH_OMAP2 && ARCH_OMAP2420
@@ -102,8 +107,8 @@ config MACH_OMAP_LDP
 	bool "OMAP 3 LDP board"
 	depends on ARCH_OMAP3 && ARCH_OMAP34XX
 
-config MACH_OMAP_2430OSK
-	bool "OMAP 2430 OSK board"
+config MACH_OMAP2EVM 
+	bool "OMAP 2530 EVM board"
 	depends on ARCH_OMAP2 && ARCH_OMAP24XX
 
 config MACH_OMAP_3430SDP

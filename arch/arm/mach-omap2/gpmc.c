@@ -23,7 +23,7 @@
 #include <asm/mach-types.h>
 #include <asm/arch/gpmc.h>
 
-#include "memory.h"
+#include <asm/arch/sdrc.h>
 
 /* GPMC register offsets */
 #define GPMC_REVISION		0x00
@@ -65,12 +65,12 @@ static struct clk *gpmc_l3_clk;
 
 static void gpmc_write_reg(int idx, u32 val)
 {
-	__raw_writel(val, gpmc_base + idx);
+	__raw_writel(val, (__force void __iomem *)(gpmc_base + idx));
 }
 
 static u32 gpmc_read_reg(int idx)
 {
-	return __raw_readl(gpmc_base + idx);
+	return __raw_readl((__force void __iomem *)(gpmc_base + idx));
 }
 
 void gpmc_cs_write_reg(int cs, int idx, u32 val)
@@ -78,12 +78,15 @@ void gpmc_cs_write_reg(int cs, int idx, u32 val)
 	u32 reg_addr;
 
 	reg_addr = gpmc_base + GPMC_CS0 + (cs * GPMC_CS_SIZE) + idx;
-	__raw_writel(val, reg_addr);
+	__raw_writel(val, (__force void __iomem *)reg_addr);
 }
 
 u32 gpmc_cs_read_reg(int cs, int idx)
 {
-	return __raw_readl(gpmc_base + GPMC_CS0 + (cs * GPMC_CS_SIZE) + idx);
+	u32 reg_addr;
+
+	reg_addr = gpmc_base + GPMC_CS0 + (cs * GPMC_CS_SIZE) + idx;
+	return __raw_readl((__force void __iomem *)reg_addr);
 }
 
 /* TODO: Add support for gpmc_fck to clock framework and use it */
@@ -216,6 +219,11 @@ int gpmc_cs_set_timings(int cs, const struct gpmc_timings *t)
 	GPMC_SET_ONE(GPMC_CS_CONFIG5, 16, 20, access);
 
 	GPMC_SET_ONE(GPMC_CS_CONFIG5, 24, 27, page_burst_access);
+
+	if (cpu_is_omap34xx()) {
+		GPMC_SET_ONE(GPMC_CS_CONFIG6, 16, 19, wr_data_mux_bus);
+		GPMC_SET_ONE(GPMC_CS_CONFIG6, 24, 28, wr_access);
+	}
 
 	/* caller is expected to have initialized CONFIG1 to cover
 	 * at least sync vs async

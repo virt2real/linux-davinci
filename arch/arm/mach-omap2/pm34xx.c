@@ -36,6 +36,7 @@
 
 #include "prm.h"
 #include "pm.h"
+#include "smartreflex.h"
 
 struct power_state {
 	struct powerdomain *pwrdm;
@@ -46,7 +47,7 @@ struct power_state {
 
 static LIST_HEAD(pwrst_list);
 
-void (*_omap_sram_idle)(u32 *addr, int save_state);
+static void (*_omap_sram_idle)(u32 *addr, int save_state);
 
 static void (*saved_idle)(void);
 
@@ -132,11 +133,11 @@ static irqreturn_t prcm_interrupt_handler (int irq, void *dev_id)
 	}
 
 	irqstatus_mpu = prm_read_mod_reg(OCP_MOD,
-					OMAP3430_PRM_IRQSTATUS_MPU_OFFSET);
+					OMAP2_PRM_IRQSTATUS_MPU_OFFSET);
 	prm_write_mod_reg(irqstatus_mpu, OCP_MOD,
-					OMAP3430_PRM_IRQSTATUS_MPU_OFFSET);
+					OMAP2_PRM_IRQSTATUS_MPU_OFFSET);
 
-	while (prm_read_mod_reg(OCP_MOD, OMAP3430_PRM_IRQSTATUS_MPU_OFFSET));
+	while (prm_read_mod_reg(OCP_MOD, OMAP2_PRM_IRQSTATUS_MPU_OFFSET));
 
 	return IRQ_HANDLED;
 }
@@ -259,6 +260,10 @@ static int omap3_pm_suspend(void)
 	struct power_state *pwrst;
 	int state, ret = 0;
 
+	/* XXX Disable smartreflex before entering suspend */
+	disable_smartreflex(SR1);
+	disable_smartreflex(SR2);
+
 	/* Read current next_pwrsts */
 	list_for_each_entry(pwrst, &pwrst_list, node)
 		pwrst->saved_state = pwrdm_read_next_pwrst(pwrst->pwrdm);
@@ -289,6 +294,10 @@ restore:
 	else
 		printk(KERN_INFO "Successfully put all powerdomains "
 		       "to target state\n");
+
+	/* XXX Enable smartreflex after suspend */
+	enable_smartreflex(SR1);
+	enable_smartreflex(SR2);
 
 	return ret;
 }
@@ -323,6 +332,20 @@ static struct platform_suspend_ops omap_pm_ops = {
 
 static void __init prcm_setup_regs(void)
 {
+	/* XXX Reset all wkdeps. This should be done when initializing
+	 * powerdomains */
+	prm_write_mod_reg(0, OMAP3430_IVA2_MOD, PM_WKDEP);
+	prm_write_mod_reg(0, MPU_MOD, PM_WKDEP);
+	prm_write_mod_reg(0, OMAP3430_DSS_MOD, PM_WKDEP);
+	prm_write_mod_reg(0, OMAP3430_NEON_MOD, PM_WKDEP);
+	prm_write_mod_reg(0, OMAP3430_CAM_MOD, PM_WKDEP);
+	prm_write_mod_reg(0, OMAP3430_PER_MOD, PM_WKDEP);
+	if (is_sil_rev_greater_than(OMAP3430_REV_ES1_0)) {
+		prm_write_mod_reg(0, OMAP3430ES2_SGX_MOD, PM_WKDEP);
+		prm_write_mod_reg(0, OMAP3430ES2_USBHOST_MOD, PM_WKDEP);
+	} else
+		prm_write_mod_reg(0, GFX_MOD, PM_WKDEP);
+
 	/* setup wakup source */
 	prm_write_mod_reg(OMAP3430_EN_IO | OMAP3430_EN_GPIO1 | OMAP3430_EN_GPT1,
 			  WKUP_MOD, PM_WKEN);
@@ -332,7 +355,7 @@ static void __init prcm_setup_regs(void)
 	/* For some reason IO doesn't generate wakeup event even if
 	 * it is selected to mpu wakeup goup */
 	prm_write_mod_reg(OMAP3430_IO_EN | OMAP3430_WKUP_EN,
-			OCP_MOD, OMAP3430_PRM_IRQENABLE_MPU_OFFSET);
+			OCP_MOD, OMAP2_PRM_IRQENABLE_MPU_OFFSET);
 }
 
 static int __init pwrdms_setup(struct powerdomain *pwrdm)
@@ -348,6 +371,10 @@ static int __init pwrdms_setup(struct powerdomain *pwrdm)
 	pwrst->pwrdm = pwrdm;
 	pwrst->next_state = PWRDM_POWER_RET;
 	list_add(&pwrst->node, &pwrst_list);
+
+	if (pwrdm_has_hdwr_sar(pwrdm))
+		pwrdm_enable_hdwr_sar(pwrdm);
+
 	return set_pwrdm_state(pwrst->pwrdm, pwrst->next_state);
 }
 
@@ -357,6 +384,10 @@ int __init omap3_pm_init(void)
 	int ret;
 
 	printk(KERN_ERR "Power Management for TI OMAP3.\n");
+
+	/* XXX prcm_setup_regs needs to be before enabling hw
+	 * supervised mode for powerdomains */
+	prcm_setup_regs();
 
 	ret = request_irq(INT_34XX_PRCM_MPU_IRQ,
 			  (irq_handler_t)prcm_interrupt_handler,
@@ -384,8 +415,6 @@ int __init omap3_pm_init(void)
 
 	suspend_set_ops(&omap_pm_ops);
 
-	prcm_setup_regs();
-
 	pm_idle = omap3_pm_idle;
 
 err1:
@@ -398,3 +427,72 @@ err2:
 	}
 	return ret;
 }
+
+static void __init configure_vc(void)
+{
+	prm_write_mod_reg((R_SRI2C_SLAVE_ADDR << OMAP3430_SMPS_SA1_SHIFT) |
+			(R_SRI2C_SLAVE_ADDR << OMAP3430_SMPS_SA0_SHIFT),
+			OMAP3430_GR_MOD, OMAP3_PRM_VC_SMPS_SA_OFFSET);
+	prm_write_mod_reg((R_VDD2_SR_CONTROL << OMAP3430_VOLRA1_SHIFT) |
+			(R_VDD1_SR_CONTROL << OMAP3430_VOLRA0_SHIFT),
+			OMAP3430_GR_MOD, OMAP3_PRM_VC_SMPS_VOL_RA_OFFSET);
+
+	prm_write_mod_reg((OMAP3430_VC_CMD_VAL0_ON <<
+		OMAP3430_VC_CMD_ON_SHIFT) |
+		(OMAP3430_VC_CMD_VAL0_ONLP << OMAP3430_VC_CMD_ONLP_SHIFT) |
+		(OMAP3430_VC_CMD_VAL0_RET << OMAP3430_VC_CMD_RET_SHIFT) |
+		(OMAP3430_VC_CMD_VAL0_OFF << OMAP3430_VC_CMD_OFF_SHIFT),
+		OMAP3430_GR_MOD, OMAP3_PRM_VC_CMD_VAL_0_OFFSET);
+
+	prm_write_mod_reg((OMAP3430_VC_CMD_VAL1_ON <<
+		OMAP3430_VC_CMD_ON_SHIFT) |
+		(OMAP3430_VC_CMD_VAL1_ONLP << OMAP3430_VC_CMD_ONLP_SHIFT) |
+		(OMAP3430_VC_CMD_VAL1_RET << OMAP3430_VC_CMD_RET_SHIFT) |
+		(OMAP3430_VC_CMD_VAL1_OFF << OMAP3430_VC_CMD_OFF_SHIFT),
+		OMAP3430_GR_MOD, OMAP3_PRM_VC_CMD_VAL_1_OFFSET);
+
+	prm_write_mod_reg(OMAP3430_CMD1 | OMAP3430_RAV1,
+				OMAP3430_GR_MOD,
+				OMAP3_PRM_VC_CH_CONF_OFFSET);
+
+	prm_write_mod_reg(OMAP3430_MCODE_SHIFT | OMAP3430_HSEN | OMAP3430_SREN,
+				OMAP3430_GR_MOD,
+				OMAP3_PRM_VC_I2C_CFG_OFFSET);
+
+	/* Setup voltctrl and other setup times */
+
+#ifdef CONFIG_OMAP_SYSOFFMODE
+	prm_write_mod_reg(OMAP3430_AUTO_OFF | OMAP3430_AUTO_RET |
+			OMAP3430_SEL_OFF, OMAP3430_GR_MOD,
+			OMAP3_PRM_VOLTCTRL_OFFSET);
+
+	prm_write_mod_reg(OMAP3430_CLKSETUP_DURATION, OMAP3430_GR_MOD,
+			OMAP3_PRM_CLKSETUP_OFFSET);
+	prm_write_mod_reg((OMAP3430_VOLTSETUP_TIME2 <<
+			OMAP3430_SETUP_TIME2_SHIFT) |
+			(OMAP3430_VOLTSETUP_TIME1 <<
+			OMAP3430_SETUP_TIME1_SHIFT),
+			OMAP3430_GR_MOD, OMAP3_PRM_VOLTSETUP1_OFFSET);
+
+	prm_write_mod_reg(OMAP3430_VOLTOFFSET_DURATION, OMAP3430_GR_MOD,
+			OMAP3_PRM_VOLTOFFSET_OFFSET);
+	prm_write_mod_reg(OMAP3430_VOLTSETUP2_DURATION, OMAP3430_GR_MOD,
+			OMAP3_PRM_VOLTSETUP2_OFFSET);
+#else
+	prm_set_mod_reg_bits(OMAP3430_AUTO_RET, OMAP3430_GR_MOD,
+			OMAP3_PRM_VOLTCTRL_OFFSET);
+#endif
+
+}
+
+static int __init omap3_pm_early_init(void)
+{
+	prm_clear_mod_reg_bits(OMAP3430_OFFMODE_POL, OMAP3430_GR_MOD,
+				OMAP3_PRM_POLCTRL_OFFSET);
+
+	configure_vc();
+
+	return 0;
+}
+
+arch_initcall(omap3_pm_early_init);

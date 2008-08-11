@@ -84,6 +84,10 @@ struct gpmc_timings {
 	u16 access;		/* Start-cycle to first data valid delay */
 	u16 rd_cycle;		/* Total read cycle time */
 	u16 wr_cycle;		/* Total write cycle time */
+
+	/* The following are only on OMAP3430 */
+	u16 wr_access;		/* WRACCESSTIME */
+	u16 wr_data_mux_bus;	/* WRDATAONADMUXBUS */
 };
 
 extern unsigned int gpmc_ns_to_ticks(unsigned int time_ns);
@@ -99,5 +103,6 @@ extern int gpmc_cs_request(int cs, unsigned long size, unsigned long *base);
 extern void gpmc_cs_free(int cs);
 extern int gpmc_cs_set_reserved(int cs, int reserved);
 extern int gpmc_cs_reserved(int cs);
+extern void __init gpmc_init(void);
 
 #endif

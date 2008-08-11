@@ -158,7 +158,7 @@ static void twl4030_kp_scan(int release_all)
 		if (!changed)
 			continue;
 
-		for (col = 0; col < n_cols + 1; col++) {
+		for (col = 0; col < n_cols; col++) {
 			int key;
 
 			if (!(changed & (1 << col)))
@@ -350,6 +350,7 @@ static struct platform_driver omap_kp_driver = {
 	.remove		= omap_kp_remove,
 	.driver		= {
 		.name	= "omap_twl4030keypad",
+		.owner	= THIS_MODULE,
 	},
 };
 
@@ -368,6 +369,7 @@ static void __exit omap_kp_exit(void)
 
 module_init(omap_kp_init);
 module_exit(omap_kp_exit);
+MODULE_ALIAS("platform:omap_twl4030keypad");
 MODULE_AUTHOR("Texas Instruments");
 MODULE_DESCRIPTION("OMAP TWL4030 Keypad Driver");
 MODULE_LICENSE("GPL");

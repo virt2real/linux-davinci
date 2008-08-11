@@ -586,7 +586,7 @@ static void twl4030_usb_ldo_init(struct twl4030_usb *twl)
 	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0, VUSB1V8_TYPE);
 
 	/* disable access to power configuration registers */
-	twl4030_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0, PROTECT_KEY);
+	twl4030_i2c_write_u8(TWL4030_MODULE_PM_MASTER, 0, PROTECT_KEY);
 }
 
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
@@ -601,10 +601,13 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 		goto done;
 	}
 
-	if (val & USB_PRES_RISING)
+	if (val & USB_PRES_RISING) {
 		twl4030_phy_resume();
-	else
+		twl4030charger_usb_en(1);
+	} else {
+		twl4030charger_usb_en(0);
 		twl4030_phy_suspend(0);
+	}
 
 	ret = IRQ_HANDLED;
 
@@ -625,8 +628,8 @@ static int twl4030_set_suspend(struct otg_transceiver *x, int suspend)
 static int twl4030_set_peripheral(struct otg_transceiver *xceiv,
 		struct usb_gadget *gadget)
 {
-	struct twl4030_usb *twl = xceiv_to_twl(xceiv);
 	u32 l;
+	struct twl4030_usb *twl = xceiv_to_twl(xceiv);
 
 	if (!xceiv)
 		return -ENODEV;
@@ -770,6 +773,7 @@ static void __exit twl4030_usb_exit(void)
 subsys_initcall(twl4030_usb_init);
 module_exit(twl4030_usb_exit);
 
+MODULE_ALIAS("i2c:twl4030-usb");
 MODULE_AUTHOR("Texas Instruments, Inc.");
 MODULE_DESCRIPTION("TWL4030 USB transceiver driver");
 MODULE_LICENSE("GPL");

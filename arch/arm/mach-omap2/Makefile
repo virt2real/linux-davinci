@@ -3,7 +3,7 @@
 #
 
 # Common support
-obj-y := irq.o id.o io.o memory.o control.o prcm.o clock.o mux.o \
+obj-y := irq.o id.o io.o sdrc.o control.o prcm.o clock.o mux.o \
 		devices.o serial.o gpmc.o timer-gp.o powerdomain.o \
 		clockdomain.o
 
@@ -14,6 +14,10 @@ obj-$(CONFIG_ARCH_OMAP2420)		+= sram242x.o
 obj-$(CONFIG_ARCH_OMAP2430)		+= sram243x.o
 obj-$(CONFIG_ARCH_OMAP3)		+= sram34xx.o
 
+# SMS/SDRC
+obj-$(CONFIG_ARCH_OMAP2)		+= sdrc2xxx.o
+# obj-$(CONFIG_ARCH_OMAP3)		+= sdrc3xxx.o
+
 # Power Management
 ifeq ($(CONFIG_PM),y)
 obj-y					+= pm.o
@@ -23,6 +27,9 @@ obj-$(CONFIG_ARCH_OMAP2430)		+= sleep243x.o
 obj-$(CONFIG_ARCH_OMAP3)		+= pm34xx.o sleep34xx.o
 obj-$(CONFIG_PM_DEBUG)			+= pm-debug.o
 endif
+
+# SmartReflex driver
+obj-$(CONFIG_OMAP_SMARTREFLEX)		+= smartreflex.o
 
 # Clock framework
 obj-$(CONFIG_ARCH_OMAP2)		+= clock24xx.o
@@ -42,12 +49,14 @@ obj-$(CONFIG_MACH_OMAP_2430SDP)		+= board-2430sdp.o \
 					   hsmmc.o \
 					   usb-musb.o \
 					   usb-ehci.o
-obj-$(CONFIG_MACH_OMAP_2430OSK)		+= board-2430osk.o
+obj-$(CONFIG_MACH_OMAP2EVM)		+= board-omap2evm.o \
+					   hsmmc.o
 obj-$(CONFIG_MACH_OMAP_3430SDP)		+= board-3430sdp.o \
 					   hsmmc.o \
 					   usb-musb.o \
 					   usb-ehci.o \
-					   board-3430sdp-flash.o
+					   board-3430sdp-flash.o \
+					   bci.o
 obj-$(CONFIG_MACH_OMAP3EVM)		+= board-omap3evm.o \
 					   hsmmc.o \
 					   usb-musb.o usb-ehci.o \
