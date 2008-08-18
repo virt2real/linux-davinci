@@ -361,8 +361,8 @@ struct emac_netbufobj {
 struct emac_netpktobj {
 	void *pkt_token; /* data token may hold tx/rx chan id */
 	struct emac_netbufobj *buf_list; /* array of network buffer objects */
-	int num_bufs; /* number of network buffer objects */
-	int pkt_length; /* packet length (number of bytes) */
+	int num_bufs;
+	int pkt_length;
 };
 
 /** emac_tx_bd: EMAC TX Buffer descriptor data structure
@@ -370,11 +370,11 @@ struct emac_netpktobj {
  * EMAC TX Buffer descriptor data structure
  */
 struct emac_tx_bd {
-	int h_next; /* next buffer descriptor pointer */
-	int buff_ptr; /* data buffer pointer */
-	int off_b_len; /* (buffer_offset_16)(buffer_length_16) */
+	int h_next;
+	int buff_ptr;
+	int off_b_len;
 	int mode; /* SOP, EOP, ownership, EOQ, teardown,Qstarv, length */
-	void *next; /* next TX buffer descriptor (linked list) */
+	void *next;
 	void *buf_token;
 };
 
@@ -384,28 +384,28 @@ struct emac_tx_bd {
  */
 struct emac_txch {
 	/* Config related */
-	u32 num_bd;	    /* number of BD (& buffers for RX) */
-	u32 service_max;    /* maximum BD's processed in one go */
+	u32 num_bd;
+	u32 service_max;
 
 	/* CPPI specific */
-	u32 alloc_size;     /* BD pool allocated memory size */
-	char *bd_mem;	    /* buffer descriptor memory pointer */
-	struct emac_tx_bd *bd_pool_head;   /* free BD pool head */
-	struct emac_tx_bd *active_queue_head;  /* head of active packet queue */
-	struct emac_tx_bd *active_queue_tail;  /* last hardware BD written */
-	struct emac_tx_bd *last_hw_bdprocessed;    /* last HW BD processed */
-	u32 queue_active;   /* queue active? */
-	u32 teardown_pending;	/* teardown pending? */
-	u32 *tx_complete;   /* tx complete notification queue */
+	u32 alloc_size;
+	char *bd_mem;
+	struct emac_tx_bd *bd_pool_head;
+	struct emac_tx_bd *active_queue_head;
+	struct emac_tx_bd *active_queue_tail;
+	struct emac_tx_bd *last_hw_bdprocessed;
+	u32 queue_active;
+	u32 teardown_pending;
+	u32 *tx_complete;
 
 	/** statistics */
 	u32 proc_count;     /* TX: # of times emac_tx_bdproc is called */
-	u32 mis_queued_packets; /* misqueued packets */
-	u32 queue_reinit;   /* queue reinit - head ptr reinit */
-	u32 end_of_queue_add;	/* packet added to end of queue in send */
-	u32 out_of_tx_bd;   /* out of tx bd errors */
+	u32 mis_queued_packets;
+	u32 queue_reinit;
+	u32 end_of_queue_add;
+	u32 out_of_tx_bd;
 	u32 no_active_pkts; /* IRQ when there were no packets to process */
-	u32 active_queue_count; /* active tx bd count */
+	u32 active_queue_count;
 };
 
 /** emac_rx_bd: EMAC RX Buffer descriptor data structure
@@ -413,14 +413,13 @@ struct emac_txch {
  * EMAC RX Buffer descriptor data structure
  */
 struct emac_rx_bd {
-	int h_next; /* next (hardware) buffer descriptor pointer */
-	int buff_ptr; /* data buffer pointer */
-	int off_b_len; /* (buffer_offset_16)(buffer_length_16) */
-	int mode; /* SOP, EOP, ownership, EOQ, teardown, *Q starv,length */
-	void *next; /* pointer to the next RX buffer in BD queue */
-	void *data_ptr; /* virtual address of the buffer allocated */
+	int h_next;
+	int buff_ptr;
+	int off_b_len;
+	int mode;
+	void *next;
+	void *data_ptr;
 	void *buf_token;
-	/* emac_rx_cppi_ch *rx_cppi; */
 };
 
 /** emac_rxch: EMAC RX Channel data structure
@@ -429,19 +428,19 @@ struct emac_rx_bd {
  */
 struct emac_rxch {
 	/* configuration info */
-	u32 num_bd; /* number of BD (& buffers for RX) */
-	u32 service_max; /* maximum BD's processed in one go */
-	u32 buf_size; /* buffer size (applicable for RX only) */
-	char mac_addr[6]; /* ethernet MAC address */
+	u32 num_bd;
+	u32 service_max;
+	u32 buf_size;
+	char mac_addr[6];
 
 	/** CPPI specific */
-	u32 alloc_size; /* BD pool allocated memory size */
-	char *bd_mem; /* buffer descriptor memory pointer */
+	u32 alloc_size;
+	char *bd_mem;
 	struct emac_rx_bd *bd_pool_head;
 	struct emac_rx_bd *active_queue_head;
 	struct emac_rx_bd *active_queue_tail;
-	u32 queue_active; /* queue active ? */
-	u32 teardown_pending; /* teardown pending? */
+	u32 queue_active;
+	u32 teardown_pending;
 
 	/* packet and buffer objects */
 	struct emac_netpktobj pkt_queue;
@@ -449,14 +448,14 @@ struct emac_rxch {
 
 	/** statistics */
 	u32 proc_count; /* number of times emac_rx_bdproc is called */
-	u32 processed_bd; /* number of BD's processed */
-	u32 recycled_bd; /* number of recycled BD's */
-	u32 out_of_rx_bd; /* NO BD's available */
-	u32 out_of_rx_buffers; /* NO buffers available */
-	u32 queue_reinit; /* condition when recycling buffers */
-	u32 end_of_queue_add; /* when adding BD at end */
-	u32 end_of_queue; /* end of queue condition */
-	u32 mis_queued_packets; /* mis-queued packet condition */
+	u32 processed_bd;
+	u32 recycled_bd;
+	u32 out_of_rx_bd;
+	u32 out_of_rx_buffers;
+	u32 queue_reinit;
+	u32 end_of_queue_add;
+	u32 end_of_queue;
+	u32 mis_queued_packets;
 };
 
 /** emac_mdio: EMAC MDIO data structure
@@ -487,17 +486,17 @@ struct emac_priv {
 	char mac_str[20];
 	spinlock_t tx_lock;
 	spinlock_t rx_lock;
-	u32 emac_base_regs; /* Base EMAC registers */
-	u32 emac_ctrl_regs; /* Control wrapper registers */
-	u32 emac_ctrl_ram; /* Buffer RAM area */
-	u32 mdio_regs; /* MDIO module registers */
-	struct emac_mdio mdio; /* MDIO configuration */
+	u32 emac_base_regs;
+	u32 emac_ctrl_regs;
+	u32 emac_ctrl_ram;
+	u32 mdio_regs;
+	struct emac_mdio mdio;
 	struct emac_txch *txch[EMAC_DEF_MAX_TX_CH];
 	struct emac_rxch *rxch[EMAC_DEF_MAX_RX_CH];
 	u32 link; /* 1=link on, 0=link off */
 	u32 speed; /* 0=Auto Neg, 1=No PHY, 10,100, 1000 - mbps */
 	u32 duplex; /* Link duplex: 1=Unknown, 2=Half, 3=Full */
-	u32 rx_buf_size; /* Max frame size + extra bytes */
+	u32 rx_buf_size;
 	u32 isr_count;
 	struct net_device_stats net_dev_stats;
 	u32 mac_hash1;
@@ -506,8 +505,8 @@ struct emac_priv {
 	u32 rx_addr_type;
 	/* periodic timer required for MDIO polling */
 	struct timer_list periodic_timer;
-	u32 periodic_ticks; /* ticks for this timer */
-	u32 timer_active; /* periodic timer active ??? */
+	u32 periodic_ticks;
+	u32 timer_active;
 };
 
 /* clock frequency for EMAC */
