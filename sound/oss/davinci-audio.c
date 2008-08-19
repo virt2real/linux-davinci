@@ -47,11 +47,12 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/completion.h>
+#include <linux/semaphore.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/hardware.h>
-#include <asm/semaphore.h>
+
+#include <mach/hardware.h>
 
 #include "davinci-audio-dma-intfc.h"
 #include "davinci-audio.h"

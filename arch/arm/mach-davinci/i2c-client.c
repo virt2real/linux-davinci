@@ -27,9 +27,9 @@
 #include <linux/delay.h>
 #include <linux/i2c.h>
 #include <linux/clk.h>
+#include <linux/semaphore.h>
 
-#include <asm/semaphore.h>
-#include <asm/arch/i2c-client.h>
+#include <mach/i2c-client.h>
 
 static DEFINE_MUTEX(expander_lock);
 static struct i2c_client *client_handle;

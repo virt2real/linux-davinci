@@ -30,7 +30,7 @@
 #include <linux/platform_device.h>
 
 #include <asm/mach-types.h>
-#include <asm/arch/i2c-client.h>
+#include <mach/i2c-client.h>
 
 
 /* REVISIT

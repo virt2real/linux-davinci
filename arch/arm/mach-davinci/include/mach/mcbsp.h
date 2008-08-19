@@ -30,8 +30,8 @@
 #ifndef __ASM_ARCH_DAVINCI_MCBSP_H
 #define __ASM_ARCH_DAVINCI_MCBSP_H
 
-#include <asm/hardware.h>
-#include <asm/arch/irqs.h>
+#include <mach/hardware.h>
+#include <mach/irqs.h>
 
 #define DAVINCI_MCBSP1_BASE	 DAVINCI_MCBSP_BASE
 #define DAVINCI_DMA_MCBSP1_RX 3

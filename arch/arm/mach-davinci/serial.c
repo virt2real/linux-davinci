@@ -32,6 +32,7 @@
 #include <mach/hardware.h>
 #include <mach/serial.h>
 #include <mach/irqs.h>
+#include <mach/board.h>
 
 #define UART_DAVINCI_PWREMU 0x0c
 

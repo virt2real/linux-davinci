@@ -46,9 +46,9 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 
-#include <asm/arch/hardware.h>
-#include <asm/arch/nand.h>
-#include <asm/arch/mux.h>
+#include <mach/hardware.h>
+#include <mach/nand.h>
+#include <mach/mux.h>
 
 #include <asm/mach/flash.h>
 

@@ -33,6 +33,7 @@
 #include <asm/mach/flash.h>
 
 #include <mach/common.h>
+#include <mach/board.h>
 
 /* other misc. init functions */
 void __init davinci_psc_init(void);

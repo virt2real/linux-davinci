@@ -1,6 +1,4 @@
 /*
- *  linux/include/asm-arm/arch-davinci/edma.h
- *
  *  BRIEF MODULE DESCRIPTION
  *      TI DAVINCI dma definitions
  *

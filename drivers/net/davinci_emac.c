@@ -58,15 +58,15 @@
 #include <linux/dma-mapping.h>
 #include <linux/clk.h>
 #include <linux/platform_device.h>
+#include <linux/semaphore.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
-#include <asm/semaphore.h>
 #include <asm/page.h>
-#include <asm/arch/memory.h>
-#include <asm/arch/cpu.h>
-#include <asm/arch/hardware.h>
+#include <mach/memory.h>
+#include <mach/cpu.h>
+#include <mach/hardware.h>
 
 #include "davinci_emac_phy.h"
 

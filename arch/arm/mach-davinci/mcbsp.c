@@ -27,10 +27,10 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-#include <asm/arch/memory.h>
-#include <asm/arch/edma.h>
-#include <asm/arch/irqs.h>
-#include <asm/arch/mcbsp.h>
+#include <mach/memory.h>
+#include <mach/edma.h>
+#include <mach/irqs.h>
+#include <mach/mcbsp.h>
 
 struct clk *mbspclk = NULL;
 

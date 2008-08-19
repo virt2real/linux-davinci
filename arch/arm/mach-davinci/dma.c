@@ -30,12 +30,12 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <asm/io.h>
-#include <asm/arch/memory.h>
+#include <mach/memory.h>
 #include <linux/kernel.h>
-#include <asm/arch/hardware.h>
-#include <asm/arch/irqs.h>
+#include <mach/hardware.h>
+#include <mach/irqs.h>
 
-#include <asm/arch/edma.h>
+#include <mach/edma.h>
 
 static spinlock_t dma_chan_lock;
 static struct device_driver edma_driver;

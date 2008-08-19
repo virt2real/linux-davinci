@@ -1,6 +1,4 @@
 /*
- *  linux/include/asm-arm/arch-davinci/board.h
- *
  *  Information structures for board-specific data
  *
  *  Derived from OMAP board.h:
