@@ -35,17 +35,17 @@
 
 #include <asm/io.h>
 #include <asm/mach/flash.h>
-#include <asm/arch/gpmc.h>
-#include <asm/arch/onenand.h>
-#include <asm/arch/gpio.h>
-#include <asm/arch/gpmc.h>
-#include <asm/arch/pm.h>
+#include <mach/gpmc.h>
+#include <mach/onenand.h>
+#include <mach/gpio.h>
+#include <mach/gpmc.h>
+#include <mach/pm.h>
 
 #include <linux/dma-mapping.h>
 #include <asm/dma-mapping.h>
-#include <asm/arch/dma.h>
+#include <mach/dma.h>
 
-#include <asm/arch/board.h>
+#include <mach/board.h>
 
 #define DRIVER_NAME "omap2-onenand"
 
@@ -141,8 +141,13 @@ static int omap2_onenand_wait(struct mtd_info *mtd, int state)
 
 		/* Turn interrupts on */
 		syscfg = read_reg(c, ONENAND_REG_SYS_CFG1);
-		syscfg |= ONENAND_SYS_CFG1_IOBE;
-		write_reg(c, syscfg, ONENAND_REG_SYS_CFG1);
+		if (!(syscfg & ONENAND_SYS_CFG1_IOBE)) {
+			syscfg |= ONENAND_SYS_CFG1_IOBE;
+			write_reg(c, syscfg, ONENAND_REG_SYS_CFG1);
+			if (cpu_is_omap34xx())
+				/* Add a delay to let GPIO settle */
+				syscfg = read_reg(c, ONENAND_REG_SYS_CFG1);
+		}
 
 		INIT_COMPLETION(c->irq_done);
 		if (c->gpio_irq) {
@@ -291,7 +296,7 @@ static int omap3_onenand_read_bufferram(struct mtd_info *mtd, int area,
 
 	dma_src = c->phys_base + bram_offset;
 	dma_dst = dma_map_single(&c->pdev->dev, buf, count, DMA_FROM_DEVICE);
-	if (dma_mapping_error(dma_dst)) {
+	if (dma_mapping_error(&c->pdev->dev, dma_dst)) {
 		dev_err(&c->pdev->dev,
 			"Couldn't DMA map a %d byte buffer\n",
 			count);
@@ -362,7 +367,7 @@ static int omap3_onenand_write_bufferram(struct mtd_info *mtd, int area,
 
 	dma_src = dma_map_single(&c->pdev->dev, buf, count, DMA_TO_DEVICE);
 	dma_dst = c->phys_base + bram_offset;
-	if (dma_mapping_error(dma_dst)) {
+	if (dma_mapping_error(&c->pdev->dev, dma_dst)) {
 		dev_err(&c->pdev->dev,
 			"Couldn't DMA map a %d byte buffer\n",
 			count);
@@ -435,7 +440,7 @@ static int omap2_onenand_read_bufferram(struct mtd_info *mtd, int area,
 	dma_src = c->phys_base + bram_offset;
 	dma_dst = dma_map_single(&c->pdev->dev, buffer, count,
 				 DMA_FROM_DEVICE);
-	if (dma_mapping_error(dma_dst)) {
+	if (dma_mapping_error(&c->pdev->dev, dma_dst)) {
 		dev_err(&c->pdev->dev,
 			"Couldn't DMA map a %d byte buffer\n",
 			count);
@@ -480,7 +485,7 @@ static int omap2_onenand_write_bufferram(struct mtd_info *mtd, int area,
 	dma_src = dma_map_single(&c->pdev->dev, (void *) buffer, count,
 				 DMA_TO_DEVICE);
 	dma_dst = c->phys_base + bram_offset;
-	if (dma_mapping_error(dma_dst)) {
+	if (dma_mapping_error(&c->pdev->dev, dma_dst)) {
 		dev_err(&c->pdev->dev,
 			"Couldn't DMA map a %d byte buffer\n",
 			count);

@@ -26,21 +26,21 @@
 #include <linux/spi/ads7846.h>
 #include <linux/i2c/twl4030-rtc.h>
 
-#include <asm/hardware.h>
+#include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
-#include <asm/arch/gpio.h>
-#include <asm/arch/mux.h>
-#include <asm/arch/board.h>
-#include <asm/arch/usb-musb.h>
-#include <asm/arch/hsmmc.h>
-#include <asm/arch/common.h>
-#include <asm/arch/keypad.h>
-#include <asm/arch/gpmc.h>
-#include <asm/arch/mcspi.h>
+#include <mach/gpio.h>
+#include <mach/mux.h>
+#include <mach/board.h>
+#include <mach/usb-musb.h>
+#include <mach/hsmmc.h>
+#include <mach/common.h>
+#include <mach/keypad.h>
+#include <mach/gpmc.h>
+#include <mach/mcspi.h>
 
 #include <asm/io.h>
 
@@ -176,9 +176,10 @@ static int sdp2430_keymap[] = {
 static struct omap_kp_platform_data sdp2430_kp_data = {
 	.rows		= 5,
 	.cols		= 6,
-	.keymap 	= sdp2430_keymap,
-	.keymapsize 	= ARRAY_SIZE(sdp2430_keymap),
+	.keymap		= sdp2430_keymap,
+	.keymapsize	= ARRAY_SIZE(sdp2430_keymap),
 	.rep		= 1,
+	.irq		= TWL4030_MODIRQ_KEYPAD,
 };
 
 static struct platform_device sdp2430_kp_device = {

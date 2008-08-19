@@ -19,12 +19,12 @@
 #include <linux/platform_device.h>
 #include <linux/timer.h>
 #include <linux/err.h>
-#include <asm/arch/hardware.h>
-#include <asm/arch/gpio.h>
-#include <asm/arch/irqs.h>
-#include <asm/arch/mux.h>
-#include <asm/arch/board.h>
-#include <asm/arch/gpio-switch.h>
+#include <mach/hardware.h>
+#include <mach/gpio.h>
+#include <mach/irqs.h>
+#include <mach/mux.h>
+#include <mach/board.h>
+#include <mach/gpio-switch.h>
 
 struct gpio_switch {
 	char		name[14];
@@ -191,9 +191,9 @@ static irqreturn_t gpio_sw_irq_handler(int irq, void *arg)
 
 	if (!sw->both_edges) {
 		if (omap_get_gpio_datain(sw->gpio))
-			set_irq_type(OMAP_GPIO_IRQ(sw->gpio), IRQT_FALLING);
+			set_irq_type(OMAP_GPIO_IRQ(sw->gpio), IRQ_TYPE_EDGE_FALLING);
 		else
-			set_irq_type(OMAP_GPIO_IRQ(sw->gpio), IRQT_RISING);
+			set_irq_type(OMAP_GPIO_IRQ(sw->gpio), IRQ_TYPE_EDGE_RISING);
 	}
 
 	state = gpio_sw_get_state(sw);

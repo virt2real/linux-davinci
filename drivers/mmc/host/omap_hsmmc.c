@@ -26,12 +26,12 @@
 #include <linux/clk.h>
 #include <linux/mmc/host.h>
 #include <linux/io.h>
-#include <asm/semaphore.h>
+#include <linux/semaphore.h>
 #include <asm/dma.h>
-#include <asm/hardware.h>
-#include <asm/arch/board.h>
-#include <asm/arch/mmc.h>
-#include <asm/arch/cpu.h>
+#include <mach/hardware.h>
+#include <mach/board.h>
+#include <mach/mmc.h>
+#include <mach/cpu.h>
 
 /* OMAP HSMMC Host Controller Registers */
 #define OMAP_HSMMC_SYSCONFIG	0x0010
@@ -810,8 +810,7 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	mmc->max_seg_size = mmc->max_req_size;
 
 	mmc->ocr_avail = mmc_slot(host).ocr_mask;
-	mmc->caps |= MMC_CAP_MULTIWRITE | MMC_CAP_MMC_HIGHSPEED |
-				MMC_CAP_SD_HIGHSPEED;
+	mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
 
 	if (pdata->conf.wire4)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;

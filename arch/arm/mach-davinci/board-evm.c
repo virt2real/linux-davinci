@@ -26,16 +26,13 @@
 #include <asm/setup.h>
 #include <asm/io.h>
 #include <asm/mach-types.h>
-#include <asm/hardware.h>
+#include <mach/hardware.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
-#include <asm/arch/board.h>
-#include <asm/arch/common.h>
-#include <asm/arch/hardware.h>
-#include <asm/arch/psc.h>
+#include <mach/common.h>
 
 /* other misc. init functions */
 void __init davinci_psc_init(void);

@@ -36,10 +36,9 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 
-#include <asm/hardware.h>
-#include <asm/mach-types.h>
+#include <mach/hardware.h>
 
-#include <asm/arch/i2c.h>
+#include <mach/i2c.h>
 
 /* ----- global defines ----------------------------------------------- */
 
@@ -376,6 +375,27 @@ i2c_davinci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 static u32 i2c_davinci_func(struct i2c_adapter *adap)
 {
 	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
+}
+
+static void terminate_read(struct davinci_i2c_dev *dev)
+{
+	u16 w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
+	w |= DAVINCI_I2C_MDR_NACK;
+	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
+
+	/* Throw away data */
+	davinci_i2c_read_reg(dev, DAVINCI_I2C_DRR_REG);
+	if (!dev->terminate)
+		dev_err(dev->dev, "RDR IRQ while no data requested\n");
+}
+static void terminate_write(struct davinci_i2c_dev *dev)
+{
+	u16 w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
+	w |= DAVINCI_I2C_MDR_RM | DAVINCI_I2C_MDR_STP;
+	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
+
+	if (!dev->terminate)
+		dev_err(dev->dev, "TDR IRQ while no data to send\n");
 }
 
 static void terminate_read(struct davinci_i2c_dev *dev)

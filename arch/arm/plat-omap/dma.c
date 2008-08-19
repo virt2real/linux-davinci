@@ -28,10 +28,10 @@
 #include <linux/io.h>
 
 #include <asm/system.h>
-#include <asm/hardware.h>
+#include <mach/hardware.h>
 #include <asm/dma.h>
 
-#include <asm/arch/tc.h>
+#include <mach/tc.h>
 
 #undef DEBUG
 
@@ -712,6 +712,7 @@ int omap_request_dma(int dev_id, const char *dev_name,
 	chan->dev_name = dev_name;
 	chan->callback = callback;
 	chan->data = data;
+	chan->flags = 0;
 
 #ifndef CONFIG_ARCH_OMAP1
 	if (cpu_class_is_omap2()) {
