@@ -16,6 +16,7 @@
 #include <linux/i2c.h>
 #include <linux/gpio.h>
 #include <linux/i2c/pcf857x.h>
+#include <linux/i2c/at24.h>
 #include <linux/leds.h>
 
 #include <linux/mtd/mtd.h>
@@ -372,6 +373,17 @@ static struct pcf857x_platform_data pcf_data_u35 = {
 
 /*----------------------------------------------------------------------*/
 
+/* Most of this EEPROM is unused, but U-Boot uses some data:
+ *  - 0x7f00, 6 bytes Ethernet Address
+ *  - 0x0039, 1 byte NTSC vs PAL (bit 0x80 == PAL)
+ *  - ... newer boards may have more
+ */
+static struct at24_platform_data eeprom_info = {
+	.byte_len	= (256*1024) / 8,
+	.page_size	= 64,
+	.flags		= AT24_FLAG_ADDR16,
+};
+
 static struct i2c_board_info __initdata i2c_info[] =  {
 	{
 		I2C_BOARD_INFO("pcf857x", 0x38),
@@ -394,10 +406,13 @@ static struct i2c_board_info __initdata i2c_info[] =  {
 		.platform_data	= &pcf_data_u35,
 	},
 #endif
+	{
+		I2C_BOARD_INFO("24c256", 0x50),
+		.platform_data	= &eeprom_info,
+	},
 	/* ALSO:
 	 * - tvl320aic33 audio codec (0x1b)
 	 * - msp430 microcontroller (0x23)
-	 * - 24wc256 eeprom (0x50)
 	 * - tvp5146 video decoder (0x5d)
 	 */
 };
