@@ -166,9 +166,6 @@ static struct musb_hdrc_platform_data usb_data = {
 	/* irlml6401 switches 5V */
 	.power          = 250,          /* sustains 3.0+ Amps (!) */
 	.potpgt         = 4,            /* ~8 msec */
-
-	/* REVISIT multipoint is a _chip_ capability; not board specific */
-	.multipoint     = 1,
 };
 
 static struct resource usb_resources [] = {
