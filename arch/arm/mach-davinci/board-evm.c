@@ -205,8 +205,8 @@ static struct platform_device rtc_dev = {
 
 static struct resource ide_resources[] = {
 	{
-		.start          = IO_ADDRESS(DAVINCI_CFC_ATA_BASE),
-		.end            = IO_ADDRESS(DAVINCI_CFC_ATA_BASE) + SZ_4K,
+		.start          = DAVINCI_CFC_ATA_BASE,
+		.end            = DAVINCI_CFC_ATA_BASE + SZ_4K,
 		.flags          = IORESOURCE_MEM,
 	},
 	{
