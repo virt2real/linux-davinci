@@ -15,6 +15,13 @@
  * is bigger than what the chip actually supports!
  */
 
+struct at24_iface {
+	ssize_t (*read)(struct at24_iface *, char *buf, off_t offset,
+			size_t count);
+	ssize_t (*write)(struct at24_iface *, char *buf, off_t offset,
+			 size_t count);
+};
+
 struct at24_platform_data {
 	u32		byte_len;		/* size (sum of all addr) */
 	u16		page_size;		/* for writes */
@@ -23,6 +30,9 @@ struct at24_platform_data {
 #define AT24_FLAG_READONLY	0x40	/* sysfs-entry will be read-only */
 #define AT24_FLAG_IRUGO		0x20	/* sysfs-entry will be world-readable */
 #define AT24_FLAG_TAKE8ADDR	0x10	/* take always 8 addresses (24c00) */
+
+	int             (*setup)(struct at24_iface *, void *context);
+	void		*context;
 };
 
 #endif /* _LINUX_AT24_H */

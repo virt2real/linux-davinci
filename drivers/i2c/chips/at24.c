@@ -53,6 +53,7 @@
 
 struct at24_data {
 	struct at24_platform_data chip;
+	struct at24_iface iface;
 	bool use_smbus;
 
 	/*
@@ -264,13 +265,6 @@ static ssize_t at24_bin_read(struct kobject *kobj, struct bin_attribute *attr,
 
 
 /*
- * REVISIT: export at24_bin{read,write}() to let other kernel code use
- * eeprom data. For example, it might hold a board's Ethernet address, or
- * board-specific calibration data generated on the manufacturing floor.
- */
-
-
-/*
  * Note that if the hardware write-protect pin is pulled high, the whole
  * chip is normally write protected. But there are plenty of product
  * variants here, including OTP fuses and partial chip protect.
@@ -386,6 +380,30 @@ static ssize_t at24_bin_write(struct kobject *kobj, struct bin_attribute *attr,
 
 /*-------------------------------------------------------------------------*/
 
+/*
+ * This lets other kernel code access the eeprom data. For example, it
+ * might hold a board's Ethernet address, or board-specific calibration
+ * data generated on the manufacturing floor.
+ */
+
+static ssize_t at24_iface_read(struct at24_iface *iface, char *buf,
+			      off_t offset, size_t count)
+{
+	struct at24_data *at24 = container_of(iface, struct at24_data, iface);
+
+	return at24_eeprom_read(at24, buf, offset, count);
+}
+
+static ssize_t at24_iface_write(struct at24_iface *iface, char *buf,
+			       off_t offset, size_t count)
+{
+	struct at24_data *at24 = container_of(iface, struct at24_data, iface);
+
+	return at24_eeprom_write(at24, buf, offset, count);
+}
+
+/*-------------------------------------------------------------------------*/
+
 static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct at24_platform_data chip;
@@ -413,6 +431,9 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		 * is recommended anyhow.
 		 */
 		chip.page_size = 1;
+
+		chip.setup = NULL;
+		chip.context = NULL;
 	}
 
 	if (!is_power_of_2(chip.byte_len))
@@ -448,6 +469,9 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		err = -ENOMEM;
 		goto err_out;
 	}
+
+	at24->iface.read = at24_iface_read;
+	at24->iface.write = at24_iface_write;
 
 	mutex_init(&at24->lock);
 	at24->use_smbus = use_smbus;
@@ -520,6 +544,10 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		chip.page_size, num_addresses,
 		at24->write_max,
 		use_smbus ? ", use_smbus" : "");
+
+	/* export data to kernel code */
+	if (chip.setup)
+		chip.setup(&at24->iface, chip.context);
 
 	return 0;
 
