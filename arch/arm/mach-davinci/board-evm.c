@@ -18,7 +18,7 @@
 #include <linux/i2c/pcf857x.h>
 #include <linux/i2c/at24.h>
 #include <linux/leds.h>
-
+#include <linux/etherdevice.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
@@ -35,6 +35,7 @@
 
 #include <mach/common.h>
 #include <mach/board.h>
+#include <mach/emac.h>
 
 /* other misc. init functions */
 void __init davinci_psc_init(void);
@@ -378,11 +379,48 @@ static struct pcf857x_platform_data pcf_data_u35 = {
  *  - 0x0039, 1 byte NTSC vs PAL (bit 0x80 == PAL)
  *  - ... newer boards may have more
  */
+static struct at24_iface *at24_if;
+
+static int at24_setup(struct at24_iface *iface, void *context)
+{
+	DECLARE_MAC_BUF(mac_str);
+	char mac_addr[6];
+
+	at24_if = iface;
+
+	/* Read MAC addr from EEPROM */
+	if (at24_if->read(at24_if, mac_addr, 0x7f00, 6) == 6) {
+		printk(KERN_INFO "Read MAC addr from EEPROM: %s\n",
+		       print_mac(mac_str, mac_addr));
+
+		davinci_init_emac(mac_addr);
+	}
+
+	return 0;
+}
+
 static struct at24_platform_data eeprom_info = {
 	.byte_len	= (256*1024) / 8,
 	.page_size	= 64,
 	.flags		= AT24_FLAG_ADDR16,
+	.setup          = at24_setup,
 };
+
+int dm6446evm_eeprom_read(void *buf, off_t off, size_t count)
+{
+	if (at24_if)
+		return at24_if->read(at24_if, buf, off, count);
+	return -ENODEV;
+}
+EXPORT_SYMBOL(dm6446evm_eeprom_read);
+
+int dm6446evm_eeprom_write(void *buf, off_t off, size_t count)
+{
+	if (at24_if)
+		return at24_if->write(at24_if, buf, off, count);
+	return -ENODEV;
+}
+EXPORT_SYMBOL(dm6446evm_eeprom_write);
 
 static struct i2c_board_info __initdata i2c_info[] =  {
 	{

@@ -67,6 +67,7 @@
 #include <mach/memory.h>
 #include <mach/cpu.h>
 #include <mach/hardware.h>
+#include <mach/emac.h>
 
 #include "davinci_emac_phy.h"
 
@@ -483,7 +484,6 @@ struct emac_priv {
 	struct platform_device *pdev;
 	struct napi_struct napi;
 	char mac_addr[6];
-	char mac_str[20];
 	spinlock_t tx_lock;
 	spinlock_t rx_lock;
 	u32 emac_base_regs;
@@ -1140,77 +1140,6 @@ static void emac_dev_mcast_set(struct net_device *ndev)
 	}
 	/* Set mbp config register */
 	emac_write(EMAC_RXMBPENABLE, mbp_enable);
-}
-
-
-/**
- * emac_str_to_hexnum: String to hex number conversion (Internal)
- * @c: string to convert to hex number
- *
- * Internal helper function to convert string to hex number
- */
-static unsigned char emac_str_to_hexnum(unsigned char c)
-{
-	if (c >= '0' && c <= '9')
-		return c - '0';
-	else if (c >= 'a' && c <= 'f')
-		return c - 'a' + 10;
-	else if (c >= 'A' && c <= 'F')
-		return c - 'A' + 10;
-	else
-		return 0;
-}
-
-/**
- * emac_str_to_ethaddr: ConvertGet EMAC mac address from platform
- * @priv: The DaVinci EMAC private adapter structure
- *
- * Invokes a board specific function that provides MAC address for this
- * adapter. For DaVinci EVM, the function invoked is
- * davinci_get_macaddr()
- *
- * @TODO: use platform parameter to pass mac address in future
- *
- */static void emac_str_to_ethaddr(unsigned char *ea, unsigned char *str)
-{
-	int i;
-	unsigned char num;
-
-	for (i = 0; i < 6; i++) {
-		if ((*str == '.') || (*str == ':'))
-			str++;
-		num = emac_str_to_hexnum(*str) << 4;
-		++str;
-		num |= (emac_str_to_hexnum(*str));
-		++str;
-		ea[i] = num;
-	}
-}
-
-/* TODO: External function in init code - move this to platform config */
-extern int davinci_get_macaddr(char *ptr);
-
-/**
- * emac_eth_setup: Get EMAC mac address from platform
- * @priv: The DaVinci EMAC private adapter structure
- *
- * Iinvokes a board specific function that provides MAC address for this
- * adapter. For DaVinci EVM, the function invoked is
- * davinci_get_macaddr()
- *
- * TODO: use platform parameter to pass mac address in future
- *
- */
-static void emac_eth_setup(struct emac_priv *priv)
-{
-	/* TODO: Try to use platform structure for this */
-	strcpy(priv->mac_str, "deadbeef");
-	if (davinci_get_macaddr(&priv->mac_str[0]) != 0) {
-		dev_warn(EMAC_DEV, "DaVinci EMAC: Error getting MAC addr\n");
-		dev_warn(EMAC_DEV, "Def MAC address: 08.00.28.32.06.08");
-	}
-	emac_str_to_ethaddr(priv->mac_addr, priv->mac_str);
-	return;
 }
 
 /**
@@ -2524,7 +2453,6 @@ static int emac_dev_open(struct net_device *ndev)
 	struct emac_priv *priv = netdev_priv(ndev);
 
 	netif_carrier_off(ndev);
-	emac_eth_setup(priv);
 	for (cnt = 0; cnt <= ETH_ALEN; cnt++)
 		ndev->dev_addr[cnt] = priv->mac_addr[cnt];
 
@@ -2709,6 +2637,13 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	priv->pdev = pdev;
 	priv->ndev = ndev;
 	priv->msg_enable = netif_msg_init(debug_level, DAVINCI_EMAC_DEBUG);
+
+	/* MAC addr: from platform_data */
+	if (pdev->dev.platform_data) {
+		struct emac_platform_data *pdata = pdev->dev.platform_data;
+
+		memcpy(priv->mac_addr, pdata->mac_addr, 6);
+	}
 
 	/* Get EMAC platform data */
 	base_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);

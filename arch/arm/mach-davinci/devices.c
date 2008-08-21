@@ -14,12 +14,15 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/random.h>
+#include <linux/etherdevice.h>
 
 #include <asm/io.h>
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
 
 #include <mach/hardware.h>
+#include <mach/emac.h>
 
 #if 	defined(CONFIG_I2C_DAVINCI) || defined(CONFIG_I2C_DAVINCI_MODULE)
 
@@ -108,22 +111,42 @@ static struct resource emac_resources[] = {
 };
 
 
+static struct emac_platform_data emac_pdata;
+
 static struct platform_device davinci_emac_device = {
        .name = "davinci_emac",
        .id = 1,
        .num_resources = ARRAY_SIZE(emac_resources),
        .resource = emac_resources,
+       .dev = {
+		.platform_data = &emac_pdata,
+	}
 };
 
-
-static void davinci_init_emac(void)
+void davinci_init_emac(char *mac_addr)
 {
-       (void) platform_device_register(&davinci_emac_device);
+	DECLARE_MAC_BUF(buf);
+
+	/* if valid MAC exists, don't re-register */
+	if (is_valid_ether_addr(emac_pdata.mac_addr))
+		return;
+
+	if (mac_addr && is_valid_ether_addr(mac_addr))
+		memcpy(emac_pdata.mac_addr, mac_addr, 6);
+	else {
+		/* Use random MAC if none passed */
+		random_ether_addr(emac_pdata.mac_addr);
+
+		printk(KERN_WARNING "%s: using random MAC addr: %s\n",
+		       __func__, print_mac(buf, emac_pdata.mac_addr));
+	}
+
+	(void) platform_device_register(&davinci_emac_device);
 }
 
 #else
 
-static void davinci_init_emac(void) {}
+void davinci_init_emac(char *unused) {}
 
 #endif
 
@@ -136,9 +159,16 @@ static int __init davinci_init_devices(void)
 	 */
 	davinci_init_i2c();
 	davinci_init_mmcsd();
-	davinci_init_emac();
 
 	return 0;
 }
 arch_initcall(davinci_init_devices);
 
+static int __init davinci_init_devices_late(void)
+{
+	/* This is a backup call in case board code did not call init func */
+	davinci_init_emac(NULL);
+
+	return 0;
+}
+late_initcall(davinci_init_devices_late);
