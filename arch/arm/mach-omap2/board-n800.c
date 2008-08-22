@@ -26,20 +26,20 @@
 #include <linux/i2c.h>
 #include <linux/i2c/lm8323.h>
 #include <linux/i2c/menelaus.h>
-#include <asm/hardware.h>
+#include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
-#include <asm/arch/gpio.h>
-#include <asm/arch/usb.h>
-#include <asm/arch/board.h>
-#include <asm/arch/common.h>
-#include <asm/arch/mcspi.h>
-#include <asm/arch/lcd_mipid.h>
-#include <asm/arch/clock.h>
-#include <asm/arch/gpio-switch.h>
-#include <asm/arch/omapfb.h>
-#include <asm/arch/blizzard.h>
+#include <mach/gpio.h>
+#include <mach/usb.h>
+#include <mach/board.h>
+#include <mach/common.h>
+#include <mach/mcspi.h>
+#include <mach/lcd_mipid.h>
+#include <mach/clock.h>
+#include <mach/gpio-switch.h>
+#include <mach/omapfb.h>
+#include <mach/blizzard.h>
 
 #include <../drivers/cbus/tahvo.h>
 #include <../drivers/media/video/tcm825x.h>
@@ -645,7 +645,9 @@ extern struct tcm825x_platform_data n800_tcm825x_platform_data;
 static struct i2c_board_info __initdata_or_module n8x0_i2c_board_info_2[] = {
 	{
 		I2C_BOARD_INFO(TCM825X_NAME, TCM825X_I2C_ADDR),
+#if defined (CONFIG_VIDEO_TCM825X) || defined (CONFIG_VIDEO_TCM825X_MODULE)
 		.platform_data = &n800_tcm825x_platform_data,
+#endif
 	},
 	{
 		I2C_BOARD_INFO("tsl2563", 0x29),

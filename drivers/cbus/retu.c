@@ -38,9 +38,9 @@
 
 #include <asm/uaccess.h>
 
-#include <asm/arch/mux.h>
-#include <asm/arch/gpio.h>
-#include <asm/arch/board.h>
+#include <mach/mux.h>
+#include <mach/gpio.h>
+#include <mach/board.h>
 
 #include "cbus.h"
 #include "retu.h"
@@ -344,7 +344,7 @@ static int __devinit retu_probe(struct device *dev)
 	omap_set_gpio_direction(retu_irq_pin, 1);
 
 	/* Rising edge triggers the IRQ */
-	set_irq_type(OMAP_GPIO_IRQ(retu_irq_pin), IRQT_RISING);
+	set_irq_type(OMAP_GPIO_IRQ(retu_irq_pin), IRQ_TYPE_EDGE_RISING);
 
 	retu_initialized = 1;
 

@@ -30,11 +30,11 @@
 #include <sound/davincisound.h>
 
 #include <asm/uaccess.h>
-#include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/mach-types.h>
 
-#include <asm/arch/mcbsp.h>
+#include <mach/hardware.h>
+#include <mach/mcbsp.h>
 #include "davinci-aic33.h"
 
 #include "davinci-audio.h"

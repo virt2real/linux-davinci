@@ -36,8 +36,8 @@
 #include <linux/kfifo.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/arch/mailbox.h>
-#include <asm/arch/dsp.h>
+#include <mach/mailbox.h>
+#include <mach/dsp.h>
 #include "uaccess_dsp.h"
 #include "dsp_mbcmd.h"
 #include "dsp.h"
@@ -1762,7 +1762,7 @@ static int taskdev_init(struct taskdev *dev, char *name, unsigned char minor)
 		goto fail_create_proclist;
 
 	task_dev = device_create(dsp_task_class, NULL,
-				 MKDEV(OMAP_DSP_TASK_MAJOR, minor),
+				 MKDEV(OMAP_DSP_TASK_MAJOR, minor), NULL,
 				 "dsptask%d", (int)minor);
 
 	if (unlikely(IS_ERR(task_dev))) {
@@ -2830,7 +2830,7 @@ static ssize_t proc_list_show(struct device *d, struct device_attribute *attr,
 	list_for_each_entry(pl, &dev->proc_list, list_head) {
 		/* need to lock tasklist_lock before calling
 		 * find_task_by_pid_type. */
-		if (find_task_by_pid(pl->pid) != NULL)
+		if (find_task_by_pid_type_ns(PIDTYPE_PID, pl->pid, &init_pid_ns) != NULL)
 			len += sprintf(buf + len, "%d\n", pl->pid);
 		read_unlock(&tasklist_lock);
 	}

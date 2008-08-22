@@ -38,9 +38,9 @@
 
 #include <asm/uaccess.h>
 
-#include <asm/arch/mux.h>
-#include <asm/arch/gpio.h>
-#include <asm/arch/board.h>
+#include <mach/mux.h>
+#include <mach/gpio.h>
+#include <mach/board.h>
 
 #include "cbus.h"
 #include "tahvo.h"
@@ -331,7 +331,7 @@ static int __devinit tahvo_probe(struct device *dev)
 	omap_set_gpio_direction(tahvo_irq_pin, 1);
 
 	/* Rising edge triggers the IRQ */
-	set_irq_type(OMAP_GPIO_IRQ(tahvo_irq_pin), IRQT_RISING);
+	set_irq_type(OMAP_GPIO_IRQ(tahvo_irq_pin), IRQ_TYPE_EDGE_RISING);
 
 	/* Mask all TAHVO interrupts */
 	tahvo_write_reg(TAHVO_REG_IMR, 0xffff);

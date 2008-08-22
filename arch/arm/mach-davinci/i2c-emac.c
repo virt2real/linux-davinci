@@ -17,7 +17,7 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 
-#include <asm/arch/i2c-client.h>
+#include <mach/i2c-client.h>
 
 /* Get Ethernet address from kernel boot params */
 static unsigned char cpmac_eth_string[20] = "deadbeef";

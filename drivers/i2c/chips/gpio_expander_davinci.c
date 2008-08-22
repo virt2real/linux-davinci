@@ -16,7 +16,7 @@
 #include <linux/errno.h>
 #include <linux/mutex.h>
 
-#include <asm/arch/i2c-client.h>
+#include <mach/i2c-client.h>
 
 static DEFINE_MUTEX(expander_lock);
 

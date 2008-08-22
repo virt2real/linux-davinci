@@ -50,16 +50,16 @@
 #include <linux/dma-mapping.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/semaphore.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
-#include <asm/hardware.h>
-#include <asm/semaphore.h>
 #include <asm/delay.h>
 
-#include <asm/arch/mcbsp.h>
-#include <asm/arch/edma.h>
-#include <asm/arch/memory.h>
+#include <mach/hardware.h>
+#include <mach/mcbsp.h>
+#include <mach/edma.h>
+#include <mach/memory.h>
 
 #include "davinci-audio-dma-intfc.h"
 #include "davinci-audio.h"

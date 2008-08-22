@@ -41,10 +41,10 @@
 #include <linux/i2c/twl4030-gpio.h>
 #include <linux/slab.h>
 
-#include <asm/arch/irqs.h>
+#include <mach/irqs.h>
 #include <asm/mach/irq.h>
-#include <asm/arch/gpio.h>
-#include <asm/arch/mux.h>
+#include <mach/gpio.h>
+#include <mach/mux.h>
 
 #include <linux/device.h>
 
@@ -748,6 +748,7 @@ static int __init gpio_twl4030_init(void)
 			&twl4030_gpio_module_irq_chip);
 		set_irq_chained_handler(TWL4030_MODIRQ_GPIO,
 			do_twl4030_gpio_module_irq);
+		wake_up_process(gpio_unmask_thread);
 	}
 
 	printk(KERN_INFO "TWL4030 GPIO Demux: IRQ Range %d to %d,"

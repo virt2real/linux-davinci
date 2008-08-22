@@ -20,17 +20,17 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 
-#include <asm/hardware.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/mach/map.h>
 #include <asm/setup.h>
 
-#include <asm/arch/board.h>
-#include <asm/arch/serial.h>
-#include <asm/arch/mux.h>
+#include <mach/hardware.h>
+#include <mach/board.h>
+#include <mach/serial.h>
+#include <mach/mux.h>
 
-#include <asm/arch/clock.h>
+#include <mach/clock.h>
 
 #define NO_LENGTH_CHECK 0xffffffff
 

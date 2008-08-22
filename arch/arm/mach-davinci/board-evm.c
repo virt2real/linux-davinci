@@ -26,16 +26,14 @@
 #include <asm/setup.h>
 #include <asm/io.h>
 #include <asm/mach-types.h>
-#include <asm/hardware.h>
+#include <mach/hardware.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
-#include <asm/arch/board.h>
-#include <asm/arch/common.h>
-#include <asm/arch/hardware.h>
-#include <asm/arch/psc.h>
+#include <mach/common.h>
+#include <mach/board.h>
 
 /* other misc. init functions */
 void __init davinci_psc_init(void);
@@ -168,9 +166,6 @@ static struct musb_hdrc_platform_data usb_data = {
 	/* irlml6401 switches 5V */
 	.power          = 250,          /* sustains 3.0+ Amps (!) */
 	.potpgt         = 4,            /* ~8 msec */
-
-	/* REVISIT multipoint is a _chip_ capability; not board specific */
-	.multipoint     = 1,
 };
 
 static struct resource usb_resources [] = {
@@ -210,8 +205,8 @@ static struct platform_device rtc_dev = {
 
 static struct resource ide_resources[] = {
 	{
-		.start          = IO_ADDRESS(DAVINCI_CFC_ATA_BASE),
-		.end            = IO_ADDRESS(DAVINCI_CFC_ATA_BASE) + SZ_4K,
+		.start          = DAVINCI_CFC_ATA_BASE,
+		.end            = DAVINCI_CFC_ATA_BASE + SZ_4K,
 		.flags          = IORESOURCE_MEM,
 	},
 	{

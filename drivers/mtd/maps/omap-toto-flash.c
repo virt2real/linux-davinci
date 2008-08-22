@@ -4,8 +4,6 @@
  * jzhang@ti.com (C) 2003 Texas Instruments.
  *
  *  (C) 2002 MontVista Software, Inc.
- *
- * $Id: omap-toto-flash.c,v 1.5 2005/11/07 11:14:27 gleixner Exp $
  */
 
 #include <linux/module.h>
@@ -19,7 +17,7 @@
 #include <linux/mtd/map.h>
 #include <linux/mtd/partitions.h>
 
-#include <asm/hardware.h>
+#include <mach/hardware.h>
 #include <asm/io.h>
 
 

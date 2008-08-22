@@ -15,10 +15,11 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 
-#include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
+
+#include <mach/hardware.h>
 
 #if 	defined(CONFIG_I2C_DAVINCI) || defined(CONFIG_I2C_DAVINCI_MODULE)
 

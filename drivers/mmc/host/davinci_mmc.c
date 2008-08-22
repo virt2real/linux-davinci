@@ -40,12 +40,13 @@
 #include <linux/irq.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
-#include <asm/hardware.h>
-#include <asm/arch/irqs.h>
-#include <asm/arch/hardware.h>
+
+#include <mach/hardware.h>
+#include <mach/irqs.h>
+#include <mach/hardware.h>
 
 #include "davinci_mmc.h"
-#include <asm/arch/edma.h>
+#include <mach/edma.h>
 
 extern void davinci_clean_channel(int ch_no);
 

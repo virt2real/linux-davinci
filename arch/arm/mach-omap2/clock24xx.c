@@ -28,12 +28,12 @@
 #include <linux/io.h>
 #include <linux/cpufreq.h>
 
-#include <asm/arch/common.h>
-#include <asm/arch/clock.h>
-#include <asm/arch/sram.h>
+#include <mach/common.h>
+#include <mach/clock.h>
+#include <mach/sram.h>
 #include <asm/div64.h>
 
-#include <asm/arch/sdrc.h>
+#include <mach/sdrc.h>
 #include "clock.h"
 #include "clock24xx.h"
 #include "prm.h"
@@ -567,11 +567,13 @@ int __init omap2_clk_init(void)
 
 		if ((*clkp)->flags & CLOCK_IN_OMAP242X && cpu_is_omap2420()) {
 			clk_register(*clkp);
+			omap2_init_clk_clkdm(*clkp);
 			continue;
 		}
 
 		if ((*clkp)->flags & CLOCK_IN_OMAP243X && cpu_is_omap2430()) {
 			clk_register(*clkp);
+			omap2_init_clk_clkdm(*clkp);
 			continue;
 		}
 	}
