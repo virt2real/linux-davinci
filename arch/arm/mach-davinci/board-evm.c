@@ -41,9 +41,6 @@ void __init davinci_irq_init(void);
 void __init davinci_map_common_io(void);
 void __init davinci_init_common_hw(void);
 
-/* NOR Flash base address set to CS0 by default */
-#define NOR_FLASH_PHYS 0x02000000
-
 static struct mtd_partition davinci_evm_norflash_partitions[] = {
 	/* bootloader (U-Boot, etc) in first 4 sectors */
 	{
@@ -84,8 +81,8 @@ static struct physmap_flash_data davinci_evm_norflash_data = {
 /* NOTE: CFI probe will correctly detect flash part as 32M, but EMIF
  * limits addresses to 16M, so using addresses past 16M will wrap */
 static struct resource davinci_evm_norflash_resource = {
-	.start		= NOR_FLASH_PHYS,
-	.end		= NOR_FLASH_PHYS + SZ_16M - 1,
+	.start		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE,
+	.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_16M - 1,
 	.flags		= IORESOURCE_MEM,
 };
 
@@ -117,7 +114,7 @@ static struct flash_platform_data davinci_evm_nandflash_data = {
 
 static struct resource davinci_evm_nandflash_resource = {
 	.start		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE,
-	.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_16K - 1,
+	.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_16M - 1,
 	.flags		= IORESOURCE_MEM,
 };
 
