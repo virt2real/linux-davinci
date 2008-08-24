@@ -2690,6 +2690,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	netif_napi_add(ndev, &priv->napi, emac_poll, EMAC_POLL_WEIGHT);
 
 	/* register the network device */
+	SET_NETDEV_DEV(ndev, &pdev->dev);
 	rc = register_netdev(ndev);
 	if (rc) {
 		dev_err(EMAC_DEV, "DaVinci EMAC: Error in register_netdev\n");
@@ -2751,7 +2752,7 @@ static struct platform_driver davinci_emac_driver = {
 		.owner	 = THIS_MODULE,
 	},
 	.probe = davinci_emac_probe,
-	.remove = davinci_emac_remove,
+	.remove = __devexit_p(davinci_emac_remove),
 };
 
 
@@ -2765,7 +2766,7 @@ static int __devinit davinci_emac_init(void)
 {
 	/* TODO: use mii/phy linux infrastructure and register mdio device */
 	printk(KERN_INFO "%s driver initialized\n", emac_version_string);
-	return (platform_driver_register(&davinci_emac_driver));
+	return platform_driver_register(&davinci_emac_driver);
 }
 
 /**
