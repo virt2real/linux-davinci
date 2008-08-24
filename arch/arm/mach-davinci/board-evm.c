@@ -36,6 +36,7 @@
 #include <mach/common.h>
 #include <mach/board.h>
 #include <mach/emac.h>
+#include <mach/i2c.h>
 
 /* other misc. init functions */
 void __init davinci_psc_init(void);
@@ -421,6 +422,20 @@ static struct i2c_board_info __initdata i2c_info[] =  {
 	 */
 };
 
+/* The msp430 uses a slow bitbanged I2C implementation (ergo 20 KHz),
+ * which requires 100 usec of idle bus after i2c writes sent to it.
+ */
+static struct davinci_i2c_platform_data i2c_pdata = {
+	.bus_freq	= 20 /* kHz */,
+	.bus_delay	= 100 /* usec */,
+};
+
+static void __init evm_init_i2c(void)
+{
+	davinci_init_i2c(&i2c_pdata);
+	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
+}
+
 static struct platform_device *davinci_evm_devices[] __initdata = {
 #if defined(CONFIG_MTD_PHYSMAP) || \
     defined(CONFIG_MTD_PHYSMAP_MODULE)
@@ -468,7 +483,7 @@ static __init void davinci_evm_init(void)
 
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));
-	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
+	evm_init_i2c();
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();

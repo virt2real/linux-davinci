@@ -23,8 +23,10 @@
 
 #include <mach/hardware.h>
 #include <mach/emac.h>
+#include <mach/i2c.h>
 
-#if 	defined(CONFIG_I2C_DAVINCI) || defined(CONFIG_I2C_DAVINCI_MODULE)
+
+#if defined(CONFIG_I2C_DAVINCI) || defined(CONFIG_I2C_DAVINCI_MODULE)
 
 static struct resource i2c_resources[] = {
 	{
@@ -45,14 +47,18 @@ static struct platform_device davinci_i2c_device = {
 	.resource	= i2c_resources,
 };
 
-static void davinci_init_i2c(void)
+void __init davinci_init_i2c(struct davinci_i2c_platform_data *pdata)
 {
+	davinci_i2c_device.dev.platform_data = pdata;
 	(void) platform_device_register(&davinci_i2c_device);
 }
 
 #else
 
-static void davinci_init_i2c(void) {}
+void __init davinci_init_i2c(struct davinci_i2c_platform_data *pdata)
+{
+	/* nothing */
+}
 
 #endif
 
@@ -157,7 +163,6 @@ static int __init davinci_init_devices(void)
 	/* please keep these calls, and their implementations above,
 	 * in alphabetical order so they're easier to sort through.
 	 */
-	davinci_init_i2c();
 	davinci_init_mmcsd();
 
 	return 0;
