@@ -43,6 +43,9 @@ void __init davinci_irq_init(void);
 void __init davinci_map_common_io(void);
 void __init davinci_init_common_hw(void);
 
+#if defined(CONFIG_MTD_PHYSMAP) || \
+    defined(CONFIG_MTD_PHYSMAP_MODULE)
+
 static struct mtd_partition davinci_evm_norflash_partitions[] = {
 	/* bootloader (U-Boot, etc) in first 4 sectors */
 	{
@@ -97,6 +100,8 @@ static struct platform_device davinci_evm_norflash_device = {
 	.num_resources	= 1,
 	.resource	= &davinci_evm_norflash_resource,
 };
+
+#endif
 
 #if defined(CONFIG_MTD_NAND_DAVINCI) || defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
 struct mtd_partition davinci_evm_nandflash_partition[] = {
@@ -202,6 +207,9 @@ static struct platform_device rtc_dev = {
 	.id             = -1,
 };
 
+#if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
+    defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
+
 static struct resource ide_resources[] = {
 	{
 		.start          = DAVINCI_CFC_ATA_BASE,
@@ -215,12 +223,20 @@ static struct resource ide_resources[] = {
 	},
 };
 
+static u64 ide_dma_mask = DMA_32BIT_MASK;
+
 static struct platform_device ide_dev = {
 	.name           = "palm_bk3710",
 	.id             = -1,
 	.resource       = ide_resources,
 	.num_resources  = ARRAY_SIZE(ide_resources),
+	.dev = {
+		.dma_mask		= &ide_dma_mask,
+		.coherent_dma_mask      = DMA_32BIT_MASK,
+	},
 };
+
+#endif
 
 /*----------------------------------------------------------------------*/
 
@@ -457,7 +473,10 @@ static struct i2c_board_info __initdata i2c_info[] =  {
 };
 
 static struct platform_device *davinci_evm_devices[] __initdata = {
+#if defined(CONFIG_MTD_PHYSMAP) || \
+    defined(CONFIG_MTD_PHYSMAP_MODULE)
 	&davinci_evm_norflash_device,
+#endif
 #if defined(CONFIG_MTD_NAND_DAVINCI) || defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
 	&davinci_evm_nandflash_device,
 #endif
@@ -468,7 +487,10 @@ static struct platform_device *davinci_evm_devices[] __initdata = {
 	&usb_dev,
 #endif
 	&rtc_dev,
+#if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
+    defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
 	&ide_dev,
+#endif
 };
 
 static struct davinci_uart_config davinci_evm_uart_config __initdata = {
@@ -491,8 +513,11 @@ static __init void davinci_evm_init(void)
 
 #if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
     defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
+#if defined(CONFIG_MTD_PHYSMAP) || \
+    defined(CONFIG_MTD_PHYSMAP_MODULE)
 	printk(KERN_WARNING "WARNING: both IDE and NOR flash are enabled, "
 	       "but share pins.\n\t Disable IDE for NOR support.\n");
+#endif
 #endif
 
 	platform_add_devices(davinci_evm_devices,

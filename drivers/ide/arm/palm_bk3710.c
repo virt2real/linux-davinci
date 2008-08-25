@@ -343,7 +343,7 @@ static struct ide_port_info __devinitdata palm_bk3710_port_info = {
 	.mwdma_mask		= ATA_MWDMA2,
 };
 
-static int __devinit palm_bk3710_probe(struct platform_device *pdev)
+static int __init palm_bk3710_probe(struct platform_device *pdev)
 {
 	struct clk *clk;
 	struct resource *mem, *irq;
@@ -390,6 +390,7 @@ static int __devinit palm_bk3710_probe(struct platform_device *pdev)
 	hw.io_ports.ctl_addr = base + IDE_PALM_ATA_PRI_CTL_OFFSET;
 	hw.irq = irq->start;
 	hw.chipset = ide_palm3710;
+	hw.dev = &pdev->dev;
 
 	palm_bk3710_port_info.udma_mask = rate < 100000000 ? ATA_UDMA4 :
 							     ATA_UDMA5;
@@ -412,13 +413,11 @@ static struct platform_driver platform_bk_driver = {
 		.name = "palm_bk3710",
 		.owner = THIS_MODULE,
 	},
-	.probe = palm_bk3710_probe,
-	.remove = NULL,
 };
 
 static int __init palm_bk3710_init(void)
 {
-	return platform_driver_register(&platform_bk_driver);
+	return platform_driver_probe(&platform_bk_driver, palm_bk3710_probe);
 }
 
 module_init(palm_bk3710_init);
