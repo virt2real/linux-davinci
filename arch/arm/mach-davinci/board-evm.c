@@ -151,57 +151,6 @@ static struct platform_device davinci_fb_device = {
 };
 #endif
 
-/*
- * USB
- */
-#if defined(CONFIG_USB_MUSB_HDRC) || defined(CONFIG_USB_MUSB_HDRC_MODULE)
-
-#include <linux/usb/musb.h>
-
-static struct musb_hdrc_platform_data usb_data = {
-#if     defined(CONFIG_USB_MUSB_OTG)
-	/* OTG requires a Mini-AB connector */
-	.mode           = MUSB_OTG,
-#elif   defined(CONFIG_USB_MUSB_PERIPHERAL)
-	.mode           = MUSB_PERIPHERAL,
-#elif   defined(CONFIG_USB_MUSB_HOST)
-	.mode           = MUSB_HOST,
-#endif
-	/* irlml6401 switches 5V */
-	.power          = 250,          /* sustains 3.0+ Amps (!) */
-	.potpgt         = 4,            /* ~8 msec */
-};
-
-static struct resource usb_resources [] = {
-	{
-		/* physical address */
-		.start          = DAVINCI_USB_OTG_BASE,
-		.end            = DAVINCI_USB_OTG_BASE + 0x5ff,
-		.flags          = IORESOURCE_MEM,
-	},
-	{
-		.start          = IRQ_USBINT,
-		.flags          = IORESOURCE_IRQ,
-	},
-};
-
-static u64 usb_dmamask = DMA_32BIT_MASK;
-
-static struct platform_device usb_dev = {
-	.name           = "musb_hdrc",
-	.id             = -1,
-	.dev = {
-		.platform_data		= &usb_data,
-		.dma_mask		= &usb_dmamask,
-		.coherent_dma_mask      = DMA_32BIT_MASK,
-        },
-	.resource       = usb_resources,
-	.num_resources  = ARRAY_SIZE(usb_resources),
-};
-
-#define setup_usb(void)	do {} while(0)
-#endif  /* CONFIG_USB_MUSB_HDRC */
-
 static struct platform_device rtc_dev = {
 	.name           = "rtc_davinci_evm",
 	.id             = -1,
@@ -483,9 +432,6 @@ static struct platform_device *davinci_evm_devices[] __initdata = {
 #if defined(CONFIG_FB_DAVINCI) || defined(CONFIG_FB_DAVINCI_MODULE)
 	&davinci_fb_device,
 #endif
-#if defined(CONFIG_USB_MUSB_HDRC) || defined(CONFIG_USB_MUSB_HDRC_MODULE)
-	&usb_dev,
-#endif
 	&rtc_dev,
 #if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
     defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
@@ -526,7 +472,9 @@ static __init void davinci_evm_init(void)
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();
-	setup_usb();
+
+	/* irlml6401 sustains over 3A, switches 5V in under 8 msec */
+	setup_usb(500, 8);
 }
 
 static __init void davinci_evm_irq_init(void)
