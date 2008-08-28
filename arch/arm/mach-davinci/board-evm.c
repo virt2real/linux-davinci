@@ -333,11 +333,62 @@ static struct pcf857x_platform_data pcf_data_u18 = {
 
 /* U35 - various I/O signals used to manage USB, CF, ATA, etc */
 
-#if 0
+static int
+evm_u35_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
+{
+	/* REVISIT -- get polarity of these right; active low == 'n' prefix */
+
+	/* p0 = nDRV_VBUS (initial:  don't supply it) */
+	gpio_request(gpio + 0, "nDRV_VBUS");
+	gpio_direction_output(gpio + 0, 1);
+
+	/* p1 = VDDIMX_EN */
+	gpio_request(gpio + 1, "VDDIMX_EN");
+	gpio_direction_output(gpio + 1, 1);
+
+	/* p2 = VLYNQ_EN */
+	gpio_request(gpio + 2, "VLYNQ_EN");
+	gpio_direction_output(gpio + 2, 1);
+
+	/* p3 = n3V3_CF_RESET (initial: stay in reset) */
+	gpio_request(gpio + 3, "nCF_RESET");
+	gpio_direction_output(gpio + 3, 0);
+
+	/* (p4 unused) */
+
+	/* p5 = 1V8_WLAN_RESET (initial: stay in reset) */
+	gpio_request(gpio + 5, "WLAN_RESET");
+	gpio_direction_output(gpio + 5, 1);
+
+	/* p6 = nATA_SEL (initial: select) */
+	gpio_request(gpio + 6, "nATA_SEL");
+	gpio_direction_output(gpio + 6, 0);
+
+	/* p7 = nCF_SEL (initial: deselect) */
+	gpio_request(gpio + 7, "nCF_SEL");
+	gpio_direction_output(gpio + 7, 1);
+
+	return 0;
+}
+
+static int
+evm_u35_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
+{
+	gpio_free(gpio + 7);
+	gpio_free(gpio + 6);
+	gpio_free(gpio + 5);
+	gpio_free(gpio + 3);
+	gpio_free(gpio + 2);
+	gpio_free(gpio + 1);
+	gpio_free(gpio + 0);
+	return 0;
+}
+
 static struct pcf857x_platform_data pcf_data_u35 = {
-	.gpio_base = PCF_Uxx_BASE(2),
+	.gpio_base	= PCF_Uxx_BASE(2),
+	.setup		= evm_u35_setup,
+	.teardown	= evm_u35_teardown,
 };
-#endif
 
 /*----------------------------------------------------------------------*/
 
@@ -391,26 +442,17 @@ EXPORT_SYMBOL(dm6446evm_eeprom_write);
 
 static struct i2c_board_info __initdata i2c_info[] =  {
 	{
-		I2C_BOARD_INFO("pcf857x", 0x38),
-		.type		= "pcf8574",
+		I2C_BOARD_INFO("pcf8574", 0x38),
 		.platform_data	= &pcf_data_u2,
 	},
 	{
-		I2C_BOARD_INFO("pcf857x", 0x39),
-		.type		= "pcf8574",
+		I2C_BOARD_INFO("pcf8574", 0x39),
 		.platform_data	= &pcf_data_u18,
 	},
-#if 0
-/* don't clash with mach-davinci/i2c-client.c
- * or drivers/i2c/chips/gpio_expander_davinci.c
- * ... eventually both should vanish
- */
 	{
-		I2C_BOARD_INFO("pcf857x", 0x3a),
-		.type		= "pcf8574a",
+		I2C_BOARD_INFO("pcf8574", 0x3a),
 		.platform_data	= &pcf_data_u35,
 	},
-#endif
 	{
 		I2C_BOARD_INFO("24c256", 0x50),
 		.platform_data	= &eeprom_info,

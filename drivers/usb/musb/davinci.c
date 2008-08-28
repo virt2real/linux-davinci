@@ -30,16 +30,16 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/gpio.h>
 
 #include <mach/hardware.h>
 #include <mach/memory.h>
-#include <mach/gpio.h>
 #include <asm/mach-types.h>
 
 #include "musb_core.h"
 
 #ifdef CONFIG_MACH_DAVINCI_EVM
-#include <mach/i2c-client.h>
+#define GPIO_nVBUS_DRV		87
 #endif
 
 #include "davinci.h"
@@ -145,7 +145,7 @@ static int vbus_state = -1;
  */
 static void evm_deferred_drvvbus(struct work_struct *ignored)
 {
-	davinci_i2c_expander_op(0x3a, USB_DRVVBUS, vbus_state);
+	gpio_set_value_cansleep(GPIO_nVBUS_DRV, vbus_state);
 	vbus_state = !vbus_state;
 }
 static DECLARE_WORK(evm_vbus_work, evm_deferred_drvvbus);
@@ -164,7 +164,7 @@ static void davinci_source_power(struct musb *musb, int is_on, int immediate)
 #ifdef CONFIG_MACH_DAVINCI_EVM
 	if (machine_is_davinci_evm()) {
 		if (immediate)
-			davinci_i2c_expander_op(0x3a, USB_DRVVBUS, !is_on);
+			gpio_set_value_cansleep(GPIO_nVBUS_DRV, vbus_state);
 		else
 			schedule_work(&evm_vbus_work);
 	}
