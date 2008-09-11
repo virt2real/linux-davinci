@@ -21,6 +21,7 @@
 
 #include <asm/dma.h>
 #include <mach/hardware.h>
+#include <mach/edma.h>
 
 #include "../codecs/tlv320aic3x.h"
 #include "davinci-pcm.h"
@@ -156,8 +157,8 @@ static struct resource evm_snd_resources[] = {
 };
 
 static struct evm_snd_platform_data evm_snd_data = {
-	.tx_dma_ch	= DM644X_DMACH_MCBSP_TX,
-	.rx_dma_ch	= DM644X_DMACH_MCBSP_RX,
+	.tx_dma_ch	= DAVINCI_DMA_MCBSP_TX,
+	.rx_dma_ch	= DAVINCI_DMA_MCBSP_RX,
 };
 
 static struct platform_device *evm_snd_device;

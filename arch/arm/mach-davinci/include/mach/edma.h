@@ -550,4 +550,14 @@ void davinci_dma_unchain_lch(int lch_head, int lch_queue);
  *****************************************************************************/
 void davinci_free_dma(int lch);
 
+/**
+ * davinci_dma_getposition - returns the current transfer points
+ * @lch: logical channel number
+ * @src: source port position
+ * @dst: destination port position
+ *
+ * Returns current source and destination address of a paticular
+ * DMA channel
+ **/
+void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst);
 #endif

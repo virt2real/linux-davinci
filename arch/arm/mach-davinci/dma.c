@@ -482,6 +482,26 @@ static void free_dma_interrupt(int intr_no)
 	}
 }
 
+/**
+ * davinci_dma_getposition - returns the current transfer points
+ * @lch: logical channel number
+ * @src: source port position
+ * @dst: destination port position
+ *
+ * Returns current source and destination address of a paticular
+ * DMA channel
+ **/
+void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst)
+{
+	edmacc_paramentry_regs temp;
+
+	davinci_get_dma_params(lch, &temp);
+	if (src != NULL)
+		*src = temp.src;
+	if (dst != NULL)
+		*dst = temp.dst;
+}
+EXPORT_SYMBOL(davinci_dma_getposition);
 /******************************************************************************
  *
  * DMA interrupt handler

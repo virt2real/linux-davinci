@@ -21,6 +21,7 @@
 #include <sound/soc.h>
 
 #include <asm/dma.h>
+#include <mach/edma.h>
 
 #include "davinci-pcm.h"
 
@@ -147,7 +148,7 @@ static int davinci_pcm_dma_request(struct snd_pcm_substream *substream)
 		return ret;
 
 	/* Request slave DMA channel */
-	ret = davinci_request_dma(PARAM_ANY, "Link",
+	ret = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "Link",
 				  NULL, NULL, &prtd->slave_lch, &tcc, EVENTQ_0);
 	if (ret) {
 		davinci_free_dma(prtd->master_lch);
@@ -191,7 +192,7 @@ static int davinci_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 static int davinci_pcm_prepare(struct snd_pcm_substream *substream)
 {
 	struct davinci_runtime_data *prtd = substream->runtime->private_data;
-	struct paramentry_descriptor temp;
+	edmacc_paramentry_regs temp;
 
 	prtd->period = 0;
 	davinci_pcm_enqueue_dma(substream);
