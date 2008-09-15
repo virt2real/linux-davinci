@@ -100,8 +100,8 @@
 #include <linux/io.h>
 
 #ifdef	CONFIG_ARM
-#include <mach/hardware.h>
-#include <asm/memory.h>
+#include <asm/arch/hardware.h>
+#include <asm/arch/memory.h>
 #include <asm/mach-types.h>
 #endif
 
