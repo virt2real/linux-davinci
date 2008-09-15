@@ -389,6 +389,7 @@ static int __init palm_bk3710_probe(struct platform_device *pdev)
 		hw.io_ports_array[i] = base + IDE_PALM_ATA_PRI_REG_OFFSET + i;
 	hw.io_ports.ctl_addr = base + IDE_PALM_ATA_PRI_CTL_OFFSET;
 	hw.irq = irq->start;
+	hw.dev = &pdev->dev;
 	hw.chipset = ide_palm3710;
 	hw.dev = &pdev->dev;
 

@@ -23,7 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/i2c/twl4030.h>
 #include <linux/power_supply.h>
-#include <asm/arch/bci.h>
+#include <mach/bci.h>
 #include <linux/i2c/twl4030-madc.h>
 
 #define T2_BATTERY_VOLT		0x04
@@ -605,6 +605,7 @@ static int twl4030backupbatt_voltage(void)
 
 	req.channels = (1 << 9);
 	req.method = TWL4030_MADC_SW1;
+	req.func_cb = NULL;
 	twl4030_madc_conversion(&req);
 	temp = (u16)req.rbuf[9];
 

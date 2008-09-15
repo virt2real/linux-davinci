@@ -59,34 +59,34 @@ static struct resource	gpmc_cs_mem[GPMC_CS_NUM];
 static DEFINE_SPINLOCK(gpmc_mem_lock);
 static unsigned		gpmc_cs_map;
 
-static u32 gpmc_base;
+static void __iomem *gpmc_base;
 
 static struct clk *gpmc_l3_clk;
 
 static void gpmc_write_reg(int idx, u32 val)
 {
-	__raw_writel(val, (__force void __iomem *)(gpmc_base + idx));
+	__raw_writel(val, gpmc_base + idx);
 }
 
 static u32 gpmc_read_reg(int idx)
 {
-	return __raw_readl((__force void __iomem *)(gpmc_base + idx));
+	return __raw_readl(gpmc_base + idx);
 }
 
 void gpmc_cs_write_reg(int cs, int idx, u32 val)
 {
-	u32 reg_addr;
+	void __iomem *reg_addr;
 
 	reg_addr = gpmc_base + GPMC_CS0 + (cs * GPMC_CS_SIZE) + idx;
-	__raw_writel(val, (__force void __iomem *)reg_addr);
+	__raw_writel(val, reg_addr);
 }
 
 u32 gpmc_cs_read_reg(int cs, int idx)
 {
-	u32 reg_addr;
+	void __iomem *reg_addr;
 
 	reg_addr = gpmc_base + GPMC_CS0 + (cs * GPMC_CS_SIZE) + idx;
-	return __raw_readl((__force void __iomem *)reg_addr);
+	return __raw_readl(reg_addr);
 }
 
 /* TODO: Add support for gpmc_fck to clock framework and use it */
@@ -95,7 +95,7 @@ unsigned long gpmc_get_fclk_period(void)
 	unsigned long rate = clk_get_rate(gpmc_l3_clk);
 
 	if (rate == 0) {
-		printk(KERN_WARNING "gpmc_l3_clk no enabled\n");
+		printk(KERN_WARNING "gpmc_l3_clk not enabled\n");
 		return 0;
 	}
 
@@ -413,16 +413,30 @@ static void __init gpmc_mem_init(void)
 void __init gpmc_init(void)
 {
 	u32 l;
+	char *ck;
 
 	if (cpu_is_omap24xx()) {
-		gpmc_l3_clk = clk_get(NULL, "core_l3_ck");
+		ck = "core_l3_ck";
 		if (cpu_is_omap2420())
-			gpmc_base = io_p2v(OMAP2420_GPMC_BASE);
-		else if (cpu_is_omap2430())
-			gpmc_base = io_p2v(OMAP243X_GPMC_BASE);
+			l = OMAP2420_GPMC_BASE;
+		else
+			l = OMAP34XX_GPMC_BASE;
 	} else if (cpu_is_omap34xx()) {
-		gpmc_l3_clk = clk_get(NULL, "gpmc_fck");
-		gpmc_base = io_p2v(OMAP34XX_GPMC_BASE);
+		ck = "gpmc_fck";
+		l = OMAP34XX_GPMC_BASE;
+	}
+
+	gpmc_l3_clk = clk_get(NULL, ck);
+	if (IS_ERR(gpmc_l3_clk)) {
+		printk(KERN_ERR "Could not get GPMC clock %s\n", ck);
+		return -ENODEV;
+	}
+
+	gpmc_base = ioremap(l, SZ_4K);
+	if (!gpmc_base) {
+		clk_put(gpmc_l3_clk);
+		printk(KERN_ERR "Could not get GPMC register memory\n");
+		return -ENOMEM;
 	}
 
 	BUG_ON(IS_ERR(gpmc_l3_clk));

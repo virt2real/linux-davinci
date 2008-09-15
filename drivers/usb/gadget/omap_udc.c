@@ -54,6 +54,7 @@
 
 #include <mach/dma.h>
 #include <mach/usb.h>
+#include <mach/control.h>
 
 #include "omap_udc.h"
 
@@ -2310,7 +2311,7 @@ static int proc_otg_show(struct seq_file *s)
 	u32		trans;
 	char		*ctrl_name;
 
-	tmp = omap_readw(OTG_REV);
+	tmp = omap_readl(OTG_REV);
 	if (cpu_is_omap24xx()) {
 		/*
 		 * REVISIT: Not clear how this works on OMAP2.  trans
@@ -2320,7 +2321,7 @@ static int proc_otg_show(struct seq_file *s)
 		 * do with the frame adjustment counter and McBSP2.
 		 */
 		ctrl_name = "control_devconf";
-		trans = omap_ctrl_readb(OMAP2_CONTROL_DEVCONF0);
+		trans = omap_ctrl_readl(OMAP2_CONTROL_DEVCONF0);
 	} else {
 		ctrl_name = "tranceiver_ctrl";
 		trans = omap_readw(USB_TRANSCEIVER_CTRL);
@@ -2603,9 +2604,7 @@ omap_ep_setup(char *name, u8 addr, u8 type,
 		 * and ignored for PIO-IN on newer chips
 		 * (for more reliable behavior)
 		 */
-		if ((!use_dma && (addr & USB_DIR_IN))
-				|| machine_is_omap_apollon()
-				|| cpu_is_omap15xx())
+		if (!use_dma || cpu_is_omap15xx() || cpu_is_omap24xx())
 			dbuf = 0;
 
 		switch (maxp) {
@@ -2695,7 +2694,7 @@ omap_udc_setup(struct platform_device *odev, struct otg_transceiver *xceiv)
 	udc->gadget.name = driver_name;
 
 	device_initialize(&udc->gadget.dev);
-	strcpy (udc->gadget.dev.bus_id, "gadget");
+	dev_set_name(&udc->gadget.dev, "gadget");
 	udc->gadget.dev.release = omap_udc_release;
 	udc->gadget.dev.parent = &odev->dev;
 	if (use_dma)

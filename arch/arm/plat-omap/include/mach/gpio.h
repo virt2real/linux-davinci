@@ -26,10 +26,10 @@
 #ifndef __ASM_ARCH_OMAP_GPIO_H
 #define __ASM_ARCH_OMAP_GPIO_H
 
+#include <linux/io.h>
 #include <mach/irqs.h>
-#include <asm/io.h>
 
-#define OMAP_MPUIO_BASE			(void __iomem *)0xfffb5000
+#define OMAP_MPUIO_BASE			0xfffb5000
 
 #ifdef CONFIG_ARCH_OMAP730
 #define OMAP_MPUIO_INPUT_LATCH		0x00

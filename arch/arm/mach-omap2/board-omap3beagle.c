@@ -20,6 +20,10 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/leds.h>
+#include <linux/gpio.h>
+#include <linux/input.h>
+#include <linux/gpio_keys.h>
+
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand.h>
@@ -30,7 +34,6 @@
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
-#include <mach/gpio.h>
 #include <mach/board.h>
 #include <mach/usb-musb.h>
 #include <mach/usb-ehci.h>
@@ -39,32 +42,35 @@
 #include <mach/gpmc.h>
 #include <mach/nand.h>
 
+
 #define GPMC_CS0_BASE  0x60
 #define GPMC_CS_SIZE   0x30
+
+#define NAND_BLOCK_SIZE		SZ_128K
 
 static struct mtd_partition omap3beagle_nand_partitions[] = {
 	/* All the partition sizes are listed in terms of NAND block size */
 	{
 		.name		= "X-Loader",
 		.offset		= 0,
-		.size		= 4*(64 * 2048),
+		.size		= 4 * NAND_BLOCK_SIZE,
 		.mask_flags	= MTD_WRITEABLE,	/* force read-only */
 	},
 	{
 		.name		= "U-Boot",
 		.offset		= MTDPART_OFS_APPEND,	/* Offset = 0x80000 */
-		.size		= 15*(64 * 2048),
+		.size		= 15 * NAND_BLOCK_SIZE,
 		.mask_flags	= MTD_WRITEABLE,	/* force read-only */
 	},
 	{
 		.name		= "U-Boot Env",
 		.offset		= MTDPART_OFS_APPEND,	/* Offset = 0x260000 */
-		.size		= 1*(64 * 2048),
+		.size		= 1 * NAND_BLOCK_SIZE,
 	},
 	{
 		.name		= "Kernel",
 		.offset		= MTDPART_OFS_APPEND,	/* Offset = 0x280000 */
-		.size		= 32*(64 * 2048),
+		.size		= 32 * NAND_BLOCK_SIZE,
 	},
 	{
 		.name		= "File System",
@@ -74,6 +80,7 @@ static struct mtd_partition omap3beagle_nand_partitions[] = {
 };
 
 static struct omap_nand_platform_data omap3beagle_nand_data = {
+	.options	= NAND_BUSWIDTH_16,
 	.parts		= omap3beagle_nand_partitions,
 	.nr_parts	= ARRAY_SIZE(omap3beagle_nand_partitions),
 	.dma_channel	= -1,		/* disable DMA in OMAP NAND driver */
@@ -118,18 +125,6 @@ static void __init omap3_beagle_init_irq(void)
 	omap_gpio_init();
 }
 
-static struct omap_mmc_config omap3beagle_mmc_config __initdata = {
-	.mmc [0] = {
-		.enabled	= 1,
-		.wire4		= 1,
-	},
-};
-
-static struct platform_device omap3_beagle_twl4030rtc_device = {
-	.name           = "twl4030_rtc",
-	.id             = -1,
-};
-
 static struct platform_device omap3_beagle_lcd_device = {
 	.name		= "omap3beagle_lcd",
 	.id		= -1,
@@ -139,15 +134,15 @@ static struct omap_lcd_config omap3_beagle_lcd_config __initdata = {
 	.ctrl_name	= "internal",
 };
 
-struct gpio_led gpio_leds[] = {
+static struct gpio_led gpio_leds[] = {
 	{
 		.name			= "beagleboard::usr0",
-		.default_trigger	= "none",
+		.default_trigger	= "heartbeat",
 		.gpio			= 150,
 	},
 	{
 		.name			= "beagleboard::usr1",
-		.default_trigger	= "none",
+		.default_trigger	= "mmc0",
 		.gpio			= 149,
 	},
 };
@@ -165,21 +160,40 @@ static struct platform_device leds_gpio = {
 	},
 };
 
+static struct gpio_keys_button gpio_buttons[] = {
+	{
+		.code			= BTN_EXTRA,
+		.gpio			= 7,
+		.desc			= "user",
+		.wakeup			= 1,
+	},
+};
+
+static struct gpio_keys_platform_data gpio_key_info = {
+	.buttons	= gpio_buttons,
+	.nbuttons	= ARRAY_SIZE(gpio_buttons),
+};
+
+static struct platform_device keys_gpio = {
+	.name	= "gpio-keys",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &gpio_key_info,
+	},
+};
+
 static struct omap_board_config_kernel omap3_beagle_config[] __initdata = {
 	{ OMAP_TAG_UART,	&omap3_beagle_uart_config },
-	{ OMAP_TAG_MMC,		&omap3beagle_mmc_config },
 	{ OMAP_TAG_LCD,		&omap3_beagle_lcd_config },
 };
 
 static struct platform_device *omap3_beagle_devices[] __initdata = {
 	&omap3_beagle_lcd_device,
-#ifdef CONFIG_RTC_DRV_TWL4030
-	&omap3_beagle_twl4030rtc_device,
-#endif
 	&leds_gpio,
+	&keys_gpio,
 };
 
-void __init omap3beagle_flash_init(void)
+static void __init omap3beagle_flash_init(void)
 {
 	u8 cs = 0;
 	u8 nandcs = GPMC_CS_NUM + 1;
@@ -219,6 +233,7 @@ void __init omap3beagle_flash_init(void)
 
 static void __init omap3_beagle_init(void)
 {
+	omap3_beagle_i2c_init();
 	platform_add_devices(omap3_beagle_devices, ARRAY_SIZE(omap3_beagle_devices));
 	omap_board_config = omap3_beagle_config;
 	omap_board_config_size = ARRAY_SIZE(omap3_beagle_config);
@@ -228,8 +243,6 @@ static void __init omap3_beagle_init(void)
 	usb_ehci_init();
 	omap3beagle_flash_init();
 }
-
-arch_initcall(omap3_beagle_i2c_init);
 
 static void __init omap3_beagle_map_io(void)
 {

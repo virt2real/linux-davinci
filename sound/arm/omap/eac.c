@@ -707,7 +707,7 @@ static int __devinit eac_probe(struct platform_device *pdev)
 		err = -ENODEV;
 		goto err1;
 	}
-	eac->base = (void __iomem *)io_p2v(res->start);
+	eac->base = ioremap(res->start, res->end - res->start + 1);
 	eac->pdata = pdata;
 
 	/* pre-initialize EAC hw */
@@ -771,6 +771,8 @@ static int __devexit eac_remove(struct platform_device *pdev)
 	eac_disable_clocks(eac);
 	eac_put_clocks(eac);
 
+	iounmap(eac->base);
+
 	platform_set_drvdata(pdev, NULL);
 
 	return 0;
@@ -785,12 +787,12 @@ static struct platform_driver eac_driver = {
 	.remove		= eac_remove,
 };
 
-int __init eac_init(void)
+static int __init eac_init(void)
 {
 	return platform_driver_register(&eac_driver);
 }
 
-void __exit eac_exit(void)
+static void __exit eac_exit(void)
 {
 	platform_driver_unregister(&eac_driver);
 }

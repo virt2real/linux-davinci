@@ -22,13 +22,13 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 #include <linux/i2c/twl4030.h>
-#include <linux/i2c/twl4030-rtc.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
+#include <mach/board-ldp.h>
 #include <mach/mcspi.h>
 #include <mach/gpio.h>
 #include <mach/board.h>
@@ -48,20 +48,21 @@
 
 static int ts_gpio;
 
-#ifdef CONFIG_RTC_DRV_TWL4030
-static int twl4030_rtc_init(void)
+static int __init msecure_init(void)
 {
 	int ret = 0;
 
+#ifdef CONFIG_RTC_DRV_TWL4030
 	/* 3430ES2.0 doesn't have msecure/gpio-22 line connected to T2 */
-	if (is_device_type_gp() && is_sil_rev_less_than(OMAP3430_REV_ES2_0)) {
+	if (omap_device_type() == OMAP2_DEVICE_TYPE_GP &&
+			system_rev < OMAP3430_REV_ES2_0) {
 		u32 msecure_pad_config_reg = omap_ctrl_base_get() + 0xA3C;
 		int mux_mask = 0x04;
 		u16 tmp;
 
-		ret = omap_request_gpio(TWL4030_MSECURE_GPIO);
+		ret = gpio_request(TWL4030_MSECURE_GPIO, "msecure");
 		if (ret < 0) {
-			printk(KERN_ERR "twl4030_rtc_init: can't"
+			printk(KERN_ERR "msecure_init: can't"
 				"reserve GPIO:%d !\n", TWL4030_MSECURE_GPIO);
 			goto out;
 		}
@@ -70,37 +71,18 @@ static int twl4030_rtc_init(void)
 		 * is low. Make msecure line high in order to change the
 		 * TWL4030 RTC time and calender registers.
 		 */
-		omap_set_gpio_direction(TWL4030_MSECURE_GPIO, 0);
 
 		tmp = omap_readw(msecure_pad_config_reg);
 		tmp &= 0xF8;	/* To enable mux mode 03/04 = GPIO_RTC */
 		tmp |= mux_mask;/* To enable mux mode 03/04 = GPIO_RTC */
 		omap_writew(tmp, msecure_pad_config_reg);
 
-		omap_set_gpio_dataout(TWL4030_MSECURE_GPIO, 1);
+		gpio_direction_output(TWL4030_MSECURE_GPIO, 1);
 	}
 out:
+#endif
 	return ret;
 }
-
-static void twl4030_rtc_exit(void)
-{
-	omap_free_gpio(TWL4030_MSECURE_GPIO);
-}
-
-static struct twl4030rtc_platform_data ldp_twl4030rtc_data = {
-	.init = &twl4030_rtc_init,
-	.exit = &twl4030_rtc_exit,
-};
-
-static struct platform_device ldp_twl4030rtc_device = {
-	.name		= "twl4030_rtc",
-	.id		= -1,
-	.dev		= {
-		.platform_data	= &ldp_twl4030rtc_data,
-	},
-};
-#endif
 
 /**
  * @brief ads7846_dev_init : Requests & sets GPIO line for pen-irq
@@ -184,9 +166,6 @@ static struct spi_board_info ldp_spi_board_info[] __initdata = {
 };
 
 static struct platform_device *ldp_devices[] __initdata = {
-#ifdef CONFIG_RTC_DRV_TWL4030
-	&ldp_twl4030rtc_device,
-#endif
 };
 
 static void __init omap_ldp_init_irq(void)
@@ -200,16 +179,8 @@ static struct omap_uart_config ldp_uart_config __initdata = {
 	.enabled_uarts	= ((1 << 0) | (1 << 1) | (1 << 2)),
 };
 
-static struct omap_mmc_config ldp_mmc_config __initdata = {
-	.mmc [0] = {
-		.enabled	= 1,
-		.wire4		= 1,
-	},
-};
-
 static struct omap_board_config_kernel ldp_config[] __initdata = {
 	{ OMAP_TAG_UART,	&ldp_uart_config },
-	{ OMAP_TAG_MMC,		&ldp_mmc_config },
 };
 
 static int __init omap_i2c_init(void)
@@ -222,6 +193,7 @@ static int __init omap_i2c_init(void)
 
 static void __init omap_ldp_init(void)
 {
+	omap_i2c_init();
 	platform_add_devices(ldp_devices, ARRAY_SIZE(ldp_devices));
 	omap_board_config = ldp_config;
 	omap_board_config_size = ARRAY_SIZE(ldp_config);
@@ -229,7 +201,9 @@ static void __init omap_ldp_init(void)
 	ldp_spi_board_info[0].irq = OMAP_GPIO_IRQ(ts_gpio);
 	spi_register_board_info(ldp_spi_board_info,
 				ARRAY_SIZE(ldp_spi_board_info));
+	msecure_init();
 	ads7846_dev_init();
+	twl4030_bci_battery_init();
 	omap_serial_init();
 	usb_musb_init();
 	hsmmc_init();
@@ -240,7 +214,6 @@ static void __init omap_ldp_map_io(void)
 	omap2_set_globals_343x();
 	omap2_map_common_io();
 }
-arch_initcall(omap_i2c_init);
 
 MACHINE_START(OMAP_LDP, "OMAP LDP board")
 	.phys_io	= 0x48000000,

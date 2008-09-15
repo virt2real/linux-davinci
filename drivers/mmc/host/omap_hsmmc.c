@@ -174,6 +174,40 @@ static void send_init_stream(struct mmc_omap_host *host)
 	enable_irq(host->irq);
 }
 
+static inline
+int mmc_omap_cover_is_closed(struct mmc_omap_host *host)
+{
+	if (host->pdata->slots[host->slot_id].get_cover_state)
+		return host->pdata->slots[host->slot_id].get_cover_state(host->dev, host->slot_id);
+	return 1;
+}
+
+static ssize_t
+mmc_omap_show_cover_switch(struct device *dev, struct device_attribute *attr,
+			   char *buf)
+{
+	struct mmc_host *mmc = container_of(dev, struct mmc_host, class_dev);
+	struct mmc_omap_host *host = mmc_priv(mmc);
+
+	return sprintf(buf, "%s\n", mmc_omap_cover_is_closed(host) ? "closed" :
+		       "open");
+}
+
+static DEVICE_ATTR(cover_switch, S_IRUGO, mmc_omap_show_cover_switch, NULL);
+
+static ssize_t
+mmc_omap_show_slot_name(struct device *dev, struct device_attribute *attr,
+			char *buf)
+{
+	struct mmc_host *mmc = container_of(dev, struct mmc_host, class_dev);
+	struct mmc_omap_host *host = mmc_priv(mmc);
+	struct omap_mmc_slot_data slot = host->pdata->slots[host->slot_id];
+
+	return sprintf(buf, "slot:%s\n", slot.name);
+}
+
+static DEVICE_ATTR(slot_name, S_IRUGO, mmc_omap_show_slot_name, NULL);
+
 /*
  * Configure the response type and send the cmd.
  */
@@ -297,6 +331,37 @@ static void mmc_dma_cleanup(struct mmc_omap_host *host)
 }
 
 /*
+ * Readable error output
+ */
+#ifdef CONFIG_MMC_DEBUG
+static void mmc_omap_report_irq(struct mmc_omap_host *host, u32 status)
+{
+	/* --- means reserved bit without definition at documentation */
+	static const char *mmc_omap_status_bits[] = {
+		"CC", "TC", "BGE", "---", "BWR", "BRR", "---", "---", "CIRQ",
+		"OBI", "---", "---", "---", "---", "---", "ERRI", "CTO", "CCRC",
+		"CEB", "CIE", "DTO", "DCRC", "DEB", "---", "ACE", "---",
+		"---", "---", "---", "CERR", "CERR", "BADA", "---", "---", "---"
+	};
+	int i;
+
+	dev_dbg(mmc_dev(host->mmc), "MMC IRQ 0x%x :", status);
+
+	for (i = 0; i < ARRAY_SIZE(mmc_omap_status_bits); i++)
+		if (status & (1 << i))
+			/*
+			 * KERN_* facility is not used here because this should
+			 * print a single line.
+			 */
+			printk(" %s", mmc_omap_status_bits[i]);
+
+	printk("\n");
+
+}
+#endif  /* CONFIG_MMC_DEBUG */
+
+
+/*
  * MMC controller IRQ handler
  */
 static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
@@ -316,6 +381,9 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 	dev_dbg(mmc_dev(host->mmc), "IRQ Status is %x\n", status);
 
 	if (status & ERR) {
+#ifdef CONFIG_MMC_DEBUG
+		mmc_omap_report_irq(host, status);
+#endif
 		if ((status & CMD_TIMEOUT) ||
 			(status & CMD_CRC)) {
 			if (host->cmd) {
@@ -428,6 +496,7 @@ static void mmc_omap_detect(struct work_struct *work)
 	struct mmc_omap_host *host = container_of(work, struct mmc_omap_host,
 						mmc_carddetect_work);
 
+	sysfs_notify(&host->mmc->class_dev.kobj, NULL, "cover_switch");
 	if (host->carddetect) {
 		if (!(OMAP_HSMMC_READ(host->base, HCTL) & SDVSDET)) {
 			/*
@@ -812,7 +881,7 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	mmc->ocr_avail = mmc_slot(host).ocr_mask;
 	mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
 
-	if (pdata->conf.wire4)
+	if (pdata->slots[host->slot_id].wire4)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
 	/* Only MMC1 supports 3.0V */
@@ -843,7 +912,7 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 			 host);
 	if (ret) {
 		dev_dbg(mmc_dev(host->mmc), "Unable to grab HSMMC IRQ\n");
-		goto irq_err;
+		goto err_irq;
 	}
 
 	/* Request IRQ for card detect */
@@ -853,18 +922,17 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 				  host);
 		if (ret) {
 			dev_dbg(mmc_dev(host->mmc),
-				"Unable to grab MMC CD IRQ");
-			free_irq(host->irq, host);
-			goto irq_err;
+				"Unable to grab MMC CD IRQ\n");
+			goto err_irq_cd;
 		}
 	}
 
 	INIT_WORK(&host->mmc_carddetect_work, mmc_omap_detect);
 	if (pdata->init != NULL) {
 		if (pdata->init(&pdev->dev) != 0) {
-			free_irq(mmc_slot(host).card_detect_irq, host);
-			free_irq(host->irq, host);
-			goto irq_err;
+			dev_dbg(mmc_dev(host->mmc),
+				"Unable to configure MMC IRQs\n");
+			goto err_irq_cd_init;
 		}
 	}
 
@@ -874,10 +942,29 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, host);
 	mmc_add_host(mmc);
 
+	if (host->pdata->slots[host->slot_id].name != NULL) {
+		ret = device_create_file(&mmc->class_dev, &dev_attr_slot_name);
+		if (ret < 0)
+			goto err_slot_name;
+	}
+	if (mmc_slot(host).card_detect_irq && mmc_slot(host).card_detect &&
+			host->pdata->slots[host->slot_id].get_cover_state) {
+		ret = device_create_file(&mmc->class_dev, &dev_attr_cover_switch);
+		if (ret < 0)
+			goto err_cover_switch;
+	}
+
 	return 0;
 
-irq_err:
-	dev_dbg(mmc_dev(host->mmc), "Unable to configure MMC IRQs\n");
+err_cover_switch:
+	device_remove_file(&mmc->class_dev, &dev_attr_cover_switch);
+err_slot_name:
+	mmc_remove_host(mmc);
+err_irq_cd_init:
+	free_irq(mmc_slot(host).card_detect_irq, host);
+err_irq_cd:
+	free_irq(host->irq, host);
+err_irq:
 	clk_disable(host->fclk);
 	clk_disable(host->iclk);
 	clk_put(host->fclk);
@@ -960,11 +1047,13 @@ static int omap_mmc_suspend(struct platform_device *pdev, pm_message_t state)
 			OMAP_HSMMC_WRITE(host->base, ISE, 0);
 			OMAP_HSMMC_WRITE(host->base, IE, 0);
 
-			ret = host->pdata->suspend(&pdev->dev, host->slot_id);
-			if (ret)
-				dev_dbg(mmc_dev(host->mmc),
-					"Unable to handle MMC board"
-					" level suspend\n");
+			if (host->pdata->suspend) {
+				ret = host->pdata->suspend(&pdev->dev, host->slot_id);
+				if (ret)
+					dev_dbg(mmc_dev(host->mmc),
+						"Unable to handle MMC board"
+						" level suspend\n");
+			}
 
 			if (!(OMAP_HSMMC_READ(host->base, HCTL) & SDVSDET)) {
 				OMAP_HSMMC_WRITE(host->base, HCTL,
@@ -1013,10 +1102,12 @@ static int omap_mmc_resume(struct platform_device *pdev)
 			dev_dbg(mmc_dev(host->mmc),
 					"Enabling debounce clk failed\n");
 
-		ret = host->pdata->resume(&pdev->dev, host->slot_id);
-		if (ret)
-			dev_dbg(mmc_dev(host->mmc),
+		if (host->pdata->resume) {
+			ret = host->pdata->resume(&pdev->dev, host->slot_id);
+			if (ret)
+				dev_dbg(mmc_dev(host->mmc),
 					"Unmask interrupt failed\n");
+		}
 
 		/* Notify the core to resume the host */
 		ret = mmc_resume_host(host->mmc);

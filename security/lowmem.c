@@ -9,54 +9,111 @@
 #include <linux/pagemap.h>
 #include <linux/hugetlb.h>
 #include <linux/sysfs.h>
+#include <linux/oom.h>
 
 #define MY_NAME "lowmem"
 
 #define LOWMEM_MAX_UIDS 8
 
 enum {
-	VM_LOWMEM_DENY = 1,
-	VM_LOWMEM_LEVEL1_NOTIFY,
-	VM_LOWMEM_LEVEL2_NOTIFY,
+	VM_LOWMEM_DENY_PAGES = 1,
+	VM_LOWMEM_NOTIFY_LOW_PAGES,
+	VM_LOWMEM_NOTIFY_HIGH_PAGES,
 	VM_LOWMEM_NR_DECAY_PAGES,
 	VM_LOWMEM_ALLOWED_UIDS,
 	VM_LOWMEM_ALLOWED_PAGES,
-	VM_LOWMEM_USED_PAGES,
+	VM_LOWMEM_FREE_PAGES,
+	VM_LOWMEM_DENY,
+	VM_LOWMEM_LEVEL1_NOTIFY,
+	VM_LOWMEM_LEVEL2_NOTIFY,
+	VM_LOWMEM_USED_PAGES
 };
 
-static unsigned int deny_percentage;
-static unsigned int l1_notify, l2_notify;
+static long deny_pages;
+static long notify_low_pages, notify_high_pages;
 static unsigned int nr_decay_pages;
 static unsigned long allowed_pages;
-static long used_pages;
+static unsigned long lowmem_free_pages;
 static unsigned int allowed_uids[LOWMEM_MAX_UIDS];
 static unsigned int minuid = 1;
 static unsigned int maxuid = 65535;
+static unsigned int deny_percentage;
+static unsigned int l1_notify, l2_notify;
+static long used_pages;
+
+static int
+proc_dointvec_used(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos);
+static int
+proc_dointvec_l1_notify(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos);
+static int
+proc_dointvec_l2_notify(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos);
+static int
+proc_dointvec_deny(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos);
 
 static ctl_table lowmem_table[] = {
 	{
+		.ctl_name = VM_LOWMEM_DENY_PAGES,
+		.procname = "lowmem_deny_watermark_pages",
+		.data = &deny_pages,
+		.maxlen = sizeof(long),
+		.mode = 0644,
+		.child = NULL,
+		.proc_handler = &proc_dointvec,
+		.strategy = &sysctl_intvec,
+	}, {
 		.ctl_name = VM_LOWMEM_DENY,
 		.procname = "lowmem_deny_watermark",
 		.data = &deny_percentage,
 		.maxlen = sizeof(unsigned int),
-		.mode = 0644,
+		.mode = 0444,
 		.child = NULL,
-		.proc_handler = &proc_dointvec,
+		.proc_handler = &proc_dointvec_deny,
 		.strategy = &sysctl_intvec,
 	}, {
 		.ctl_name = VM_LOWMEM_LEVEL1_NOTIFY,
 		.procname = "lowmem_notify_low",
 		.data = &l1_notify,
 		.maxlen = sizeof(unsigned int),
-		.mode = 0644,
+		.mode = 0444,
 		.child = NULL,
-		.proc_handler = &proc_dointvec,
+		.proc_handler = &proc_dointvec_l1_notify,
 		.strategy = &sysctl_intvec,
 	}, {
 		.ctl_name = VM_LOWMEM_LEVEL2_NOTIFY,
 		.procname = "lowmem_notify_high",
 		.data = &l2_notify,
 		.maxlen = sizeof(unsigned int),
+		.mode = 0444,
+		.child = NULL,
+		.proc_handler = &proc_dointvec_l2_notify,
+		.strategy = &sysctl_intvec,
+	}, {
+		.ctl_name = VM_LOWMEM_USED_PAGES,
+		.procname = "lowmem_used_pages",
+		.data = &used_pages,
+		.maxlen = sizeof(long),
+		.mode = 0444,
+		.child = NULL,
+		.proc_handler = &proc_dointvec_used,
+		.strategy = &sysctl_intvec,
+	}, {
+		.ctl_name = VM_LOWMEM_NOTIFY_LOW_PAGES,
+		.procname = "lowmem_notify_low_pages",
+		.data = &notify_low_pages,
+		.maxlen = sizeof(long),
+		.mode = 0644,
+		.child = NULL,
+		.proc_handler = &proc_dointvec,
+		.strategy = &sysctl_intvec,
+	}, {
+		.ctl_name = VM_LOWMEM_NOTIFY_HIGH_PAGES,
+		.procname = "lowmem_notify_high_pages",
+		.data = &notify_high_pages,
+		.maxlen = sizeof(long),
 		.mode = 0644,
 		.child = NULL,
 		.proc_handler = &proc_dointvec,
@@ -68,7 +125,7 @@ static ctl_table lowmem_table[] = {
 		.maxlen = sizeof(unsigned int),
 		.mode = 0644,
 		.child = NULL,
-		.proc_handler = &proc_dointvec_minmax,
+		.proc_handler = &proc_dointvec,
 		.strategy = &sysctl_intvec,
 	}, {
 		.ctl_name = VM_LOWMEM_ALLOWED_UIDS,
@@ -88,16 +145,16 @@ static ctl_table lowmem_table[] = {
 		.maxlen = sizeof(unsigned long),
 		.mode = 0444,
 		.child = NULL,
-		.proc_handler = &proc_dointvec_minmax,
+		.proc_handler = &proc_dointvec,
 		.strategy = &sysctl_intvec,
 	}, {
-		.ctl_name = VM_LOWMEM_USED_PAGES,
-		.procname = "lowmem_used_pages",
-		.data = &used_pages,
-		.maxlen = sizeof(long),
+		.ctl_name = VM_LOWMEM_FREE_PAGES,
+		.procname = "lowmem_free_pages",
+		.data = &lowmem_free_pages,
+		.maxlen = sizeof(unsigned long),
 		.mode = 0444,
 		.child = NULL,
-		.proc_handler = &proc_dointvec_minmax,
+		.proc_handler = &proc_dointvec,
 		.strategy = &sysctl_intvec,
 	}, {
 		.ctl_name = 0
@@ -116,16 +173,56 @@ static ctl_table lowmem_root_table[] = {
 };
 
 #define KERNEL_ATTR_RO(_name) \
-static struct subsys_attribute _name##_attr = __ATTR_RO(_name)
+static struct kobj_attribute _name##_attr = __ATTR_RO(_name)
 
 static int low_watermark_reached, high_watermark_reached;
 
-static ssize_t low_watermark_show(struct subsystem *subsys, char *page)
+static int
+proc_dointvec_l1_notify(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	l1_notify =
+	100 - (100 * notify_low_pages + allowed_pages / 2) / allowed_pages;
+	return proc_dointvec(table, write, filp, buffer, lenp, ppos);
+}
+
+static int
+proc_dointvec_l2_notify(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	l2_notify =
+	100 - (100 * notify_high_pages + allowed_pages / 2) / allowed_pages;
+	return proc_dointvec(table, write, filp, buffer, lenp, ppos);
+}
+
+static int
+proc_dointvec_deny(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	deny_percentage =
+	100 - (100 * deny_pages + allowed_pages / 2) / allowed_pages;
+	return proc_dointvec(table, write, filp, buffer, lenp, ppos);
+}
+
+static int
+proc_dointvec_used(ctl_table *table, int write, struct file *filp,
+			void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	if (lowmem_free_pages > 0 && allowed_pages > lowmem_free_pages)
+		used_pages = allowed_pages - lowmem_free_pages;
+	else
+		used_pages = 0;
+	return proc_dointvec(table, write, filp, buffer, lenp, ppos);
+}
+
+static ssize_t low_watermark_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *page)
 {
 	return sprintf(page, "%u\n", low_watermark_reached);
 }
 
-static ssize_t high_watermark_show(struct subsystem *subsys, char *page)
+static ssize_t high_watermark_show(struct kobject *kobj,
+				   struct kobj_attribute *attr, char *page)
 {
 	return sprintf(page, "%u\n", high_watermark_reached);
 }
@@ -135,48 +232,35 @@ KERNEL_ATTR_RO(high_watermark);
 
 static void low_watermark_state(int new_state)
 {
-	int changed = 0;
-
 	if (low_watermark_reached != new_state) {
 		low_watermark_reached = new_state;
-		changed = 1;
+		sysfs_notify(kernel_kobj, NULL, "low_watermark");
 	}
-
-	if (changed)
-		sysfs_notify(&kernel_subsys.kset.kobj, NULL, "low_watermark");
 }
 
 static void high_watermark_state(int new_state)
 {
-	int changed = 0;
-
 	if (high_watermark_reached != new_state) {
 		high_watermark_reached = new_state;
-		changed = 1;
+		sysfs_notify(kernel_kobj, NULL, "high_watermark");
 	}
-
-	if (changed)
-		sysfs_notify(&kernel_subsys.kset.kobj, NULL, "high_watermark");
 }
 
-static int low_vm_enough_memory(long pages)
+static int low_vm_enough_memory(struct mm_struct *mm, long pages)
 {
 	unsigned long free, allowed;
-	long deny_threshold, level1, level2, used;
 	int cap_sys_admin = 0, notify;
 
 	if (cap_capable(current, CAP_SYS_ADMIN) == 0)
 		cap_sys_admin = 1;
 
+	allowed = totalram_pages - hugetlb_total_pages();
+	allowed_pages = allowed;
+
 	/* We activate ourselves only after both parameters have been
 	 * configured. */
-	if (deny_percentage == 0 || l1_notify == 0 || l2_notify == 0)
-		return __vm_enough_memory(pages, cap_sys_admin);
-
-	allowed = totalram_pages - hugetlb_total_pages();
-	deny_threshold = allowed * deny_percentage / 100;
-	level1 = allowed * l1_notify / 100;
-	level2 = allowed * l2_notify / 100;
+	if (deny_pages == 0 || notify_low_pages == 0 || notify_high_pages == 0)
+		return  __vm_enough_memory(mm, pages, cap_sys_admin);
 
 	vm_acct_memory(pages);
 
@@ -185,26 +269,24 @@ static int low_vm_enough_memory(long pages)
 	free += nr_swap_pages;
 	free += global_page_state(NR_SLAB_RECLAIMABLE);
 
-	used = allowed - free;
-	if (unlikely(used < 0))
-		used = 0;
-
-	/* The hot path, plenty of memory */
-	if (likely(used < level1))
+	if (likely(free > notify_low_pages))
 		goto enough_memory;
 
 	/* No luck, lets make it more expensive and try again.. */
-	used -= nr_free_pages();
+	free += nr_free_pages();
 
-	if (used >= deny_threshold) {
+	if (free < deny_pages) {
 		int i;
 
-		allowed_pages = allowed;
-		used_pages = used;
+		lowmem_free_pages = free;
 		low_watermark_state(1);
 		high_watermark_state(1);
 		/* Memory allocations by root are always allowed */
 		if (cap_sys_admin)
+			return 0;
+
+		/* OOM unkillable process is allowed to consume memory */
+		if (current->oomkilladj == OOM_DISABLE)
 			return 0;
 
 		/* uids from allowed_uids vector are also allowed no matter what */
@@ -222,7 +304,7 @@ static int low_vm_enough_memory(long pages)
 
 enough_memory:
 	/* See if we need to notify level 1 */
-	low_watermark_state(used >= level1);
+	low_watermark_state(free < notify_low_pages);
 
 	/*
 	 * In the level 2 notification case things are more complicated,
@@ -231,19 +313,19 @@ enough_memory:
 	 * on the same watermark level ends up bouncing back and forth
 	 * when applications are being stupid.
 	 */
-	notify = used >= level2;
-	if (notify || used + nr_decay_pages < level2)
+	notify = free < notify_high_pages;
+	if (notify || free - nr_decay_pages > notify_high_pages)
 		high_watermark_state(notify);
 
 	/* We have plenty of memory */
-	allowed_pages = allowed;
-	used_pages = used;
+	lowmem_free_pages = free;
 	return 0;
 }
 
 static struct security_operations lowmem_security_ops = {
 	/* Use the capability functions for some of the hooks */
-	.ptrace = cap_ptrace,
+	.ptrace_may_access = cap_ptrace_may_access,
+	.ptrace_traceme = cap_ptrace_traceme,
 	.capget = cap_capget,
 	.capset_check = cap_capset_check,
 	.capset_set = cap_capset_set,
@@ -258,8 +340,6 @@ static struct security_operations lowmem_security_ops = {
 };
 
 static struct ctl_table_header *lowmem_table_header;
-/* flag to keep track of how we were registered */
-static int secondary;
 
 static struct attribute *lowmem_attrs[] = {
 	&low_watermark_attr.attr,
@@ -278,13 +358,7 @@ static int __init lowmem_init(void)
 	/* register ourselves with the security framework */
 	if (register_security(&lowmem_security_ops)) {
 		printk(KERN_ERR MY_NAME ": Failure registering with the kernel\n");
-		/* try registering with primary module */
-		if (mod_reg_security(MY_NAME, &lowmem_security_ops)) {
-			printk(KERN_ERR ": Failure registering with the primary"
-			       "security module.\n");
-			return -EINVAL;
-		}
-		secondary = 1;
+		return -EINVAL;
 	}
 
 	/* initialize the uids vector */
@@ -294,9 +368,7 @@ static int __init lowmem_init(void)
 	if (unlikely(!lowmem_table_header))
 		return -EPERM;
 
-	kernel_subsys.kset.kobj.kset = &kernel_subsys.kset;
-
-	r = sysfs_create_group(&kernel_subsys.kset.kobj,
+	r = sysfs_create_group(kernel_kobj,
 			       &lowmem_attr_group);
 	if (unlikely(r))
 		return r;
@@ -306,29 +378,7 @@ static int __init lowmem_init(void)
 	return 0;
 }
 
-static void __exit lowmem_exit(void)
-{
-	/* remove ourselves from the security framework */
-	if (secondary) {
-		if (mod_unreg_security(MY_NAME, &lowmem_security_ops))
-			printk(KERN_ERR MY_NAME ": Failure unregistering "
-			       "with the primary security module.\n");
-	} else {
-		if (unregister_security(&lowmem_security_ops)) {
-			printk(KERN_ERR MY_NAME ": Failure unregistering "
-			       "with the kernel.\n");
-		}
-	}
-
-	unregister_sysctl_table(lowmem_table_header);
-
-	sysfs_remove_group(&kernel_subsys.kset.kobj, &lowmem_attr_group);
-
-	printk(KERN_INFO MY_NAME ": Module removed.\n");
-}
-
 module_init(lowmem_init);
-module_exit(lowmem_exit);
 
 MODULE_DESCRIPTION("Low watermark LSM module");
 MODULE_LICENSE("GPL");

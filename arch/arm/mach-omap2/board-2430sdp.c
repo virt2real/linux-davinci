@@ -20,11 +20,11 @@
 #include <linux/mtd/partitions.h>
 #include <linux/delay.h>
 #include <linux/input.h>
+#include <linux/i2c/twl4030.h>
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
-#include <linux/i2c/twl4030-rtc.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -190,13 +190,14 @@ static struct platform_device sdp2430_kp_device = {
 	},
 };
 
-static int twl4030_rtc_init(void)
+static int __init msecure_init(void)
 {
 	int ret = 0;
 
-	ret = omap_request_gpio(TWL4030_MSECURE_GPIO);
+#ifdef CONFIG_RTC_DRV_TWL4030
+	ret = gpio_request(TWL4030_MSECURE_GPIO, "msecure");
 	if (ret < 0) {
-		printk(KERN_ERR "twl4030_rtc_init: can't reserve GPIO:%d !\n",
+		printk(KERN_ERR "msecure_init: can't reserve GPIO:%d !\n",
 			TWL4030_MSECURE_GPIO);
 		goto out;
 	}
@@ -205,36 +206,18 @@ static int twl4030_rtc_init(void)
 	 * Make msecure line high in order to change the TWL4030 RTC time
 	 * and calender registers.
 	 */
-	omap_set_gpio_direction(TWL4030_MSECURE_GPIO, 0);	/*dir out */
-	omap_set_gpio_dataout(TWL4030_MSECURE_GPIO, 1);
+	gpio_direction_output(TWL4030_MSECURE_GPIO, 1);
 out:
+#endif
+
 	return ret;
 }
-
-static void twl4030_rtc_exit(void)
-{
-	omap_free_gpio(TWL4030_MSECURE_GPIO);
-}
-
-static struct twl4030rtc_platform_data sdp2430_twl4030rtc_data = {
-	.init = &twl4030_rtc_init,
-	.exit = &twl4030_rtc_exit,
-};
-
-static struct platform_device sdp2430_twl4030rtc_device = {
- 	.name		= "twl4030_rtc",
- 	.id		= -1,
-	.dev		= {
-		.platform_data	= &sdp2430_twl4030rtc_data,
-	},
-};
 
 static struct platform_device *sdp2430_devices[] __initdata = {
 	&sdp2430_smc91x_device,
 	&sdp2430_flash_device,
 	&sdp2430_kp_device,
 	&sdp2430_lcd_device,
-	&sdp2430_twl4030rtc_device,	
 };
 
 static void ads7846_dev_init(void)
@@ -364,18 +347,10 @@ struct omap_serial_console_config sdp2430_serial_console_config __initdata = {
 	.console_speed = 115200,
 };
 
-static struct omap_mmc_config sdp2430_mmc_config __initdata = {
-	.mmc [0] = {
-		.enabled	= 1,
-		.wire4		= 1,
-	},
-};
-
 static struct omap_board_config_kernel sdp2430_config[] __initdata = {
 	{OMAP_TAG_UART, &sdp2430_uart_config},
 	{OMAP_TAG_LCD, &sdp2430_lcd_config},
 	{OMAP_TAG_SERIAL_CONSOLE, &sdp2430_serial_console_config},
-	{OMAP_TAG_MMC,	&sdp2430_mmc_config},
 };
 
 static int __init omap2430_i2c_init(void)
@@ -391,10 +366,14 @@ static int __init omap2430_i2c_init(void)
 
 static void __init omap_2430sdp_init(void)
 {
+	omap2430_i2c_init();
+
 	platform_add_devices(sdp2430_devices, ARRAY_SIZE(sdp2430_devices));
 	omap_board_config = sdp2430_config;
 	omap_board_config_size = ARRAY_SIZE(sdp2430_config);
 	omap_serial_init();
+
+	msecure_init();
 
 	sdp2430_flash_init();
 	usb_musb_init();
@@ -414,8 +393,6 @@ static void __init omap_2430sdp_map_io(void)
 	omap2_set_globals_243x();
 	omap2_map_common_io();
 }
-
-arch_initcall(omap2430_i2c_init);
 
 MACHINE_START(OMAP_2430SDP, "OMAP2430 sdp2430 board")
 	/* Maintainer: Syed Khasim - Texas Instruments Inc */

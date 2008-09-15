@@ -20,7 +20,7 @@
 
 #include "musb_core.h"
 
-#define to_chdat(c)		(struct tusb_omap_dma_ch *)(c)->private_data
+#define to_chdat(c)		((struct tusb_omap_dma_ch *)(c)->private_data)
 
 #define MAX_DMAREQ		5	/* REVISIT: Really 6, but req5 not OK */
 

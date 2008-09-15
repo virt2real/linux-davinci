@@ -440,9 +440,16 @@ static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
 	omap_i2c_write_reg(dev, OMAP_I2C_CON_REG, w);
 
 	if (dev->b_hw && stop) {
+		unsigned long delay = jiffies + OMAP_I2C_TIMEOUT;
+
 		/* H/w behavior: dont write stt and stp together.. */
 		while (omap_i2c_read_reg(dev, OMAP_I2C_CON_REG) & OMAP_I2C_CON_STT) {
-			/* Dont do anything - this will come in a couple of loops at max*/
+			/* Let the user know if i2c is in a bad state */
+			if (time_after (jiffies, delay)) {
+				dev_err(dev->dev, "controller timed out "
+				"waiting for start condition to finish\n");
+				return -ETIMEDOUT;
+			}
 		}
 		w |= OMAP_I2C_CON_STP;
 		w &= ~OMAP_I2C_CON_STT;
@@ -757,11 +764,16 @@ omap_i2c_probe(struct platform_device *pdev)
 	dev->speed = *speed;
 	dev->dev = &pdev->dev;
 	dev->irq = irq->start;
-	dev->base = (void __iomem *) IO_ADDRESS(mem->start);
+	dev->base = ioremap(mem->start, mem->end - mem->start + 1);
+	if (!dev->base) {
+		r = -ENOMEM;
+		goto err_free_mem;
+	}
+
 	platform_set_drvdata(pdev, dev);
 
 	if ((r = omap_i2c_get_clocks(dev)) != 0)
-		goto err_free_mem;
+		goto err_iounmap;
 
 	omap_i2c_unidle(dev);
 
@@ -821,6 +833,8 @@ err_unuse_clocks:
 	omap_i2c_write_reg(dev, OMAP_I2C_CON_REG, 0);
 	omap_i2c_idle(dev);
 	omap_i2c_put_clocks(dev);
+err_iounmap:
+	iounmap(dev->base);
 err_free_mem:
 	platform_set_drvdata(pdev, NULL);
 	kfree(dev);
@@ -842,6 +856,7 @@ omap_i2c_remove(struct platform_device *pdev)
 	i2c_del_adapter(&dev->adapter);
 	omap_i2c_write_reg(dev, OMAP_I2C_CON_REG, 0);
 	omap_i2c_put_clocks(dev);
+	iounmap(dev->base);
 	kfree(dev);
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	release_mem_region(mem->start, (mem->end - mem->start) + 1);

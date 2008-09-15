@@ -43,6 +43,9 @@
 
 #define OMAP24XX_MCBSP1_BASE	0x48074000
 #define OMAP24XX_MCBSP2_BASE	0x48076000
+#define OMAP2430_MCBSP3_BASE	0x4808c000
+#define OMAP2430_MCBSP4_BASE	0x4808e000
+#define OMAP2430_MCBSP5_BASE	0x48096000
 
 #define OMAP34XX_MCBSP1_BASE	0x48074000
 #define OMAP34XX_MCBSP2_BASE	0x49022000
@@ -326,7 +329,7 @@ struct omap_mcbsp_ops {
 };
 
 struct omap_mcbsp_platform_data {
-	u32 virt_base;
+	unsigned long phys_base;
 	u8 dma_rx_sync, dma_tx_sync;
 	u16 rx_irq, tx_irq;
 	struct omap_mcbsp_ops *ops;
@@ -335,7 +338,8 @@ struct omap_mcbsp_platform_data {
 
 struct omap_mcbsp {
 	struct device *dev;
-	u32 io_base;
+	unsigned long phys_base;
+	void __iomem *io_base;
 	u8 id;
 	u8 free;
 	omap_mcbsp_word_length rx_word_length;

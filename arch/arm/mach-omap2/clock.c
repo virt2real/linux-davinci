@@ -78,8 +78,10 @@ void omap2_init_clk_clkdm(struct clk *clk)
 {
 	struct clockdomain *clkdm;
 
-	if (!clk->clkdm.name)
+	if (!clk->clkdm.name) {
+		pr_err("clock: %s: missing clockdomain", clk->name);
 		return;
+	}
 
 	clkdm = clkdm_lookup(clk->clkdm.name);
 	if (clkdm) {
@@ -87,8 +89,8 @@ void omap2_init_clk_clkdm(struct clk *clk)
 			 clk->name, clk->clkdm.name);
 		clk->clkdm.ptr = clkdm;
 	} else {
-		pr_debug("clock: could not associate clk %s to "
-			 "clkdm %s\n", clk->name, clk->clkdm.name);
+		pr_err("clock: %s: could not associate to clkdm %s\n",
+		       clk->name, clk->clkdm.name);
 	}
 }
 
@@ -261,7 +263,7 @@ static void omap2_clk_wait_ready(struct clk *clk)
 		    (reg & 0x0f) == 0 &&
 		    clk->enable_bit == OMAP3430_EN_SSI_SHIFT) {
 
-			if (is_sil_rev_equal_to(OMAP3430_REV_ES1_0))
+			if (system_rev == OMAP3430_REV_ES1_0)
 				return;
 
 			idlest_bit = OMAP3430ES2_ST_SSI_IDLE;
@@ -271,7 +273,7 @@ static void omap2_clk_wait_ready(struct clk *clk)
 		if (prcm_mod == OMAP34XX_CM_REGADDR(OMAP3430_DSS_MOD, 0)) {
 
 			/* 3430ES1 DSS has no target idlest bits */
-			if (is_sil_rev_equal_to(OMAP3430_REV_ES1_0))
+			if (system_rev == OMAP3430_REV_ES1_0)
 				return;
 
 			/*
@@ -285,7 +287,7 @@ static void omap2_clk_wait_ready(struct clk *clk)
 		}
 
 		/* USBHOST */
-		if (is_sil_rev_greater_than(OMAP3430_REV_ES1_0) &&
+		if (system_rev > OMAP3430_REV_ES1_0 &&
 		    prcm_mod == OMAP34XX_CM_REGADDR(OMAP3430ES2_USBHOST_MOD, 0)) {
 
 			/*
@@ -324,7 +326,7 @@ static int _omap2_clk_enable(struct clk *clk)
 	if (clk->enable)
 		return clk->enable(clk);
 
-	if (!clk->enable_reg) {
+	if (unlikely(clk->enable_reg == NULL)) {
 		printk(KERN_ERR "clock.c: Enable for %s without enable code\n",
 		       clk->name);
 		return 0; /* REVISIT: -EINVAL */
@@ -356,7 +358,7 @@ static void _omap2_clk_disable(struct clk *clk)
 		return;
 	}
 
-	if (!clk->enable_reg) {
+	if (clk->enable_reg == NULL) {
 		/*
 		 * 'Independent' here refers to a clock which is not
 		 * controlled by its parent.
@@ -561,7 +563,7 @@ long omap2_clksel_round_rate(struct clk *clk, unsigned long target_rate)
 /* Given a clock and a rate apply a clock specific rounding function */
 long omap2_clk_round_rate(struct clk *clk, unsigned long rate)
 {
-	if (clk->round_rate)
+	if (clk->round_rate != NULL)
 		return clk->round_rate(clk, rate);
 
 	if (clk->flags & RATE_FIXED)
@@ -650,7 +652,7 @@ u32 omap2_divisor_to_clksel(struct clk *clk, u32 div)
  */
 static void __iomem *omap2_get_clksel(struct clk *clk, u32 *field_mask)
 {
-	if (!clk->clksel_reg || (clk->clksel_mask == 0))
+	if (unlikely((clk->clksel_reg == NULL) || (clk->clksel_mask == NULL)))
 		return NULL;
 
 	*field_mask = clk->clksel_mask;
@@ -670,7 +672,7 @@ u32 omap2_clksel_get_divisor(struct clk *clk)
 	void __iomem *div_addr;
 
 	div_addr = omap2_get_clksel(clk, &field_mask);
-	if (!div_addr)
+	if (div_addr == NULL)
 		return 0;
 
 	field_val = __raw_readl(div_addr) & field_mask;
@@ -690,7 +692,7 @@ int omap2_clksel_set_rate(struct clk *clk, unsigned long rate)
 		return -EINVAL;
 
 	div_addr = omap2_get_clksel(clk, &field_mask);
-	if (!div_addr)
+	if (div_addr == NULL)
 		return -EINVAL;
 
 	field_val = omap2_divisor_to_clksel(clk, new_div);
@@ -729,7 +731,7 @@ int omap2_clk_set_rate(struct clk *clk, unsigned long rate)
 		return -EINVAL;
 
 	/* dpll_ck, core_ck, virt_prcm_set; plus all clksel clocks */
-	if (clk->set_rate)
+	if (clk->set_rate != NULL)
 		ret = clk->set_rate(clk, rate);
 
 	if (ret == 0 && (clk->flags & RATE_PROPAGATES))
@@ -791,7 +793,7 @@ int omap2_clk_set_parent(struct clk *clk, struct clk *new_parent)
 
 	field_val = omap2_clksel_get_src_field(&src_addr, new_parent,
 					       &field_mask, clk, &parent_div);
-	if (!src_addr)
+	if (src_addr == NULL)
 		return -EINVAL;
 
 	if (clk->usecount > 0)

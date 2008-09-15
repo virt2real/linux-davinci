@@ -20,9 +20,9 @@
 #include <linux/workqueue.h>
 #include <linux/err.h>
 #include <linux/clk.h>
-#include <linux/i2c/twl4030.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
+#include <linux/i2c/twl4030.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -129,20 +129,21 @@ static struct platform_device sdp3430_kp_device = {
 
 static int ts_gpio;
 
-#ifdef CONFIG_RTC_DRV_TWL4030
-static int twl4030_rtc_init(void)
+static int __init msecure_init(void)
 {
 	int ret = 0;
 
+#ifdef CONFIG_RTC_DRV_TWL4030
 	/* 3430ES2.0 doesn't have msecure/gpio-22 line connected to T2 */
-	if (is_device_type_gp() && is_sil_rev_less_than(OMAP3430_REV_ES2_0)) {
+	if (omap_type() == OMAP2_DEVICE_TYPE_GP &&
+			system_rev < OMAP3430_REV_ES2_0) {
 		u32 msecure_pad_config_reg = omap_ctrl_base_get() + 0xA3C;
 		int mux_mask = 0x04;
 		u16 tmp;
 
-		ret = omap_request_gpio(TWL4030_MSECURE_GPIO);
+		ret = gpio_request(TWL4030_MSECURE_GPIO, "msecure");
 		if (ret < 0) {
-			printk(KERN_ERR "twl4030_rtc_init: can't"
+			printk(KERN_ERR "msecure_init: can't"
 				"reserve GPIO:%d !\n", TWL4030_MSECURE_GPIO);
 			goto out;
 		}
@@ -151,40 +152,17 @@ static int twl4030_rtc_init(void)
 		 * is low. Make msecure line high in order to change the
 		 * TWL4030 RTC time and calender registers.
 		 */
-		omap_set_gpio_direction(TWL4030_MSECURE_GPIO, 0);
-
 		tmp = omap_readw(msecure_pad_config_reg);
 		tmp &= 0xF8; /* To enable mux mode 03/04 = GPIO_RTC */
 		tmp |= mux_mask;/* To enable mux mode 03/04 = GPIO_RTC */
 		omap_writew(tmp, msecure_pad_config_reg);
 
-		omap_set_gpio_dataout(TWL4030_MSECURE_GPIO, 1);
+		gpio_direction_output(TWL4030_MSECURE_GPIO, 1);
 	}
 out:
+#endif
 	return ret;
 }
-
-static void twl4030_rtc_exit(void)
-{
-	if (is_device_type_gp() &&
-			is_sil_rev_less_than(OMAP3430_REV_ES2_0)) {
-		omap_free_gpio(TWL4030_MSECURE_GPIO);
-	}
-}
-
-static struct twl4030rtc_platform_data sdp3430_twl4030rtc_data = {
-	.init = &twl4030_rtc_init,
-	.exit = &twl4030_rtc_exit,
-};
-
-static struct platform_device sdp3430_twl4030rtc_device = {
-	.name = "twl4030_rtc",
-	.id = -1,
-	.dev = {
-	.platform_data = &sdp3430_twl4030rtc_data,
-	},
-};
-#endif
 
 /**
  * @brief ads7846_dev_init : Requests & sets GPIO line for pen-irq
@@ -276,9 +254,6 @@ static struct platform_device *sdp3430_devices[] __initdata = {
 	&sdp3430_smc91x_device,
 	&sdp3430_kp_device,
 	&sdp3430_lcd_device,
-#ifdef CONFIG_RTC_DRV_TWL4030
-	&sdp3430_twl4030rtc_device,
-#endif
 };
 
 static inline void __init sdp3430_init_smc91x(void)
@@ -298,7 +273,7 @@ static inline void __init sdp3430_init_smc91x(void)
 	sdp3430_smc91x_resources[0].end   = cs_mem_base + 0xf;
 	udelay(100);
 
-	if (is_sil_rev_greater_than(OMAP3430_REV_ES1_0))
+	if (system_rev > OMAP3430_REV_ES1_0)
 		eth_gpio = OMAP34XX_ETHR_GPIO_IRQ_SDPV2;
 	else
 		eth_gpio = OMAP34XX_ETHR_GPIO_IRQ_SDPV1;
@@ -329,17 +304,9 @@ static struct omap_lcd_config sdp3430_lcd_config __initdata = {
 	.ctrl_name	= "internal",
 };
 
-static struct omap_mmc_config sdp3430_mmc_config __initdata = {
-	.mmc [0] = {
-		.enabled	= 1,
-		.wire4		= 1,
-	},
-};
-
 static struct omap_board_config_kernel sdp3430_config[] __initdata = {
 	{ OMAP_TAG_UART,	&sdp3430_uart_config },
-	{OMAP_TAG_LCD,		&sdp3430_lcd_config},
-	{OMAP_TAG_MMC,		&sdp3430_mmc_config },
+	{ OMAP_TAG_LCD,		&sdp3430_lcd_config },
 };
 
 static int __init omap3430_i2c_init(void)
@@ -354,10 +321,11 @@ extern void __init sdp3430_flash_init(void);
 
 static void __init omap_3430sdp_init(void)
 {
+	omap3430_i2c_init();
 	platform_add_devices(sdp3430_devices, ARRAY_SIZE(sdp3430_devices));
 	omap_board_config = sdp3430_config;
 	omap_board_config_size = ARRAY_SIZE(sdp3430_config);
-	if (is_sil_rev_greater_than(OMAP3430_REV_ES1_0))
+	if (system_rev > OMAP3430_REV_ES1_0)
 		ts_gpio = OMAP34XX_TS_GPIO_IRQ_SDPV2;
 	else
 		ts_gpio = OMAP34XX_TS_GPIO_IRQ_SDPV1;
@@ -366,6 +334,7 @@ static void __init omap_3430sdp_init(void)
 				ARRAY_SIZE(sdp3430_spi_board_info));
 	ads7846_dev_init();
 	sdp3430_flash_init();
+	msecure_init();
 	twl4030_bci_battery_init();
 	omap_serial_init();
 	usb_musb_init();
@@ -378,7 +347,6 @@ static void __init omap_3430sdp_map_io(void)
 	omap2_set_globals_343x();
 	omap2_map_common_io();
 }
-arch_initcall(omap3430_i2c_init);
 
 MACHINE_START(OMAP_3430SDP, "OMAP3430 3430SDP board")
 	/* Maintainer: Syed Khasim - Texas Instruments Inc */

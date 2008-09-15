@@ -27,6 +27,8 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <linux/io.h>
+#include <linux/delay.h>
 
 #include <mach/gpio.h>
 #include <mach/keypad.h>
@@ -94,13 +96,6 @@ static int __init omap3_evm_i2c_init(void)
 	return 0;
 }
 
-static struct omap_mmc_config omap3_evm_mmc_config __initdata = {
-	.mmc [0] = {
-		.enabled        = 1,
-		.wire4          = 1,
-	},
-};
-
 static struct platform_device omap3_evm_lcd_device = {
 	.name		= "omap3evm_lcd",
 	.id		= -1,
@@ -108,11 +103,6 @@ static struct platform_device omap3_evm_lcd_device = {
 
 static struct omap_lcd_config omap3_evm_lcd_config __initdata = {
 	.ctrl_name	= "internal",
-};
-
-static struct platform_device omap3_evm_twl4030rtc_device = {
-	.name		= "twl4030_rtc",
-	.id		= -1,
 };
 
 static void ads7846_dev_init(void)
@@ -132,8 +122,16 @@ static int ads7846_get_pendown_state(void)
 }
 
 struct ads7846_platform_data ads7846_config = {
+	.x_max                  = 0x0fff,
+	.y_max                  = 0x0fff,
+	.x_plate_ohms           = 180,
+	.pressure_max           = 255,
+	.debounce_max           = 10,
+	.debounce_tol           = 3,
+	.debounce_rep           = 1,
 	.get_pendown_state	= ads7846_get_pendown_state,
 	.keep_vref_on		= 1,
+	.settle_delay_usecs     = 150,
 };
 
 static struct omap2_mcspi_device_config ads7846_mcspi_config = {
@@ -198,21 +196,19 @@ static void __init omap3_evm_init_irq(void)
 
 static struct omap_board_config_kernel omap3_evm_config[] __initdata = {
 	{ OMAP_TAG_UART,	&omap3_evm_uart_config },
-	{ OMAP_TAG_MMC,		&omap3_evm_mmc_config },
 	{ OMAP_TAG_LCD,		&omap3_evm_lcd_config },
 };
 
 static struct platform_device *omap3_evm_devices[] __initdata = {
 	&omap3_evm_lcd_device,
 	&omap3evm_kp_device,
-#ifdef CONFIG_RTC_DRV_TWL4030
-	&omap3_evm_twl4030rtc_device,
-#endif
 	&omap3evm_smc911x_device,
 };
 
 static void __init omap3_evm_init(void)
 {
+	omap3_evm_i2c_init();
+
 	platform_add_devices(omap3_evm_devices, ARRAY_SIZE(omap3_evm_devices));
 	omap_board_config = omap3_evm_config;
 	omap_board_config_size = ARRAY_SIZE(omap3_evm_config);
@@ -227,8 +223,6 @@ static void __init omap3_evm_init(void)
 	omap3evm_flash_init();
 	ads7846_dev_init();
 }
-
-arch_initcall(omap3_evm_i2c_init);
 
 static void __init omap3_evm_map_io(void)
 {
