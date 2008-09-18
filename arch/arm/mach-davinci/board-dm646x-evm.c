@@ -48,6 +48,16 @@ static struct davinci_board_config_kernel davinci_evm_config[] __initdata = {
 	{ DAVINCI_TAG_UART,     &davinci_evm_uart_config },
 };
 
+static struct davinci_i2c_platform_data i2c_pdata = {
+	.bus_freq       = 100 /* kHz */,
+	.bus_delay      = 0 /* usec */,
+};
+
+static void __init evm_init_i2c(void)
+{
+	davinci_init_i2c(&i2c_pdata);
+}
+
 static void board_init(void)
 {
 	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DM646X_LPSC_AEMIF, 1);
@@ -64,6 +74,7 @@ static void __init davinci_map_io(void)
 
 static __init void evm_init(void)
 {
+	evm_init_i2c();
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();
