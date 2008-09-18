@@ -30,4 +30,9 @@ struct clk {
 #define ALWAYS_ENABLED		16
 #define ENABLE_REG_32BIT	32
 
+/* various clock frequencies */
+#define DM646X_OSC_FREQ    	27000000
+#define DM646X_AUX_OSC_FREQ	24000000
+#define DM646X_CLOCK_TICK_RATE	148500000
+
 #endif

@@ -21,6 +21,7 @@
 #include <mach/hardware.h>
 
 #include <mach/psc.h>
+#include <mach/cpu.h>
 #include "clock.h"
 
 /* PLL/Reset register offsets */
@@ -31,6 +32,9 @@ static DEFINE_MUTEX(clocks_mutex);
 static DEFINE_SPINLOCK(clockfw_lock);
 
 static unsigned int commonrate;
+static unsigned int div_by_four;
+static unsigned int div_by_six;
+static unsigned int div_by_eight;
 static unsigned int armrate;
 static unsigned int fixedrate = 27000000;	/* 27 MHZ */
 
@@ -247,6 +251,45 @@ static struct clk davinci_clks[] = {
 		.usecount = 1,
 	}
 };
+static struct clk davinci_dm646x_clks[] = {
+	{
+		.name = "ARMCLK",
+		.rate = &armrate,
+		.lpsc = -1,
+		.flags = ALWAYS_ENABLED,
+	},
+	{
+		.name = "UART0",
+		.rate = &fixedrate,
+		.lpsc = DM646X_LPSC_UART0,
+	},
+	{
+		.name = "UART1",
+		.rate = &fixedrate,
+		.lpsc = DM646X_LPSC_UART1,
+	},
+	{
+		.name = "UART2",
+		.rate = &fixedrate,
+		.lpsc = DM646X_LPSC_UART2,
+	},
+	{
+		.name = "I2CCLK",
+		.rate = &div_by_four,
+		.lpsc = DM646X_LPSC_I2C,
+	},
+	{
+		.name = "gpio",
+		.rate = &commonrate,
+		.lpsc = DM646X_LPSC_GPIO,
+	},
+	{
+		.name = "AEMIFCLK",
+		.rate = &div_by_four,
+		.lpsc = DM646X_LPSC_AEMIF,
+		.usecount = 1,
+	},
+};
 
 #ifdef CONFIG_DAVINCI_RESET_CLOCKS
 /*
@@ -275,15 +318,33 @@ late_initcall(clk_disable_unused);
 int __init davinci_clk_init(void)
 {
 	struct clk *clkp;
-	int count = 0;
+	static struct clk *board_clks;
+	int count = 0, num_clks;
 	u32 pll_mult;
 
 	pll_mult = davinci_readl(DAVINCI_PLL_CNTRL0_BASE + PLLM);
-	commonrate = ((pll_mult + 1) * 27000000) / 6;
-	armrate = ((pll_mult + 1) * 27000000) / 2;
+	commonrate = ((pll_mult + 1) * DM646X_OSC_FREQ) / 6;
+	armrate = ((pll_mult + 1) * DM646X_OSC_FREQ) / 2;
 
-	for (clkp = davinci_clks; count < ARRAY_SIZE(davinci_clks);
-	     count++, clkp++) {
+	if (cpu_is_davinci_dm646x()) {
+		fixedrate = 24000000;
+		div_by_four = ((pll_mult + 1) * DM646X_OSC_FREQ) / 4;
+		div_by_six = ((pll_mult + 1) * DM646X_OSC_FREQ) / 6;
+		div_by_eight = ((pll_mult + 1) * DM646X_OSC_FREQ) / 8;
+		armrate = ((pll_mult + 1) * DM646X_OSC_FREQ) / 2;
+
+		board_clks = davinci_dm646x_clks;
+		num_clks = ARRAY_SIZE(davinci_dm646x_clks);
+	} else {
+		fixedrate = DM646X_OSC_FREQ;
+		armrate = (pll_mult + 1) * (fixedrate / 2);
+		commonrate = armrate / 3;
+
+		board_clks = davinci_clks;
+		num_clks = ARRAY_SIZE(davinci_clks);
+	}
+
+	for (clkp = board_clks; count < num_clks; count++, clkp++) {
 		clk_register(clkp);
 
 		/* Turn on clocks that have been enabled in the
