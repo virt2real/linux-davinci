@@ -9,3 +9,4 @@ obj-y 			:= time.o irq.o clock.o serial.o io.o id.o psc.o \
 
 # Board specific
 obj-$(CONFIG_MACH_DAVINCI_EVM)  	+= board-evm.o
+obj-$(CONFIG_MACH_DAVINCI_DM646X_EVM)	+= board-dm646x-evm.o

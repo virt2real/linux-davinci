@@ -33,6 +33,8 @@
 #include <mach/serial.h>
 #include <mach/irqs.h>
 #include <mach/board.h>
+#include <mach/cpu.h>
+#include "clock.h"
 
 #define UART_DAVINCI_PWREMU 0x0c
 
@@ -135,6 +137,11 @@ void __init davinci_serial_init(void)
 	for (i = 0; i < DAVINCI_MAX_NR_UARTS; i++) {
 		struct plat_serial8250_port *p = serial_platform_data + i;
 
+		if (cpu_is_davinci_dm646x()) {
+			p->uartclk = DM646X_AUX_OSC_FREQ;
+			p->iotype = UPIO_MEM32;
+		}
+
 		if (!(info->enabled_uarts & (1 << i))) {
 			p->membase = 0;
 			p->mapbase = 0;
@@ -148,7 +155,8 @@ void __init davinci_serial_init(void)
 					__func__, __LINE__, i);
 		else {
 			clk_enable(uart_clk);
-			davinci_serial_reset(p);
+			if (cpu_is_davinci_dm644x())
+				davinci_serial_reset(p);
 		}
 	}
 }

@@ -4,9 +4,16 @@ menu "TI DaVinci Implementations"
 
 comment "DaVinci Core Type"
 
+choice
+	prompt "DaVinci ARCH type"
+	default ARCH_DAVINCI644x
+
 config ARCH_DAVINCI644x
-	default y
 	bool "DaVinci 644x based system"
+
+config ARCH_DAVINCI_DM646x
+        bool "DaVinci 646x based system"
+endchoice
 
 comment "DaVinci Board Type"
 
@@ -17,6 +24,14 @@ config MACH_DAVINCI_EVM
 	help
 	  Configure this option to specify the whether the board used
 	  for development is a DaVinci EVM
+
+config MACH_DAVINCI_DM646X_EVM
+	bool "TI DM646x EVM"
+	default n
+	depends on ARCH_DAVINCI_DM646x
+	help
+	  Configure this option to specify the whether the board used
+	  for development is a DM646x EVM
 
 config DAVINCI_RESET_CLOCKS
 	bool "Reset unused clocks during boot"
