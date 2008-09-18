@@ -27,6 +27,6 @@ static inline int cpu_is_davinci_dm ##type (void)	\
 /* following generates the cpu_is_davinci_dmxxx */
 IS_DAVINCI_CPU(644x, 0x6446)	/* cpu_is_davinci_dm644x() */
 IS_DAVINCI_CPU(646x, 0x6467)	/* cpu_is_davinci_dm646x() */
-IS_DAVINCI_CPU(350, 0x350)	/* cpu_is_davinci_dm350() */
+IS_DAVINCI_CPU(355, 0x355)	/* cpu_is_davinci_dm355() */
 
 #endif

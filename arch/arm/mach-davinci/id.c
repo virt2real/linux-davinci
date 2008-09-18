@@ -40,6 +40,13 @@ static struct davinci_id davinci_ids[] __initdata = {
 		.manufacturer = 0x017,
 		.type         = 0x64670000,
 	},
+	{
+		/* DM355 */
+		.part_no	= 0xb73b,
+		.variant	= 0x0,
+		.manufacturer	= 0x00f,
+		.type		= 0x03550000,
+	},
 };
 
 /*
