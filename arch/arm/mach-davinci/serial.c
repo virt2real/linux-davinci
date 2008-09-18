@@ -37,6 +37,7 @@
 #include "clock.h"
 
 #define UART_DAVINCI_PWREMU 0x0c
+#define DM355_UART2_BASE	(0x01E06000)
 
 static inline unsigned int davinci_serial_in(struct plat_serial8250_port *up,
 					  int offset)
@@ -142,6 +143,16 @@ void __init davinci_serial_init(void)
 			p->iotype = UPIO_MEM32;
 		}
 
+		if (cpu_is_davinci_dm355()) {
+			p->uartclk = 24000000;
+			if (i == 2) {
+				p->membase = (char *)
+					IO_ADDRESS(DM355_UART2_BASE);
+				p->mapbase = (unsigned long)DM355_UART2_BASE;
+				p->irq = IRQ_DM355_UARTINT2;
+			}
+		}
+
 		if (!(info->enabled_uarts & (1 << i))) {
 			p->membase = 0;
 			p->mapbase = 0;
@@ -155,7 +166,7 @@ void __init davinci_serial_init(void)
 					__func__, __LINE__, i);
 		else {
 			clk_enable(uart_clk);
-			if (cpu_is_davinci_dm644x())
+			if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm355())
 				davinci_serial_reset(p);
 		}
 	}
