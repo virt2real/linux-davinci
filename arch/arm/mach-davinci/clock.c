@@ -290,6 +290,108 @@ static struct clk davinci_dm646x_clks[] = {
 		.usecount = 1,
 	},
 };
+static struct clk davinci_dm355_clks[] = {
+	{
+		.name = "ARMCLK",
+		.rate = &armrate,
+		.lpsc = -1,
+		.flags = ALWAYS_ENABLED,
+	},
+	{
+		.name = "UART0",
+		.rate = &fixedrate,
+		.lpsc = DAVINCI_LPSC_UART0,
+		.usecount = 1,
+	},
+	{
+		.name = "UART1",
+		.rate = &fixedrate,
+		.lpsc = DAVINCI_LPSC_UART1,
+		.usecount = 1,
+	},
+	{
+		.name = "UART2",
+		.rate = &fixedrate,
+		.lpsc = DAVINCI_LPSC_UART2,
+		.usecount = 1,
+	},
+	{
+		.name = "EMACCLK",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_EMAC_WRAPPER,
+	},
+	{
+		.name = "I2CCLK",
+		.rate = &fixedrate,
+		.lpsc = DAVINCI_LPSC_I2C,
+	},
+	{
+		.name = "IDECLK",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_ATA,
+	},
+	{
+		.name = "McBSPCLK0",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_McBSP,
+	},
+	{
+		.name = "McBSPCLK1",
+		.rate = &commonrate,
+		.lpsc = DM355_LPSC_McBSP1,
+	},
+	{
+		.name = "MMCSDCLK0",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_MMC_SD,
+	},
+	{
+		.name = "MMCSDCLK1",
+		.rate = &commonrate,
+		.lpsc = DM355_LPSC_MMC_SD1,
+	},
+	{
+		.name = "SPICLK",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_SPI,
+	},
+	{
+		.name = "gpio",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_GPIO,
+	},
+	{
+		.name = "AEMIFCLK",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_AEMIF,
+		.usecount = 1,
+	},
+	{
+		.name = "PWM0_CLK",
+		.rate = &fixedrate,
+		.lpsc = DAVINCI_LPSC_PWM0,
+	},
+	{
+		.name = "PWM1_CLK",
+		.rate = &fixedrate,
+		.lpsc = DAVINCI_LPSC_PWM1,
+	},
+	{
+		.name = "PWM2_CLK",
+		.rate = &fixedrate,
+		.lpsc = DAVINCI_LPSC_PWM2,
+	},
+	{
+		.name = "PWM3_CLK",
+		.rate = &fixedrate,
+		.lpsc = DM355_LPSC_PWM3,
+	},
+	{
+		.name = "USBCLK",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_USB,
+	},
+};
 
 #ifdef CONFIG_DAVINCI_RESET_CLOCKS
 /*
@@ -335,6 +437,17 @@ int __init davinci_clk_init(void)
 
 		board_clks = davinci_dm646x_clks;
 		num_clks = ARRAY_SIZE(davinci_dm646x_clks);
+	} else if (cpu_is_davinci_dm355()) {
+		unsigned long postdiv;
+
+		postdiv = (davinci_readl(DAVINCI_PLL_CNTRL0_BASE + 0x128)
+			   & 0x1f) + 1;
+
+		fixedrate = 24000000;
+		armrate = (pll_mult + 1) * (fixedrate / (16 * postdiv));
+		commonrate = armrate / 2;
+		board_clks = davinci_dm355_clks;
+		num_clks = ARRAY_SIZE(davinci_dm355_clks);
 	} else {
 		fixedrate = DM646X_OSC_FREQ;
 		armrate = (pll_mult + 1) * (fixedrate / 2);

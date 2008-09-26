@@ -314,6 +314,8 @@ static void __init davinci_timer_init(void)
 		davinci_clock_tick_rate = DM646X_OSC_FREQ;
 	else if (cpu_is_davinci_dm646x())
 		davinci_clock_tick_rate = DM646X_CLOCK_TICK_RATE;
+	else if (cpu_is_davinci_dm355())
+		davinci_clock_tick_rate = DM355_CLOCK_TICK_RATE;
 
 	/* setup clocksource */
 	clocksource_davinci.mult =
