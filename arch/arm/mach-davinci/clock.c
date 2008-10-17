@@ -289,6 +289,11 @@ static struct clk davinci_dm646x_clks[] = {
 		.lpsc = DM646X_LPSC_AEMIF,
 		.usecount = 1,
 	},
+	{
+		.name = "EMACCLK",
+		.rate = &div_by_four,
+		.lpsc = DM646X_LPSC_EMAC,
+	},
 };
 static struct clk davinci_dm355_clks[] = {
 	{

@@ -235,6 +235,10 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_DM644X_MAC_IN_VECTOR_RX_INT_VEC	      (0xFF00)
 #define EMAC_DM644X_MAC_IN_VECTOR_TX_INT_VEC	      (0xFF)
 
+/** NOTE:: For DM646x the IN_VECTOR has changed */
+#define EMAC_DM646X_MAC_IN_VECTOR_RX_INT_VEC	(1 << EMAC_DEF_RX_CH)
+#define EMAC_DM646X_MAC_IN_VECTOR_TX_INT_VEC	(0x10000 << EMAC_DEF_TX_CH)
+
 /* CPPI bit positions */
 #define EMAC_CPPI_SOP_BIT		(1 << 31)
 #define EMAC_CPPI_EOP_BIT		(1 << 30)
@@ -262,6 +266,8 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_TXINTMASKSET	0x88
 #define EMAC_TXINTMASKCLEAR	0x8C
 #define EMAC_MACINVECTOR	0x90
+
+#define EMAC_DM646X_MACEOIVECTOR	0x94
 
 #define EMAC_RXINTSTATRAW	0xA0
 #define EMAC_RXINTSTATMASKED	0xA4
@@ -344,6 +350,13 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_CTRL_EWCTL 	(0x4)
 #define EMAC_CTRL_EWINTTCNT	(0x8)
 
+/* EMAC DM646X control module registers */
+#define EMAC_DM646X_CMRXINTEN	(0x14)
+#define EMAC_DM646X_CMTXINTEN	(0x18)
+
+/* EMAC EOI codes for C0 */
+#define EMAC_DM646X_MAC_EOI_C0_RXEN	(0x01)
+#define EMAC_DM646X_MAC_EOI_C0_TXEN	(0x02)
 
 /** net_buf_obj: EMAC network bufferdata structure
  *
@@ -1184,8 +1197,23 @@ static void emac_timer_cb(struct emac_priv *priv)
  */
 static void emac_int_disable(struct emac_priv *priv)
 {
-	/* Set DM644x control registers for interrupt control */
-	emac_ctrl_write(EMAC_CTRL_EWCTL, 0x0);
+	if (cpu_is_davinci_dm646x()) {
+		unsigned long flags;
+
+		local_irq_save(flags);
+
+		/* Program C0_Int_En to zero to turn off
+		* interrupts to the CPU */
+		emac_ctrl_write(EMAC_DM646X_CMRXINTEN, 0x0);
+		emac_ctrl_write(EMAC_DM646X_CMTXINTEN, 0x0);
+		/* NOTE: Rx Threshold and Misc interrupts are not disabled */
+
+		local_irq_restore(flags);
+
+	} else {
+		/* Set DM644x control registers for interrupt control */
+		emac_ctrl_write(EMAC_CTRL_EWCTL, 0x0);
+	}
 }
 
 /**
@@ -1197,8 +1225,28 @@ static void emac_int_disable(struct emac_priv *priv)
  */
 static void emac_int_enable(struct emac_priv *priv)
 {
-	/* Set DM644x control registers for interrupt control */
-	emac_ctrl_write(EMAC_CTRL_EWCTL, 0x1);
+	if (cpu_is_davinci_dm646x()) {
+		emac_ctrl_write(EMAC_DM646X_CMRXINTEN, 0xff);
+		emac_ctrl_write(EMAC_DM646X_CMTXINTEN, 0xff);
+
+		/* In addition to turning on interrupt Enable, we need
+		 * ack by writing appropriate values to the EOI
+		 * register */
+
+		/* NOTE: Rx Threshold and Misc interrupts are not enabled */
+
+		/* ack rxen only then a new pulse will be generated */
+		emac_write(EMAC_DM646X_MACEOIVECTOR,
+			EMAC_DM646X_MAC_EOI_C0_RXEN);
+
+		/* ack txen- only then a new pulse will be generated */
+		emac_write(EMAC_DM646X_MACEOIVECTOR,
+			EMAC_DM646X_MAC_EOI_C0_TXEN);
+
+	} else {
+		/* Set DM644x control registers for interrupt control */
+		emac_ctrl_write(EMAC_CTRL_EWCTL, 0x1);
+	}
 }
 
 /**
@@ -2323,6 +2371,7 @@ static int emac_hw_enable(struct emac_priv *priv)
  */
 static int emac_poll(struct napi_struct *napi, int budget)
 {
+	unsigned int mask;
 	struct emac_priv *priv = container_of(napi, struct emac_priv, napi);
 	struct net_device *ndev = priv->ndev;
 	u32 status = 0;
@@ -2337,14 +2386,24 @@ static int emac_poll(struct napi_struct *napi, int budget)
 	status = emac_read(EMAC_MACINVECTOR);
 
 	/* Since we support only 1 TX ch, for now check all TX int mask */
-	if (status & EMAC_DM644X_MAC_IN_VECTOR_TX_INT_VEC) {
+	mask = EMAC_DM644X_MAC_IN_VECTOR_TX_INT_VEC;
+
+	if (cpu_is_davinci_dm646x())
+		mask = EMAC_DM646X_MAC_IN_VECTOR_TX_INT_VEC;
+
+	if (status & mask) {
 		num_pkts = emac_tx_bdproc(priv, EMAC_DEF_TX_CH,
 					  EMAC_DEF_TX_MAX_SERVICE,
 					  &txpending);
 	} /* TX processing */
 
-	/* Since we support only 1 TX ch, for now check all TX int mask */
-	if (status & EMAC_DM644X_MAC_IN_VECTOR_RX_INT_VEC) {
+	/* Since we support only 1 RX ch, for now check all RX int mask */
+	mask = EMAC_DM644X_MAC_IN_VECTOR_RX_INT_VEC;
+
+	if (cpu_is_davinci_dm646x())
+		mask = EMAC_DM646X_MAC_IN_VECTOR_RX_INT_VEC;
+
+	if (status & mask) {
 		num_pkts = emac_rx_bdproc(priv, EMAC_DEF_RX_CH,
 					  budget, &rxpending);
 	} /* RX processing */
@@ -2450,6 +2509,10 @@ typedef void (*timer_tick_func) (unsigned long);
 static int emac_dev_open(struct net_device *ndev)
 {
 	u32 rc, cnt, ch;
+	struct resource *res;
+	int q, m;
+	int i = 0;
+	int k = 0;
 	struct emac_priv *priv = netdev_priv(ndev);
 
 	netif_carrier_off(ndev);
@@ -2496,9 +2559,14 @@ static int emac_dev_open(struct net_device *ndev)
 	}
 
 	/* Request IRQ */
-	if (request_irq(ndev->irq, emac_irq, IRQF_DISABLED, ndev->name, ndev)) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: request_irq() failed");
-		return (-EBUSY);
+
+	while ((res = platform_get_resource(priv->pdev, IORESOURCE_IRQ, k))) {
+		for (i = res->start; i <= res->end; i++) {
+			if (request_irq(i, emac_irq, IRQF_DISABLED,
+					ndev->name, ndev))
+				goto rollback;
+		}
+		k++;
 	}
 
 	/* Start/Enable EMAC hardware */
@@ -2510,6 +2578,18 @@ static int emac_dev_open(struct net_device *ndev)
 		dev_notice(EMAC_DEV, "DaVinci EMAC: Opened %s\n", ndev->name);
 
 	return (0);
+
+rollback:
+
+	dev_err(EMAC_DEV, "DaVinci EMAC: request_irq() failed");
+
+	for (q = k; k >= 0; k--) {
+		for (m = i; m >= res->start; m--)
+			free_irq(m, ndev);
+		res = platform_get_resource(priv->pdev, IORESOURCE_IRQ, k-1);
+		m = res->end;
+	}
+	return -EBUSY;
 }
 
 /**

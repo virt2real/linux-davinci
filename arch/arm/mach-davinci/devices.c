@@ -25,6 +25,7 @@
 #include <mach/hardware.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
+#include <mach/cpu.h>
 
 static struct resource i2c_resources[] = {
 	{
@@ -100,6 +101,7 @@ static struct resource emac_resources[] = {
 	},
 	{
 		.start = IRQ_EMACINT,
+		.end   = IRQ_EMACINT,
 		.flags = IORESOURCE_IRQ,
 	},
 };
@@ -112,6 +114,44 @@ static struct platform_device davinci_emac_device = {
        .num_resources = ARRAY_SIZE(emac_resources),
        .resource = emac_resources,
        .dev = {
+		.platform_data = &emac_pdata,
+	}
+};
+
+static struct resource dm646x_emac_resources[] = {
+	{
+		.start = DAVINCI_EMAC_CNTRL_REGS_BASE,
+		.end   = DAVINCI_EMAC_CNTRL_REGS_BASE + 0x4800,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start 	= IRQ_DM646X_EMACRXTHINT,
+		.end 	= IRQ_DM646X_EMACRXTHINT,
+		.flags 	= IORESOURCE_IRQ,
+	},
+	{
+		.start 	= IRQ_DM646X_EMACRXINT,
+		.end 	= IRQ_DM646X_EMACRXINT,
+		.flags 	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_DM646X_EMACTXINT,
+		.end 	= IRQ_DM646X_EMACTXINT,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start 	= IRQ_DM646X_EMACMISCINT,
+		.end 	= IRQ_DM646X_EMACMISCINT,
+		.flags 	= IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device dm646x_emac_device = {
+	.name = "davinci_emac",
+	.id = 1,
+	.num_resources = ARRAY_SIZE(dm646x_emac_resources),
+	.resource = dm646x_emac_resources,
+	.dev = {
 		.platform_data = &emac_pdata,
 	}
 };
@@ -133,8 +173,10 @@ void davinci_init_emac(char *mac_addr)
 		printk(KERN_WARNING "%s: using random MAC addr: %s\n",
 		       __func__, print_mac(buf, emac_pdata.mac_addr));
 	}
-
-	(void) platform_device_register(&davinci_emac_device);
+	if ((cpu_is_davinci_dm644x()))
+		(void) platform_device_register(&davinci_emac_device);
+	else
+		(void) platform_device_register(&dm646x_emac_device);
 }
 
 #else
