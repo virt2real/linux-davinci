@@ -93,17 +93,16 @@ static void davinci_init_mmcsd(void) {}
 #if defined(CONFIG_TI_DAVINCI_EMAC) || defined(CONFIG_TI_DAVINCI_EMAC_MODULE)
 
 static struct resource emac_resources[] = {
-       {
-       .start = DAVINCI_EMAC_CNTRL_REGS_BASE,
-       .end   = DAVINCI_EMAC_CNTRL_REGS_BASE + 0x4800, /* 4K */
-       .flags = IORESOURCE_MEM,
-       },
-       {
-       .start = IRQ_EMACINT,
-       .flags = IORESOURCE_IRQ,
-       },
+	{
+		.start = DAVINCI_EMAC_CNTRL_REGS_BASE,
+		.end   = DAVINCI_EMAC_CNTRL_REGS_BASE + 0x4800,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = IRQ_EMACINT,
+		.flags = IORESOURCE_IRQ,
+	},
 };
-
 
 static struct emac_platform_data emac_pdata;
 
