@@ -20,8 +20,6 @@
 #include <linux/clk.h>
 #include <linux/input.h>
 
-#include <linux/i2c/twl4030.h>
-
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 #include <linux/i2c/twl4030.h>
@@ -34,13 +32,16 @@
 #include <mach/gpio.h>
 #include <mach/keypad.h>
 #include <mach/board.h>
-#include <mach/hsmmc.h>
+#include <mach/mmc.h>
 #include <mach/usb-musb.h>
 #include <mach/usb-ehci.h>
 #include <mach/common.h>
 #include <mach/mcspi.h>
 
 #include "sdram-micron-mt46h32m32lf-6.h"
+#include "twl4030-generic-scripts.h"
+#include "mmc-twl4030.h"
+
 
 static struct resource omap3evm_smc911x_resources[] = {
 	[0] =	{
@@ -139,6 +140,7 @@ static struct twl4030_platform_data omap3evm_twldata = {
 	.keypad		= &omap3evm_kp_data,
 	.madc		= &omap3evm_madc_data,
 	.usb		= &omap3evm_usb_data,
+	.power		= &generic3430_t2scripts_data,
 	.gpio		= &omap3evm_gpio_data,
 };
 
@@ -233,6 +235,15 @@ static struct platform_device *omap3_evm_devices[] __initdata = {
 	&omap3evm_smc911x_device,
 };
 
+static struct twl4030_hsmmc_info mmc[] __initdata = {
+	{
+		.mmc		= 1,
+		.wires		= 4,
+		.gpio_cd	= -EINVAL,
+	},
+	{}	/* Terminator */
+};
+
 static void __init omap3_evm_init(void)
 {
 	omap3_evm_i2c_init();
@@ -245,7 +256,7 @@ static void __init omap3_evm_init(void)
 				ARRAY_SIZE(omap3evm_spi_board_info));
 
 	omap_serial_init();
-	hsmmc_init();
+	hsmmc_init(mmc);
 	usb_musb_init();
 	usb_ehci_init();
 	omap3evm_flash_init();

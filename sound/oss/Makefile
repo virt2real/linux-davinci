@@ -7,17 +7,9 @@
 
 obj-$(CONFIG_SOUND_OSS)		+= sound.o
 
-obj-$(CONFIG_SOUND_OMAP)        += omap-audio-dma-intfc.o omap-audio.o
-obj-$(CONFIG_SOUND_OMAP_TSC2101)+= omap-audio-tsc2101.o
-obj-$(CONFIG_SOUND_OMAP_AIC23)  += omap-audio-aic23.o
-
-obj-$(CONFIG_SOUND_DAVINCI)	+= davinci-audio-dma-intfc.o davinci-audio.o
-obj-$(CONFIG_SOUND_DAVINCI_AIC33) += davinci-audio-aic33.o
-
 # Please leave it as is, cause the link order is significant !
 
 obj-$(CONFIG_SOUND_SH_DAC_AUDIO)	+= sh_dac_audio.o
-obj-$(CONFIG_SOUND_HAL2)	+= hal2.o
 obj-$(CONFIG_SOUND_AEDSP16)	+= aedsp16.o
 obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb_lib.o uart401.o

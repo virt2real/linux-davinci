@@ -339,19 +339,6 @@ config RADIO_ZOLTRIX_PORT
 	help
 	  Enter the I/O port of your Zoltrix radio card.
 
-config RADIO_TEA5761
-	tristate "Philips Semiconductors TEA5761 I2C FM Radio"
-	help
-	  Choose Y here if you have one of these AM/FM radio cards.
-
-	  In order to control your radio card, you will need to use programs
-	  that are compatible with the Video For Linux 2 API.  Information on
-	  this API and pointers to "v4l" programs may be found at
-	  <file:Documentation/video4linux/API.html>.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called radio-tea5761.
-
 config USB_DSBR
 	tristate "D-Link/GemTek USB FM radio support"
 	depends on USB && VIDEO_V4L2
@@ -372,6 +359,18 @@ config USB_SI470X
 	  computer's USB port.
 
 	  To compile this driver as a module, choose M here: the
-	  module will be called radio-silabs.
+	  module will be called radio-si470x.
+
+config USB_MR800
+	tristate "AverMedia MR 800 USB FM radio support"
+	depends on USB && VIDEO_V4L2
+	---help---
+	  Say Y here if you want to connect this type of radio to your
+	  computer's USB port. Note that the audio is not digital, and
+	  you must connect the line out connector to a sound card or a
+	  set of speakers.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called radio-mr800.
 
 endif # RADIO_ADAPTERS

@@ -13,26 +13,27 @@
 #include <linux/init.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
-#include <linux/i2c.h>
 #include <linux/gpio.h>
+#include <linux/leds.h>
+
+#include <linux/i2c.h>
 #include <linux/i2c/pcf857x.h>
 #include <linux/i2c/at24.h>
-#include <linux/leds.h>
 #include <linux/etherdevice.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/physmap.h>
+#include <linux/io.h>
 
 #include <asm/setup.h>
-#include <asm/io.h>
 #include <asm/mach-types.h>
-#include <mach/hardware.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
+#include <mach/hardware.h>
 #include <mach/common.h>
 #include <mach/board.h>
 #include <mach/emac.h>
@@ -336,8 +337,6 @@ static struct pcf857x_platform_data pcf_data_u18 = {
 static int
 evm_u35_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 {
-	/* REVISIT -- get polarity of these right; active low == 'n' prefix */
-
 	/* p0 = nDRV_VBUS (initial:  don't supply it) */
 	gpio_request(gpio + 0, "nDRV_VBUS");
 	gpio_direction_output(gpio + 0, 1);

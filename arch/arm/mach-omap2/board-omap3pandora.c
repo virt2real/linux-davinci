@@ -41,12 +41,14 @@
 #include <mach/gpio.h>
 #include <mach/gpmc.h>
 #include <mach/hardware.h>
-#include <mach/hsmmc.h>
+#include <mach/mmc.h>
 #include <mach/nand.h>
 #include <mach/usb-ehci.h>
 #include <mach/usb-musb.h>
 
 #include "sdram-micron-mt46h32m32lf-6.h"
+#include "mmc-twl4030.h"
+
 
 #define NAND_BLOCK_SIZE SZ_128K
 #define GPMC_CS0_BASE  0x60
@@ -201,6 +203,15 @@ static struct platform_device *omap3pandora_devices[] __initdata = {
 	&omap3pandora_lcd_device,
 };
 
+static struct twl4030_hsmmc_info mmc[] __initdata = {
+	{
+		.mmc		= 1,
+		.wires		= 4,
+		.gpio_cd	= -EINVAL,
+	},
+	{}	/* Terminator */
+};
+
 static void __init omap3pandora_init(void)
 {
 	omap3pandora_i2c_init();
@@ -208,7 +219,7 @@ static void __init omap3pandora_init(void)
 	omap_board_config = omap3pandora_config;
 	omap_board_config_size = ARRAY_SIZE(omap3pandora_config);
 	omap_serial_init();
-	hsmmc_init();
+	hsmmc_init(mmc);
 	usb_musb_init();
 	usb_ehci_init();
 	omap3pandora_flash_init();

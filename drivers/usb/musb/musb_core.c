@@ -83,8 +83,8 @@
  * This gets many kinds of configuration information:
  *	- Kconfig for everything user-configurable
  *	- platform_device for addressing, irq, and platform_data
- *	- platform_data is mostly for board-specific information
- *	  (plus recently, SOC or family details)
+ *	- platform_data is mostly for board-specific informarion
+ *	  (plus recentrly, SOC or family details)
  *
  * Most of the conditional compilation will (someday) vanish.
  */
@@ -1671,20 +1671,17 @@ musb_mode_store(struct device *dev, struct device_attribute *attr,
 {
 	struct musb	*musb = dev_to_musb(dev);
 	unsigned long	flags;
-	int		status;
 
 	spin_lock_irqsave(&musb->lock, flags);
-	if (sysfs_streq(buf, "host"))
-		status = musb_platform_set_mode(musb, MUSB_HOST);
-	else if (sysfs_streq(buf, "peripheral"))
-		status = musb_platform_set_mode(musb, MUSB_PERIPHERAL);
-	else if (sysfs_streq(buf, "otg"))
-		status = musb_platform_set_mode(musb, MUSB_OTG);
-	else
-		status = -EINVAL;
+	if (!strncmp(buf, "host", 4))
+		musb_platform_set_mode(musb, MUSB_HOST);
+	if (!strncmp(buf, "peripheral", 10))
+		musb_platform_set_mode(musb, MUSB_PERIPHERAL);
+	if (!strncmp(buf, "otg", 3))
+		musb_platform_set_mode(musb, MUSB_OTG);
 	spin_unlock_irqrestore(&musb->lock, flags);
 
-	return (status == 0) ? n : status;
+	return n;
 }
 static DEVICE_ATTR(mode, 0644, musb_mode_show, musb_mode_store);
 
@@ -1809,6 +1806,7 @@ allocate_instance(struct device *dev,
 	musb->ctrl_base = mbase;
 	musb->nIrq = -ENODEV;
 	musb->config = config;
+	BUG_ON(musb->config->num_eps > MUSB_C_NUM_EPS);
 	for (epnum = 0, ep = musb->endpoints;
 			epnum < musb->config->num_eps;
 			epnum++, ep++) {
@@ -2057,15 +2055,6 @@ bad_config:
 
 	}
 
-	return 0;
-
-fail:
-	if (musb->clock)
-		clk_put(musb->clock);
-	device_init_wakeup(dev, 0);
-	musb_free(musb);
-	return status;
-
 #ifdef CONFIG_SYSFS
 	status = device_create_file(dev, &dev_attr_mode);
 	status = device_create_file(dev, &dev_attr_vbus);
@@ -2074,12 +2063,31 @@ fail:
 #endif /* CONFIG_USB_GADGET_MUSB_HDRC */
 	status = 0;
 #endif
+	if (status)
+		goto fail2;
+
+	return 0;
+
+fail2:
+#ifdef CONFIG_SYSFS
+	device_remove_file(musb->controller, &dev_attr_mode);
+	device_remove_file(musb->controller, &dev_attr_vbus);
+#ifdef CONFIG_USB_MUSB_OTG
+	device_remove_file(musb->controller, &dev_attr_srp);
+#endif
+#endif
+	musb_platform_exit(musb);
+fail:
+	dev_err(musb->controller,
+		"musb_init_controller failed with status %d\n", status);
+
+	if (musb->clock)
+		clk_put(musb->clock);
+	device_init_wakeup(dev, 0);
+	musb_free(musb);
 
 	return status;
 
-fail2:
-	musb_platform_exit(musb);
-	goto fail;
 }
 
 /*-------------------------------------------------------------------------*/

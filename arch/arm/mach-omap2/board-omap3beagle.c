@@ -24,8 +24,6 @@
 #include <linux/input.h>
 #include <linux/gpio_keys.h>
 
-#include <linux/i2c/twl4030.h>
-
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand.h>
@@ -39,11 +37,14 @@
 #include <mach/board.h>
 #include <mach/usb-musb.h>
 #include <mach/usb-ehci.h>
-#include <mach/hsmmc.h>
+#include <mach/mmc.h>
 #include <mach/common.h>
 #include <mach/gpmc.h>
 #include <mach/nand.h>
 #include <mach/mux.h>
+
+#include "twl4030-generic-scripts.h"
+#include "mmc-twl4030.h"
 
 
 #define GPMC_CS0_BASE  0x60
@@ -157,6 +158,7 @@ static struct twl4030_platform_data beagle_twldata = {
 	/* platform_data for children goes here */
 	.usb		= &beagle_usb_data,
 	.gpio		= &beagle_gpio_data,
+	.power		= &generic3430_t2scripts_data,
 };
 
 static struct i2c_board_info __initdata beagle_i2c_boardinfo[] = {
@@ -297,6 +299,15 @@ static void __init omap3beagle_flash_init(void)
 	}
 }
 
+static struct twl4030_hsmmc_info mmc[] __initdata = {
+	{
+		.mmc		= 1,
+		.wires		= 8,
+		.gpio_cd	= TWL4030_GPIO_IRQ_NO(0),
+	},
+	{}	/* Terminator */
+};
+
 static void __init omap3_beagle_init(void)
 {
 	omap3_beagle_i2c_init();
@@ -309,7 +320,7 @@ static void __init omap3_beagle_init(void)
 	omap_cfg_reg(AH8_34XX_GPIO29);
 	gpio_request(29, "mmc0_wp");
 	gpio_direction_input(29);
-	hsmmc_init();
+	hsmmc_init(mmc);
 
 	omap_cfg_reg(J25_34XX_GPIO170);
 	gpio_request(170, "DVI_nPD");

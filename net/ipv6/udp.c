@@ -107,6 +107,21 @@ static struct sock *__udp6_lib_lookup(struct net *net,
 	return result;
 }
 
+static struct sock *__udp6_lib_lookup_skb(struct sk_buff *skb,
+					  __be16 sport, __be16 dport,
+					  struct hlist_head udptable[])
+{
+	struct sock *sk;
+	struct ipv6hdr *iph = ipv6_hdr(skb);
+
+	if (unlikely(sk = skb_steal_sock(skb)))
+		return sk;
+	else
+		return __udp6_lib_lookup(dev_net(skb->dst->dev), &iph->saddr, sport,
+					 &iph->daddr, dport, inet6_iif(skb),
+					 udptable);
+}
+
 /*
  * 	This should be easy, if there is something there we
  * 	return it, otherwise we block.
@@ -313,7 +328,7 @@ drop:
 	return -1;
 }
 
-static struct sock *udp_v6_mcast_next(struct sock *sk,
+static struct sock *udp_v6_mcast_next(struct net *net, struct sock *sk,
 				      __be16 loc_port, struct in6_addr *loc_addr,
 				      __be16 rmt_port, struct in6_addr *rmt_addr,
 				      int dif)
@@ -325,7 +340,7 @@ static struct sock *udp_v6_mcast_next(struct sock *sk,
 	sk_for_each_from(s, node) {
 		struct inet_sock *inet = inet_sk(s);
 
-		if (sock_net(s) != sock_net(sk))
+		if (!net_eq(sock_net(s), net))
 			continue;
 
 		if (s->sk_hash == num && s->sk_family == PF_INET6) {
@@ -368,14 +383,14 @@ static int __udp6_lib_mcast_deliver(struct net *net, struct sk_buff *skb,
 	read_lock(&udp_hash_lock);
 	sk = sk_head(&udptable[udp_hashfn(net, ntohs(uh->dest))]);
 	dif = inet6_iif(skb);
-	sk = udp_v6_mcast_next(sk, uh->dest, daddr, uh->source, saddr, dif);
+	sk = udp_v6_mcast_next(net, sk, uh->dest, daddr, uh->source, saddr, dif);
 	if (!sk) {
 		kfree_skb(skb);
 		goto out;
 	}
 
 	sk2 = sk;
-	while ((sk2 = udp_v6_mcast_next(sk_next(sk2), uh->dest, daddr,
+	while ((sk2 = udp_v6_mcast_next(net, sk_next(sk2), uh->dest, daddr,
 					uh->source, saddr, dif))) {
 		struct sk_buff *buff = skb_clone(skb, GFP_ATOMIC);
 		if (buff) {
@@ -488,8 +503,7 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct hlist_head udptable[],
 	 * check socket cache ... must talk to Alan about his plans
 	 * for sock caches... i'll skip this for now.
 	 */
-	sk = __udp6_lib_lookup(net, saddr, uh->source,
-			       daddr, uh->dest, inet6_iif(skb), udptable);
+	sk = __udp6_lib_lookup_skb(skb, uh->source, uh->dest, udptable);
 
 	if (sk == NULL) {
 		if (!xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb))

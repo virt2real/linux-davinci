@@ -32,9 +32,9 @@
 #include <linux/io.h>
 #include <linux/gpio.h>
 
-#include <mach/hardware.h>
-#include <mach/memory.h>
-
+#include <asm/arch/hardware.h>
+#include <asm/arch/memory.h>
+#include <asm/arch/gpio.h>
 #include <asm/mach-types.h>
 
 #include "musb_core.h"

@@ -26,7 +26,6 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
-
 #include <linux/i2c/twl4030.h>
 
 #include <linux/mtd/mtd.h>
@@ -44,12 +43,14 @@
 #include <mach/gpio.h>
 #include <mach/gpmc.h>
 #include <mach/hardware.h>
-#include <mach/hsmmc.h>
+#include <mach/mmc.h>
 #include <mach/nand.h>
 #include <mach/usb-ehci.h>
 #include <mach/usb-musb.h>
 
 #include "sdram-micron-mt46h32m32lf-6.h"
+#include "twl4030-generic-scripts.h"
+#include "mmc-twl4030.h"
 
 #define NAND_BLOCK_SIZE SZ_128K
 #define GPMC_CS0_BASE  0x60
@@ -145,6 +146,7 @@ static void __init overo_flash_init(void)
 static struct omap_uart_config overo_uart_config __initdata = {
 	.enabled_uarts	= ((1 << 0) | (1 << 1) | (1 << 2)),
 };
+
 static struct twl4030_gpio_platform_data overo_gpio_data = {
 	.gpio_base	= OMAP_MAX_GPIO_LINES,
 	.irq_base	= TWL4030_GPIO_IRQ_BASE,
@@ -160,6 +162,7 @@ static struct twl4030_platform_data overo_twldata = {
 	.irq_end	= TWL4030_IRQ_END,
 	.gpio		= &overo_gpio_data,
 	.usb		= &overo_usb_data,
+	.power		= &generic3430_t2scripts_data,
 };
 
 static struct i2c_board_info __initdata overo_i2c_boardinfo[] = {
@@ -205,6 +208,20 @@ static struct platform_device *overo_devices[] __initdata = {
 	&overo_lcd_device,
 };
 
+static struct twl4030_hsmmc_info mmc[] __initdata = {
+	{
+		.mmc		= 1,
+		.wires		= 4,
+		.gpio_cd	= -EINVAL,
+	},
+	{
+		.mmc		= 2,
+		.wires		= 4,
+		.gpio_cd	= -EINVAL,
+	},
+	{}	/* Terminator */
+};
+
 static void __init overo_init(void)
 {
 	overo_i2c_init();
@@ -212,7 +229,7 @@ static void __init overo_init(void)
 	omap_board_config = overo_config;
 	omap_board_config_size = ARRAY_SIZE(overo_config);
 	omap_serial_init();
-	hsmmc_init();
+	hsmmc_init(mmc);
 	usb_musb_init();
 	usb_ehci_init();
 	overo_flash_init();

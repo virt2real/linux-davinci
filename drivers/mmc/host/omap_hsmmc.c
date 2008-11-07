@@ -51,27 +51,30 @@
 #define OMAP_HSMMC_ISE		0x0138
 #define OMAP_HSMMC_CAPA		0x0140
 
-#define VS18			(1<<26)
-#define VS30			(1<<25)
-#define SDVS18			(0x5<<9)
-#define SDVS30			(0x6<<9)
+#define VS18			(1 << 26)
+#define VS30			(1 << 25)
+#define SDVS18			(0x5 << 9)
+#define SDVS30			(0x6 << 9)
 #define SDVSCLR			0xFFFFF1FF
 #define SDVSDET			0x00000400
 #define AUTOIDLE		0x1
-#define SDBP			(1<<8)
+#define SDBP			(1 << 8)
 #define DTO			0xe
 #define ICE			0x1
 #define ICS			0x2
-#define CEN			(1<<2)
+#define CEN			(1 << 2)
 #define CLKD_MASK		0x0000FFC0
+#define CLKD_SHIFT		6
+#define DTO_MASK		0x000F0000
+#define DTO_SHIFT		16
 #define INT_EN_MASK		0x307F0033
-#define INIT_STREAM		(1<<1)
-#define DP_SELECT		(1<<21)
-#define DDIR			(1<<4)
+#define INIT_STREAM		(1 << 1)
+#define DP_SELECT		(1 << 21)
+#define DDIR			(1 << 4)
 #define DMA_EN			0x1
-#define MSBS			1<<5
-#define BCE			1<<1
-#define FOUR_BIT		1 << 1
+#define MSBS			(1 << 5)
+#define BCE			(1 << 1)
+#define FOUR_BIT		(1 << 1)
 #define CC			0x1
 #define TC			0x02
 #define OD			0x1
@@ -417,6 +420,11 @@ static irqreturn_t mmc_omap_irq(int irq, void *dev_id)
 					mmc_dma_cleanup(host);
 				else
 					host->data->error = -EILSEQ;
+				OMAP_HSMMC_WRITE(host->base, SYSCTL,
+					OMAP_HSMMC_READ(host->base,
+							SYSCTL) | SRD);
+				while (OMAP_HSMMC_READ(host->base,
+							SYSCTL) & SRD) ;
 				end_trans = 1;
 			}
 		}
@@ -656,6 +664,42 @@ mmc_omap_start_dma_transfer(struct mmc_omap_host *host, struct mmc_request *req)
 	return 0;
 }
 
+static void set_data_timeout(struct mmc_omap_host *host,
+			     struct mmc_request *req)
+{
+	unsigned int timeout, cycle_ns;
+	uint32_t reg, clkd, dto = 0;
+
+	reg = OMAP_HSMMC_READ(host->base, SYSCTL);
+	clkd = (reg & CLKD_MASK) >> CLKD_SHIFT;
+	if (clkd == 0)
+		clkd = 1;
+
+	cycle_ns = 1000000000 / (clk_get_rate(host->fclk) / clkd);
+	timeout = req->data->timeout_ns / cycle_ns;
+	timeout += req->data->timeout_clks;
+	if (timeout) {
+		while ((timeout & 0x80000000) == 0) {
+			dto += 1;
+			timeout <<= 1;
+		}
+		dto = 31 - dto;
+		timeout <<= 1;
+		if (timeout && dto)
+			dto += 1;
+		if (dto >= 13)
+			dto -= 13;
+		else
+			dto = 0;
+		if (dto > 14)
+			dto = 14;
+	}
+
+	reg &= ~DTO_MASK;
+	reg |= dto << DTO_SHIFT;
+	OMAP_HSMMC_WRITE(host->base, SYSCTL, reg);
+}
+
 /*
  * Configure block length for MMC/SD cards and initiate the transfer.
  */
@@ -673,6 +717,7 @@ mmc_omap_prepare_data(struct mmc_omap_host *host, struct mmc_request *req)
 
 	OMAP_HSMMC_WRITE(host->base, BLK, (req->data->blksz)
 					| (req->data->blocks << 16));
+	set_data_timeout(host, req);
 
 	host->datadir = (req->data->flags & MMC_DATA_WRITE) ?
 			OMAP_MMC_DATADIR_WRITE : OMAP_MMC_DATADIR_READ;
@@ -891,7 +936,7 @@ static int __init omap_mmc_probe(struct platform_device *pdev)
 	mmc->ocr_avail = mmc_slot(host).ocr_mask;
 	mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
 
-	if (pdata->slots[host->slot_id].wire4)
+	if (pdata->slots[host->slot_id].wires >= 4)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
 	/* Only MMC1 supports 3.0V */

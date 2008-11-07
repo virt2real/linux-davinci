@@ -34,12 +34,15 @@
 #include <mach/gpio.h>
 #include <mach/board.h>
 #include <mach/common.h>
-#include <mach/hsmmc.h>
+#include <mach/mmc.h>
 #include <mach/keypad.h>
 #include <mach/gpmc.h>
 #include <mach/nand.h>
 #include <mach/mcspi.h>
 #include <mach/mux.h>
+
+#include "mmc-twl4030.h"
+
 
 #define GPMC_OFF_CONFIG1_0 0x60
 
@@ -337,6 +340,15 @@ static struct platform_device *omap2_evm_devices[] __initdata = {
 	&omap2evm_smc911x_device,
 };
 
+static struct twl4030_hsmmc_info mmc[] __initdata = {
+	{
+		.mmc		= 1,
+		.wires		= 4,
+		.gpio_cd	= -EINVAL,
+	},
+	{}	/* Terminator */
+};
+
 static void __init omap2_evm_init(void)
 {
 	omap2_evm_i2c_init();
@@ -347,7 +359,7 @@ static void __init omap2_evm_init(void)
 	spi_register_board_info(omap2evm_spi_board_info,
 				ARRAY_SIZE(omap2evm_spi_board_info));
 	omap_serial_init();
-	hsmmc_init();
+	hsmmc_init(mmc);
 	omap2evm_flash_init();
 	ads7846_dev_init();
 }

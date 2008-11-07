@@ -35,7 +35,7 @@
 #include <mach/board.h>
 #include <mach/usb-musb.h>
 #include <mach/usb-ehci.h>
-#include <mach/hsmmc.h>
+#include <mach/mmc.h>
 #include <mach/common.h>
 #include <mach/keypad.h>
 #include <mach/dma.h>
@@ -46,6 +46,9 @@
 #include <mach/control.h>
 
 #include "sdram-qimonda-hyb18m512160af-6.h"
+#include "mmc-twl4030.h"
+
+#define CONFIG_DISABLE_HFCLK 1
 
 #define	SDP3430_SMC91X_CS	3
 
@@ -127,7 +130,7 @@ static int __init msecure_init(void)
 #ifdef CONFIG_RTC_DRV_TWL4030
 	/* 3430ES2.0 doesn't have msecure/gpio-22 line connected to T2 */
 	if (omap_type() == OMAP2_DEVICE_TYPE_GP &&
-			system_rev < OMAP3430_REV_ES2_0) {
+			omap_rev() < OMAP3430_REV_ES2_0) {
 		void __iomem *msecure_pad_config_reg = omap_ctrl_base_get() +
 			0xA3C;
 		int mux_mask = 0x04;
@@ -264,7 +267,7 @@ static inline void __init sdp3430_init_smc91x(void)
 	sdp3430_smc91x_resources[0].end   = cs_mem_base + 0xf;
 	udelay(100);
 
-	if (system_rev > OMAP3430_REV_ES1_0)
+	if (omap_rev() > OMAP3430_REV_ES1_0)
 		eth_gpio = OMAP34XX_ETHR_GPIO_IRQ_SDPV2;
 	else
 		eth_gpio = OMAP34XX_ETHR_GPIO_IRQ_SDPV1;
@@ -330,6 +333,87 @@ static struct twl4030_madc_platform_data sdp3430_madc_data = {
 	.irq_line	= 1,
 };
 
+
+static struct twl4030_ins __initdata sleep_on_seq[] = {
+/*
+ * Turn off VDD1 and VDD2.
+ */
+	{MSG_SINGULAR(DEV_GRP_P1, 0xf, RES_STATE_OFF), 4},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x10, RES_STATE_OFF), 2},
+#ifdef CONFIG_DISABLE_HFCLK
+/*
+ * And also turn off the OMAP3 PLLs and the sysclk output.
+ */
+	{MSG_SINGULAR(DEV_GRP_P1, 0x7, RES_STATE_OFF), 3},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x19, RES_STATE_OFF), 3},
+#endif
+};
+
+static struct twl4030_script sleep_on_script __initdata = {
+	.script	= sleep_on_seq,
+	.size	= ARRAY_SIZE(sleep_on_seq),
+	.flags	= TRITON_SLEEP_SCRIPT,
+};
+
+static struct twl4030_ins wakeup_seq[] __initdata = {
+#ifndef CONFIG_DISABLE_HFCLK
+/*
+ * Wakeup VDD1 and VDD2.
+ */
+	{MSG_SINGULAR(DEV_GRP_P1, 0xf, RES_STATE_ACTIVE), 4},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x10, RES_STATE_ACTIVE), 2},
+#else
+/*
+ * Reenable the OMAP3 PLLs.
+ * Wakeup VDD1 and VDD2.
+ * Reenable sysclk output.
+ */
+	{MSG_SINGULAR(DEV_GRP_P1, 0x7, RES_STATE_ACTIVE), 0x30},
+	{MSG_SINGULAR(DEV_GRP_P1, 0xf, RES_STATE_ACTIVE), 0x30},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x10, RES_STATE_ACTIVE), 0x37},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x19, RES_STATE_ACTIVE), 3},
+#endif /* #ifndef CONFIG_DISABLE_HFCLK */
+};
+
+static struct twl4030_script wakeup_script __initdata = {
+	.script	= wakeup_seq,
+	.size	= ARRAY_SIZE(wakeup_seq),
+	.flags	= TRITON_WAKEUP12_SCRIPT | TRITON_WAKEUP3_SCRIPT,
+};
+
+static struct twl4030_ins wrst_seq[] __initdata = {
+/*
+ * Reset twl4030.
+ * Reset VDD1 regulator.
+ * Reset VDD2 regulator.
+ * Reset VPLL1 regulator.
+ * Enable sysclk output.
+ * Reenable twl4030.
+ */
+	{MSG_SINGULAR(DEV_GRP_NULL, 0x1b, RES_STATE_OFF), 2},
+	{MSG_SINGULAR(DEV_GRP_P1, 0xf, RES_STATE_WRST), 15},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x10, RES_STATE_WRST), 15},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x7, RES_STATE_WRST), 0x60},
+	{MSG_SINGULAR(DEV_GRP_P1, 0x19, RES_STATE_ACTIVE), 2},
+	{MSG_SINGULAR(DEV_GRP_NULL, 0x1b, RES_STATE_ACTIVE), 2},
+};
+static struct twl4030_script wrst_script __initdata = {
+	.script = wrst_seq,
+	.size   = ARRAY_SIZE(wakeup_seq),
+	.flags  = TRITON_WRST_SCRIPT,
+};
+
+static struct twl4030_script *twl4030_scripts[] __initdata = {
+	&sleep_on_script,
+	&wakeup_script,
+	&wrst_script,
+};
+
+static struct twl4030_power_data sdp3430_t2scripts_data __initdata = {
+	.scripts	= twl4030_scripts,
+	.size		= ARRAY_SIZE(twl4030_scripts),
+};
+
 static struct twl4030_platform_data sdp3430_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
 	.irq_end	= TWL4030_IRQ_END,
@@ -339,6 +423,7 @@ static struct twl4030_platform_data sdp3430_twldata = {
 	.gpio		= &sdp3430_gpio_data,
 	.madc		= &sdp3430_madc_data,
 	.keypad		= &sdp3430_kp_data,
+	.power		= &sdp3430_t2scripts_data,
 	.usb		= &sdp3430_usb_data,
 };
 
@@ -360,6 +445,20 @@ static int __init omap3430_i2c_init(void)
 	return 0;
 }
 
+static struct twl4030_hsmmc_info mmc[] __initdata = {
+	{
+		.mmc		= 1,
+		.wires		= 8,
+		.gpio_cd	= -EINVAL,
+	},
+	{
+		.mmc		= 2,
+		.wires		= 8,
+		.gpio_cd	= -EINVAL,
+	},
+	{}	/* Terminator */
+};
+
 extern void __init sdp3430_flash_init(void);
 
 static void __init omap_3430sdp_init(void)
@@ -368,7 +467,7 @@ static void __init omap_3430sdp_init(void)
 	platform_add_devices(sdp3430_devices, ARRAY_SIZE(sdp3430_devices));
 	omap_board_config = sdp3430_config;
 	omap_board_config_size = ARRAY_SIZE(sdp3430_config);
-	if (system_rev > OMAP3430_REV_ES1_0)
+	if (omap_rev() > OMAP3430_REV_ES1_0)
 		ts_gpio = OMAP34XX_TS_GPIO_IRQ_SDPV2;
 	else
 		ts_gpio = OMAP34XX_TS_GPIO_IRQ_SDPV1;
@@ -381,7 +480,7 @@ static void __init omap_3430sdp_init(void)
 	omap_serial_init();
 	usb_musb_init();
 	usb_ehci_init();
-	hsmmc_init();
+	hsmmc_init(mmc);
 }
 
 static void __init omap_3430sdp_map_io(void)

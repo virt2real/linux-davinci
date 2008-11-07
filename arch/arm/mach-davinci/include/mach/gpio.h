@@ -71,11 +71,11 @@ __gpio_to_controller(unsigned gpio)
 	void *__iomem ptr;
 
 	if (gpio < 32)
-		ptr = (void *__iomem) IO_ADDRESS(DAVINCI_GPIO_BASE + 0x10);
+		ptr = IO_ADDRESS(DAVINCI_GPIO_BASE + 0x10);
 	else if (gpio < 64)
-		ptr = (void *__iomem) IO_ADDRESS(DAVINCI_GPIO_BASE + 0x38);
+		ptr = IO_ADDRESS(DAVINCI_GPIO_BASE + 0x38);
 	else if (gpio < DAVINCI_N_GPIO)
-		ptr = (void *__iomem) IO_ADDRESS(DAVINCI_GPIO_BASE + 0x60);
+		ptr = IO_ADDRESS(DAVINCI_GPIO_BASE + 0x60);
 	else
 		ptr = NULL;
 	return ptr;
@@ -127,7 +127,7 @@ static inline int gpio_get_value(unsigned gpio)
 		return __gpio_get_value(gpio);
 
 	g = __gpio_to_controller(gpio);
-	return !!(__gpio_mask(gpio) & __raw_readl(&g->in_data));
+	return __gpio_mask(gpio) & __raw_readl(&g->in_data);
 }
 
 static inline int gpio_cansleep(unsigned gpio)

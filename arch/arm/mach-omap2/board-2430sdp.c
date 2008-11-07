@@ -23,6 +23,7 @@
 #include <linux/i2c/twl4030.h>
 #include <linux/err.h>
 #include <linux/clk.h>
+#include <linux/io.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 
@@ -36,13 +37,15 @@
 #include <mach/mux.h>
 #include <mach/board.h>
 #include <mach/usb-musb.h>
-#include <mach/hsmmc.h>
+#include <mach/mmc.h>
 #include <mach/common.h>
 #include <mach/keypad.h>
 #include <mach/gpmc.h>
 #include <mach/mcspi.h>
 
-#include <asm/io.h>
+
+#include "mmc-twl4030.h"
+
 
 #define	SDP2430_FLASH_CS	0
 #define	SDP2430_SMC91X_CS	5
@@ -387,6 +390,15 @@ static int __init omap2430_i2c_init(void)
 	return 0;
 }
 
+static struct twl4030_hsmmc_info mmc[] __initdata = {
+	{
+		.mmc		= 1,
+		.wires		= 4,
+		.gpio_cd	= -EINVAL,
+	},
+	{}	/* Terminator */
+};
+
 static void __init omap_2430sdp_init(void)
 {
 	omap2430_i2c_init();
@@ -404,7 +416,7 @@ static void __init omap_2430sdp_init(void)
 	spi_register_board_info(sdp2430_spi_board_info,
 				ARRAY_SIZE(sdp2430_spi_board_info));
 	ads7846_dev_init();
-	hsmmc_init();
+	hsmmc_init(mmc);
 
 	/* turn off secondary LCD backlight */
 	omap_set_gpio_direction(SECONDARY_LCD_GPIO, 0);

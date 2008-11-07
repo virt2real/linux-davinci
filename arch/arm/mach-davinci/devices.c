@@ -1,5 +1,5 @@
 /*
- * linux/arch/arm/mach-davinci/devices.c
+ * mach-davinci/devices.c
  *
  * DaVinci platform device setup/initialization
  *
@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/io.h>
 #include <linux/random.h>
 #include <linux/etherdevice.h>
 
@@ -24,9 +25,6 @@
 #include <mach/hardware.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
-
-
-#if defined(CONFIG_I2C_DAVINCI) || defined(CONFIG_I2C_DAVINCI_MODULE)
 
 static struct resource i2c_resources[] = {
 	{
@@ -52,16 +50,6 @@ void __init davinci_init_i2c(struct davinci_i2c_platform_data *pdata)
 	davinci_i2c_device.dev.platform_data = pdata;
 	(void) platform_device_register(&davinci_i2c_device);
 }
-
-#else
-
-void __init davinci_init_i2c(struct davinci_i2c_platform_data *pdata)
-{
-	/* nothing */
-}
-
-#endif
-
 
 #if 	defined(CONFIG_MMC_DAVINCI) || defined(CONFIG_MMC_DAVINCI_MODULE)
 
