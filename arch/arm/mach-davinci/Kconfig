@@ -4,19 +4,17 @@ menu "TI DaVinci Implementations"
 
 comment "DaVinci Core Type"
 
-choice
-	prompt "DaVinci ARCH type"
-	default ARCH_DAVINCI644x
-
 config ARCH_DAVINCI644x
 	bool "DaVinci 644x based system"
+	select CPU_V5
 
 config ARCH_DAVINCI_DM646x
         bool "DaVinci 646x based system"
+	select CPU_V5
 
 config ARCH_DAVINCI_DM355
         bool "DaVinci 355 based system"
-endchoice
+	select CPU_V5
 
 comment "DaVinci Board Type"
 
