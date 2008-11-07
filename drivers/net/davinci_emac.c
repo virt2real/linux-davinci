@@ -488,8 +488,8 @@ struct emac_priv {
 	spinlock_t rx_lock;
 	u32 emac_base_regs;
 	u32 emac_ctrl_regs;
-	u32 emac_ctrl_ram;
-	u32 mdio_regs;
+	void __iomem *emac_ctrl_ram;
+	void __iomem *mdio_regs;
 	struct emac_mdio mdio;
 	struct emac_txch *txch[EMAC_DEF_MAX_TX_CH];
 	struct emac_rxch *rxch[EMAC_DEF_MAX_RX_CH];
@@ -2213,7 +2213,7 @@ static int emac_hw_enable(struct emac_priv *priv)
 	else if (EMAC_SPEED_AUTO == cfg_link_speed)
 		priv->speed = EMAC_SPEED_AUTO;
 
-	priv->mdio.mdio_base_address = priv->mdio_regs;
+	priv->mdio.mdio_base_address = (u32)priv->mdio_regs;
 	priv->mdio.mdio_reset_line = 0;
 	priv->mdio.mdio_intr_line = 0;
 	priv->mdio.phy_mask = EMAC_EVM_PHY_MASK;
@@ -2654,7 +2654,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 		goto probe_quit;
 	}
 	priv->emac_base_regs = base_res->start;
-	ndev->base_addr = IO_ADDRESS(base_res->start);
+	ndev->base_addr = (unsigned long)IO_ADDRESS(base_res->start);
 	emac_base_addr = (u32)ndev->base_addr; /* need to check virt2phys */
 	ndev->irq = (int) irq_res->start;
 	priv->emac_ctrl_regs = ((u32)(base_res->start) +
