@@ -52,6 +52,9 @@
 
 #include <asm/mach/flash.h>
 
+/* FIXME: this should be passed in using platform_data */
+#define DAVINCI_ASYNC_EMIF_CNTRL_BASE           (0x01E00000)
+
 #ifdef CONFIG_NAND_FLASH_HW_ECC
 #define DAVINCI_NAND_ECC_MODE NAND_ECC_HW3_512
 #else
