@@ -37,6 +37,8 @@
 
 #include <mach/edma.h>
 
+#define DAVINCI_DMA_3PCC_BASE 0x01C00000
+
 static spinlock_t dma_chan_lock;
 static struct device_driver edma_driver;
 static struct platform_device edma_dev;
@@ -49,11 +51,9 @@ typedef void (*intr_callback) (void);
 static int register_dma_interrupts(intr_callback, intr_callback, intr_callback,
 				   intr_callback);
 
-#define DAVINCI_DMA_REGISTER_BASE DAVINCI_DMA_3PCC_BASE
-
 static edmacc_regs *get_edma_base(void)
 {
-	return ((edmacc_regs *) IO_ADDRESS(DAVINCI_DMA_REGISTER_BASE));
+	return (edmacc_regs *) IO_ADDRESS(DAVINCI_DMA_3PCC_BASE);
 }
 
 static intr_callback cb[4];

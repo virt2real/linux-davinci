@@ -15,7 +15,8 @@
 
 #include <linux/io.h>
 #include <asm-generic/gpio.h>
-#include <mach/hardware.h>
+
+#define DAVINCI_GPIO_BASE 0x01C67000
 
 /*
  * basic gpio routines

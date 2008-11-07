@@ -24,6 +24,8 @@
 #include <mach/cpu.h>
 #include "clock.h"
 
+#define DAVINCI_PLL_CNTRL0_BASE 0x01C40800
+
 /* PLL/Reset register offsets */
 #define PLLM		0x110
 

@@ -30,10 +30,10 @@
 #ifndef __ASM_ARCH_DAVINCI_MCBSP_H
 #define __ASM_ARCH_DAVINCI_MCBSP_H
 
-#include <mach/hardware.h>
 #include <mach/irqs.h>
 
-#define DAVINCI_MCBSP1_BASE	 DAVINCI_MCBSP_BASE
+#define DAVINCI_MCBSP_BASE    0x01E02000
+#define DAVINCI_MCBSP1_BASE   DAVINCI_MCBSP_BASE
 #define DAVINCI_DMA_MCBSP1_RX 3
 #define DAVINCI_DMA_MCBSP1_TX 2
 

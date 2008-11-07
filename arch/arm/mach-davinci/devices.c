@@ -27,6 +27,10 @@
 #include <mach/i2c.h>
 #include <mach/cpu.h>
 
+#define DAVINCI_I2C_BASE	     0x01C21000
+#define DAVINCI_EMAC_CNTRL_REGS_BASE 0x01C80000
+#define DAVINCI_MMC_SD_BASE	     0x01E10000
+
 static struct resource i2c_resources[] = {
 	{
 		.start		= DAVINCI_I2C_BASE,

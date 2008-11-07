@@ -33,7 +33,7 @@
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
-#include <mach/hardware.h>
+#include <mach/dm644x.h>
 #include <mach/common.h>
 #include <mach/board.h>
 #include <mach/emac.h>
@@ -44,6 +44,13 @@ void __init davinci_psc_init(void);
 void __init davinci_irq_init(void);
 void __init davinci_map_common_io(void);
 void __init davinci_init_common_hw(void);
+
+#define DAVINCI_CFC_ATA_BASE		  0x01C66000
+
+#define DAVINCI_ASYNC_EMIF_DATA_CE0_BASE  0x02000000
+#define DAVINCI_ASYNC_EMIF_DATA_CE1_BASE  0x04000000
+#define DAVINCI_ASYNC_EMIF_DATA_CE2_BASE  0x06000000
+#define DAVINCI_ASYNC_EMIF_DATA_CE3_BASE  0x08000000
 
 #if defined(CONFIG_MTD_PHYSMAP) || \
     defined(CONFIG_MTD_PHYSMAP_MODULE)

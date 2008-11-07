@@ -13,6 +13,8 @@
 #include <mach/common.h>
 #include <mach/hardware.h>
 
+#define DAVINCI_USB_OTG_BASE 0x01C64000
+
 #if defined(CONFIG_USB_MUSB_HDRC) || defined(CONFIG_USB_MUSB_HDRC_MODULE)
 static struct musb_hdrc_eps_bits musb_eps[] = {
 	{ "ep1_tx", 8, },
