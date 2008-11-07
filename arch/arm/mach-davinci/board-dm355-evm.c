@@ -27,14 +27,7 @@
 #include <mach/board.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
-
-
-/* other misc. init functions */
-void __init davinci_psc_init(void);
-void __init davinci_irq_init(void);
-void __init davinci_map_common_io(void);
-void __init davinci_init_common_hw(void);
-
+#include <mach/serial.h>
 
 static struct davinci_i2c_platform_data i2c_pdata = {
 	.bus_freq	= 20 /* kHz */,

@@ -114,4 +114,8 @@
 #define DM646X_LPSC_TIMER1         35
 #define DM646X_LPSC_ARM_INTC       45
 
+extern void davinci_psc_init(void);
+extern void davinci_psc_config(unsigned int domain, unsigned int id,
+			       char enable);
+
 #endif /* __ASM_ARCH_PSC_H */

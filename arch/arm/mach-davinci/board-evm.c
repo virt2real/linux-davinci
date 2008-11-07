@@ -38,12 +38,8 @@
 #include <mach/board.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
-
-/* other misc. init functions */
-void __init davinci_psc_init(void);
-void __init davinci_irq_init(void);
-void __init davinci_map_common_io(void);
-void __init davinci_init_common_hw(void);
+#include <mach/serial.h>
+#include <mach/psc.h>
 
 #define DAVINCI_CFC_ATA_BASE		  0x01C66000
 

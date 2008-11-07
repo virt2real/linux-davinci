@@ -15,12 +15,10 @@
 struct sys_timer;
 
 extern struct sys_timer davinci_timer;
-extern void davinci_serial_init(void);
+
 extern void davinci_irq_init(void);
-extern void davinci_psc_config(unsigned int domain, unsigned int id,
-			       char enable);
-extern void __init davinci_init_common_hw(void);
-void __init davinci_map_common_io(void);
+extern void davinci_init_common_hw(void);
+extern void davinci_map_common_io(void);
 
 /* parameters describe VBUS sourcing for host mode */
 extern void setup_usb(unsigned mA, unsigned potpgt_msec);
