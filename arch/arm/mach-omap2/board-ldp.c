@@ -54,9 +54,10 @@ static int __init msecure_init(void)
 
 #ifdef CONFIG_RTC_DRV_TWL4030
 	/* 3430ES2.0 doesn't have msecure/gpio-22 line connected to T2 */
-	if (omap_device_type() == OMAP2_DEVICE_TYPE_GP &&
+	if (omap_type() == OMAP2_DEVICE_TYPE_GP &&
 			system_rev < OMAP3430_REV_ES2_0) {
-		u32 msecure_pad_config_reg = omap_ctrl_base_get() + 0xA3C;
+		void __iomem *msecure_pad_config_reg =
+			omap_ctrl_base_get() + 0xA3C;
 		int mux_mask = 0x04;
 		u16 tmp;
 
@@ -72,10 +73,10 @@ static int __init msecure_init(void)
 		 * TWL4030 RTC time and calender registers.
 		 */
 
-		tmp = omap_readw(msecure_pad_config_reg);
+		tmp = __raw_readw(msecure_pad_config_reg);
 		tmp &= 0xF8;	/* To enable mux mode 03/04 = GPIO_RTC */
 		tmp |= mux_mask;/* To enable mux mode 03/04 = GPIO_RTC */
-		omap_writew(tmp, msecure_pad_config_reg);
+		__raw_writew(tmp, msecure_pad_config_reg);
 
 		gpio_direction_output(TWL4030_MSECURE_GPIO, 1);
 	}
@@ -146,7 +147,7 @@ static struct ads7846_platform_data tsc2046_config __initdata = {
 
 static struct omap2_mcspi_device_config tsc2046_mcspi_config = {
 	.turbo_mode	= 0,
-	.single_channel	= 1,  /* 0: slave, 1: master */
+	.single_channel	= 1,	/* 0: slave, 1: master */
 };
 
 static struct spi_board_info ldp_spi_board_info[] __initdata = {
@@ -183,9 +184,60 @@ static struct omap_board_config_kernel ldp_config[] __initdata = {
 	{ OMAP_TAG_UART,	&ldp_uart_config },
 };
 
+static int ldp_batt_table[] = {
+/* 0 C*/
+30800, 29500, 28300, 27100,
+26000, 24900, 23900, 22900, 22000, 21100, 20300, 19400, 18700, 17900,
+17200, 16500, 15900, 15300, 14700, 14100, 13600, 13100, 12600, 12100,
+11600, 11200, 10800, 10400, 10000, 9630,   9280,   8950,   8620,   8310,
+8020,   7730,   7460,   7200,   6950,   6710,   6470,   6250,   6040,   5830,
+5640,   5450,   5260,   5090,   4920,   4760,   4600,   4450,   4310,   4170,
+4040,   3910,   3790,   3670,   3550
+};
+
+static struct twl4030_bci_platform_data ldp_bci_data = {
+	.battery_tmp_tbl	= ldp_batt_table,
+	.tblsize		= ARRAY_SIZE(ldp_batt_table),
+};
+
+static struct twl4030_usb_data ldp_usb_data = {
+	.usb_mode	= T2_USB_MODE_ULPI,
+};
+
+static struct twl4030_gpio_platform_data ldp_gpio_data = {
+	.gpio_base	= OMAP_MAX_GPIO_LINES,
+	.irq_base	= TWL4030_GPIO_IRQ_BASE,
+	.irq_end	= TWL4030_GPIO_IRQ_END,
+};
+
+static struct twl4030_madc_platform_data ldp_madc_data = {
+	.irq_line	= 1,
+};
+
+static struct twl4030_platform_data ldp_twldata = {
+	.irq_base	= TWL4030_IRQ_BASE,
+	.irq_end	= TWL4030_IRQ_END,
+
+	/* platform_data for children goes here */
+	.bci		= &ldp_bci_data,
+	.madc		= &ldp_madc_data,
+	.usb		= &ldp_usb_data,
+	.gpio		= &ldp_gpio_data,
+};
+
+static struct i2c_board_info __initdata ldp_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("twl4030", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_34XX_SYS_NIRQ,
+		.platform_data = &ldp_twldata,
+	},
+};
+
 static int __init omap_i2c_init(void)
 {
-	omap_register_i2c_bus(1, 2600, NULL, 0);
+	omap_register_i2c_bus(1, 2600, ldp_i2c_boardinfo,
+			ARRAY_SIZE(ldp_i2c_boardinfo));
 	omap_register_i2c_bus(2, 400, NULL, 0);
 	omap_register_i2c_bus(3, 400, NULL, 0);
 	return 0;
@@ -203,7 +255,6 @@ static void __init omap_ldp_init(void)
 				ARRAY_SIZE(ldp_spi_board_info));
 	msecure_init();
 	ads7846_dev_init();
-	twl4030_bci_battery_init();
 	omap_serial_init();
 	usb_musb_init();
 	hsmmc_init();

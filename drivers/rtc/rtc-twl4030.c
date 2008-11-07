@@ -21,25 +21,68 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/ioport.h>
-#include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/rtc.h>
 #include <linux/bcd.h>
 #include <linux/platform_device.h>
-#include <linux/spinlock.h>
 #include <linux/interrupt.h>
-#include <linux/device.h>
+
 #include <linux/i2c/twl4030.h>
-#include <linux/i2c/twl4030-rtc.h>
-#include <linux/io.h>
-#include <linux/irq.h>
 
-#include <asm/mach/time.h>
-#include <asm/system.h>
-#include <mach/hardware.h>
 
+/*
+ * RTC block register offsets (use TWL_MODULE_RTC)
+ */
+#define REG_SECONDS_REG                          0x00
+#define REG_MINUTES_REG                          0x01
+#define REG_HOURS_REG                            0x02
+#define REG_DAYS_REG                             0x03
+#define REG_MONTHS_REG                           0x04
+#define REG_YEARS_REG                            0x05
+#define REG_WEEKS_REG                            0x06
+
+#define REG_ALARM_SECONDS_REG                    0x07
+#define REG_ALARM_MINUTES_REG                    0x08
+#define REG_ALARM_HOURS_REG                      0x09
+#define REG_ALARM_DAYS_REG                       0x0A
+#define REG_ALARM_MONTHS_REG                     0x0B
+#define REG_ALARM_YEARS_REG                      0x0C
+
+#define REG_RTC_CTRL_REG                         0x0D
+#define REG_RTC_STATUS_REG                       0x0E
+#define REG_RTC_INTERRUPTS_REG                   0x0F
+
+#define REG_RTC_COMP_LSB_REG                     0x10
+#define REG_RTC_COMP_MSB_REG                     0x11
+
+/* RTC_CTRL_REG bitfields */
+#define BIT_RTC_CTRL_REG_STOP_RTC_M              0x01
+#define BIT_RTC_CTRL_REG_ROUND_30S_M             0x02
+#define BIT_RTC_CTRL_REG_AUTO_COMP_M             0x04
+#define BIT_RTC_CTRL_REG_MODE_12_24_M            0x08
+#define BIT_RTC_CTRL_REG_TEST_MODE_M             0x10
+#define BIT_RTC_CTRL_REG_SET_32_COUNTER_M        0x20
+#define BIT_RTC_CTRL_REG_GET_TIME_M              0x40
+
+/* RTC_STATUS_REG bitfields */
+#define BIT_RTC_STATUS_REG_RUN_M                 0x02
+#define BIT_RTC_STATUS_REG_1S_EVENT_M            0x04
+#define BIT_RTC_STATUS_REG_1M_EVENT_M            0x08
+#define BIT_RTC_STATUS_REG_1H_EVENT_M            0x10
+#define BIT_RTC_STATUS_REG_1D_EVENT_M            0x20
+#define BIT_RTC_STATUS_REG_ALARM_M               0x40
+#define BIT_RTC_STATUS_REG_POWER_UP_M            0x80
+
+/* RTC_INTERRUPTS_REG bitfields */
+#define BIT_RTC_INTERRUPTS_REG_EVERY_M           0x03
+#define BIT_RTC_INTERRUPTS_REG_IT_TIMER_M        0x04
+#define BIT_RTC_INTERRUPTS_REG_IT_ALARM_M        0x08
+
+
+/* REG_SECONDS_REG through REG_YEARS_REG is how many registers? */
 #define ALL_TIME_REGS		6
+
+/*----------------------------------------------------------------------*/
 
 /*
  * Supports 1 byte read from TWL4030 RTC register.
@@ -304,6 +347,14 @@ static irqreturn_t twl4030_rtc_interrupt(int irq, void *rtc)
 	int res;
 	u8 rd_reg;
 
+#ifdef CONFIG_LOCKDEP
+	/* WORKAROUND for lockdep forcing IRQF_DISABLED on us, which
+	 * we don't want and can't tolerate.  Although it might be
+	 * friendlier not to borrow this thread context...
+	 */
+	local_irq_enable();
+#endif
+
 	res = twl4030_rtc_read_u8(&rd_reg, REG_RTC_STATUS_REG);
 	if (res)
 		goto out;
@@ -323,12 +374,19 @@ static irqreturn_t twl4030_rtc_interrupt(int irq, void *rtc)
 	if (res)
 		goto out;
 
-	/* Clear on Read enabled. RTC_IT bit of REG_PWR_ISR1 needs
-	 * 2 reads to clear the interrupt. One read is done in
+	/* Clear on Read enabled. RTC_IT bit of TWL4030_INT_PWR_ISR1
+	 * needs 2 reads to clear the interrupt. One read is done in
 	 * do_twl4030_pwrirq(). Doing the second read, to clear
 	 * the bit.
+	 *
+	 * FIXME the reason PWR_ISR1 needs an extra read is that
+	 * RTC_IF retriggered until we cleared REG_ALARM_M above.
+	 * But re-reading like this is a bad hack; by doing so we
+	 * risk wrongly clearing status for some other IRQ (losing
+	 * the interrupt).  Be smarter about handling RTC_UF ...
 	 */
-	res = twl4030_i2c_read_u8(TWL4030_MODULE_INT, &rd_reg, REG_PWR_ISR1);
+	res = twl4030_i2c_read_u8(TWL4030_MODULE_INT,
+			&rd_reg, TWL4030_INT_PWR_ISR1);
 	if (res)
 		goto out;
 
@@ -348,18 +406,17 @@ static struct rtc_class_ops twl4030_rtc_ops = {
 	.set_alarm	= twl4030_rtc_set_alarm,
 };
 
+/*----------------------------------------------------------------------*/
+
 static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 {
-	struct twl4030rtc_platform_data *pdata = pdev->dev.platform_data;
 	struct rtc_device *rtc;
 	int ret = 0;
+	int irq = platform_get_irq(pdev, 0);
 	u8 rd_reg;
 
-	if (pdata != NULL && pdata->init != NULL) {
-		ret = pdata->init();
-		if (ret < 0)
-			goto out;
-	}
+	if (irq < 0)
+		return irq;
 
 	rtc = rtc_device_register(pdev->name,
 				  &pdev->dev, &twl4030_rtc_ops, THIS_MODULE);
@@ -389,8 +446,9 @@ static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto out1;
 
-	ret = request_irq(TWL4030_PWRIRQ_RTC, twl4030_rtc_interrupt,
-				0, rtc->dev.bus_id, rtc);
+	ret = request_irq(irq, twl4030_rtc_interrupt,
+				IRQF_TRIGGER_RISING,
+				rtc->dev.bus_id, rtc);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "IRQ is not free.\n");
 		goto out1;
@@ -409,26 +467,6 @@ static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 			goto out2;
 	}
 
-	ret = twl4030_i2c_read_u8(TWL4030_MODULE_INT, &rd_reg, REG_PWR_IMR1);
-	if (ret < 0)
-		goto out2;
-
-	rd_reg &= PWR_RTC_IT_UNMASK;
-	/* MASK PWR - we will need this */
-	ret = twl4030_i2c_write_u8(TWL4030_MODULE_INT, rd_reg, REG_PWR_IMR1);
-	if (ret < 0)
-		goto out2;
-
-	ret = twl4030_i2c_read_u8(TWL4030_MODULE_INT, &rd_reg, REG_PWR_EDR1);
-	if (ret < 0)
-		goto out2;
-
-	/* Rising edge detection enabled, needed for RTC alarm */
-	rd_reg |= 0x80;
-	ret = twl4030_i2c_write_u8(TWL4030_MODULE_INT, rd_reg, REG_PWR_EDR1);
-	if (ret < 0)
-		goto out2;
-
 	/* init cached IRQ enable bits */
 	ret = twl4030_rtc_read_u8(&rtc_irq_bits, REG_RTC_INTERRUPTS_REG);
 	if (ret < 0)
@@ -438,13 +476,10 @@ static int __devinit twl4030_rtc_probe(struct platform_device *pdev)
 
 
 out2:
-	free_irq(TWL4030_MODIRQ_PWR, rtc);
+	free_irq(irq, rtc);
 out1:
 	rtc_device_unregister(rtc);
 out0:
-	if (pdata != NULL && pdata->exit != NULL)
-		pdata->exit();
-out:
 	return ret;
 }
 
@@ -455,16 +490,13 @@ out:
 static int __devexit twl4030_rtc_remove(struct platform_device *pdev)
 {
 	/* leave rtc running, but disable irqs */
-	struct twl4030rtc_platform_data *pdata = pdev->dev.platform_data;
 	struct rtc_device *rtc = platform_get_drvdata(pdev);
+	int irq = platform_get_irq(pdev, 0);
 
 	mask_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_ALARM_M);
 	mask_rtc_irq_bit(BIT_RTC_INTERRUPTS_REG_IT_TIMER_M);
 
-	free_irq(TWL4030_MODIRQ_PWR, rtc);
-
-	if (pdata != NULL && pdata->exit != NULL)
-		pdata->exit();
+	free_irq(irq, rtc);
 
 	rtc_device_unregister(rtc);
 	platform_set_drvdata(pdev, NULL);

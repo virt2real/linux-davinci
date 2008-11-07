@@ -26,6 +26,9 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
+
+#include <linux/i2c/twl4030.h>
+
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
@@ -142,10 +145,36 @@ static void __init overo_flash_init(void)
 static struct omap_uart_config overo_uart_config __initdata = {
 	.enabled_uarts	= ((1 << 0) | (1 << 1) | (1 << 2)),
 };
+static struct twl4030_gpio_platform_data overo_gpio_data = {
+	.gpio_base	= OMAP_MAX_GPIO_LINES,
+	.irq_base	= TWL4030_GPIO_IRQ_BASE,
+	.irq_end	= TWL4030_GPIO_IRQ_END,
+};
+
+static struct twl4030_usb_data overo_usb_data = {
+	.usb_mode	= T2_USB_MODE_ULPI,
+};
+
+static struct twl4030_platform_data overo_twldata = {
+	.irq_base	= TWL4030_IRQ_BASE,
+	.irq_end	= TWL4030_IRQ_END,
+	.gpio		= &overo_gpio_data,
+	.usb		= &overo_usb_data,
+};
+
+static struct i2c_board_info __initdata overo_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("twl4030", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_34XX_SYS_NIRQ,
+		.platform_data = &overo_twldata,
+	},
+};
 
 static int __init overo_i2c_init(void)
 {
-	omap_register_i2c_bus(1, 2600, NULL, 0);
+	omap_register_i2c_bus(1, 2600, overo_i2c_boardinfo,
+			ARRAY_SIZE(overo_i2c_boardinfo));
 	/* i2c2 pins are used for gpio */
 	omap_register_i2c_bus(3, 400, NULL, 0);
 	return 0;
@@ -157,11 +186,6 @@ static void __init overo_init_irq(void)
 	omap_init_irq();
 	omap_gpio_init();
 }
-
-static struct platform_device overo_twl4030rtc_device = {
-	.name           = "twl4030_rtc",
-	.id             = -1,
-};
 
 static struct platform_device overo_lcd_device = {
 	.name		= "overo_lcd",
@@ -179,9 +203,6 @@ static struct omap_board_config_kernel overo_config[] __initdata = {
 
 static struct platform_device *overo_devices[] __initdata = {
 	&overo_lcd_device,
-#ifdef CONFIG_RTC_DRV_TWL4030
-	&overo_twl4030rtc_device,
-#endif
 };
 
 static void __init overo_init(void)
@@ -204,8 +225,15 @@ static void __init overo_init(void)
 		udelay(10);
 		gpio_set_value(OVERO_GPIO_W2W_NRESET, 1);
 	} else {
-		printk(KERN_ERR "could not obtain gpio for OVERO_GPIO_W2W_NRESET\n");
+		printk(KERN_ERR "could not obtain gpio for "
+					"OVERO_GPIO_W2W_NRESET\n");
 	}
+
+	if ((gpio_request(OVERO_GPIO_BT_XGATE, "OVERO_GPIO_BT_XGATE") == 0) &&
+	    (gpio_direction_output(OVERO_GPIO_BT_XGATE, 0) == 0))
+		gpio_export(OVERO_GPIO_BT_XGATE, 0);
+	else
+		printk(KERN_ERR "could not obtain gpio for OVERO_GPIO_BT_XGATE\n");
 
 	if ((gpio_request(OVERO_GPIO_BT_NRESET, "OVERO_GPIO_BT_NRESET") == 0) &&
 	    (gpio_direction_output(OVERO_GPIO_BT_NRESET, 1) == 0)) {
@@ -214,21 +242,24 @@ static void __init overo_init(void)
 		mdelay(6);
 		gpio_set_value(OVERO_GPIO_BT_NRESET, 1);
 	} else {
-		printk(KERN_ERR "could not obtain gpio for OVERO_GPIO_BT_NRESET\n");
+		printk(KERN_ERR "could not obtain gpio for "
+					"OVERO_GPIO_BT_NRESET\n");
 	}
 
 	if ((gpio_request(OVERO_GPIO_USBH_CPEN, "OVERO_GPIO_USBH_CPEN") == 0) &&
 	    (gpio_direction_output(OVERO_GPIO_USBH_CPEN, 1) == 0))
 		gpio_export(OVERO_GPIO_USBH_CPEN, 0);
 	else
-		printk(KERN_ERR "could not obtain gpio for OVERO_GPIO_USBH_CPEN\n");
+		printk(KERN_ERR "could not obtain gpio for "
+					"OVERO_GPIO_USBH_CPEN\n");
 
 	if ((gpio_request(OVERO_GPIO_USBH_NRESET,
 			  "OVERO_GPIO_USBH_NRESET") == 0) &&
 	    (gpio_direction_output(OVERO_GPIO_USBH_NRESET, 1) == 0))
 		gpio_export(OVERO_GPIO_USBH_NRESET, 0);
 	else
-		printk(KERN_ERR "could not obtain gpio for OVERO_GPIO_USBH_NRESET\n");
+		printk(KERN_ERR "could not obtain gpio for "
+					"OVERO_GPIO_USBH_NRESET\n");
 }
 
 static void __init overo_map_io(void)

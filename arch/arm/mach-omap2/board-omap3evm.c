@@ -18,17 +18,18 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/clk.h>
-#include <linux/io.h>
 #include <linux/input.h>
+
+#include <linux/i2c/twl4030.h>
+
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
+#include <linux/i2c/twl4030.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
-#include <linux/io.h>
-#include <linux/delay.h>
 
 #include <mach/gpio.h>
 #include <mach/keypad.h>
@@ -88,9 +89,72 @@ static struct omap_uart_config omap3_evm_uart_config __initdata = {
 	.enabled_uarts	= ((1 << 0) | (1 << 1) | (1 << 2)),
 };
 
+static struct twl4030_gpio_platform_data omap3evm_gpio_data = {
+	.gpio_base	= OMAP_MAX_GPIO_LINES,
+	.irq_base	= TWL4030_GPIO_IRQ_BASE,
+	.irq_end	= TWL4030_GPIO_IRQ_END,
+};
+
+static struct twl4030_usb_data omap3evm_usb_data = {
+	.usb_mode	= T2_USB_MODE_ULPI,
+};
+
+static int omap3evm_keymap[] = {
+	KEY(0, 0, KEY_LEFT),
+	KEY(0, 1, KEY_RIGHT),
+	KEY(0, 2, KEY_A),
+	KEY(0, 3, KEY_B),
+	KEY(1, 0, KEY_DOWN),
+	KEY(1, 1, KEY_UP),
+	KEY(1, 2, KEY_E),
+	KEY(1, 3, KEY_F),
+	KEY(2, 0, KEY_ENTER),
+	KEY(2, 1, KEY_I),
+	KEY(2, 2, KEY_J),
+	KEY(2, 3, KEY_K),
+	KEY(3, 0, KEY_M),
+	KEY(3, 1, KEY_N),
+	KEY(3, 2, KEY_O),
+	KEY(3, 3, KEY_P)
+};
+
+static struct twl4030_keypad_data omap3evm_kp_data = {
+	.rows		= 4,
+	.cols		= 4,
+	.keymap		= omap3evm_keymap,
+	.keymapsize	= ARRAY_SIZE(omap3evm_keymap),
+	.rep		= 1,
+	.irq		= TWL4030_MODIRQ_KEYPAD,
+};
+
+static struct twl4030_madc_platform_data omap3evm_madc_data = {
+	.irq_line	= 1,
+};
+
+static struct twl4030_platform_data omap3evm_twldata = {
+	.irq_base	= TWL4030_IRQ_BASE,
+	.irq_end	= TWL4030_IRQ_END,
+
+	/* platform_data for children goes here */
+	.keypad		= &omap3evm_kp_data,
+	.madc		= &omap3evm_madc_data,
+	.usb		= &omap3evm_usb_data,
+	.gpio		= &omap3evm_gpio_data,
+};
+
+static struct i2c_board_info __initdata omap3evm_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("twl4030", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_34XX_SYS_NIRQ,
+		.platform_data = &omap3evm_twldata,
+	},
+};
+
 static int __init omap3_evm_i2c_init(void)
 {
-	omap_register_i2c_bus(1, 2600, NULL, 0);
+	omap_register_i2c_bus(1, 2600, omap3evm_i2c_boardinfo,
+			ARRAY_SIZE(omap3evm_i2c_boardinfo));
 	omap_register_i2c_bus(2, 400, NULL, 0);
 	omap_register_i2c_bus(3, 400, NULL, 0);
 	return 0;
@@ -151,41 +215,6 @@ struct spi_board_info omap3evm_spi_board_info[] = {
 	},
 };
 
-static int omap3evm_keymap[] = {
-	KEY(0, 0, KEY_LEFT),
-	KEY(0, 1, KEY_RIGHT),
-	KEY(0, 2, KEY_A),
-	KEY(0, 3, KEY_B),
-	KEY(1, 0, KEY_DOWN),
-	KEY(1, 1, KEY_UP),
-	KEY(1, 2, KEY_E),
-	KEY(1, 3, KEY_F),
-	KEY(2, 0, KEY_ENTER),
-	KEY(2, 1, KEY_I),
-	KEY(2, 2, KEY_J),
-	KEY(2, 3, KEY_K),
-	KEY(3, 0, KEY_M),
-	KEY(3, 1, KEY_N),
-	KEY(3, 2, KEY_O),
-	KEY(3, 3, KEY_P)
-};
-
-static struct omap_kp_platform_data omap3evm_kp_data = {
-	.rows		= 4,
-	.cols		= 4,
-	.keymap 	= omap3evm_keymap,
-	.keymapsize	= ARRAY_SIZE(omap3evm_keymap),
-	.rep		= 1,
-};
-
-static struct platform_device omap3evm_kp_device = {
-	.name		= "omap_twl4030keypad",
-	.id		= -1,
-	.dev		= {
-				.platform_data = &omap3evm_kp_data,
-			},
-};
-
 static void __init omap3_evm_init_irq(void)
 {
 	omap2_init_common_hw(mt46h32m32lf6_sdrc_params);
@@ -201,7 +230,6 @@ static struct omap_board_config_kernel omap3_evm_config[] __initdata = {
 
 static struct platform_device *omap3_evm_devices[] __initdata = {
 	&omap3_evm_lcd_device,
-	&omap3evm_kp_device,
 	&omap3evm_smc911x_device,
 };
 

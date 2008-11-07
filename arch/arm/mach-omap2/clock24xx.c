@@ -93,7 +93,6 @@ static void omap2_disable_osc_ck(struct clk *clk)
 static int omap2_clk_fixed_enable(struct clk *clk)
 {
 	u32 cval, apll_mask;
-	void __iomem *idlest;
 
 	apll_mask = EN_APLL_LOCKED << clk->enable_bit;
 
@@ -111,14 +110,7 @@ static int omap2_clk_fixed_enable(struct clk *clk)
 	else if (clk == &apll54_ck)
 		cval = OMAP24XX_ST_54M_APLL;
 
-	if (cpu_is_omap242x())
-		idlest = (__force void __iomem *)OMAP2420_CM_REGADDR(PLL_MOD,
-								CM_IDLEST);
-	else
-		idlest = (__force void __iomem *)OMAP2430_CM_REGADDR(PLL_MOD,
-								CM_IDLEST);
-
-	omap2_wait_clock_ready(idlest, cval, clk->name);
+	omap2_wait_clock_ready(PLL_MOD, CM_IDLEST, cval, clk->name);
 
 	/*
 	 * REVISIT: Should we return an error code if omap2_wait_clock_ready()
@@ -209,7 +201,8 @@ static int omap2_reprogram_dpllcore(struct clk *clk, unsigned long rate)
 		if (!dd)
 			goto dpll_exit;
 
-		tmpset.cm_clksel1_pll = __raw_readl(dd->mult_div1_reg);
+		tmpset.cm_clksel1_pll = cm_read_mod_reg(clk->prcm_mod,
+							dd->mult_div1_reg);
 		tmpset.cm_clksel1_pll &= ~(dd->mult_mask |
 					   dd->div1_mask);
 		div = ((curr_prcm_set->xtal_speed / 1000000) - 1);
@@ -508,37 +501,6 @@ static int __init omap2_clk_arch_init(void)
 }
 arch_initcall(omap2_clk_arch_init);
 
-static u32 prm_base;
-static u32 cm_base;
-
-/*
- * Since we share clock data for 242x and 243x, we need to rewrite some
- * some register base offsets. Assume offset is at prm_base if flagged,
- * else assume it's cm_base.
- */
-static inline void omap2_clk_check_reg(u32 flags, void __iomem **reg)
-{
-	u32 tmp = (__force u32)*reg;
-
-	if ((tmp >> 24) != 0)
-		return;
-
-	if (flags & OFFSET_GR_MOD)
-		tmp += prm_base;
-	else
-		tmp += cm_base;
-
-	*reg = (__force void __iomem *)tmp;
-}
-
-static void __init omap2_clk_rewrite_base(struct clk *clk)
-{
-	omap2_clk_check_reg(clk->flags, &clk->clksel_reg);
-	omap2_clk_check_reg(clk->flags, &clk->enable_reg);
-	if (clk->dpll_data)
-		omap2_clk_check_reg(0, &clk->dpll_data->mult_div1_reg);
-}
-
 int __init omap2_clk_init(void)
 {
 	struct prcm_config *prcm;
@@ -549,12 +511,6 @@ int __init omap2_clk_init(void)
 		cpu_mask = RATE_IN_242X;
 	else if (cpu_is_omap2430())
 		cpu_mask = RATE_IN_243X;
-
-	for (clkp = onchip_24xx_clks;
-	     clkp < onchip_24xx_clks + ARRAY_SIZE(onchip_24xx_clks);
-	     clkp++) {
-			omap2_clk_rewrite_base(*clkp);
-	}
 
 	clk_init(&omap2_clk_functions);
 
@@ -608,10 +564,4 @@ int __init omap2_clk_init(void)
 	sclk = clk_get(NULL, "sys_ck");
 
 	return 0;
-}
-
-void __init omap2_set_globals_clock24xx(struct omap_globals *omap2_globals)
-{
-	prm_base = (__force u32)omap2_globals->prm;
-	cm_base = (__force u32)omap2_globals->cm;
 }

@@ -22,6 +22,8 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand.h>
+#include <linux/spi/spi.h>
+#include <linux/spi/ads7846.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -36,6 +38,8 @@
 #include <mach/keypad.h>
 #include <mach/gpmc.h>
 #include <mach/nand.h>
+#include <mach/mcspi.h>
+#include <mach/mux.h>
 
 #define GPMC_OFF_CONFIG1_0 0x60
 
@@ -181,6 +185,66 @@ static struct omap_lcd_config omap2_evm_lcd_config __initdata = {
 	.ctrl_name	= "internal",
 };
 
+static void ads7846_dev_init(void)
+{
+	int gpio = OMAP2_EVM_TS_GPIO;
+	int ret;
+
+	ret = gpio_request(gpio, "ads7846_pen_down");
+	if (ret < 0) {
+		printk(KERN_ERR "Failed to request GPIO %d for ads7846 pen down IRQ\n",
+				gpio);
+		return;
+	}
+
+	gpio_direction_input(gpio);
+
+	/*Setting the MUX */
+	omap_cfg_reg(Y18_2430_MCSPI1_CLK);
+	omap_cfg_reg(AD15_2430_MCSPI1_SIMO);
+	omap_cfg_reg(AE17_2430_MCSPI1_SOMI);
+	omap_cfg_reg(U1_2430_MCSPI1_CS0);
+
+	omap_cfg_reg(AF19_2430_GPIO_85);
+
+}
+
+static int ads7846_get_pendown_state(void)
+{
+	return !omap_get_gpio_datain(OMAP2_EVM_TS_GPIO);
+}
+
+struct ads7846_platform_data ads7846_config = {
+	.x_max			= 0x0fff,
+	.y_max			= 0x0fff,
+	.x_plate_ohms		= 180,
+	.pressure_max		= 255,
+	.debounce_max		= 10,
+	.debounce_tol		= 3,
+	.debounce_rep		= 1,
+	.get_pendown_state	= ads7846_get_pendown_state,
+	.keep_vref_on		= 1,
+	.settle_delay_usecs	= 150,
+};
+
+static struct omap2_mcspi_device_config ads7846_mcspi_config = {
+	.turbo_mode	= 0,
+	.single_channel	= 1,  /* 0: slave, 1: master */
+};
+
+struct spi_board_info omap2evm_spi_board_info[] = {
+	[0] = {
+		.modalias		= "ads7846",
+		.bus_num		= 1,
+		.chip_select		= 0,
+		.max_speed_hz		= 1500000,
+		.controller_data	= &ads7846_mcspi_config,
+		.irq			= OMAP_GPIO_IRQ(OMAP2_EVM_TS_GPIO),
+		.platform_data		= &ads7846_config,
+	},
+};
+
+
 static int omap2evm_keymap[] = {
 	KEY(0, 0, KEY_LEFT),
 	KEY(0, 1, KEY_RIGHT),
@@ -200,21 +264,13 @@ static int omap2evm_keymap[] = {
 	KEY(3, 3, KEY_P)
 };
 
-static struct omap_kp_platform_data omap2evm_kp_data = {
+static struct twl4030_keypad_data omap2evm_kp_data = {
 	.rows		= 4,
 	.cols		= 4,
-	.keymap 	= omap2evm_keymap,
+	.keymap		= omap2evm_keymap,
 	.keymapsize	= ARRAY_SIZE(omap2evm_keymap),
 	.rep		= 1,
 	.irq		= TWL4030_MODIRQ_KEYPAD,
-};
-
-static struct platform_device omap2evm_kp_device = {
-	.name		= "omap_twl4030keypad",
-	.id		= -1,
-	.dev		= {
-				.platform_data = &omap2evm_kp_data,
-			},
 };
 
 static void __init omap2_evm_init_irq(void)
@@ -234,21 +290,51 @@ static struct omap_board_config_kernel omap2_evm_config[] __initdata = {
 	{ OMAP_TAG_LCD,		&omap2_evm_lcd_config },
 };
 
+static struct twl4030_gpio_platform_data omap2evm_gpio_data = {
+	.gpio_base	= OMAP_MAX_GPIO_LINES,
+	.irq_base	= TWL4030_GPIO_IRQ_BASE,
+	.irq_end	= TWL4030_GPIO_IRQ_END,
+};
+
+static struct twl4030_usb_data omap2evm_usb_data = {
+	.usb_mode	= T2_USB_MODE_ULPI,
+};
+
+static struct twl4030_madc_platform_data omap2evm_madc_data = {
+	.irq_line	= 1,
+};
+
+static struct twl4030_platform_data omap2evm_twldata = {
+	.irq_base	= TWL4030_IRQ_BASE,
+	.irq_end	= TWL4030_IRQ_END,
+
+	/* platform_data for children goes here */
+	.keypad		= &omap2evm_kp_data,
+	.madc		= &omap2evm_madc_data,
+	.usb		= &omap2evm_usb_data,
+	.gpio		= &omap2evm_gpio_data,
+};
+
+static struct i2c_board_info __initdata omap2evm_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("twl4030", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_24XX_SYS_NIRQ,
+		.platform_data = &omap2evm_twldata,
+	},
+};
+
 static int __init omap2_evm_i2c_init(void)
 {
-	/*
-	 * Registering bus 2 first to avoid twl4030 misbehaving as OMAP2EVM
-	 * has twl4030 on bus 2
-	 */
-	omap_register_i2c_bus(2, 2600, NULL, 0);
 	omap_register_i2c_bus(1, 400, NULL, 0);
+	omap_register_i2c_bus(2, 2600, omap2evm_i2c_boardinfo,
+			ARRAY_SIZE(omap2evm_i2c_boardinfo));
 	return 0;
 }
 
 static struct platform_device *omap2_evm_devices[] __initdata = {
 	&omap2_evm_lcd_device,
 	&omap2evm_smc911x_device,
-	&omap2evm_kp_device,
 };
 
 static void __init omap2_evm_init(void)
@@ -258,9 +344,12 @@ static void __init omap2_evm_init(void)
 	platform_add_devices(omap2_evm_devices, ARRAY_SIZE(omap2_evm_devices));
 	omap_board_config = omap2_evm_config;
 	omap_board_config_size = ARRAY_SIZE(omap2_evm_config);
+	spi_register_board_info(omap2evm_spi_board_info,
+				ARRAY_SIZE(omap2evm_spi_board_info));
 	omap_serial_init();
 	hsmmc_init();
 	omap2evm_flash_init();
+	ads7846_dev_init();
 }
 
 static void __init omap2_evm_map_io(void)

@@ -173,21 +173,13 @@ static int sdp2430_keymap[] = {
 	0
 };
 
-static struct omap_kp_platform_data sdp2430_kp_data = {
+static struct twl4030_keypad_data sdp2430_kp_data = {
 	.rows		= 5,
 	.cols		= 6,
 	.keymap		= sdp2430_keymap,
 	.keymapsize	= ARRAY_SIZE(sdp2430_keymap),
 	.rep		= 1,
 	.irq		= TWL4030_MODIRQ_KEYPAD,
-};
-
-static struct platform_device sdp2430_kp_device = {
-	.name		= "omap_twl4030keypad",
-	.id		= -1,
-	.dev		= {
-		.platform_data	= &sdp2430_kp_data,
-	},
 };
 
 static int __init msecure_init(void)
@@ -216,7 +208,6 @@ out:
 static struct platform_device *sdp2430_devices[] __initdata = {
 	&sdp2430_smc91x_device,
 	&sdp2430_flash_device,
-	&sdp2430_kp_device,
 	&sdp2430_lcd_device,
 };
 
@@ -353,14 +344,46 @@ static struct omap_board_config_kernel sdp2430_config[] __initdata = {
 	{OMAP_TAG_SERIAL_CONSOLE, &sdp2430_serial_console_config},
 };
 
+
+static struct twl4030_gpio_platform_data sdp2430_gpio_data = {
+	.gpio_base	= OMAP_MAX_GPIO_LINES,
+	.irq_base	= TWL4030_GPIO_IRQ_BASE,
+	.irq_end	= TWL4030_GPIO_IRQ_END,
+};
+
+static struct twl4030_usb_data sdp2430_usb_data = {
+	.usb_mode	= T2_USB_MODE_ULPI,
+};
+
+static struct twl4030_madc_platform_data sdp2430_madc_data = {
+	.irq_line	= 1,
+};
+
+static struct twl4030_platform_data sdp2430_twldata = {
+	.irq_base	= TWL4030_IRQ_BASE,
+	.irq_end	= TWL4030_IRQ_END,
+
+	/* platform_data for children goes here */
+	.gpio		= &sdp2430_gpio_data,
+	.madc		= &sdp2430_madc_data,
+	.keypad		= &sdp2430_kp_data,
+	.usb		= &sdp2430_usb_data,
+};
+
+static struct i2c_board_info __initdata sdp2430_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("twl4030", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_24XX_SYS_NIRQ,
+		.platform_data = &sdp2430_twldata,
+	},
+};
+
 static int __init omap2430_i2c_init(void)
 {
-	/*
-	 * Registering bus 2 first to avoid twl4030 misbehaving as 2430SDP
-	 * has twl4030 on bus 2
-	 */
-	omap_register_i2c_bus(2, 2600, NULL, 0);
 	omap_register_i2c_bus(1, 400, NULL, 0);
+	omap_register_i2c_bus(2, 2600, sdp2430_i2c_boardinfo,
+			ARRAY_SIZE(sdp2430_i2c_boardinfo));
 	return 0;
 }
 

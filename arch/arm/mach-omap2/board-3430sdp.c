@@ -40,7 +40,6 @@
 #include <mach/keypad.h>
 #include <mach/dma.h>
 #include <mach/gpmc.h>
-#include <linux/i2c/twl4030-rtc.h>
 
 #include <asm/io.h>
 #include <asm/delay.h>
@@ -110,21 +109,13 @@ static int sdp3430_keymap[] = {
 	0
 };
 
-static struct omap_kp_platform_data sdp3430_kp_data = {
+static struct twl4030_keypad_data sdp3430_kp_data = {
 	.rows		= 5,
 	.cols		= 6,
 	.keymap		= sdp3430_keymap,
 	.keymapsize	= ARRAY_SIZE(sdp3430_keymap),
 	.rep		= 1,
 	.irq		= TWL4030_MODIRQ_KEYPAD,
-};
-
-static struct platform_device sdp3430_kp_device = {
-	.name		= "omap_twl4030keypad",
-	.id		= -1,
-	.dev		= {
-		.platform_data	= &sdp3430_kp_data,
-	},
 };
 
 static int ts_gpio;
@@ -137,7 +128,8 @@ static int __init msecure_init(void)
 	/* 3430ES2.0 doesn't have msecure/gpio-22 line connected to T2 */
 	if (omap_type() == OMAP2_DEVICE_TYPE_GP &&
 			system_rev < OMAP3430_REV_ES2_0) {
-		u32 msecure_pad_config_reg = omap_ctrl_base_get() + 0xA3C;
+		void __iomem *msecure_pad_config_reg = omap_ctrl_base_get() +
+			0xA3C;
 		int mux_mask = 0x04;
 		u16 tmp;
 
@@ -152,10 +144,10 @@ static int __init msecure_init(void)
 		 * is low. Make msecure line high in order to change the
 		 * TWL4030 RTC time and calender registers.
 		 */
-		tmp = omap_readw(msecure_pad_config_reg);
+		tmp = __raw_readw(msecure_pad_config_reg);
 		tmp &= 0xF8; /* To enable mux mode 03/04 = GPIO_RTC */
 		tmp |= mux_mask;/* To enable mux mode 03/04 = GPIO_RTC */
-		omap_writew(tmp, msecure_pad_config_reg);
+		__raw_writew(tmp, msecure_pad_config_reg);
 
 		gpio_direction_output(TWL4030_MSECURE_GPIO, 1);
 	}
@@ -252,7 +244,6 @@ static struct platform_device sdp3430_lcd_device = {
 
 static struct platform_device *sdp3430_devices[] __initdata = {
 	&sdp3430_smc91x_device,
-	&sdp3430_kp_device,
 	&sdp3430_lcd_device,
 };
 
@@ -309,9 +300,61 @@ static struct omap_board_config_kernel sdp3430_config[] __initdata = {
 	{ OMAP_TAG_LCD,		&sdp3430_lcd_config },
 };
 
+static int sdp3430_batt_table[] = {
+/* 0 C*/
+30800, 29500, 28300, 27100,
+26000, 24900, 23900, 22900, 22000, 21100, 20300, 19400, 18700, 17900,
+17200, 16500, 15900, 15300, 14700, 14100, 13600, 13100, 12600, 12100,
+11600, 11200, 10800, 10400, 10000, 9630,   9280,   8950,   8620,   8310,
+8020,   7730,   7460,   7200,   6950,   6710,   6470,   6250,   6040,   5830,
+5640,   5450,   5260,   5090,   4920,   4760,   4600,   4450,   4310,   4170,
+4040,   3910,   3790,   3670,   3550
+};
+
+static struct twl4030_bci_platform_data sdp3430_bci_data = {
+      .battery_tmp_tbl	= sdp3430_batt_table,
+      .tblsize		= ARRAY_SIZE(sdp3430_batt_table),
+};
+
+static struct twl4030_gpio_platform_data sdp3430_gpio_data = {
+	.gpio_base	= OMAP_MAX_GPIO_LINES,
+	.irq_base	= TWL4030_GPIO_IRQ_BASE,
+	.irq_end	= TWL4030_GPIO_IRQ_END,
+};
+
+static struct twl4030_usb_data sdp3430_usb_data = {
+	.usb_mode	= T2_USB_MODE_ULPI,
+};
+
+static struct twl4030_madc_platform_data sdp3430_madc_data = {
+	.irq_line	= 1,
+};
+
+static struct twl4030_platform_data sdp3430_twldata = {
+	.irq_base	= TWL4030_IRQ_BASE,
+	.irq_end	= TWL4030_IRQ_END,
+
+	/* platform_data for children goes here */
+	.bci		= &sdp3430_bci_data,
+	.gpio		= &sdp3430_gpio_data,
+	.madc		= &sdp3430_madc_data,
+	.keypad		= &sdp3430_kp_data,
+	.usb		= &sdp3430_usb_data,
+};
+
+static struct i2c_board_info __initdata sdp3430_i2c_boardinfo[] = {
+	{
+		I2C_BOARD_INFO("twl4030", 0x48),
+		.flags = I2C_CLIENT_WAKE,
+		.irq = INT_34XX_SYS_NIRQ,
+		.platform_data = &sdp3430_twldata,
+	},
+};
+
 static int __init omap3430_i2c_init(void)
 {
-	omap_register_i2c_bus(1, 2600, NULL, 0);
+	omap_register_i2c_bus(1, 2600, sdp3430_i2c_boardinfo,
+			ARRAY_SIZE(sdp3430_i2c_boardinfo));
 	omap_register_i2c_bus(2, 400, NULL, 0);
 	omap_register_i2c_bus(3, 400, NULL, 0);
 	return 0;
@@ -335,7 +378,6 @@ static void __init omap_3430sdp_init(void)
 	ads7846_dev_init();
 	sdp3430_flash_init();
 	msecure_init();
-	twl4030_bci_battery_init();
 	omap_serial_init();
 	usb_musb_init();
 	usb_ehci_init();

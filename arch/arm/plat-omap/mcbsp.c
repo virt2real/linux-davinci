@@ -234,8 +234,16 @@ int omap_mcbsp_request(unsigned int id)
 	mcbsp->free = 0;
 	spin_unlock(&mcbsp->lock);
 
+	/*
+	 * Make sure that transmitter, receiver and sample-rate generator are
+	 * not running before activating IRQs.
+	 */
+	OMAP_MCBSP_WRITE(mcbsp->io_base, SPCR1, 0);
+	OMAP_MCBSP_WRITE(mcbsp->io_base, SPCR2, 0);
+
 	if (mcbsp->io_type == OMAP_MCBSP_IRQ_IO) {
 		/* We need to get IRQs here */
+		init_completion(&mcbsp->tx_irq_completion);
 		err = request_irq(mcbsp->tx_irq, omap_mcbsp_tx_irq_handler,
 					0, "McBSP", (void *)mcbsp);
 		if (err != 0) {
@@ -245,8 +253,7 @@ int omap_mcbsp_request(unsigned int id)
 			return err;
 		}
 
-		init_completion(&mcbsp->tx_irq_completion);
-
+		init_completion(&mcbsp->rx_irq_completion);
 		err = request_irq(mcbsp->rx_irq, omap_mcbsp_rx_irq_handler,
 					0, "McBSP", (void *)mcbsp);
 		if (err != 0) {
@@ -256,8 +263,6 @@ int omap_mcbsp_request(unsigned int id)
 			free_irq(mcbsp->tx_irq, (void *)mcbsp);
 			return err;
 		}
-
-		init_completion(&mcbsp->rx_irq_completion);
 	}
 
 	return 0;
@@ -858,7 +863,7 @@ EXPORT_SYMBOL(omap_mcbsp_set_spi_mode);
  * McBSP1 and McBSP3 are directly mapped on 1610 and 1510.
  * 730 has only 2 McBSP, and both of them are MPU peripherals.
  */
-static int __init omap_mcbsp_probe(struct platform_device *pdev)
+static int __devinit omap_mcbsp_probe(struct platform_device *pdev)
 {
 	struct omap_mcbsp_platform_data *pdata = pdev->dev.platform_data;
 	struct omap_mcbsp *mcbsp;
@@ -930,7 +935,7 @@ exit:
 	return ret;
 }
 
-static int omap_mcbsp_remove(struct platform_device *pdev)
+static int __devexit omap_mcbsp_remove(struct platform_device *pdev)
 {
 	struct omap_mcbsp *mcbsp = platform_get_drvdata(pdev);
 
@@ -956,7 +961,7 @@ static int omap_mcbsp_remove(struct platform_device *pdev)
 
 static struct platform_driver omap_mcbsp_driver = {
 	.probe		= omap_mcbsp_probe,
-	.remove		= omap_mcbsp_remove,
+	.remove		= __devexit_p(omap_mcbsp_remove),
 	.driver		= {
 		.name	= "omap-mcbsp",
 	},

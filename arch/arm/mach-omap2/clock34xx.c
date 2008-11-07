@@ -66,10 +66,10 @@ static void _omap3_dpll_write_clken(struct clk *clk, u8 clken_bits)
 
 	dd = clk->dpll_data;
 
-	v = __raw_readl(dd->control_reg);
+	v = cm_read_mod_reg(clk->prcm_mod, dd->control_reg);
 	v &= ~dd->enable_mask;
 	v |= clken_bits << __ffs(dd->enable_mask);
-	__raw_writel(v, dd->control_reg);
+	cm_write_mod_reg(v, clk->prcm_mod, dd->control_reg);
 }
 
 /* _omap3_wait_dpll_status: wait for a DPLL to enter a specific state */
@@ -78,14 +78,13 @@ static int _omap3_wait_dpll_status(struct clk *clk, u8 state)
 	const struct dpll_data *dd;
 	int i = 0;
 	int ret = -EINVAL;
-	u32 idlest_mask;
 
 	dd = clk->dpll_data;
 
-	state <<= dd->idlest_bit;
-	idlest_mask = 1 << dd->idlest_bit;
+	state <<= __ffs(dd->idlest_mask);
 
-	while (((__raw_readl(dd->idlest_reg) & idlest_mask) != state) &&
+	while (((cm_read_mod_reg(clk->prcm_mod, dd->idlest_reg)
+		 & dd->idlest_mask) != state) &&
 	       i < MAX_DPLL_WAIT_TRIES) {
 		i++;
 		udelay(1);
@@ -182,7 +181,7 @@ static int _omap3_noncore_dpll_lock(struct clk *clk)
 }
 
 /*
- * omap3_noncore_dpll_bypass - instruct a DPLL to bypass and wait for readiness
+ * _omap3_noncore_dpll_bypass - instruct a DPLL to bypass and wait for readiness
  * @clk: pointer to a DPLL struct clk
  *
  * Instructs a non-CORE DPLL to enter low-power bypass mode.  In
@@ -272,14 +271,22 @@ static int _omap3_noncore_dpll_stop(struct clk *clk)
 static int omap3_noncore_dpll_enable(struct clk *clk)
 {
 	int r;
+	struct dpll_data *dd;
 
 	if (clk == &dpll3_ck)
 		return -EINVAL;
 
-	if (clk->parent->rate == omap2_get_dpll_rate(clk))
+	dd = clk->dpll_data;
+	if (!dd)
+		return -EINVAL;
+
+	if (clk->rate == dd->bypass_clk->rate)
 		r = _omap3_noncore_dpll_bypass(clk);
 	else
 		r = _omap3_noncore_dpll_lock(clk);
+
+	if (!r)
+		clk->rate = omap2_get_dpll_rate(clk);
 
 	return r;
 }
@@ -347,17 +354,17 @@ static int omap3_noncore_dpll_program(struct clk *clk, u16 m, u8 n, u16 freqsel)
 	_omap3_noncore_dpll_bypass(clk);
 
 	/* Set jitter correction */
-	v = __raw_readl(dd->control_reg);
+	v = cm_read_mod_reg(clk->prcm_mod, dd->control_reg);
 	v &= ~dd->freqsel_mask;
 	v |= freqsel << __ffs(dd->freqsel_mask);
-	__raw_writel(v, dd->control_reg);
+	cm_write_mod_reg(v, clk->prcm_mod, dd->control_reg);
 
 	/* Set DPLL multiplier, divider */
-	v = __raw_readl(dd->mult_div1_reg);
+	v = cm_read_mod_reg(clk->prcm_mod, dd->mult_div1_reg);
 	v &= ~(dd->mult_mask | dd->div1_mask);
 	v |= m << __ffs(dd->mult_mask);
 	v |= (n - 1) << __ffs(dd->div1_mask);
-	__raw_writel(v, dd->mult_div1_reg);
+	cm_write_mod_reg(v, clk->prcm_mod, dd->mult_div1_reg);
 
 	/* We let the clock framework set the other output dividers later */
 
@@ -373,13 +380,17 @@ static int omap3_noncore_dpll_program(struct clk *clk, u16 m, u8 n, u16 freqsel)
  * @clk: struct clk * of DPLL to set
  * @rate: rounded target rate
  *
- * Program the DPLL with the rounded target rate.  Returns -EINVAL upon
- * error, or 0 upon success.
+ * Set the DPLL CLKOUT to the target rate.  If the DPLL can enter
+ * low-power bypass, and the target rate is the bypass source clock
+ * rate, then configure the DPLL for bypass.  Otherwise, round the
+ * target rate if it hasn't been done already, then program and lock
+ * the DPLL.  Returns -EINVAL upon error, or 0 upon success.
  */
 static int omap3_noncore_dpll_set_rate(struct clk *clk, unsigned long rate)
 {
 	u16 freqsel;
 	struct dpll_data *dd;
+	int ret;
 
 	if (!clk || !rate)
 		return -EINVAL;
@@ -391,18 +402,37 @@ static int omap3_noncore_dpll_set_rate(struct clk *clk, unsigned long rate)
 	if (rate == omap2_get_dpll_rate(clk))
 		return 0;
 
-	if (dd->last_rounded_rate != rate)
-		omap2_dpll_round_rate(clk, rate);
+	if (dd->bypass_clk->rate == rate &&
+	    (clk->dpll_data->modes & (1 << DPLL_LOW_POWER_BYPASS))) {
 
-	if (dd->last_rounded_rate == 0)
-		return -EINVAL;
+		pr_debug("clock: %s: set rate: entering bypass.\n", clk->name);
 
-	freqsel = _omap3_dpll_compute_freqsel(clk, dd->last_rounded_n);
-	if (!freqsel)
-		WARN_ON(1);
+		ret = _omap3_noncore_dpll_bypass(clk);
+		if (!ret)
+			clk->rate = rate;
 
-	omap3_noncore_dpll_program(clk, dd->last_rounded_m, dd->last_rounded_n,
-				   freqsel);
+	} else {
+
+		if (dd->last_rounded_rate != rate)
+			omap2_dpll_round_rate(clk, rate);
+
+		if (dd->last_rounded_rate == 0)
+			return -EINVAL;
+
+		freqsel = _omap3_dpll_compute_freqsel(clk, dd->last_rounded_n);
+		if (!freqsel)
+			WARN_ON(1);
+
+		pr_debug("clock: %s: set rate: locking rate to %lu.\n",
+			 clk->name, rate);
+
+		ret = omap3_noncore_dpll_program(clk, dd->last_rounded_m,
+						 dd->last_rounded_n, freqsel);
+
+		if (!ret)
+			clk->rate = rate;
+
+	}
 
 	omap3_dpll_recalc(clk);
 
@@ -495,7 +525,7 @@ static u32 omap3_dpll_autoidle_read(struct clk *clk)
 
 	dd = clk->dpll_data;
 
-	v = __raw_readl(dd->autoidle_reg);
+	v = cm_read_mod_reg(clk->prcm_mod, dd->autoidle_reg);
 	v &= dd->autoidle_mask;
 	v >>= __ffs(dd->autoidle_mask);
 
@@ -526,10 +556,10 @@ static void omap3_dpll_allow_idle(struct clk *clk)
 	 * by writing 0x5 instead of 0x1.  Add some mechanism to
 	 * optionally enter this mode.
 	 */
-	v = __raw_readl(dd->autoidle_reg);
+	v = cm_read_mod_reg(clk->prcm_mod, dd->autoidle_reg);
 	v &= ~dd->autoidle_mask;
 	v |= DPLL_AUTOIDLE_LOW_POWER_STOP << __ffs(dd->autoidle_mask);
-	__raw_writel(v, dd->autoidle_reg);
+	cm_write_mod_reg(v, clk->prcm_mod, dd->autoidle_reg);
 }
 
 /**
@@ -548,10 +578,10 @@ static void omap3_dpll_deny_idle(struct clk *clk)
 
 	dd = clk->dpll_data;
 
-	v = __raw_readl(dd->autoidle_reg);
+	v = cm_read_mod_reg(clk->prcm_mod, dd->autoidle_reg);
 	v &= ~dd->autoidle_mask;
 	v |= DPLL_AUTOIDLE_DISABLE << __ffs(dd->autoidle_mask);
-	__raw_writel(v, dd->autoidle_reg);
+	cm_write_mod_reg(v, clk->prcm_mod, dd->autoidle_reg);
 }
 
 /* Clock control for DPLL outputs */
@@ -579,11 +609,10 @@ static void omap3_clkoutx2_recalc(struct clk *clk)
 
 	dd = pclk->dpll_data;
 
-	WARN_ON(!dd->control_reg || !dd->enable_mask);
+	WARN_ON(!dd->idlest_reg || !dd->idlest_mask);
 
-	v = __raw_readl(dd->control_reg) & dd->enable_mask;
-	v >>= __ffs(dd->enable_mask);
-	if (v != DPLL_LOCKED)
+	v = cm_read_mod_reg(pclk->prcm_mod, dd->idlest_reg) & dd->idlest_mask;
+	if (!v)
 		clk->rate = clk->parent->rate;
 	else
 		clk->rate = clk->parent->rate * 2;

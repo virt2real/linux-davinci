@@ -31,7 +31,7 @@ struct clksel {
 };
 
 struct dpll_data {
-	void __iomem		*mult_div1_reg;
+	u16			mult_div1_reg;
 	u32			mult_mask;
 	u32			div1_mask;
 	u16			last_rounded_m;
@@ -41,18 +41,19 @@ struct dpll_data {
 	u16			max_multiplier;
 	u8			max_divider;
 	u32			max_tolerance;
+	u16			idlest_reg;
+	u32			idlest_mask;
+	struct clk		*bypass_clk;
 #  if defined(CONFIG_ARCH_OMAP3)
 	u32			freqsel_mask;
 	u8			modes;
-	void __iomem		*control_reg;
+	u16			control_reg;
 	u32			enable_mask;
 	u8			auto_recal_bit;
 	u8			recal_en_bit;
 	u8			recal_st_bit;
-	void __iomem		*autoidle_reg;
+	u16			autoidle_reg;
 	u32			autoidle_mask;
-	void __iomem		*idlest_reg;
-	u8			idlest_bit;
 #  endif
 };
 
@@ -66,9 +67,10 @@ struct clk {
 	struct clk		*parent;
 	unsigned long		rate;
 	__u32			flags;
-	void __iomem		*enable_reg;
+	u32			enable_reg;
 	__u8			enable_bit;
 	__s8			usecount;
+	u8			idlest_bit;
 	void			(*recalc)(struct clk *);
 	int			(*set_rate)(struct clk *, unsigned long);
 	long			(*round_rate)(struct clk *, unsigned long);
@@ -77,7 +79,7 @@ struct clk {
 	void			(*disable)(struct clk *);
 #if defined(CONFIG_ARCH_OMAP2) || defined(CONFIG_ARCH_OMAP3)
 	u8			fixed_div;
-	void __iomem		*clksel_reg;
+	u16			clksel_reg;
 	u32			clksel_mask;
 	const struct clksel	*clksel;
 	struct dpll_data	*dpll_data;
@@ -85,6 +87,7 @@ struct clk {
 		const char		*name;
 		struct clockdomain	*ptr;
 	} clkdm;
+	s16			prcm_mod;
 #else
 	__u8			rate_offset;
 	__u8			src_offset;
@@ -134,14 +137,14 @@ extern void clk_init_cpufreq_table(struct cpufreq_frequency_table **table);
 #define VIRTUAL_CLOCK		(1 << 3)	/* Composite clock from table */
 #define ALWAYS_ENABLED		(1 << 4)	/* Clock cannot be disabled */
 #define ENABLE_REG_32BIT	(1 << 5)	/* Use 32-bit access */
-#define VIRTUAL_IO_ADDRESS	(1 << 6)	/* Clock in virtual address */
+
 #define CLOCK_IDLE_CONTROL	(1 << 7)
 #define CLOCK_NO_IDLE_PARENT	(1 << 8)
 #define DELAYED_APP		(1 << 9)	/* Delay application of clock */
 #define CONFIG_PARTICIPANT	(1 << 10)	/* Fundamental clock */
 #define ENABLE_ON_INIT		(1 << 11)	/* Enable upon framework init */
-#define INVERT_ENABLE           (1 << 12)       /* 0 enables, 1 disables */
-#define OFFSET_GR_MOD		(1 << 13)	/* 24xx GR_MOD reg as offset */
+#define INVERT_ENABLE		(1 << 12)	/* 0 enables, 1 disables */
+#define WAIT_READY		(1 << 13)	/* wait for dev to leave idle */
 /* bits 14-20 are currently free */
 #define CLOCK_IN_OMAP310	(1 << 21)
 #define CLOCK_IN_OMAP730	(1 << 22)
@@ -152,17 +155,24 @@ extern void clk_init_cpufreq_table(struct cpufreq_frequency_table **table);
 #define CLOCK_IN_OMAP343X	(1 << 27)	/* clocks common to all 343X */
 #define PARENT_CONTROLS_CLOCK	(1 << 28)
 #define CLOCK_IN_OMAP3430ES1	(1 << 29)	/* 3430ES1 clocks only */
-#define CLOCK_IN_OMAP3430ES2	(1 << 30)	/* 3430ES2 clocks only */
+#define CLOCK_IN_OMAP3430ES2	(1 << 30)	/* 3430ES2+ clocks only */
 
 /* Clksel_rate flags */
 #define DEFAULT_RATE		(1 << 0)
 #define RATE_IN_242X		(1 << 1)
 #define RATE_IN_243X		(1 << 2)
 #define RATE_IN_343X		(1 << 3)	/* rates common to all 343X */
-#define RATE_IN_3430ES2		(1 << 4)	/* 3430ES2 rates only */
+#define RATE_IN_3430ES2		(1 << 4)	/* 3430ES2+ rates only */
 
 #define RATE_IN_24XX		(RATE_IN_242X | RATE_IN_243X)
 
+/*
+ * clk.prcm_mod flags (possible since only the top byte in clk.prcm_mod
+ * is significant)
+ */
+#define PRCM_MOD_ADDR_MASK	0xff00
+#define CLK_REG_IN_PRM		(1 << 0)
+#define CLK_REG_IN_SCM		(1 << 1)
 
 /* CM_CLKSEL2_PLL.CORE_CLK_SRC options (24XX) */
 #define CORE_CLK_SRC_32K		0

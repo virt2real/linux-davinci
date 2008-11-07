@@ -21,7 +21,7 @@ config MFD_SM501
 
 config MFD_SM501_GPIO
 	bool "Export GPIO via GPIO layer"
-	depends on MFD_SM501 && HAVE_GPIO_LIB
+	depends on MFD_SM501 && GPIOLIB
 	 ---help---
 	 This option uses the gpio library layer to export the 64 GPIO
 	 lines on the SM501. The platform data is used to supply the
@@ -29,7 +29,7 @@ config MFD_SM501_GPIO
 
 config MFD_ASIC3
 	bool "Support for Compaq ASIC3"
-	depends on GENERIC_HARDIRQS && HAVE_GPIO_LIB && ARM
+	depends on GENERIC_HARDIRQS && GPIOLIB && ARM
 	 ---help---
 	  This driver supports the ASIC3 multifunction chip found on many
 	  PDAs (mainly iPAQ and HTC based ones)
@@ -49,6 +49,20 @@ config HTC_PASIC3
 	  chips labeled "AIC2" and "AIC3", found on HTC Blueangel and
 	  HTC Magician devices, respectively. Actual functionality is
 	  handled by the leds-pasic3 and ds1wm drivers.
+
+config TWL4030_CORE
+	bool "Texas Instruments TWL4030/TPS659x0 Support"
+	depends on I2C=y && GENERIC_HARDIRQS && (ARCH_OMAP2 || ARCH_OMAP3)
+	help
+	  Say yes here if you have TWL4030 family chip on your board.
+	  This core driver provides register access and IRQ handling
+	  facilities, and registers devices for the various functions
+	  so that function-specific drivers can bind to them.
+
+	  These multi-function chips are found on many OMAP2 and OMAP3
+	  boards, providing power management, RTC, GPIO, keypad, a
+	  high speed USB OTG transceiver, an audio codec (on most
+	  versions) and many other features.
 
 config MFD_TMIO
 	bool

@@ -2,6 +2,8 @@
  * twl4030_usb - TWL4030 USB transceiver, talking to OMAP OTG controller
  *
  * Copyright (C) 2004-2007 Texas Instruments
+ * Copyright (C) 2008 Nokia Corporation
+ * Contact: Felipe Balbi <felipe.balbi@nokia.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,15 +24,14 @@
  *	- 3-pin mode support may be added in future.
  */
 
-
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/time.h>
 #include <linux/interrupt.h>
+#include <linux/platform_device.h>
+#include <linux/spinlock.h>
+#include <linux/workqueue.h>
 #include <linux/io.h>
-#include <linux/usb.h>
-#include <linux/usb/ch9.h>
-#include <linux/usb/gadget.h>
+#include <linux/delay.h>
 #include <linux/usb/otg.h>
 #include <linux/i2c/twl4030.h>
 #include <mach/usb.h>
@@ -228,33 +229,12 @@
 #define VUSB3V1_TYPE			0x78
 #define VUSB3V1_REMAP			0x79
 
-#define ID_STATUS			0x96
-#define ID_RES_FLOAT			(1 << 4) /* mini-B */
-#define ID_RES_440K			(1 << 3) /* type 2 charger */
-#define ID_RES_200K			(1 << 2) /* 5-wire carkit or
-						    type 1 charger */
-#define ID_RES_102K			(1 << 1) /* phone */
-#define ID_RES_GND			(1 << 0) /* mini-A */
-
 /* In module TWL4030_MODULE_INTBR */
 #define PMBR1				0x0D
 #define GPIO_USB_4PIN_ULPI_2430C	(3 << 0)
 
-/* In module TWL4030_MODULE_INT */
-#define REG_PWR_ISR1			0x00
-#define REG_PWR_IMR1			0x01
-#define USB_PRES			(1 << 2)
-#define REG_PWR_EDR1			0x05
-#define USB_PRES_FALLING		(1 << 4)
-#define USB_PRES_RISING			(1 << 5)
-#define REG_PWR_SIH_CTRL		0x07
-#define COR				(1 << 2)
-
-/* internal define on top of container_of */
-#define xceiv_to_twl(x)		container_of((x), struct twl4030_usb, otg);
 
 /* bits in OTG_CTRL */
-
 #define	OTG_XCEIV_OUTPUTS \
 	(OTG_ASESSVLD|OTG_BSESSEND|OTG_BSESSVLD|OTG_VBUSVLD|OTG_ID)
 #define	OTG_XCEIV_INPUTS \
@@ -268,22 +248,36 @@
 	OTG_CTRL_BITS)
 
 
-/*-------------------------------------------------------------------------*/
+enum linkstat {
+	USB_LINK_UNKNOWN = 0,
+	USB_LINK_NONE,
+	USB_LINK_VBUS,
+	USB_LINK_ID,
+};
 
 struct twl4030_usb {
 	struct otg_transceiver	otg;
+	struct device		*dev;
+
+	/* for vbus reporting with irqs disabled */
+	spinlock_t		lock;
+
+	/* pin configuration */
+	enum twl4030_usb_mode	usb_mode;
+
 	int			irq;
-	u8			usb_mode;	/* pin configuration */
-#define T2_USB_MODE_ULPI		1
-/* #define T2_USB_MODE_CEA2011_3PIN	2 */
+	u8			linkstat;
 	u8			asleep;
+	bool			irq_enabled;
 };
 
-static struct twl4030_usb *the_transceiver;
+/* internal define on top of container_of */
+#define xceiv_to_twl(x)		container_of((x), struct twl4030_usb, otg);
 
 /*-------------------------------------------------------------------------*/
 
-static int twl4030_i2c_write_u8_verify(u8 module, u8 data, u8 address)
+static int twl4030_i2c_write_u8_verify(struct twl4030_usb *twl,
+		u8 module, u8 data, u8 address)
 {
 	u8 check;
 
@@ -297,47 +291,58 @@ static int twl4030_i2c_write_u8_verify(u8 module, u8 data, u8 address)
 						(check == data))
 		return 0;
 	/* Failed again: Return error */
+
 	return -EBUSY;
 }
 
-#define twl4030_usb_write_verify(address, data)	\
-	twl4030_i2c_write_u8_verify(TWL4030_MODULE_USB, (data), (address))
+#define twl4030_usb_write_verify(twl, address, data)	\
+	twl4030_i2c_write_u8_verify(twl, TWL4030_MODULE_USB, (data), (address))
 
-static inline int twl4030_usb_write(u8 address, u8 data)
+static inline int twl4030_usb_write(struct twl4030_usb *twl,
+		u8 address, u8 data)
 {
 	int ret = 0;
+
 	ret = twl4030_i2c_write_u8(TWL4030_MODULE_USB, data, address);
 	if (ret >= 0) {
 #if 0	/* debug */
 		u8 data1;
 		if (twl4030_i2c_read_u8(TWL4030_MODULE_USB, &data1,
 					address) < 0)
-			printk(KERN_ERR "re-read failed\n");
+			dev_err(twl->dev, "re-read failed\n");
 		else
-			printk(KERN_INFO
+			dev_dbg(twl->dev,
 			       "Write %s wrote %x read %x from reg %x\n",
 			       (data1 == data) ? "succeed" : "mismatch",
 			       data, data1, address);
 #endif
 	} else {
-		printk(KERN_WARNING
+		dev_warn(twl->dev,
 			"TWL4030:USB:Write[0x%x] Error %d\n", address, ret);
 	}
+
 	return ret;
 }
 
-static inline int twl4030_usb_read(u8 address)
+static inline int twl4030_readb(struct twl4030_usb *twl, u8 module, u8 address)
 {
 	u8 data;
 	int ret = 0;
-	ret = twl4030_i2c_read_u8(TWL4030_MODULE_USB, &data, address);
-	if (ret >= 0) {
+
+	ret = twl4030_i2c_read_u8(module, &data, address);
+	if (ret >= 0)
 		ret = data;
-	} else {
-		printk(KERN_WARNING
-			"TWL4030:USB:Read[0x%x] Error %d\n", address, ret);
-	}
+	else
+		dev_warn(twl->dev,
+			"TWL4030:readb[0x%x,0x%x] Error %d\n",
+					module, address, ret);
+
 	return ret;
+}
+
+static inline int twl4030_usb_read(struct twl4030_usb *twl, u8 address)
+{
+	return twl4030_readb(twl, TWL4030_MODULE_USB, address);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -345,17 +350,49 @@ static inline int twl4030_usb_read(u8 address)
 static inline int
 twl4030_usb_set_bits(struct twl4030_usb *twl, u8 reg, u8 bits)
 {
-	return twl4030_usb_write(reg + 1, bits);
+	return twl4030_usb_write(twl, reg + 1, bits);
 }
 
 static inline int
 twl4030_usb_clear_bits(struct twl4030_usb *twl, u8 reg, u8 bits)
 {
-	return twl4030_usb_write(reg + 2, bits);
-
+	return twl4030_usb_write(twl, reg + 2, bits);
 }
 
 /*-------------------------------------------------------------------------*/
+
+static enum linkstat twl4030_usb_linkstat(struct twl4030_usb *twl)
+{
+	int	status;
+	int	linkstat = USB_LINK_UNKNOWN;
+
+	/* STS_HW_CONDITIONS */
+	status = twl4030_readb(twl, TWL4030_MODULE_PM_MASTER, 0x0f);
+	if (status < 0)
+		dev_err(twl->dev, "USB link status err %d\n", status);
+	else if (status & BIT(7))
+		linkstat = USB_LINK_VBUS;
+	else if (status & BIT(2))
+		linkstat = USB_LINK_ID;
+	else
+		linkstat = USB_LINK_NONE;
+
+	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
+			status, status, linkstat);
+
+	spin_lock_irq(&twl->lock);
+	twl->linkstat = linkstat;
+	if (linkstat == USB_LINK_ID) {
+		twl->otg.default_a = true;
+		twl->otg.state = OTG_STATE_A_IDLE;
+	} else {
+		twl->otg.default_a = false;
+		twl->otg.state = OTG_STATE_B_IDLE;
+	}
+	spin_unlock_irq(&twl->lock);
+
+	return linkstat;
+}
 
 static void twl4030_usb_set_mode(struct twl4030_usb *twl, int mode)
 {
@@ -380,185 +417,74 @@ static void twl4030_usb_set_mode(struct twl4030_usb *twl, int mode)
 	};
 }
 
-#ifdef CONFIG_TWL4030_USB_HS_ULPI
-static void hs_usb_init(struct twl4030_usb *twl)
-{
-	twl->usb_mode = T2_USB_MODE_ULPI;
-	return;
-}
-
-#endif
-
-static void twl4030_i2c_access(int on)
+static void twl4030_i2c_access(struct twl4030_usb *twl, int on)
 {
 	unsigned long timeout;
-	int val = twl4030_usb_read(PHY_CLK_CTRL);
+	int val = twl4030_usb_read(twl, PHY_CLK_CTRL);
 
 	if (val >= 0) {
 		if (on) {
 			/* enable DPLL to access PHY registers over I2C */
 			val |= REQ_PHY_DPLL_CLK;
-			if (twl4030_usb_write_verify(PHY_CLK_CTRL,
-								(u8)val) < 0) {
-				printk(KERN_ERR "twl4030_usb: i2c write failed,"
-						" line %d\n", __LINE__);
-				return;
-			}
+			WARN_ON(twl4030_usb_write_verify(twl, PHY_CLK_CTRL,
+						(u8)val) < 0);
 
 			timeout = jiffies + HZ;
-			while (!(twl4030_usb_read(PHY_CLK_CTRL_STS) &
+			while (!(twl4030_usb_read(twl, PHY_CLK_CTRL_STS) &
 							PHY_DPLL_CLK)
 				&& time_before(jiffies, timeout))
 					udelay(10);
-			if (!(twl4030_usb_read(PHY_CLK_CTRL_STS) &
+			if (!(twl4030_usb_read(twl, PHY_CLK_CTRL_STS) &
 							PHY_DPLL_CLK))
-				printk(KERN_ERR "Timeout setting T2 HSUSB "
+				dev_err(twl->dev, "Timeout setting T2 HSUSB "
 						"PHY DPLL clock\n");
 		} else {
 			/* let ULPI control the DPLL clock */
 			val &= ~REQ_PHY_DPLL_CLK;
-			if (twl4030_usb_write_verify(PHY_CLK_CTRL,
-								(u8)val) < 0) {
-				printk(KERN_ERR "twl4030_usb: i2c write failed,"
-						" line %d\n", __LINE__);
-			}
+			WARN_ON(twl4030_usb_write_verify(twl, PHY_CLK_CTRL,
+						(u8)val) < 0);
 		}
 	}
-	return;
-}
-
-static void usb_irq_enable(int rising, int falling)
-{
-	u8 val;
-
-	/* edge setup */
-	if (twl4030_i2c_read_u8(TWL4030_MODULE_INT, &val, REG_PWR_EDR1) < 0) {
-		printk(KERN_ERR "twl4030_usb: i2c read failed,"
-				" line %d\n", __LINE__);
-		return;
-	}
-	val &= ~(USB_PRES_RISING | USB_PRES_FALLING);
-	if (rising)
-		val = val | USB_PRES_RISING;
-	if (falling)
-		val = val | USB_PRES_FALLING;
-	if (twl4030_i2c_write_u8_verify(TWL4030_MODULE_INT, val,
-							REG_PWR_EDR1) < 0) {
-		printk(KERN_ERR "twl4030_usb: i2c write failed,"
-				" line %d\n", __LINE__);
-		return;
-	}
-
-	/* un-mask interrupt */
-	if (twl4030_i2c_read_u8(TWL4030_MODULE_INT, &val, REG_PWR_IMR1) < 0) {
-		printk(KERN_ERR "twl4030_usb: i2c read failed,"
-				" line %d\n", __LINE__);
-		return;
-	}
-	val &= ~USB_PRES;
-	if (twl4030_i2c_write_u8_verify(TWL4030_MODULE_INT, val,
-							REG_PWR_IMR1) < 0)
-		printk(KERN_ERR "twl4030_usb: i2c write failed,"
-				" line %d\n", __LINE__);
-
-	return;
-}
-
-static void usb_irq_disable(void)
-{
-	u8 val;
-
-	/* undo edge setup */
-	if (twl4030_i2c_read_u8(TWL4030_MODULE_INT, &val, REG_PWR_EDR1) < 0) {
-		printk(KERN_ERR "twl4030_usb: i2c read failed,"
-				" line %d\n", __LINE__);
-		return;
-	}
-	val &= ~(USB_PRES_RISING | USB_PRES_FALLING);
-	if (twl4030_i2c_write_u8_verify(TWL4030_MODULE_INT, val,
-							REG_PWR_EDR1) < 0) {
-		printk(KERN_ERR "twl4030_usb: i2c write failed,"
-				" line %d\n", __LINE__);
-		return;
-	}
-
-	/* mask interrupt */
-	if (twl4030_i2c_read_u8(TWL4030_MODULE_INT, &val, REG_PWR_IMR1) < 0) {
-		printk(KERN_ERR "twl4030_usb: i2c read failed,"
-				" line %d\n", __LINE__);
-		return;
-	}
-	val |= USB_PRES;
-	if (twl4030_i2c_write_u8_verify(TWL4030_MODULE_INT, val,
-							REG_PWR_IMR1) < 0)
-		printk(KERN_ERR "twl4030_usb: i2c write failed,"
-				" line %d\n", __LINE__);
-
-	return;
 }
 
 static void twl4030_phy_power(struct twl4030_usb *twl, int on)
 {
 	u8 pwr;
 
-	pwr = twl4030_usb_read(PHY_PWR_CTRL);
+	pwr = twl4030_usb_read(twl, PHY_PWR_CTRL);
 	if (on) {
 		pwr &= ~PHY_PWR_PHYPWD;
-		if (twl4030_usb_write_verify(PHY_PWR_CTRL, pwr) < 0) {
-			printk(KERN_ERR "twl4030_usb: i2c write failed,"
-					" line %d\n", __LINE__);
-			return;
-		}
-		twl4030_usb_write(PHY_CLK_CTRL,
-				  twl4030_usb_read(PHY_CLK_CTRL) |
+		WARN_ON(twl4030_usb_write_verify(twl, PHY_PWR_CTRL, pwr) < 0);
+		twl4030_usb_write(twl, PHY_CLK_CTRL,
+				  twl4030_usb_read(twl, PHY_CLK_CTRL) |
 					(PHY_CLK_CTRL_CLOCKGATING_EN |
 						PHY_CLK_CTRL_CLK32K_EN));
 	} else  {
 		pwr |= PHY_PWR_PHYPWD;
-		if (twl4030_usb_write_verify(PHY_PWR_CTRL, pwr) < 0) {
-			printk(KERN_ERR "twl4030_usb: i2c write failed,"
-					" line %d\n", __LINE__);
-		}
+		WARN_ON(twl4030_usb_write_verify(twl, PHY_PWR_CTRL, pwr) < 0);
 	}
-	return;
 }
 
-static void twl4030_phy_suspend(int controller_off)
+static void twl4030_phy_suspend(struct twl4030_usb *twl, int controller_off)
 {
-	struct twl4030_usb *twl = the_transceiver;
-
-	if (controller_off)
-		usb_irq_disable();
-
 	if (twl->asleep)
 		return;
 
-	if (!controller_off)
-		/* enable rising edge interrupt to detect cable attach */
-		usb_irq_enable(1, 0);
-
 	twl4030_phy_power(twl, 0);
 	twl->asleep = 1;
-	return;
 }
 
-static void twl4030_phy_resume(void)
+static void twl4030_phy_resume(struct twl4030_usb *twl)
 {
-	struct twl4030_usb *twl = the_transceiver;
-
 	if (!twl->asleep)
 		return;
 
-	/* enable falling edge interrupt to detect cable detach */
-	usb_irq_enable(0, 1);
-
 	twl4030_phy_power(twl, 1);
-	twl4030_i2c_access(1);
+	twl4030_i2c_access(twl, 1);
 	twl4030_usb_set_mode(twl, twl->usb_mode);
 	if (twl->usb_mode == T2_USB_MODE_ULPI)
-		twl4030_i2c_access(0);
+		twl4030_i2c_access(twl, 0);
 	twl->asleep = 0;
-	return;
 }
 
 static void twl4030_usb_ldo_init(struct twl4030_usb *twl)
@@ -589,61 +515,94 @@ static void twl4030_usb_ldo_init(struct twl4030_usb *twl)
 	twl4030_i2c_write_u8(TWL4030_MODULE_PM_MASTER, 0, PROTECT_KEY);
 }
 
+static ssize_t twl4030_usb_vbus_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct twl4030_usb *twl = dev_get_drvdata(dev);
+	unsigned long flags;
+	int ret = -EINVAL;
+
+	spin_lock_irqsave(&twl->lock, flags);
+	ret = sprintf(buf, "%s\n",
+			(twl->linkstat == USB_LINK_VBUS) ? "on" : "off");
+	spin_unlock_irqrestore(&twl->lock, flags);
+
+	return ret;
+}
+static DEVICE_ATTR(vbus, 0444, twl4030_usb_vbus_show, NULL);
+
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 {
-	int ret = IRQ_NONE;
-	u8 val;
+	struct twl4030_usb *twl = _twl;
+	int status;
 
-	/* action based on cable attach or detach */
-	if (twl4030_i2c_read_u8(TWL4030_MODULE_INT, &val, REG_PWR_EDR1) < 0) {
-		printk(KERN_ERR "twl4030_usb: i2c read failed,"
-				" line %d\n", __LINE__);
-		goto done;
+#ifdef CONFIG_LOCKDEP
+	/* WORKAROUND for lockdep forcing IRQF_DISABLED on us, which
+	 * we don't want and can't tolerate.  Although it might be
+	 * friendlier not to borrow this thread context...
+	 */
+	local_irq_enable();
+#endif
+
+	status = twl4030_usb_linkstat(twl);
+	if (status != USB_LINK_UNKNOWN) {
+
+		/* FIXME add a set_power() method so that B-devices can
+		 * configure the charger appropriately.  It's not always
+		 * correct to consume VBUS power, and how much current to
+		 * consume is a function of the USB configuration chosen
+		 * by the host.
+		 *
+		 * REVISIT usb_gadget_vbus_connect(...) as needed, ditto
+		 * its disconnect() sibling, when changing to/from the
+		 * USB_LINK_VBUS state.  musb_hdrc won't care until it
+		 * starts to handle softconnect right.
+		 */
+		twl4030charger_usb_en(status == USB_LINK_VBUS);
+
+		if (status == USB_LINK_NONE)
+			twl4030_phy_suspend(twl, 0);
+		else
+			twl4030_phy_resume(twl);
 	}
+	sysfs_notify(&twl->dev->kobj, NULL, "vbus");
 
-	if (val & USB_PRES_RISING) {
-		twl4030_phy_resume();
-		twl4030charger_usb_en(1);
-	} else {
-		twl4030charger_usb_en(0);
-		twl4030_phy_suspend(0);
-	}
-
-	ret = IRQ_HANDLED;
-
-done:
-	return ret;
+	return IRQ_HANDLED;
 }
 
 static int twl4030_set_suspend(struct otg_transceiver *x, int suspend)
 {
+	struct twl4030_usb *twl = xceiv_to_twl(x);
+
 	if (suspend)
-		twl4030_phy_suspend(1);
+		twl4030_phy_suspend(twl, 1);
 	else
-		twl4030_phy_resume();
+		twl4030_phy_resume(twl);
 
 	return 0;
 }
 
-static int twl4030_set_peripheral(struct otg_transceiver *xceiv,
+static int twl4030_set_peripheral(struct otg_transceiver *x,
 		struct usb_gadget *gadget)
 {
+	struct twl4030_usb *twl;
 	u32 l;
-	struct twl4030_usb *twl = xceiv_to_twl(xceiv);
 
-	if (!xceiv)
+	if (!x)
 		return -ENODEV;
+
+	twl = xceiv_to_twl(x);
 
 	if (!gadget) {
 		omap_writew(0, OTG_IRQ_EN);
-		twl4030_phy_suspend(1);
+		twl4030_phy_suspend(twl, 1);
 		twl->otg.gadget = NULL;
 
 		return -ENODEV;
 	}
 
 	twl->otg.gadget = gadget;
-	twl4030_phy_resume();
+	twl4030_phy_resume(twl);
 
 	l = omap_readl(OTG_CTRL) & OTG_CTRL_MASK;
 	l &= ~(OTG_XCEIV_OUTPUTS|OTG_CTRL_BITS);
@@ -652,101 +611,114 @@ static int twl4030_set_peripheral(struct otg_transceiver *xceiv,
 
 	twl->otg.state = OTG_STATE_B_IDLE;
 
-	twl4030_usb_set_bits(twl, USB_INT_EN_RISE,
-			USB_INT_SESSVALID | USB_INT_VBUSVALID);
-	twl4030_usb_set_bits(twl, USB_INT_EN_FALL,
-			USB_INT_SESSVALID | USB_INT_VBUSVALID);
-
 	return 0;
 }
 
-static int twl4030_set_host(struct otg_transceiver *xceiv, struct usb_bus *host)
+static int twl4030_set_host(struct otg_transceiver *x, struct usb_bus *host)
 {
-	struct twl4030_usb *twl = xceiv_to_twl(xceiv);
+	struct twl4030_usb *twl;
 
-	if (!xceiv)
+	if (!x)
 		return -ENODEV;
+
+	twl = xceiv_to_twl(x);
 
 	if (!host) {
 		omap_writew(0, OTG_IRQ_EN);
-		twl4030_phy_suspend(1);
+		twl4030_phy_suspend(twl, 1);
 		twl->otg.host = NULL;
 
 		return -ENODEV;
 	}
 
 	twl->otg.host = host;
-	twl4030_phy_resume();
+	twl4030_phy_resume(twl);
 
 	twl4030_usb_set_bits(twl, TWL4030_OTG_CTRL,
 			TWL4030_OTG_CTRL_DMPULLDOWN
 				| TWL4030_OTG_CTRL_DPPULLDOWN);
-	twl4030_usb_set_bits(twl, USB_INT_EN_RISE, USB_INT_IDGND);
-	twl4030_usb_set_bits(twl, USB_INT_EN_FALL, USB_INT_IDGND);
+
 	twl4030_usb_set_bits(twl, FUNC_CTRL, FUNC_CTRL_SUSPENDM);
 	twl4030_usb_set_bits(twl, TWL4030_OTG_CTRL, TWL4030_OTG_CTRL_DRVVBUS);
 
 	return 0;
 }
 
-static int __init twl4030_usb_init(void)
+static int __init twl4030_usb_probe(struct platform_device *pdev)
 {
+	struct twl4030_usb_data *pdata = pdev->dev.platform_data;
 	struct twl4030_usb	*twl;
-	int status;
-
-	if (the_transceiver)
-		return 0;
+	int			status;
 
 	twl = kzalloc(sizeof *twl, GFP_KERNEL);
 	if (!twl)
-		return 0;
+		return -ENOMEM;
 
-	the_transceiver = twl;
+	if (!pdata) {
+		dev_info(&pdev->dev, "platform_data not available\n");
+		return -EINVAL;
+	}
 
-	twl->irq		= TWL4030_PWRIRQ_USB_PRES;
+	twl->dev		= &pdev->dev;
+	twl->irq		= platform_get_irq(pdev, 0);
+	twl->otg.dev		= twl->dev;
+	twl->otg.label		= "twl4030";
 	twl->otg.set_host	= twl4030_set_host;
 	twl->otg.set_peripheral	= twl4030_set_peripheral;
 	twl->otg.set_suspend	= twl4030_set_suspend;
+	twl->usb_mode		= pdata->usb_mode;
+	twl->asleep		= 1;
 
-	usb_irq_disable();
-	status = request_irq(twl->irq, twl4030_usb_irq, 0, "twl4030_usb", twl);
-	if (status < 0) {
-		printk(KERN_DEBUG "can't get IRQ %d, err %d\n",
-			twl->irq, status);
-		kfree(twl);
-		return -ENODEV;
-	}
+	/* init spinlock for workqueue */
+	spin_lock_init(&twl->lock);
 
-#if defined(CONFIG_TWL4030_USB_HS_ULPI)
-	hs_usb_init(twl);
-#endif
 	twl4030_usb_ldo_init(twl);
-	twl4030_phy_power(twl, 1);
-	twl4030_i2c_access(1);
-	twl4030_usb_set_mode(twl, twl->usb_mode);
-	if (twl->usb_mode == T2_USB_MODE_ULPI)
-		twl4030_i2c_access(0);
-
-	twl->asleep = 0;
-
-	if (twl->usb_mode == T2_USB_MODE_ULPI)
-		twl4030_phy_suspend(1);
-
 	otg_set_transceiver(&twl->otg);
 
-	printk(KERN_INFO "Initialized TWL4030 USB module\n");
+	platform_set_drvdata(pdev, twl);
+	if (device_create_file(&pdev->dev, &dev_attr_vbus))
+		dev_warn(&pdev->dev, "could not create sysfs file\n");
 
+	/* Our job is to use irqs and status from the power module
+	 * to keep the transceiver disabled when nothing's connected.
+	 *
+	 * FIXME we actually shouldn't start enabling it until the
+	 * USB controller drivers have said they're ready, by calling
+	 * set_host() and/or set_peripheral() ... OTG_capable boards
+	 * need both handles, otherwise just one suffices.
+	 */
+	twl->irq_enabled = true;
+	status = request_irq(twl->irq, twl4030_usb_irq,
+			IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+			"twl4030_usb", twl);
+	if (status < 0) {
+		dev_dbg(&pdev->dev, "can't get IRQ %d, err %d\n",
+			twl->irq, status);
+		kfree(twl);
+		return status;
+	}
+
+	/* The IRQ handler just handles changes from the previous states
+	 * of the ID and VBUS pins ... in probe() we must initialize that
+	 * previous state.  The easy way:  fake an IRQ.
+	 *
+	 * REVISIT:  a real IRQ might have happened already, if PREEMPT is
+	 * enabled.  Else the IRQ may not yet be configured or enabled,
+	 * because of scheduling delays.
+	 */
+	twl4030_usb_irq(twl->irq, twl);
+
+	dev_info(&pdev->dev, "Initialized TWL4030 USB module\n");
 	return 0;
 }
 
-
-static void __exit twl4030_usb_exit(void)
+static int __exit twl4030_usb_remove(struct platform_device *pdev)
 {
-	struct twl4030_usb *twl = the_transceiver;
+	struct twl4030_usb *twl = platform_get_drvdata(pdev);
 	int val;
 
-	usb_irq_disable();
 	free_irq(twl->irq, twl);
+	device_remove_file(twl->dev, &dev_attr_vbus);
 
 	/* set transceiver mode to power on defaults */
 	twl4030_usb_set_mode(twl, -1);
@@ -755,11 +727,11 @@ static void __exit twl4030_usb_exit(void)
 	 * clear dpll clock request for i2c access,
 	 * disable 32KHz
 	 */
-	val = twl4030_usb_read(PHY_CLK_CTRL);
+	val = twl4030_usb_read(twl, PHY_CLK_CTRL);
 	if (val >= 0) {
 		val |= PHY_CLK_CTRL_CLOCKGATING_EN;
 		val &= ~(PHY_CLK_CTRL_CLK32K_EN | REQ_PHY_DPLL_CLK);
-		twl4030_usb_write(PHY_CLK_CTRL, (u8)val);
+		twl4030_usb_write(twl, PHY_CLK_CTRL, (u8)val);
 	}
 
 	/* disable complete OTG block */
@@ -768,12 +740,32 @@ static void __exit twl4030_usb_exit(void)
 	twl4030_phy_power(twl, 0);
 
 	kfree(twl);
+
+	return 0;
 }
 
+static struct platform_driver twl4030_usb_driver = {
+	.probe		= twl4030_usb_probe,
+	.remove		= __exit_p(twl4030_remove),
+	.driver		= {
+		.name	= "twl4030_usb",
+		.owner	= THIS_MODULE,
+	},
+};
+
+static int __init twl4030_usb_init(void)
+{
+	return platform_driver_register(&twl4030_usb_driver);
+}
 subsys_initcall(twl4030_usb_init);
+
+static void __exit twl4030_usb_exit(void)
+{
+	platform_driver_unregister(&twl4030_usb_driver);
+}
 module_exit(twl4030_usb_exit);
 
-MODULE_ALIAS("i2c:twl4030-usb");
-MODULE_AUTHOR("Texas Instruments, Inc.");
+MODULE_ALIAS("platform:twl4030_usb");
+MODULE_AUTHOR("Texas Instruments, Inc, Nokia Corporation");
 MODULE_DESCRIPTION("TWL4030 USB transceiver driver");
 MODULE_LICENSE("GPL");

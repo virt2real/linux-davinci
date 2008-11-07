@@ -9,8 +9,9 @@
  * Additional contributions by:
  *	Tony Lindgren <tony@atomide.com>
  *	Imre Deak <imre.deak@nokia.com>
- *	Juha Yrjölä <juha.yrjola@nokia.com>
+ *	Juha YrjÃ¶lÃ¤ <juha.yrjola@solidboot.com>
  *	Syed Khasim <x0khasim@ti.com>
+ *	Nishant Menon <nm@ti.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,12 +36,7 @@
 #include <linux/completion.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
-
-#include <asm/io.h>
-
-/* Hack to enable zero length transfers and smbus quick until clean fix
-   is available */
-#define OMAP_HACK
+#include <linux/io.h>
 
 /* timeout waiting for the controller to respond */
 #define OMAP_I2C_TIMEOUT (msecs_to_jiffies(1000))
@@ -64,8 +60,8 @@
 #define OMAP_I2C_BUFSTAT_REG		0x40
 
 /* I2C Interrupt Enable Register (OMAP_I2C_IE): */
-#define OMAP_I2C_IE_XDR		(1 << 14)	/* TX Buffer draining int enable */
-#define OMAP_I2C_IE_RDR		(1 << 13)	/* RX Buffer draining int enable */
+#define OMAP_I2C_IE_XDR		(1 << 14)	/* TX Buffer drain int enable */
+#define OMAP_I2C_IE_RDR		(1 << 13)	/* RX Buffer drain int enable */
 #define OMAP_I2C_IE_XRDY	(1 << 4)	/* TX data ready int enable */
 #define OMAP_I2C_IE_RRDY	(1 << 3)	/* RX data ready int enable */
 #define OMAP_I2C_IE_ARDY	(1 << 2)	/* Access ready int enable */
@@ -206,6 +202,8 @@ static void omap_i2c_put_clocks(struct omap_i2c_dev *dev)
 
 static void omap_i2c_unidle(struct omap_i2c_dev *dev)
 {
+	WARN_ON(!dev->idle);
+
 	if (dev->iclk != NULL)
 		clk_enable(dev->iclk);
 	clk_enable(dev->fclk);
@@ -218,10 +216,12 @@ static void omap_i2c_idle(struct omap_i2c_dev *dev)
 {
 	u16 iv;
 
+	WARN_ON(dev->idle);
+
 	dev->iestate = omap_i2c_read_reg(dev, OMAP_I2C_IE_REG);
 	omap_i2c_write_reg(dev, OMAP_I2C_IE_REG, 0);
 	if (dev->rev1)
-		iv = omap_i2c_read_reg(dev, OMAP_I2C_IV_REG);
+		iv = omap_i2c_read_reg(dev, OMAP_I2C_IV_REG); /* Read clears */
 	else
 		omap_i2c_write_reg(dev, OMAP_I2C_STAT_REG, dev->iestate);
 	/*
@@ -373,16 +373,12 @@ static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
 			     struct i2c_msg *msg, int stop)
 {
 	struct omap_i2c_dev *dev = i2c_get_adapdata(adap);
-#ifdef OMAP_HACK
-	u8 zero_byte = 0;
-#endif
 	int r;
 	u16 w;
 
 	dev_dbg(dev->dev, "addr: 0x%04x, len: %d, flags: 0x%x, stop: %d\n",
 		msg->addr, msg->len, msg->flags, stop);
 
-#ifndef OMAP_HACK
 	if (msg->len == 0)
 		return -EINVAL;
 
@@ -391,27 +387,6 @@ static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
 	/* REVISIT: Could the STB bit of I2C_CON be used with probing? */
 	dev->buf = msg->buf;
 	dev->buf_len = msg->len;
-
-#else
-
-	omap_i2c_write_reg(dev, OMAP_I2C_SA_REG, msg->addr);
-	/* REVISIT: Remove this hack when we can get I2C chips from board-*.c
-	 *	    files
-	 * Sigh, seems we can't do zero length transactions. Thus, we
-	 * can't probe for devices w/o actually sending/receiving at least
-	 * a single byte. So we'll set count to 1 for the zero length
-	 * transaction case and hope we don't cause grief for some
-	 * arbitrary device due to random byte write/read during
-	 * probes.
-	 */
-	if (msg->len == 0) {
-		dev->buf = &zero_byte;
-		dev->buf_len = 1;
-	} else {
-		dev->buf = msg->buf;
-		dev->buf_len = msg->len;
-	}
-#endif
 
 	omap_i2c_write_reg(dev, OMAP_I2C_CNT_REG, dev->buf_len);
 
@@ -439,18 +414,24 @@ static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
 
 	omap_i2c_write_reg(dev, OMAP_I2C_CON_REG, w);
 
+	/*
+	 * Don't write stt and stp together on some hardware
+	 */
 	if (dev->b_hw && stop) {
 		unsigned long delay = jiffies + OMAP_I2C_TIMEOUT;
+		u16 con = omap_i2c_read_reg(dev, OMAP_I2C_CON_REG);
+		while (con & OMAP_I2C_CON_STT) {
+			con = omap_i2c_read_reg(dev, OMAP_I2C_CON_REG);
 
-		/* H/w behavior: dont write stt and stp together.. */
-		while (omap_i2c_read_reg(dev, OMAP_I2C_CON_REG) & OMAP_I2C_CON_STT) {
 			/* Let the user know if i2c is in a bad state */
-			if (time_after (jiffies, delay)) {
+			if (time_after(jiffies, delay)) {
 				dev_err(dev->dev, "controller timed out "
 				"waiting for start condition to finish\n");
 				return -ETIMEDOUT;
 			}
+			cpu_relax();
 		}
+
 		w |= OMAP_I2C_CON_STP;
 		w &= ~OMAP_I2C_CON_STT;
 		omap_i2c_write_reg(dev, OMAP_I2C_CON_REG, w);
@@ -503,7 +484,8 @@ omap_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 
 	omap_i2c_unidle(dev);
 
-	if ((r = omap_i2c_wait_for_bb(dev)) < 0)
+	r = omap_i2c_wait_for_bb(dev);
+	if (r < 0)
 		goto out;
 
 	for (i = 0; i < num; i++) {
@@ -522,11 +504,7 @@ out:
 static u32
 omap_i2c_func(struct i2c_adapter *adap)
 {
-#ifndef OMAP_HACK
 	return I2C_FUNC_I2C | (I2C_FUNC_SMBUS_EMUL & ~I2C_FUNC_SMBUS_QUICK);
-#else
-	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
-#endif
 }
 
 static inline void
@@ -640,8 +618,11 @@ omap_i2c_isr(int this_irq, void *dev_id)
 		if (stat & (OMAP_I2C_STAT_RRDY | OMAP_I2C_STAT_RDR)) {
 			u8 num_bytes = 1;
 			if (dev->fifo_size) {
-				num_bytes = (stat & OMAP_I2C_STAT_RRDY) ? dev->fifo_size :
-						omap_i2c_read_reg(dev, OMAP_I2C_BUFSTAT_REG);
+				if (stat & OMAP_I2C_STAT_RRDY)
+					num_bytes = dev->fifo_size;
+				else
+					num_bytes = omap_i2c_read_reg(dev,
+							OMAP_I2C_BUFSTAT_REG);
 			}
 			while (num_bytes) {
 				num_bytes--;
@@ -659,22 +640,28 @@ omap_i2c_isr(int this_irq, void *dev_id)
 					}
 				} else {
 					if (stat & OMAP_I2C_STAT_RRDY)
-						dev_err(dev->dev, "RRDY IRQ while no data "
-								"requested\n");
+						dev_err(dev->dev,
+							"RRDY IRQ while no data"
+								" requested\n");
 					if (stat & OMAP_I2C_STAT_RDR)
-						dev_err(dev->dev, "RDR IRQ while no data "
-								"requested\n");
+						dev_err(dev->dev,
+							"RDR IRQ while no data"
+								" requested\n");
 					break;
 				}
 			}
-			omap_i2c_ack_stat(dev, stat & (OMAP_I2C_STAT_RRDY | OMAP_I2C_STAT_RDR));
+			omap_i2c_ack_stat(dev,
+				stat & (OMAP_I2C_STAT_RRDY | OMAP_I2C_STAT_RDR));
 			continue;
 		}
 		if (stat & (OMAP_I2C_STAT_XRDY | OMAP_I2C_STAT_XDR)) {
 			u8 num_bytes = 1;
 			if (dev->fifo_size) {
-				num_bytes = (stat & OMAP_I2C_STAT_XRDY) ? dev->fifo_size :
-						omap_i2c_read_reg(dev, OMAP_I2C_BUFSTAT_REG);
+				if (stat & OMAP_I2C_STAT_XRDY)
+					num_bytes = dev->fifo_size;
+				else
+					num_bytes = omap_i2c_read_reg(dev,
+							OMAP_I2C_BUFSTAT_REG);
 			}
 			while (num_bytes) {
 				num_bytes--;
@@ -692,16 +679,19 @@ omap_i2c_isr(int this_irq, void *dev_id)
 					}
 				} else {
 					if (stat & OMAP_I2C_STAT_XRDY)
-						dev_err(dev->dev, "XRDY IRQ while no "
-								"data to send\n");
+						dev_err(dev->dev,
+							"XRDY IRQ while no "
+							"data to send\n");
 					if (stat & OMAP_I2C_STAT_XDR)
-						dev_err(dev->dev, "XDR IRQ while no "
-								"data to send\n");
+						dev_err(dev->dev,
+							"XDR IRQ while no "
+							"data to send\n");
 					break;
 				}
 				omap_i2c_write_reg(dev, OMAP_I2C_DATA_REG, w);
 			}
-			omap_i2c_ack_stat(dev, stat & (OMAP_I2C_STAT_XRDY | OMAP_I2C_STAT_XDR));
+			omap_i2c_ack_stat(dev,
+				stat & (OMAP_I2C_STAT_XRDY | OMAP_I2C_STAT_XDR));
 			continue;
 		}
 		if (stat & OMAP_I2C_STAT_ROVR) {
@@ -762,6 +752,7 @@ omap_i2c_probe(struct platform_device *pdev)
 		*speed = 100; /* Defualt speed */
 
 	dev->speed = *speed;
+	dev->idle = 1;
 	dev->dev = &pdev->dev;
 	dev->irq = irq->start;
 	dev->base = ioremap(mem->start, mem->end - mem->start + 1);
@@ -772,7 +763,8 @@ omap_i2c_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dev);
 
-	if ((r = omap_i2c_get_clocks(dev)) != 0)
+	r = omap_i2c_get_clocks(dev);
+	if (r != 0)
 		goto err_iounmap;
 
 	omap_i2c_unidle(dev);
@@ -781,13 +773,16 @@ omap_i2c_probe(struct platform_device *pdev)
 		dev->rev1 = omap_i2c_read_reg(dev, OMAP_I2C_REV_REG) < 0x20;
 
 	if (cpu_is_omap2430() || cpu_is_omap34xx()) {
+		u16 s;
+
 		/* Set up the fifo size - Get total size */
-		dev->fifo_size = 0x8 <<
-			((omap_i2c_read_reg(dev, OMAP_I2C_BUFSTAT_REG) >> 14) & 0x3);
+		s = (omap_i2c_read_reg(dev, OMAP_I2C_BUFSTAT_REG) >> 14) & 0x3;
+		dev->fifo_size = 0x8 << s;
+
 		/*
-		 * Set up notification threshold as half the total available size
-		 * This is to ensure that we can handle the status on int call back
-		 * latencies
+		 * Set up notification threshold as half the total available
+		 * size. This is to ensure that we can handle the status on int
+		 * call back latencies.
 		 */
 		dev->fifo_size = (dev->fifo_size / 2);
 		dev->b_hw = 1; /* Enable hardware fixes */
@@ -807,6 +802,8 @@ omap_i2c_probe(struct platform_device *pdev)
 	dev_info(dev->dev, "bus %d rev%d.%d at %d kHz\n",
 		 pdev->id, r >> 4, r & 0xf, dev->speed);
 
+	omap_i2c_idle(dev);
+
 	adap = &dev->adapter;
 	i2c_set_adapdata(adap, dev);
 	adap->owner = THIS_MODULE;
@@ -822,8 +819,6 @@ omap_i2c_probe(struct platform_device *pdev)
 		dev_err(dev->dev, "failure adding adapter\n");
 		goto err_free_irq;
 	}
-
-	omap_i2c_idle(dev);
 
 	return 0;
 

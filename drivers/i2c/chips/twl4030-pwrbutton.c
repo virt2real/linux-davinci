@@ -26,9 +26,6 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/input.h>
-#include <linux/timer.h>
-#include <linux/jiffies.h>
-#include <linux/kthread.h>
 #include <linux/interrupt.h>
 #include <linux/i2c/twl4030.h>
 
@@ -47,15 +44,18 @@
 
 static struct input_dev *powerbutton_dev;
 
-/*
- * Note : the following function runs in kernel thread context
- * with IRQs enabled
- */
-
 static irqreturn_t powerbutton_irq(int irq, void *dev_id)
 {
 	int err;
 	u8 value;
+
+#ifdef CONFIG_LOCKDEP
+	/* WORKAROUND for lockdep forcing IRQF_DISABLED on us, which
+	 * we don't want and can't tolerate.  Although it might be
+	 * friendlier not to borrow this thread context...
+	 */
+	local_irq_enable();
+#endif
 
 	err = twl4030_i2c_read_u8(TWL4030_MODULE_PM_MASTER, &value,
 				  STS_HW_CONDITIONS);
@@ -63,7 +63,7 @@ static irqreturn_t powerbutton_irq(int irq, void *dev_id)
 		input_report_key(powerbutton_dev, KEY_POWER,
 				 value & PWR_PWRON_IRQ);
 	} else {
-		printk(KERN_WARNING "I2C error %d while reading TWL4030"
+		pr_err("twl4030: i2c error %d while reading TWL4030"
 			" PM_MASTER STS_HW_CONDITIONS register\n", err);
 	}
 
@@ -75,6 +75,7 @@ static int __init twl4030_pwrbutton_init(void)
 	int err = 0;
 	u8 value;
 
+	/* PWRBTN == PWRON */
 	if (request_irq(TWL4030_PWRIRQ_PWRBTN, powerbutton_irq, 0,
 			"PwrButton", NULL) < 0) {
 		printk(KERN_ERR "Unable to allocate IRQ for power button\n");
@@ -100,22 +101,9 @@ static int __init twl4030_pwrbutton_init(void)
 		goto free_irq_and_out;
 	}
 
-	err = twl4030_i2c_read_u8(TWL4030_MODULE_INT, &value, PWR_IMR1);
-	if (err) {
-		printk(KERN_WARNING "I2C error %d while reading TWL4030"
-					" INT PWR_IMR1 register\n", err);
-
-		goto free_input_dev;
-	}
-
-	err = twl4030_i2c_write_u8(TWL4030_MODULE_INT,
-				   value & (~PWR_PWRON_IRQ), PWR_IMR1);
-	if (err) {
-		printk(KERN_WARNING "I2C error %d while writing TWL4030"
-				    " INT PWR_IMR1 register\n", err);
-		goto free_input_dev;
-	}
-
+	/* FIXME just pass IRQF_EDGE_FALLING | IRQF_EDGE_RISING
+	 * to request_irq(), once MODULE_INT supports them...
+	 */
 	err = twl4030_i2c_read_u8(TWL4030_MODULE_INT, &value, PWR_EDR1);
 	if (err) {
 		printk(KERN_WARNING "I2C error %d while reading TWL4030"
@@ -144,19 +132,16 @@ free_irq_and_out:
 out:
 	return err;
 }
+module_init(twl4030_pwrbutton_init);
 
 static void __exit twl4030_pwrbutton_exit(void)
 {
 	free_irq(TWL4030_PWRIRQ_PWRBTN, NULL);
 	input_unregister_device(powerbutton_dev);
 	input_free_device(powerbutton_dev);
-
 }
-
-module_init(twl4030_pwrbutton_init);
 module_exit(twl4030_pwrbutton_exit);
 
-MODULE_ALIAS("i2c:twl4030-pwrbutton");
 MODULE_DESCRIPTION("Triton2 Power Button");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Peter De Schrijver");

@@ -43,32 +43,32 @@ struct omap_sr {
 	int		srid;
 	int		is_sr_reset;
 	int		is_autocomp_active;
-	struct clk 	*clk;
-	u32 		clk_length;
-	u32 		req_opp_no;
-	u32 		opp1_nvalue, opp2_nvalue, opp3_nvalue, opp4_nvalue;
+	struct clk	*clk;
+	u32		clk_length;
+	u32		req_opp_no;
+	u32		opp1_nvalue, opp2_nvalue, opp3_nvalue, opp4_nvalue;
 	u32		opp5_nvalue;
 	u32		senp_mod, senn_mod;
-	u32		srbase_addr;
-	u32		vpbase_addr;
+	void __iomem	*srbase_addr;
+	void __iomem	*vpbase_addr;
 };
 
 /* Custom clocks to enable SR specific enable/disable functions. */
 struct sr_custom_clk {
-	struct clk 	clk;  /* meta-clock with custom enable/disable calls */
-	struct clk 	*fck; /* actual functional clock */
-	struct omap_sr 	*sr;
+	struct clk	clk;  /* meta-clock with custom enable/disable calls */
+	struct clk	*fck; /* actual functional clock */
+	struct omap_sr	*sr;
 };
 
-#define SR_REGADDR(offs)     (__force void __iomem *)(sr->srbase_addr + offset)
+#define SR_REGADDR(offs)	(sr->srbase_addr + offset)
 
-static inline void sr_write_reg(struct omap_sr *sr, int offset, u32 value)
+static inline void sr_write_reg(struct omap_sr *sr, unsigned offset, u32 value)
 {
 	__raw_writel(value, SR_REGADDR(offset));
 }
 
-static inline void sr_modify_reg(struct omap_sr *sr, int offset, u32 mask,
-								u32 value)
+static inline void sr_modify_reg(struct omap_sr *sr, unsigned offset, u32 mask,
+					u32 value)
 {
 	u32 reg_val;
 
@@ -79,7 +79,7 @@ static inline void sr_modify_reg(struct omap_sr *sr, int offset, u32 mask,
 	__raw_writel(reg_val, SR_REGADDR(offset));
 }
 
-static inline u32 sr_read_reg(struct omap_sr *sr, int offset)
+static inline u32 sr_read_reg(struct omap_sr *sr, unsigned offset)
 {
 	return __raw_readl(SR_REGADDR(offset));
 }
@@ -136,7 +136,7 @@ static struct omap_sr sr2 = {
 
 static struct sr_custom_clk sr1_custom_clk = {
 	.clk = {
-			.name 		= "sr1_custom_clk",
+			.name		= "sr1_custom_clk",
 			.enable		= sr_clk_enable,
 			.disable	= sr_clk_disable,
 	},
@@ -145,7 +145,7 @@ static struct sr_custom_clk sr1_custom_clk = {
 
 static struct sr_custom_clk sr2_custom_clk = {
 	.clk = {
-			.name 		= "sr2_custom_clk",
+			.name		= "sr2_custom_clk",
 			.enable		= sr_clk_enable,
 			.disable	= sr_clk_disable,
 	},
