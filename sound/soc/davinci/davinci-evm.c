@@ -20,7 +20,7 @@
 #include <sound/soc-dapm.h>
 
 #include <asm/dma.h>
-#include <mach/hardware.h>
+#include <mach/mcbsp.h>
 #include <mach/edma.h>
 
 #include "../codecs/tlv320aic3x.h"
