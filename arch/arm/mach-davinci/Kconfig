@@ -18,14 +18,6 @@ config MACH_DAVINCI_EVM
 	  Configure this option to specify the whether the board used
 	  for development is a DaVinci EVM
 
-config DAVINCI_MCBSP
-	bool
-        prompt "DaVinci McBSP Driver" if SOUND_DAVINCI=n
-	depends on ARCH_DAVINCI
-	default SOUND_DAVINCI
-	---help---
-	DaVinci McBSP driver.  Auto-enabled by DaVinci sound driver.
-
 config DAVINCI_RESET_CLOCKS
 	bool "Reset unused clocks during boot"
 	depends on ARCH_DAVINCI
