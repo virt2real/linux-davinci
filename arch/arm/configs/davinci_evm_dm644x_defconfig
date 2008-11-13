@@ -186,7 +186,7 @@ CONFIG_ARCH_DAVINCI=y
 #
 # DaVinci Core Type
 #
-CONFIG_ARCH_DAVINCI644x=y
+CONFIG_ARCH_DAVINCI_DM644x=y
 
 #
 # DaVinci Board Type

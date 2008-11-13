@@ -4,7 +4,7 @@ menu "TI DaVinci Implementations"
 
 comment "DaVinci Core Type"
 
-config ARCH_DAVINCI644x
+config ARCH_DAVINCI_DM644x
 	bool "DaVinci 644x based system"
 	select CPU_V5
 
@@ -21,7 +21,7 @@ comment "DaVinci Board Type"
 config MACH_DAVINCI_EVM
 	bool "TI DaVinci EVM"
 	default y
-	depends on ARCH_DAVINCI644x
+	depends on ARCH_DAVINCI_DM644x
 	help
 	  Configure this option to specify the whether the board used
 	  for development is a DaVinci EVM
@@ -56,7 +56,7 @@ config DAVINCI_RESET_CLOCKS
 
 config DAVINCI_BOOT_TAG
 	bool "DaVinci bootloader information passing"
-        depends on ARCH_DAVINCI644x
+        depends on ARCH_DAVINCI_DM644x
         default n
         help
           Say Y, if you have a bootloader which passes information
