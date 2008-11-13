@@ -117,20 +117,6 @@ static void __init evm_init_i2c(void)
 	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
 }
 
-#define UART_DM646X_SCR         (DAVINCI_UART0_BASE + 0x40)
-/*
- * Internal UARTs need to be initialized for the 8250 autoconfig to work
- * properly. Note that the TX watermark initialization may not be needed
- * once the 8250.c watermark handling code is merged.
- */
-static int __init dm646x_serial_reset(void)
-{
-	davinci_writel(0x08, UART_DM646X_SCR);
-
-	return 0;
-}
-late_initcall(dm646x_serial_reset);
-
 static void board_init(void)
 {
 	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DM646X_LPSC_AEMIF, 1);

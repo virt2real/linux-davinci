@@ -18,6 +18,13 @@
 #define DAVINCI_UART1_BASE   (IO_PHYS + 0x20400)
 #define DAVINCI_UART2_BASE   (IO_PHYS + 0x20800)
 
+#define DM355_UART2_BASE     (IO_PHYS + 0x206000)
+
+/* DaVinci UART register offsets */
+#define UART_DAVINCI_PWREMU           0x0c
+#define UART_DM646X_SCR	              0x10
+#define UART_DM646X_SCR_TX_WATERMARK  0x08
+
 extern void davinci_serial_init(void);
 
 #endif /* __ASM_ARCH_SERIAL_H */

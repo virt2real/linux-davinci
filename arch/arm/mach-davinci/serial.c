@@ -36,28 +36,18 @@
 #include <mach/cpu.h>
 #include "clock.h"
 
-#define UART_DAVINCI_PWREMU 0x0c
-#define DM355_UART2_BASE	(0x01E06000)
-
-static inline unsigned int davinci_serial_in(struct plat_serial8250_port *up,
-					  int offset)
+static inline unsigned int serial_read_reg(struct plat_serial8250_port *up,
+					   int offset)
 {
 	offset <<= up->regshift;
-	return (unsigned int)__raw_readb(up->membase + offset);
+	return (unsigned int)__raw_readl(up->membase + offset);
 }
 
-static inline void davinci_serial_outb(struct plat_serial8250_port *p,
-				       int offset, int value)
+static inline void serial_write_reg(struct plat_serial8250_port *p, int offset,
+				    int value)
 {
 	offset <<= p->regshift;
-	__raw_writeb(value, p->membase + offset);
-}
-
-static inline void davinci_serial_outs(struct plat_serial8250_port *p,
-				       int offset, int value)
-{
-	offset <<= p->regshift;
-	__raw_writew(value, p->membase + offset);
+	__raw_writel(value, p->membase + offset);
 }
 
 static struct plat_serial8250_port serial_platform_data[] = {
@@ -103,17 +93,21 @@ static struct platform_device serial_device = {
 
 static void __init davinci_serial_reset(struct plat_serial8250_port *p)
 {
-	/* reset both transmitter and receiver: bits 14,13 = UTRST, URRST */
 	unsigned int pwremu = 0;
 
-	davinci_serial_outb(p, UART_IER, 0);  /* disable all interrupts */
+	serial_write_reg(p, UART_IER, 0);  /* disable all interrupts */
 
-	davinci_serial_outs(p, UART_DAVINCI_PWREMU, pwremu);
+	/* reset both transmitter and receiver: bits 14,13 = UTRST, URRST */
+	serial_write_reg(p, UART_DAVINCI_PWREMU, pwremu);
 	mdelay(10);
 
 	pwremu |= (0x3 << 13);
 	pwremu |= 0x1;
-	davinci_serial_outs(p, UART_DAVINCI_PWREMU, pwremu);
+	serial_write_reg(p, UART_DAVINCI_PWREMU, pwremu);
+
+	if (cpu_is_davinci_dm646x())
+		serial_write_reg(p, UART_DM646X_SCR,
+				 UART_DM646X_SCR_TX_WATERMARK);
 }
 
 void __init davinci_serial_init(void)
@@ -166,8 +160,7 @@ void __init davinci_serial_init(void)
 					__func__, __LINE__, i);
 		else {
 			clk_enable(uart_clk);
-			if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm355())
-				davinci_serial_reset(p);
+			davinci_serial_reset(p);
 		}
 	}
 }
