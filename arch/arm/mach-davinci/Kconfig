@@ -19,12 +19,12 @@ config ARCH_DAVINCI_DM355
 comment "DaVinci Board Type"
 
 config MACH_DAVINCI_EVM
-	bool "TI DaVinci EVM"
+	bool "TI DM644x EVM"
 	default y
 	depends on ARCH_DAVINCI_DM644x
 	help
 	  Configure this option to specify the whether the board used
-	  for development is a DaVinci EVM
+	  for development is a DM644x EVM
 
 config MACH_DAVINCI_DM646X_EVM
 	bool "TI DM646x EVM"
