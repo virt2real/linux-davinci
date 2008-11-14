@@ -2252,7 +2252,7 @@ static int emac_hw_enable(struct emac_priv *priv)
 		cpu_relax();
 
 	/* Disable interrupt & Set pacing for more interrupts initially */
-	emac_ctrl_write(EMAC_CTRL_EWCTL, 0x0);
+	emac_int_disable(priv);
 
 	/* Set speed and duplex mode */
 	priv->duplex = EMAC_DUPLEX_UNKNOWN;
@@ -2603,6 +2603,9 @@ rollback:
  */
 static int emac_dev_stop(struct net_device *ndev)
 {
+	struct resource *res;
+	int i = 0;
+	int irq_num;
 	struct emac_priv *priv = netdev_priv(ndev);
 
 	/* inform the upper layers. */
@@ -2622,7 +2625,12 @@ static int emac_dev_stop(struct net_device *ndev)
 	emac_write(EMAC_SOFTRESET, 1);
 
 	/* Free IRQ */
-	free_irq(ndev->irq, priv->ndev);
+	while ((res = platform_get_resource(priv->pdev, IORESOURCE_IRQ, i))) {
+		for (irq_num = res->start; irq_num <= res->end; irq_num++)
+			free_irq(irq_num, priv->ndev);
+		i++;
+	}
+
 	if (netif_msg_drv(priv))
 		dev_notice(EMAC_DEV, "DaVinci EMAC: %s stopped\n", ndev->name);
 
