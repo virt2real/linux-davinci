@@ -256,11 +256,8 @@ static struct platform_device h2_kp_device = {
 #if defined(CONFIG_OMAP_IR) || defined(CONFIG_OMAP_IR_MODULE)
 static int h2_transceiver_mode(struct device *dev, int state)
 {
-	if (state & IR_SIRMODE)
-		omap_set_gpio_dataout(H2_IRDA_FIRSEL_GPIO_PIN, 0);
-	else    /* MIR/FIR */
-		omap_set_gpio_dataout(H2_IRDA_FIRSEL_GPIO_PIN, 1);
-
+	/* SIR when low, else MIR/FIR when HIGH */
+	gpio_set_value(H2_IRDA_FIRSEL_GPIO_PIN, !(state & IR_SIRMODE));
 	return 0;
 }
 #endif
@@ -503,7 +500,7 @@ static struct omap_board_config_kernel h2_config[] __initdata = {
 
 static int h2_nand_dev_ready(struct omap_nand_platform_data *data)
 {
-	return omap_get_gpio_datain(H2_NAND_RB_GPIO_PIN);
+	return gpio_get_value(H2_NAND_RB_GPIO_PIN);
 }
 
 static void __init h2_init(void)
@@ -536,7 +533,7 @@ static void __init h2_init(void)
 #if defined(CONFIG_OMAP_IR) || defined(CONFIG_OMAP_IR_MODULE)
 	omap_writel(omap_readl(FUNC_MUX_CTRL_A) | 7, FUNC_MUX_CTRL_A);
 	if (!(omap_request_gpio(H2_IRDA_FIRSEL_GPIO_PIN))) {
-		omap_set_gpio_direction(H2_IRDA_FIRSEL_GPIO_PIN, 0);
+		gpio_direction_output(H2_IRDA_FIRSEL_GPIO_PIN, 0);
 		h2_irda_data.transceiver_mode = h2_transceiver_mode;
 	}
 #endif

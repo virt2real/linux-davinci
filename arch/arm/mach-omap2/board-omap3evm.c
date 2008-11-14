@@ -83,7 +83,7 @@ static inline void __init omap3evm_init_smc911x(void)
 		return;
 	}
 
-	omap_set_gpio_direction(OMAP3EVM_ETHR_GPIO_IRQ, 1);
+	gpio_direction_input(OMAP3EVM_ETHR_GPIO_IRQ);
 }
 
 static struct omap_uart_config omap3_evm_uart_config __initdata = {
@@ -176,7 +176,7 @@ static void ads7846_dev_init(void)
 	if (omap_request_gpio(OMAP3_EVM_TS_GPIO) < 0)
 		printk(KERN_ERR "can't get ads7846 pen down GPIO\n");
 
-	omap_set_gpio_direction(OMAP3_EVM_TS_GPIO, 1);
+	gpio_direction_input(OMAP3_EVM_TS_GPIO);
 
 	omap_set_gpio_debounce(OMAP3_EVM_TS_GPIO, 1);
 	omap_set_gpio_debounce_time(OMAP3_EVM_TS_GPIO, 0xa);
@@ -184,7 +184,7 @@ static void ads7846_dev_init(void)
 
 static int ads7846_get_pendown_state(void)
 {
-	return !omap_get_gpio_datain(OMAP3_EVM_TS_GPIO);
+	return !gpio_get_value(OMAP3_EVM_TS_GPIO);
 }
 
 struct ads7846_platform_data ads7846_config = {
@@ -240,6 +240,7 @@ static struct twl4030_hsmmc_info mmc[] __initdata = {
 		.mmc		= 1,
 		.wires		= 4,
 		.gpio_cd	= -EINVAL,
+		.gpio_wp	= -EINVAL,
 	},
 	{}	/* Terminator */
 };

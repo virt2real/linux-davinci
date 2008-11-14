@@ -247,7 +247,7 @@ static void palmte_get_power_status(struct apm_power_info *info, int *battery)
 {
 	int charging, batt, hi, lo, mid;
 
-	charging = !omap_get_gpio_datain(PALMTE_DC_GPIO);
+	charging = !gpio_get_value(PALMTE_DC_GPIO);
 	batt = battery[0];
 	if (charging)
 		batt -= 60;
@@ -326,11 +326,11 @@ static void palmte_headphones_detect(void *data, int state)
 {
 	if (state) {
 		/* Headphones connected, disable speaker */
-		omap_set_gpio_dataout(PALMTE_SPEAKER_GPIO, 0);
+		gpio_set_value(PALMTE_SPEAKER_GPIO, 0);
 		printk(KERN_INFO "PM: speaker off\n");
 	} else {
 		/* Headphones unplugged, re-enable speaker */
-		omap_set_gpio_dataout(PALMTE_SPEAKER_GPIO, 1);
+		gpio_set_value(PALMTE_SPEAKER_GPIO, 1);
 		printk(KERN_INFO "PM: speaker on\n");
 	}
 }
@@ -373,14 +373,14 @@ static void __init palmte_misc_gpio_setup(void)
 		printk(KERN_ERR "Could not reserve PINTDAV GPIO!\n");
 		return;
 	}
-	omap_set_gpio_direction(PALMTE_PINTDAV_GPIO, 1);
+	gpio_direction_input(PALMTE_PINTDAV_GPIO);
 
 	/* Set USB-or-DC-IN pin as input (unused) */
 	if (omap_request_gpio(PALMTE_USB_OR_DC_GPIO)) {
 		printk(KERN_ERR "Could not reserve cable signal GPIO!\n");
 		return;
 	}
-	omap_set_gpio_direction(PALMTE_USB_OR_DC_GPIO, 1);
+	gpio_direction_input(PALMTE_USB_OR_DC_GPIO);
 }
 
 static void __init omap_palmte_init(void)

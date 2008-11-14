@@ -314,7 +314,7 @@ static inline void __init apollon_init_smc91x(void)
 		gpmc_cs_free(eth_cs);
 		goto out;
 	}
-	omap_set_gpio_direction(APOLLON_ETHR_GPIO_IRQ, 1);
+	gpio_direction_input(APOLLON_ETHR_GPIO_IRQ);
 
 out:
 	clk_disable(gpmc_fck);
@@ -392,8 +392,7 @@ static void __init apollon_usb_init(void)
 	/* DEVICE_SUSPEND */
 	omap_cfg_reg(P21_242X_GPIO12);
 	omap_request_gpio(12);
-	omap_set_gpio_direction(12, 0);		/* OUT */
-	omap_set_gpio_dataout(12, 0);
+	gpio_direction_output(12, 0);
 }
 
 static void __init apollon_tsc_init(void)
@@ -401,7 +400,7 @@ static void __init apollon_tsc_init(void)
 	/* TSC2101 */
 	omap_cfg_reg(N15_24XX_GPIO85);
 	omap_request_gpio(85);
-	omap_set_gpio_direction(85, 1);
+	gpio_direction_input(85);
 
 	omap_cfg_reg(W14_24XX_SYS_CLKOUT);	/* mclk */
 }

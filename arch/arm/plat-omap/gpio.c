@@ -244,6 +244,8 @@ static inline struct gpio_bank *get_gpio_bank(int gpio)
 		return &gpio_bank[gpio >> 5];
 	if (cpu_is_omap34xx())
 		return &gpio_bank[gpio >> 5];
+	BUG();
+	return NULL;
 }
 
 static inline int get_gpio_index(int gpio)
@@ -332,19 +334,6 @@ static void _set_gpio_direction(struct gpio_bank *bank, int gpio, int is_input)
 	__raw_writel(l, reg);
 }
 
-void omap_set_gpio_direction(int gpio, int is_input)
-{
-	struct gpio_bank *bank;
-	unsigned long flags;
-
-	if (check_gpio(gpio) < 0)
-		return;
-	bank = get_gpio_bank(gpio);
-	spin_lock_irqsave(&bank->lock, flags);
-	_set_gpio_direction(bank, get_gpio_index(gpio), is_input);
-	spin_unlock_irqrestore(&bank->lock, flags);
-}
-
 static void _set_gpio_dataout(struct gpio_bank *bank, int gpio, int enable)
 {
 	void __iomem *reg = bank->base;
@@ -406,20 +395,7 @@ static void _set_gpio_dataout(struct gpio_bank *bank, int gpio, int enable)
 	__raw_writel(l, reg);
 }
 
-void omap_set_gpio_dataout(int gpio, int enable)
-{
-	struct gpio_bank *bank;
-	unsigned long flags;
-
-	if (check_gpio(gpio) < 0)
-		return;
-	bank = get_gpio_bank(gpio);
-	spin_lock_irqsave(&bank->lock, flags);
-	_set_gpio_dataout(bank, get_gpio_index(gpio), enable);
-	spin_unlock_irqrestore(&bank->lock, flags);
-}
-
-int omap_get_gpio_datain(int gpio)
+static int __omap_get_gpio_datain(int gpio)
 {
 	struct gpio_bank *bank;
 	void __iomem *reg;
@@ -473,6 +449,7 @@ void omap_set_gpio_debounce(int gpio, int enable)
 {
 	struct gpio_bank *bank;
 	void __iomem *reg;
+	unsigned long flags;
 	u32 val, l = 1 << get_gpio_index(gpio);
 
 	if (cpu_class_is_omap1())
@@ -480,21 +457,28 @@ void omap_set_gpio_debounce(int gpio, int enable)
 
 	bank = get_gpio_bank(gpio);
 	reg = bank->base;
-
 	reg += OMAP24XX_GPIO_DEBOUNCE_EN;
+
+	spin_lock_irqsave(&bank->lock, flags);
 	val = __raw_readl(reg);
 
 	if (enable && !(val & l))
 		val |= l;
-	else if (!enable && val & l)
+	else if (!enable && (val & l))
 		val &= ~l;
 	else
-		return;
+		goto done;
 
-	if (cpu_is_omap34xx())
-		enable ? clk_enable(bank->dbck) : clk_disable(bank->dbck);
+	if (cpu_is_omap34xx()) {
+		if (enable)
+			clk_enable(bank->dbck);
+		else
+			clk_disable(bank->dbck);
+	}
 
 	__raw_writel(val, reg);
+done:
+	spin_unlock_irqrestore(&bank->lock, flags);
 }
 EXPORT_SYMBOL(omap_set_gpio_debounce);
 
@@ -911,26 +895,17 @@ static int gpio_wake_enable(unsigned int irq, unsigned int enable)
 	return retval;
 }
 
-int omap_request_gpio(int gpio)
+static int omap_gpio_request(struct gpio_chip *chip, unsigned offset)
 {
-	struct gpio_bank *bank;
+	struct gpio_bank *bank = container_of(chip, struct gpio_bank, chip);
 	unsigned long flags;
-	int status;
 
-	if (check_gpio(gpio) < 0)
-		return -EINVAL;
-
-	status = gpio_request(gpio, NULL);
-	if (status < 0)
-		return status;
-
-	bank = get_gpio_bank(gpio);
 	spin_lock_irqsave(&bank->lock, flags);
 
 	/* Set trigger to none. You need to enable the desired trigger with
 	 * request_irq() or set_irq_type().
 	 */
-	_set_gpio_triggering(bank, get_gpio_index(gpio), IRQ_TYPE_NONE);
+	_set_gpio_triggering(bank, offset, IRQ_TYPE_NONE);
 
 #ifdef CONFIG_ARCH_OMAP15XX
 	if (bank->method == METHOD_GPIO_1510) {
@@ -938,7 +913,7 @@ int omap_request_gpio(int gpio)
 
 		/* Claim the pin for MPU */
 		reg = bank->base + OMAP1510_GPIO_PIN_CONTROL;
-		__raw_writel(__raw_readl(reg) | (1 << get_gpio_index(gpio)), reg);
+		__raw_writel(__raw_readl(reg) | (1 << offset), reg);
 	}
 #endif
 	spin_unlock_irqrestore(&bank->lock, flags);
@@ -946,39 +921,28 @@ int omap_request_gpio(int gpio)
 	return 0;
 }
 
-void omap_free_gpio(int gpio)
+static void omap_gpio_free(struct gpio_chip *chip, unsigned offset)
 {
-	struct gpio_bank *bank;
+	struct gpio_bank *bank = container_of(chip, struct gpio_bank, chip);
 	unsigned long flags;
 
-	if (check_gpio(gpio) < 0)
-		return;
-	bank = get_gpio_bank(gpio);
 	spin_lock_irqsave(&bank->lock, flags);
-	if (unlikely(!gpiochip_is_requested(&bank->chip,
-				get_gpio_index(gpio)))) {
-		spin_unlock_irqrestore(&bank->lock, flags);
-		printk(KERN_ERR "omap-gpio: GPIO %d wasn't reserved!\n", gpio);
-		dump_stack();
-		return;
-	}
 #ifdef CONFIG_ARCH_OMAP16XX
 	if (bank->method == METHOD_GPIO_1610) {
 		/* Disable wake-up during idle for dynamic tick */
 		void __iomem *reg = bank->base + OMAP1610_GPIO_CLEAR_WAKEUPENA;
-		__raw_writel(1 << get_gpio_index(gpio), reg);
+		__raw_writel(1 << offset, reg);
 	}
 #endif
 #if defined(CONFIG_ARCH_OMAP24XX) || defined(CONFIG_ARCH_OMAP34XX)
 	if (bank->method == METHOD_GPIO_24XX) {
 		/* Disable wake-up during idle for dynamic tick */
 		void __iomem *reg = bank->base + OMAP24XX_GPIO_CLEARWKUENA;
-		__raw_writel(1 << get_gpio_index(gpio), reg);
+		__raw_writel(1 << offset, reg);
 	}
 #endif
-	_reset_gpio(bank, gpio);
+	_reset_gpio(bank, bank->chip.base + offset);
 	spin_unlock_irqrestore(&bank->lock, flags);
-	gpio_free(gpio);
 }
 
 /*
@@ -1257,7 +1221,7 @@ static int gpio_input(struct gpio_chip *chip, unsigned offset)
 
 static int gpio_get(struct gpio_chip *chip, unsigned offset)
 {
-	return omap_get_gpio_datain(chip->base + offset);
+	return __omap_get_gpio_datain(chip->base + offset);
 }
 
 static int gpio_output(struct gpio_chip *chip, unsigned offset, int value)
@@ -1483,6 +1447,8 @@ static int __init _omap_gpio_init(void)
 		/* REVISIT eventually switch from OMAP-specific gpio structs
 		 * over to the generic ones
 		 */
+		bank->chip.request = omap_gpio_request;
+		bank->chip.free = omap_gpio_free;
 		bank->chip.direction_input = gpio_input;
 		bank->chip.get = gpio_get;
 		bank->chip.direction_output = gpio_output;
@@ -1751,12 +1717,6 @@ static int __init omap_gpio_sysinit(void)
 	return ret;
 }
 
-EXPORT_SYMBOL(omap_request_gpio);
-EXPORT_SYMBOL(omap_free_gpio);
-EXPORT_SYMBOL(omap_set_gpio_direction);
-EXPORT_SYMBOL(omap_set_gpio_dataout);
-EXPORT_SYMBOL(omap_get_gpio_datain);
-
 arch_initcall(omap_gpio_sysinit);
 
 
@@ -1813,7 +1773,7 @@ static int dbg_gpio_show(struct seq_file *s, void *unused)
 				continue;
 
 			irq = bank->virtual_irq_start + j;
-			value = omap_get_gpio_datain(gpio);
+			value = gpio_get_value(gpio);
 			is_in = gpio_is_input(bank, mask);
 
 			if (bank_is_mpuio(bank))

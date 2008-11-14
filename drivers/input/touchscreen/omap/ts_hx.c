@@ -91,13 +91,13 @@ static int __init hx_ts_probe(struct omap_ts_t *ts)
 	} else
 		return -ENODEV;
 
-	ts->irq = OMAP_GPIO_IRQ(gpio);
+	ts->irq = gpio_to_irq(gpio);
 	if (omap_request_gpio(gpio) != 0) {
 		printk(KERN_ERR "hX_ts_init.c: Could not reserve GPIO!\n");
 		return -EINVAL;
 	};
 
-	omap_set_gpio_direction(gpio, 1);
+	gpio_direction_input(gpio);
 	ts->irq_type = IRQF_TRIGGER_FALLING;
 	return 0;
 }

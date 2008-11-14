@@ -219,7 +219,7 @@ static void ads7846_dev_init(void)
 	if (omap_request_gpio(TS_GPIO) < 0)
 		printk(KERN_ERR "can't get ads746 pen down GPIO\n");
 
-	omap_set_gpio_direction(TS_GPIO, 1);
+	gpio_direction_input(TS_GPIO);
 
 	omap_set_gpio_debounce(TS_GPIO, 1);
 	omap_set_gpio_debounce_time(TS_GPIO, 0xa);
@@ -227,7 +227,7 @@ static void ads7846_dev_init(void)
 
 static int ads7846_get_pendown_state(void)
 {
-	return !omap_get_gpio_datain(TS_GPIO);
+	return !gpio_get_value(TS_GPIO);
 }
 
 static struct ads7846_platform_data tsc2046_config __initdata = {
@@ -316,7 +316,7 @@ static inline void __init sdp2430_init_smc91x(void)
 		gpmc_cs_free(eth_cs);
 		goto out;
 	}
-	omap_set_gpio_direction(OMAP24XX_ETHR_GPIO_IRQ, 1);
+	gpio_direction_input(OMAP24XX_ETHR_GPIO_IRQ);
 
 out:
 	clk_disable(gpmc_fck);
@@ -395,6 +395,8 @@ static struct twl4030_hsmmc_info mmc[] __initdata = {
 		.mmc		= 1,
 		.wires		= 4,
 		.gpio_cd	= -EINVAL,
+		.gpio_wp	= -EINVAL,
+		.ext_clock	= 1,
 	},
 	{}	/* Terminator */
 };
@@ -419,8 +421,7 @@ static void __init omap_2430sdp_init(void)
 	hsmmc_init(mmc);
 
 	/* turn off secondary LCD backlight */
-	omap_set_gpio_direction(SECONDARY_LCD_GPIO, 0);
-	omap_set_gpio_dataout(SECONDARY_LCD_GPIO, 0);
+	gpio_direction_output(SECONDARY_LCD_GPIO, 0);
 }
 
 static void __init omap_2430sdp_map_io(void)

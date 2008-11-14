@@ -133,8 +133,7 @@ void __init nokia_n800_init_irq(void)
 		return;
 	}
 
-	omap_set_gpio_direction(N800_STI_GPIO, 0);
-	omap_set_gpio_dataout(N800_STI_GPIO, 0);
+	gpio_direction_output(N800_STI_GPIO, 0);
 #endif
 }
 
@@ -178,7 +177,7 @@ static void mipid_shutdown(struct mipid_platform_data *pdata)
 {
 	if (pdata->nreset_gpio != -1) {
 		pr_info("shutdown LCD\n");
-		omap_set_gpio_dataout(pdata->nreset_gpio, 0);
+		gpio_set_value(pdata->nreset_gpio, 0);
 		msleep(120);
 	}
 }
@@ -232,12 +231,12 @@ static void blizzard_power_up(struct device *dev)
 	msleep(10);
 
 	blizzard_enable_clocks(1);
-	omap_set_gpio_dataout(N800_BLIZZARD_POWERDOWN_GPIO, 1);
+	gpio_set_value(N800_BLIZZARD_POWERDOWN_GPIO, 1);
 }
 
 static void blizzard_power_down(struct device *dev)
 {
-	omap_set_gpio_dataout(N800_BLIZZARD_POWERDOWN_GPIO, 0);
+	gpio_set_value(N800_BLIZZARD_POWERDOWN_GPIO, 0);
 	blizzard_enable_clocks(0);
 
 	/* Vcore to 1.005V */
@@ -258,8 +257,7 @@ static void __init blizzard_dev_init(void)
 	r = omap_request_gpio(N800_BLIZZARD_POWERDOWN_GPIO);
 	if (r < 0)
 		return;
-	omap_set_gpio_direction(N800_BLIZZARD_POWERDOWN_GPIO, 0);
-	omap_set_gpio_dataout(N800_BLIZZARD_POWERDOWN_GPIO, 1);
+	gpio_direction_output(N800_BLIZZARD_POWERDOWN_GPIO, 1);
 
 	blizzard_get_clocks();
 	omapfb_set_ctrl_platform_data(&n800_blizzard_data);
@@ -305,7 +303,7 @@ static void tsc2301_dev_init(void)
 	r = gpio_request(gpio, "tsc2301 KBD IRQ");
 	if (r >= 0) {
 		gpio_direction_input(gpio);
-		tsc2301_config.keyb_int = OMAP_GPIO_IRQ(gpio);
+		tsc2301_config.keyb_int = gpio_to_irq(gpio);
 	} else {
 		printk(KERN_ERR "unable to get KBD GPIO");
 	}
@@ -314,7 +312,7 @@ static void tsc2301_dev_init(void)
 	r = gpio_request(gpio, "tsc2301 DAV IRQ");
 	if (r >= 0) {
 		gpio_direction_input(gpio);
-		tsc2301_config.dav_int = OMAP_GPIO_IRQ(gpio);
+		tsc2301_config.dav_int = gpio_to_irq(gpio);
 	} else {
 		printk(KERN_ERR "unable to get DAV GPIO");
 	}
@@ -339,9 +337,9 @@ static int __init tea5761_dev_init(void)
 			return -ENODEV;
 		}
 
-		omap_set_gpio_direction(enable_gpio, 0);
+		gpio_direction_output(enable_gpio, 0);
 		udelay(50);
-		omap_set_gpio_dataout(enable_gpio, 1);
+		gpio_set_value(enable_gpio, 1);
 	}
 
 	return 0;

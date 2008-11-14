@@ -41,6 +41,7 @@
 #include <mach/mux.h>
 #include <mach/gpio.h>
 #include <mach/board.h>
+#include <mach/board-nokia.h>
 
 #include "cbus.h"
 #include "retu.h"
@@ -341,10 +342,10 @@ static int __devinit retu_probe(struct device *dev)
 	}
 
 	/* Set the pin as input */
-	omap_set_gpio_direction(retu_irq_pin, 1);
+	gpio_direction_input(retu_irq_pin);
 
 	/* Rising edge triggers the IRQ */
-	set_irq_type(OMAP_GPIO_IRQ(retu_irq_pin), IRQ_TYPE_EDGE_RISING);
+	set_irq_type(gpio_to_irq(retu_irq_pin), IRQ_TYPE_EDGE_RISING);
 
 	retu_initialized = 1;
 
@@ -358,14 +359,14 @@ static int __devinit retu_probe(struct device *dev)
 	/* Mask all RETU interrupts */
 	retu_write_reg(RETU_REG_IMR, 0xffff);
 
-	ret = request_irq(OMAP_GPIO_IRQ(retu_irq_pin), retu_irq_handler, 0,
+	ret = request_irq(gpio_to_irq(retu_irq_pin), retu_irq_handler, 0,
 			  "retu", 0);
 	if (ret < 0) {
 		printk(KERN_ERR PFX "Unable to register IRQ handler\n");
 		omap_free_gpio(retu_irq_pin);
 		return ret;
 	}
-	set_irq_wake(OMAP_GPIO_IRQ(retu_irq_pin), 1);
+	set_irq_wake(gpio_to_irq(retu_irq_pin), 1);
 
 	/* Register power off function */
 	pm_power_off = retu_power_off;
@@ -374,7 +375,7 @@ static int __devinit retu_probe(struct device *dev)
 	/* Initialize user-space interface */
 	if (retu_user_init() < 0) {
 		printk(KERN_ERR "Unable to initialize driver\n");
-		free_irq(OMAP_GPIO_IRQ(retu_irq_pin), 0);
+		free_irq(gpio_to_irq(retu_irq_pin), 0);
 		omap_free_gpio(retu_irq_pin);
 		return ret;
 	}
@@ -390,7 +391,7 @@ static int retu_remove(struct device *dev)
 #endif
 	/* Mask all RETU interrupts */
 	retu_write_reg(RETU_REG_IMR, 0xffff);
-	free_irq(OMAP_GPIO_IRQ(retu_irq_pin), 0);
+	free_irq(gpio_to_irq(retu_irq_pin), 0);
 	omap_free_gpio(retu_irq_pin);
 	tasklet_kill(&retu_tasklet);
 
