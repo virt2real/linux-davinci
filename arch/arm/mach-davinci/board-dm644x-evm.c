@@ -48,9 +48,6 @@
 #define DAVINCI_ASYNC_EMIF_DATA_CE2_BASE  0x06000000
 #define DAVINCI_ASYNC_EMIF_DATA_CE3_BASE  0x08000000
 
-#if defined(CONFIG_MTD_PHYSMAP) || \
-    defined(CONFIG_MTD_PHYSMAP_MODULE)
-
 static struct mtd_partition davinci_evm_norflash_partitions[] = {
 	/* bootloader (U-Boot, etc) in first 4 sectors */
 	{
@@ -106,9 +103,6 @@ static struct platform_device davinci_evm_norflash_device = {
 	.resource	= &davinci_evm_norflash_resource,
 };
 
-#endif
-
-#if defined(CONFIG_MTD_NAND_DAVINCI) || defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
 struct mtd_partition davinci_evm_nandflash_partition[] = {
 	/* 5 MB space at the beginning for bootloader and kernel */
 	{
@@ -139,9 +133,6 @@ static struct platform_device davinci_evm_nandflash_device = {
 	.num_resources	= 1,
 	.resource	= &davinci_evm_nandflash_resource,
 };
-#endif
-
-#if defined(CONFIG_FB_DAVINCI) || defined(CONFIG_FB_DAVINCI_MODULE)
 
 static u64 davinci_fb_dma_mask = DMA_32BIT_MASK;
 
@@ -154,15 +145,11 @@ static struct platform_device davinci_fb_device = {
 	},
 	.num_resources = 0,
 };
-#endif
 
 static struct platform_device rtc_dev = {
 	.name           = "rtc_davinci_evm",
 	.id             = -1,
 };
-
-#if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
-    defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
 
 static struct resource ide_resources[] = {
 	{
@@ -189,8 +176,6 @@ static struct platform_device ide_dev = {
 		.coherent_dma_mask      = DMA_32BIT_MASK,
 	},
 };
-
-#endif
 
 /*----------------------------------------------------------------------*/
 
@@ -481,21 +466,11 @@ static void __init evm_init_i2c(void)
 }
 
 static struct platform_device *davinci_evm_devices[] __initdata = {
-#if defined(CONFIG_MTD_PHYSMAP) || \
-    defined(CONFIG_MTD_PHYSMAP_MODULE)
 	&davinci_evm_norflash_device,
-#endif
-#if defined(CONFIG_MTD_NAND_DAVINCI) || defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
 	&davinci_evm_nandflash_device,
-#endif
-#if defined(CONFIG_FB_DAVINCI) || defined(CONFIG_FB_DAVINCI_MODULE)
 	&davinci_fb_device,
-#endif
 	&rtc_dev,
-#if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
-    defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
 	&ide_dev,
-#endif
 };
 
 static struct davinci_uart_config davinci_evm_uart_config __initdata = {
