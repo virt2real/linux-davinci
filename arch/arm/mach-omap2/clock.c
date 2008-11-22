@@ -48,7 +48,7 @@
 #define DPLL_MIN_DIVIDER		1
 
 /* Possible error results from _dpll_test_mult */
-#define DPLL_MULT_UNDERFLOW		(1 << 0)
+#define DPLL_MULT_UNDERFLOW		-1
 
 /*
  * Scale factor to mitigate roundoff errors in DPLL rate rounding.
@@ -60,6 +60,16 @@
 #define DPLL_SCALE_BASE			2
 #define DPLL_ROUNDING_VAL		((DPLL_SCALE_BASE / 2) * \
 					 (DPLL_SCALE_FACTOR / DPLL_SCALE_BASE))
+
+/* DPLL valid Fint frequency band limits - from 34xx TRM Section 4.7.6.2 */
+#define DPLL_FINT_BAND1_MIN		750000
+#define DPLL_FINT_BAND1_MAX		2100000
+#define DPLL_FINT_BAND2_MIN		7500000
+#define DPLL_FINT_BAND2_MAX		21000000
+
+/* _dpll_test_fint() return codes */
+#define DPLL_FINT_UNDERFLOW		-1
+#define DPLL_FINT_INVALID		-2
 
 /* Some OMAP2xxx CM_CLKSEL_PLL.ST_CORE_CLK bits - for omap2_get_dpll_rate() */
 #define ST_CORE_CLK_REF			0x1
@@ -114,6 +124,51 @@ static void _omap2_clk_write_reg(u32 v, u16 reg_offset, struct clk *clk)
 		cm_write_mod_reg(v, clk->prcm_mod, reg_offset);
 }
 
+/*
+ * _dpll_test_fint - test whether an Fint value is valid for the DPLL
+ * @clk: DPLL struct clk to test
+ * @n: divider value (N) to test
+ *
+ * Tests whether a particular divider @n will result in a valid DPLL
+ * internal clock frequency Fint. See the 34xx TRM 4.7.6.2 "DPLL Jitter
+ * Correction".  Returns 0 if OK, -1 if the enclosing loop can terminate
+ * (assuming that it is counting N upwards), or -2 if the enclosing loop
+ * should skip to the next iteration (again assuming N is increasing).
+ */
+static int _dpll_test_fint(struct clk *clk, u8 n)
+{
+	struct dpll_data *dd;
+	long fint;
+	int ret = 0;
+
+	dd = clk->dpll_data;
+
+	/* DPLL divider must result in a valid jitter correction val */
+	fint = clk->parent->rate / (n + 1);
+	if (fint < DPLL_FINT_BAND1_MIN) {
+
+		pr_debug("rejecting n=%d due to Fint failure, "
+			 "lowering max_divider\n", n);
+		dd->max_divider = n;
+		ret = DPLL_FINT_UNDERFLOW;
+
+	} else if (fint > DPLL_FINT_BAND1_MAX &&
+		   fint < DPLL_FINT_BAND2_MIN) {
+
+		pr_debug("rejecting n=%d due to Fint failure\n", n);
+		ret = DPLL_FINT_INVALID;
+
+	} else if (fint > DPLL_FINT_BAND2_MAX) {
+
+		pr_debug("rejecting n=%d due to Fint failure, "
+			 "boosting min_divider\n", n);
+		dd->min_divider = n;
+		ret = DPLL_FINT_INVALID;
+
+	}
+
+	return ret;
+}
 
 /**
  * omap2_init_clk_clkdm - look up a clockdomain name, store pointer in clk
@@ -877,7 +932,7 @@ static int _dpll_test_mult(int *m, int n, unsigned long *new_rate,
 			   unsigned long target_rate,
 			   unsigned long parent_rate)
 {
-	int flags = 0, carry = 0;
+	int r = 0, carry = 0;
 
 	/* Unscale m and round if necessary */
 	if (*m % DPLL_SCALE_FACTOR >= DPLL_ROUNDING_VAL)
@@ -898,13 +953,13 @@ static int _dpll_test_mult(int *m, int n, unsigned long *new_rate,
 	if (*m < DPLL_MIN_MULTIPLIER) {
 		*m = DPLL_MIN_MULTIPLIER;
 		*new_rate = 0;
-		flags = DPLL_MULT_UNDERFLOW;
+		r = DPLL_MULT_UNDERFLOW;
 	}
 
 	if (*new_rate == 0)
 		*new_rate = _dpll_compute_new_rate(parent_rate, *m, n);
 
-	return flags;
+	return r;
 }
 
 /**
@@ -928,54 +983,65 @@ long omap2_dpll_round_rate(struct clk *clk, unsigned long target_rate)
 	int m, n, r, e, scaled_max_m;
 	unsigned long scaled_rt_rp, new_rate;
 	int min_e = -1, min_e_m = -1, min_e_n = -1;
+	struct dpll_data *dd;
 
 	if (!clk || !clk->dpll_data)
 		return ~0;
+
+	dd = clk->dpll_data;
 
 	pr_debug("clock: starting DPLL round_rate for clock %s, target rate "
 		 "%ld\n", clk->name, target_rate);
 
 	scaled_rt_rp = target_rate / (clk->parent->rate / DPLL_SCALE_FACTOR);
-	scaled_max_m = clk->dpll_data->max_multiplier * DPLL_SCALE_FACTOR;
+	scaled_max_m = dd->max_multiplier * DPLL_SCALE_FACTOR;
 
-	clk->dpll_data->last_rounded_rate = 0;
+	dd->last_rounded_rate = 0;
 
-	for (n = clk->dpll_data->max_divider; n >= DPLL_MIN_DIVIDER; n--) {
+	for (n = dd->min_divider; n <= dd->max_divider; n++) {
+
+		/* Is the (input clk, divider) pair valid for the DPLL? */
+		r = _dpll_test_fint(clk, n);
+		if (r == DPLL_FINT_UNDERFLOW)
+			break;
+		else if (r == DPLL_FINT_INVALID)
+			continue;
 
 		/* Compute the scaled DPLL multiplier, based on the divider */
 		m = scaled_rt_rp * n;
 
 		/*
-		 * Since we're counting n down, a m overflow means we can
-		 * can immediately skip to the next n
+		 * Since we're counting n up, a m overflow means we
+		 * can bail out completely (since as n increases in
+		 * the next iteration, there's no way that m can
+		 * increase beyond the current m)
 		 */
 		if (m > scaled_max_m)
-			continue;
+			break;
 
 		r = _dpll_test_mult(&m, n, &new_rate, target_rate,
 				    clk->parent->rate);
+
+		/* m can't be set low enough for this n - try with a larger n */
+		if (r == DPLL_MULT_UNDERFLOW)
+			continue;
 
 		e = target_rate - new_rate;
 		pr_debug("clock: n = %d: m = %d: rate error is %d "
 			 "(new_rate = %ld)\n", n, m, e, new_rate);
 
 		if (min_e == -1 ||
-		    min_e >= (int)(abs(e) - clk->dpll_data->rate_tolerance)) {
+		    min_e >= (int)(abs(e) - dd->rate_tolerance)) {
 			min_e = e;
 			min_e_m = m;
 			min_e_n = n;
 
 			pr_debug("clock: found new least error %d\n", min_e);
-		}
 
-		/*
-		 * Since we're counting n down, a m underflow means we
-		 * can bail out completely (since as n decreases in
-		 * the next iteration, there's no way that m can
-		 * increase beyond the current m)
-		 */
-		if (r & DPLL_MULT_UNDERFLOW)
-			break;
+			/* We found good settings -- bail out now */
+			if (min_e <= dd->rate_tolerance)
+				break;
+		}
 	}
 
 	if (min_e < 0) {
@@ -983,17 +1049,17 @@ long omap2_dpll_round_rate(struct clk *clk, unsigned long target_rate)
 		return ~0;
 	}
 
-	clk->dpll_data->last_rounded_m = min_e_m;
-	clk->dpll_data->last_rounded_n = min_e_n;
-	clk->dpll_data->last_rounded_rate =
-		_dpll_compute_new_rate(clk->parent->rate, min_e_m,  min_e_n);
+	dd->last_rounded_m = min_e_m;
+	dd->last_rounded_n = min_e_n;
+	dd->last_rounded_rate = _dpll_compute_new_rate(clk->parent->rate,
+						       min_e_m,  min_e_n);
 
 	pr_debug("clock: final least error: e = %d, m = %d, n = %d\n",
 		 min_e, min_e_m, min_e_n);
 	pr_debug("clock: final rate: %ld  (target rate: %ld)\n",
-		 clk->dpll_data->last_rounded_rate, target_rate);
+		 dd->last_rounded_rate, target_rate);
 
-	return clk->dpll_data->last_rounded_rate;
+	return dd->last_rounded_rate;
 }
 
 /*-------------------------------------------------------------------------

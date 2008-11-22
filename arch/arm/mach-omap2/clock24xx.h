@@ -676,6 +676,7 @@ static struct dpll_data dpll_dd = {
 	.idlest_reg		= CM_IDLEST,
 	.idlest_mask		= OMAP24XX_ST_CORE_CLK_MASK,
 	.max_multiplier		= 1024,
+	.min_divider		= 1,
 	.max_divider		= 16,
 	.rate_tolerance		= DEFAULT_DPLL_RATE_TOLERANCE
 };
@@ -2500,7 +2501,7 @@ static struct clk i2c2_fck = {
 };
 
 static struct clk i2chs2_fck = {
-	.name		= "i2chs_fck",
+	.name		= "i2c_fck",
 	.id		= 2,
 	.parent		= &func_96m_ck,
 	.prcm_mod	= CORE_MOD,
@@ -2538,7 +2539,7 @@ static struct clk i2c1_fck = {
 };
 
 static struct clk i2chs1_fck = {
-	.name		= "i2chs_fck",
+	.name		= "i2c_fck",
 	.id		= 1,
 	.parent		= &func_96m_ck,
 	.prcm_mod	= CORE_MOD,
