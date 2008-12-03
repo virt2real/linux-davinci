@@ -444,12 +444,12 @@ static int request_dma_interrupt(int lch,
 		}
 	}
 	if (free_intr_no >= 0 && free_intr_no < 64) {
+		intr_data[free_intr_no].callback = callback;
+		intr_data[free_intr_no].data = data;
 		(free_intr_no < 32) ?
 		    (ptr_edmacc_regs->shadow[0].iesr = (1UL << free_intr_no))
 		    : (ptr_edmacc_regs->shadow[0].iesrh =
 		       (1UL << (free_intr_no - 32)));
-		intr_data[free_intr_no].callback = callback;
-		intr_data[free_intr_no].data = data;
 	}
 	return free_intr_no;
 }
