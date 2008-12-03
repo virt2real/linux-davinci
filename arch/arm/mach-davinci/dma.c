@@ -1329,7 +1329,7 @@ int davinci_start_dma(int lch)
 		    (1 << (lch - DAVINCI_EDMA_QSTART));
 		ret_val = 0;
 	} else {		/* for slaveChannels */
-		ret_val = EINVAL;
+		ret_val = -EINVAL;
 	}
 	return ret_val;
 }
