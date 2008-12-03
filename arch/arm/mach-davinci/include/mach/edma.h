@@ -53,8 +53,7 @@
 * Register Overlay Structure for DRA
 \**************************************************************************/
 typedef struct {
-	unsigned int drae;
-	unsigned int draeh;
+	unsigned int drae[2];
 } edmacc_dra_regs;
 
 /**************************************************************************\
@@ -68,35 +67,21 @@ typedef struct {
 * Register Overlay Structure for SHADOW
 \**************************************************************************/
 typedef struct {
-	unsigned int er;
-	unsigned int erh;
-	unsigned int ecr;
-	unsigned int ecrh;
-	unsigned int esr;
-	unsigned int esrh;
-	unsigned int cer;
-	unsigned int cerh;
-	unsigned int eer;
-	unsigned int eerh;
-	unsigned int eecr;
-	unsigned int eecrh;
-	unsigned int eesr;
-	unsigned int eesrh;
-	unsigned int ser;
-	unsigned int serh;
-	unsigned int secr;
-	unsigned int secrh;
+	unsigned int er[2];
+	unsigned int ecr[2];
+	unsigned int esr[2];
+	unsigned int cer[2];
+	unsigned int eer[2];
+	unsigned int eecr[2];
+	unsigned int eesr[2];
+	unsigned int ser[2];
+	unsigned int secr[2];
 	unsigned char rsvd0[8];
-	unsigned int ier;
-	unsigned int ierh;
-	unsigned int iecr;
-	unsigned int iecrh;
-	unsigned int iesr;
-	unsigned int iesrh;
-	unsigned int ipr;
-	unsigned int iprh;
-	unsigned int icr;
-	unsigned int icrh;
+	unsigned int ier[2];
+	unsigned int iecr[2];
+	unsigned int iesr[2];
+	unsigned int ipr[2];
+	unsigned int icr[2];
 	unsigned int ieval;
 	unsigned char rsvd1[4];
 	unsigned int qer;
@@ -137,10 +122,8 @@ typedef struct {
 	unsigned int quetcmap;
 	unsigned int quepri;
 	unsigned char rsvd3[120];
-	unsigned int emr;
-	unsigned int emrh;
-	unsigned int emcr;
-	unsigned int emcrh;
+	unsigned int emr[2];
+	unsigned int emcr[2];
 	unsigned int qemr;
 	unsigned int qemcr;
 	unsigned int ccerr;
@@ -164,35 +147,21 @@ typedef struct {
 	unsigned int aetstat;
 	unsigned int aetcmd;
 	unsigned char rsvd11[2292];
-	unsigned int er;
-	unsigned int erh;
-	unsigned int ecr;
-	unsigned int ecrh;
-	unsigned int esr;
-	unsigned int esrh;
-	unsigned int cer;
-	unsigned int cerh;
-	unsigned int eer;
-	unsigned int eerh;
-	unsigned int eecr;
-	unsigned int eecrh;
-	unsigned int eesr;
-	unsigned int eesrh;
-	unsigned int ser;
-	unsigned int serh;
-	unsigned int secr;
-	unsigned int secrh;
+	unsigned int er[2];
+	unsigned int ecr[2];
+	unsigned int esr[2];
+	unsigned int cer[2];
+	unsigned int eer[2];
+	unsigned int eecr[2];
+	unsigned int eesr[2];
+	unsigned int ser[2];
+	unsigned int secr[2];
 	unsigned char rsvd12[8];
-	unsigned int ier;
-	unsigned int ierh;
-	unsigned int iecr;
-	unsigned int iecrh;
-	unsigned int iesr;
-	unsigned int iesrh;
-	unsigned int ipr;
-	unsigned int iprh;
-	unsigned int icr;
-	unsigned int icrh;
+	unsigned int ier[2];
+	unsigned int iecr[2];
+	unsigned int iesr[2];
+	unsigned int ipr[2];
+	unsigned int icr[2];
 	unsigned int ieval;
 	unsigned char rsvd13[4];
 	unsigned int qer;
