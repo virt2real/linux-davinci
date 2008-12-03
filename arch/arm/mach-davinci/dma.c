@@ -575,7 +575,7 @@ static void dma_ccerr_handler(void)
 	int i;
 	unsigned int cnt;
 	cnt = 0;
-	if ((ptr_edmacc_regs->emr == 0) && (ptr_edmacc_regs->emr == 0) &&
+	if ((ptr_edmacc_regs->emr == 0) && (ptr_edmacc_regs->emrh == 0) &&
 	    (ptr_edmacc_regs->qemr == 0) && (ptr_edmacc_regs->ccerr == 0))
 		return;
 	while (1) {
@@ -606,11 +606,12 @@ static void dma_ccerr_handler(void)
 					/* Clear any SER */
 					ptr_edmacc_regs->shadow[0].secrh =
 					    (1 << i);
-					if (intr_data[i].callback) {
-						intr_data[i].callback(i,
-								      DMA_CC_ERROR,
-								      intr_data
-								      [i].data);
+					if (intr_data[32 + i].callback) {
+						intr_data[32 + i].callback(
+								32 + i,
+								DMA_CC_ERROR,
+								intr_data
+								[32 + i].data);
 					}
 				}
 			}
