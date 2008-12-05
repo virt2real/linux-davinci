@@ -134,21 +134,6 @@ static int dma_chan_no_event[] = {
 	61, 62, 63, -1
 };
 
-static int channel_queue_mapping[][2] = {
-/* {channel no, event queue no } */
-	{0, 0}, {1, 1}, {2, 0}, {3, 1}, {4, 0}, {5, 1}, {6, 0}, {7, 1},
-	{8, 0}, {9, 1}, {10, 0}, {11, 1}, {12, 0}, {13, 1}, {14, 0},
-	{15, 1}, {16, 0}, {17, 1}, {18, 0}, {19, 1}, {20, 0}, {21, 1},
-	{22, 0}, {23, 1}, {24, 0}, {25, 1}, {26, 0}, {27, 1}, {28, 0},
-	{29, 1}, {30, 0}, {31, 1}, {32, 0}, {33, 1}, {34, 0}, {35, 1},
-	{36, 0}, {37, 1}, {38, 0}, {39, 1}, {40, 0}, {41, 1}, {42, 0},
-	{43, 1}, {44, 0}, {45, 1}, {46, 0}, {47, 1}, {48, 0}, {49, 1},
-	{50, 0}, {51, 1}, {52, 0}, {53, 1}, {54, 0}, {55, 1}, {56, 0},
-	{57, 1}, {58, 0}, {59, 1}, {60, 0}, {61, 1}, {62, 0}, {63, 1},
-	{64, 0}, {65, 1}, {66, 0}, {67, 1}, {68, 0}, {69, 1}, {70, 0},
-	{71, 1}, {-1, -1}
-};
-
 static int queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 /* {event queue no, TC no} */
 	{0, 0},
@@ -640,13 +625,14 @@ int __init arch_dma_init(void)
 	memset(dma_chan, 0x00, sizeof(dma_chan));
 	memset((void *)&(ptr_edmacc_regs->paramentry[0]), 0x00,
 	       sizeof(ptr_edmacc_regs->paramentry));
-	i = 0;
-	/* Channel to queue mapping */
-	while (channel_queue_mapping[i][0] != -1) {
-		map_dmach_queue(channel_queue_mapping[i][0],
-				channel_queue_mapping[i][1]);
-		i++;
-	}
+
+	/* Everything lives on transfer controller 1 until otherwise specified.
+	 * This way, long transfers on the low priority queue
+	 * started by the codec engine will not cause audio defects.
+	 */
+	for (i = 0; i < DAVINCI_EDMA_QEND; i++)
+		map_dmach_queue(i, 1);
+
 	i = 0;
 	/* Event queue to TC mapping */
 	while (queue_tc_mapping[i][0] != -1) {
