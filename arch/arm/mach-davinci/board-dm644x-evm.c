@@ -25,6 +25,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/physmap.h>
 #include <linux/io.h>
+#include <linux/phy.h>
 
 #include <asm/setup.h>
 #include <asm/mach-types.h>
@@ -47,6 +48,9 @@
 #define DAVINCI_ASYNC_EMIF_DATA_CE1_BASE  0x04000000
 #define DAVINCI_ASYNC_EMIF_DATA_CE2_BASE  0x06000000
 #define DAVINCI_ASYNC_EMIF_DATA_CE3_BASE  0x08000000
+
+#define LXT971_PHY_ID	(0x001378e2)
+#define LXT971_PHY_MASK	(0xfffffff0)
 
 static struct mtd_partition davinci_evm_norflash_partitions[] = {
 	/* bootloader (U-Boot, etc) in first 4 sectors */
@@ -580,6 +584,19 @@ davinci_evm_map_io(void)
 	davinci_map_common_io();
 }
 
+static int davinci_phy_fixup(struct phy_device *phydev)
+{
+	unsigned int control;
+	/* CRITICAL: Fix for increasing PHY signal drive strength for
+	 * TX lockup issue. On DaVinci EVM, the Intel LXT971 PHY
+	 * signal strength was low causing  TX to fail randomly. The
+	 * fix is to Set bit 11 (Increased MII drive strength) of PHY
+	 * register 26 (Digital Config register) on this phy. */
+	control = phy_read(phydev, 26);
+	phy_write(phydev, 26, (control | 0x800));
+	return 0;
+}
+
 static __init void davinci_evm_init(void)
 {
 	davinci_psc_init();
@@ -605,6 +622,11 @@ static __init void davinci_evm_init(void)
 
 	/* irlml6401 sustains over 3A, switches 5V in under 8 msec */
 	setup_usb(500, 8);
+
+	/* Register the fixup for PHY on DaVinci */
+	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,
+					davinci_phy_fixup);
+
 }
 
 static __init void davinci_evm_irq_init(void)
