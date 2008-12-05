@@ -507,7 +507,7 @@ static void dma_irq_handler(void)
 			j = 1;
 		else
 			break;
-		dev_dbg(&edma_dev.dev, "IPR%d =%d\r\n", j,
+		dev_dbg(&edma_dev.dev, "IPR%d =%x\r\n", j,
 				ptr_edmacc_regs->shadow[0].ipr[j]);
 		for (i = 0; i < 32; i++) {
 			int k = (j << 5) + i;
@@ -548,7 +548,7 @@ static void dma_ccerr_handler(void)
 		else if (ptr_edmacc_regs->emr[1])
 			j = 1;
 		if (j >= 0) {
-			dev_dbg(&edma_dev.dev, "EMR%d =%d\r\n", j,
+			dev_dbg(&edma_dev.dev, "EMR%d =%x\r\n", j,
 					ptr_edmacc_regs->emr[j]);
 			for (i = 0; i < 32; i++) {
 				int k = (j << 5) + i;
@@ -567,7 +567,7 @@ static void dma_ccerr_handler(void)
 				}
 			}
 		} else if (ptr_edmacc_regs->qemr) {
-			dev_dbg(&edma_dev.dev, "QEMR =%d\r\n",
+			dev_dbg(&edma_dev.dev, "QEMR =%x\r\n",
 				ptr_edmacc_regs->qemr);
 			for (i = 0; i < 8; i++) {
 				if (ptr_edmacc_regs->qemr & (1 << i)) {
@@ -578,7 +578,7 @@ static void dma_ccerr_handler(void)
 				}
 			}
 		} else if (ptr_edmacc_regs->ccerr) {
-			dev_dbg(&edma_dev.dev, "CCERR =%d\r\n",
+			dev_dbg(&edma_dev.dev, "CCERR =%x\r\n",
 				ptr_edmacc_regs->ccerr);
 			for (i = 0; i < 8; i++) {
 				if (ptr_edmacc_regs->ccerr & (1 << i)) {
@@ -1169,14 +1169,14 @@ int davinci_start_dma(int lch)
 			i++;
 		}
 		/* EDMA channel with event association */
-		dev_dbg(&edma_dev.dev, "ER%d=%d\r\n", j,
+		dev_dbg(&edma_dev.dev, "ER%d=%x\r\n", j,
 			ptr_edmacc_regs->shadow[0].er[j]);
 		/* Clear any pending error */
 		ptr_edmacc_regs->emcr[j] = mask;
 		/* Clear any SER */
 		ptr_edmacc_regs->shadow[0].secr[j] = mask;
 		ptr_edmacc_regs->shadow[0].eesr[j] = mask;
-		dev_dbg(&edma_dev.dev, "EER%d=%d\r\n", j,
+		dev_dbg(&edma_dev.dev, "EER%d=%x\r\n", j,
 			ptr_edmacc_regs->shadow[0].eer[j]);
 	} else if (DAVINCI_EDMA_IS_Q(lch)) {
 		ptr_edmacc_regs->shadow[0].qeesr =
@@ -1228,7 +1228,7 @@ void davinci_stop_dma(int lch)
 				ptr_edmacc_regs->emr[j]);
 			ptr_edmacc_regs->emcr[j] = mask;
 		}
-		dev_dbg(&edma_dev.dev, "EER%d=%d\r\n", j,
+		dev_dbg(&edma_dev.dev, "EER%d=%x\r\n", j,
 				ptr_edmacc_regs->shadow[0].eer[j]);
 		/*
 		 * if the requested channel is one of the event channels
@@ -1238,8 +1238,8 @@ void davinci_stop_dma(int lch)
 	} else if (DAVINCI_EDMA_IS_Q(lch)) {
 		/* for QDMA channels */
 		ptr_edmacc_regs->qeecr = (1 << (lch - DAVINCI_EDMA_QSTART));
-		dev_dbg(&edma_dev.dev, "QER=%d\r\n", ptr_edmacc_regs->qer);
-		dev_dbg(&edma_dev.dev, "QEER=%d\r\n", ptr_edmacc_regs->qeer);
+		dev_dbg(&edma_dev.dev, "QER=%x\r\n", ptr_edmacc_regs->qer);
+		dev_dbg(&edma_dev.dev, "QEER=%x\r\n", ptr_edmacc_regs->qeer);
 	} else if ((lch >= DAVINCI_EDMA_QEND) &&
 		   (lch < DAVINCI_EDMA_NUM_PARAMENTRY)) {
 		/* for slaveChannels */
@@ -1368,7 +1368,7 @@ void davinci_clean_channel(int ch_no)
 	if ((ch_no >= 0) && (ch_no < DAVINCI_EDMA_NUM_DMACH)) {
 		int j = (ch_no >> 5);
 		unsigned int mask = 1 << (ch_no & 0x1f);
-		dev_dbg(&edma_dev.dev, "EMR%d =%d\r\n", j,
+		dev_dbg(&edma_dev.dev, "EMR%d =%x\r\n", j,
 				ptr_edmacc_regs->emr[j]);
 		ptr_edmacc_regs->shadow[0].ecr[j] = mask;
 		/* Clear the corresponding EMR bits */
