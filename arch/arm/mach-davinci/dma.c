@@ -1129,6 +1129,26 @@ void davinci_get_dma_params(int lch, edmacc_paramentry_regs * temp)
 	}
 }
 
+/*
+ * DMA pause - pauses the dma on the channel passed
+ */
+void davinci_pause_dma(int lch)
+{
+	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
+		unsigned int mask = (1 << (lch & 0x1f));
+		ptr_edmacc_regs->shadow[0].eecr[lch >> 5] = mask;
+	}
+}
+/*
+ * DMA resume - resumes the dma on the channel passed
+ */
+void davinci_resume_dma(int lch)
+{
+	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
+		unsigned int mask = (1 << (lch & 0x1f));
+		ptr_edmacc_regs->shadow[0].eesr[lch >> 5] = mask;
+	}
+}
 /******************************************************************************
  *
  * DMA Start - Starts the dma on the channel passed

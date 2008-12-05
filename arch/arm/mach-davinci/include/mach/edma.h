@@ -533,6 +533,9 @@ void davinci_free_dma(int lch);
  * DMA channel
  **/
 void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst);
+void davinci_clean_channel(int lch);
+void davinci_pause_dma(int lch);
+void davinci_resume_dma(int lch);
 
 int davinci_alloc_iram(unsigned size);
 void davinci_free_iram(unsigned addr, unsigned size);
