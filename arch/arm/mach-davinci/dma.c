@@ -1241,6 +1241,7 @@ void davinci_stop_dma(int lch)
 		 * then just set the link field of the corresponding
 		 * param entry to 0xffff
 		 */
+		ptr_edmacc_regs->paramentry[lch].link_bcntrld |= 0xffff;
 	} else if (DAVINCI_EDMA_IS_Q(lch)) {
 		/* for QDMA channels */
 		ptr_edmacc_regs->qeecr = (1 << (lch - DAVINCI_EDMA_QSTART));
