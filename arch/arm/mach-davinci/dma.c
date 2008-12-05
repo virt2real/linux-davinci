@@ -143,8 +143,8 @@ static int queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 
 static int queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 	/* {event queue no, Priority} */
-	{0, 0},
-	{1, 1},
+	{0, 3},
+	{1, 7},
 	{-1, -1}
 };
 
