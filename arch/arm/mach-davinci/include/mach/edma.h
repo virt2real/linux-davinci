@@ -49,49 +49,6 @@
 
 /*Used by driver*/
 
-/**************************************************************************\
-* Register Overlay Structure for DRA
-\**************************************************************************/
-typedef struct {
-	unsigned int drae[2];
-} edmacc_dra_regs;
-
-/**************************************************************************\
-* Register Overlay Structure for QUEEVTENTRY
-\**************************************************************************/
-typedef struct {
-	unsigned int evt_entry;
-} edmacc_que_evtentry_regs;
-
-/**************************************************************************\
-* Register Overlay Structure for SHADOW
-\**************************************************************************/
-typedef struct {
-	unsigned int er[2];
-	unsigned int ecr[2];
-	unsigned int esr[2];
-	unsigned int cer[2];
-	unsigned int eer[2];
-	unsigned int eecr[2];
-	unsigned int eesr[2];
-	unsigned int ser[2];
-	unsigned int secr[2];
-	unsigned char rsvd0[8];
-	unsigned int ier[2];
-	unsigned int iecr[2];
-	unsigned int iesr[2];
-	unsigned int ipr[2];
-	unsigned int icr[2];
-	unsigned int ieval;
-	unsigned char rsvd1[4];
-	unsigned int qer;
-	unsigned int qeer;
-	unsigned int qeecr;
-	unsigned int qeesr;
-	unsigned int qser;
-	unsigned int qsecr;
-	unsigned char rsvd2[360];
-} edmacc_shadow_regs;
 
 /**************************************************************************\
 * Register Overlay Structure for PARAMENTRY
@@ -107,74 +64,6 @@ typedef struct {
 	unsigned int ccnt;
 } edmacc_paramentry_regs;
 
-/**************************************************************************\
-* Register Overlay Structure
-\**************************************************************************/
-typedef struct {
-	unsigned int rev;
-	unsigned int cccfg;
-	unsigned char rsvd0[504];
-	unsigned int qchmap[8];
-	unsigned char rsvd1[32];
-	unsigned int dmaqnum[8];
-	unsigned int qdmaqnum;
-	unsigned char rsvd2[28];
-	unsigned int quetcmap;
-	unsigned int quepri;
-	unsigned char rsvd3[120];
-	unsigned int emr[2];
-	unsigned int emcr[2];
-	unsigned int qemr;
-	unsigned int qemcr;
-	unsigned int ccerr;
-	unsigned int ccerrclr;
-	unsigned int eeval;
-	unsigned char rsvd4[28];
-	edmacc_dra_regs dra[4];
-	unsigned char rsvd5[32];
-	unsigned int qrae[4];
-	unsigned char rsvd6[112];
-	edmacc_que_evtentry_regs queevtentry[2][16];
-	unsigned char rsvd7[384];
-	unsigned int qstat[2];
-	unsigned char rsvd8[24];
-	unsigned int qwmthra;
-	unsigned int qwmthrb;
-	unsigned char rsvd9[24];
-	unsigned int ccstat;
-	unsigned char rsvd10[188];
-	unsigned int aetctl;
-	unsigned int aetstat;
-	unsigned int aetcmd;
-	unsigned char rsvd11[2292];
-	unsigned int er[2];
-	unsigned int ecr[2];
-	unsigned int esr[2];
-	unsigned int cer[2];
-	unsigned int eer[2];
-	unsigned int eecr[2];
-	unsigned int eesr[2];
-	unsigned int ser[2];
-	unsigned int secr[2];
-	unsigned char rsvd12[8];
-	unsigned int ier[2];
-	unsigned int iecr[2];
-	unsigned int iesr[2];
-	unsigned int ipr[2];
-	unsigned int icr[2];
-	unsigned int ieval;
-	unsigned char rsvd13[4];
-	unsigned int qer;
-	unsigned int qeer;
-	unsigned int qeecr;
-	unsigned int qeesr;
-	unsigned int qser;
-	unsigned int qsecr;
-	unsigned char rsvd14[3944];
-	edmacc_shadow_regs shadow[4];
-	unsigned char rsvd15[6144];
-	edmacc_paramentry_regs paramentry[128];
-} edmacc_regs;
 
 #define CCINT0_INTERRUPT     16
 #define CCERRINT_INTERRUPT   17
