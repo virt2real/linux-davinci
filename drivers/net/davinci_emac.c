@@ -59,6 +59,7 @@
 #include <linux/clk.h>
 #include <linux/platform_device.h>
 #include <linux/semaphore.h>
+#include <linux/phy.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -68,8 +69,6 @@
 #include <mach/cpu.h>
 #include <mach/hardware.h>
 #include <mach/emac.h>
-
-#include "davinci_emac_phy.h"
 
 static int cfg_link_speed;
 module_param(cfg_link_speed, int, 0);
@@ -148,18 +147,6 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #error "Error. DM644x has space for no more than total 256 (TX+RX) BD's"
 #endif
 
-/* Phy information */
-#define EMAC_LINK_OFF		(0) /* Link down */
-#define EMAC_LINK_ON		(1) /* Link up */
-#define EMAC_SPEED_AUTO 	(0) /* Auto Negotiation */
-#define EMAC_SPEED_NO_PHY	(1) /* No Phy - Always ON - Ext Sw */
-#define EMAC_SPEED_10MBPS	(10) /* 10 Mbps */
-#define EMAC_SPEED_100MBPS	(100) /* 100 Mbps */
-#define EMAC_SPEED_1GBPS	(1000) /* 1 Gbpps */
-#define EMAC_DUPLEX_UNKNOWN	(1) /* Not known - negotiating? */
-#define EMAC_DUPLEX_HALF	(2) /* Half Duplex */
-#define EMAC_DUPLEX_FULL	(3) /* Full Duplex */
-
 /* config parameters that get tested for operation */
 #define EMAC_MIN_FREQUENCY_FOR_10MBPS	(5500000)
 #define EMAC_MIN_FREQUENCY_FOR_100MBPS	(55000000)
@@ -214,6 +201,11 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_MACCONTROL_GIGABITEN	(0x80)
 #define EMAC_MACCONTROL_GIGABITEN_SHIFT (7)
 #define EMAC_MACCONTROL_FULLDUPLEXEN	(0x1)
+
+/* GIGABIT MODE related bits */
+#define EMAC_DM646X_MACCONTORL_GMIIEN	(0x01 << 5)
+#define EMAC_DM646X_MACCONTORL_GIG	(0x01 << 7)
+#define EMAC_DM646X_MACCONTORL_GIGFORCE	(0x01 << 17)
 
 /* EMAC mac_status register */
 #define EMAC_MACSTATUS_TXERRCODE_MASK	(0xF00000)
@@ -350,6 +342,26 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_CTRL_EWCTL 	(0x4)
 #define EMAC_CTRL_EWINTTCNT	(0x8)
 
+/* EMAC MDIO related */
+/* Mask & Control defines */
+#define MDIO_CONTROL_CLKDIV	(0xFF)
+#define MDIO_CONTROL_ENABLE	(1 << 30)
+#define MDIO_USERACCESS_GO	(1 << 31)
+#define MDIO_USERACCESS_WRITE	(1 << 30)
+#define MDIO_USERACCESS_READ	(0 << 30)
+#define MDIO_USERACCESS_WRITE	(1 << 30)
+#define MDIO_USERACCESS_REGADR	(0x1F << 21)
+#define MDIO_USERACCESS_PHYADR	(0x1F << 16)
+#define MDIO_USERACCESS_DATA	(0xFFFF)
+#define MDIO_USERPHYSEL_LINKSEL	(1 << 7)
+#define MDIO_VER_MODID		(0xFFFF << 16)
+#define MDIO_VER_REVMAJ		(0xFF   << 8)
+#define MDIO_VER_REVMIN		(0xFF)
+
+#define MDIO_USERACCESS(inst)	(0x80 + (inst * 8))
+#define MDIO_USERPHYSEL(inst)	(0x84 + (inst * 8))
+#define MDIO_CONTROL		(0x04)
+
 /* EMAC DM646X control module registers */
 #define EMAC_DM646X_CMRXINTEN	(0x14)
 #define EMAC_DM646X_CMTXINTEN	(0x18)
@@ -472,21 +484,6 @@ struct emac_rxch {
 	u32 mis_queued_packets;
 };
 
-/** emac_mdio: EMAC MDIO data structure
- *
- * EMAC MDIO data structure
- */
-struct emac_mdio {
-	u32 mdio_base_address;
-	u32 mdio_reset_line;
-	u32 mdio_intr_line;
-	u32 phy_mask;
-	u32 MLink_mask;
-	u32 mdio_bus_frequency;
-	u32 mdio_clock_frequency;
-	u32 mdio_tick_msec;
-};
-
 /* emac_priv: EMAC private data structure
  *
  * EMAC adapter private data structure
@@ -502,8 +499,6 @@ struct emac_priv {
 	u32 emac_base_regs;
 	u32 emac_ctrl_regs;
 	void __iomem *emac_ctrl_ram;
-	void __iomem *mdio_regs;
-	struct emac_mdio mdio;
 	struct emac_txch *txch[EMAC_DEF_MAX_TX_CH];
 	struct emac_rxch *rxch[EMAC_DEF_MAX_RX_CH];
 	u32 link; /* 1=link on, 0=link off */
@@ -520,6 +515,10 @@ struct emac_priv {
 	struct timer_list periodic_timer;
 	u32 periodic_ticks;
 	u32 timer_active;
+	/* mii_bus,phy members */
+	struct mii_bus *mii_bus;
+	struct phy_device *phydev;
+	spinlock_t lock;
 };
 
 /* clock frequency for EMAC */
@@ -582,7 +581,8 @@ static char *emac_rxhost_errcodes[16] = {
 #define emac_ctrl_write(reg, val) \
 	davinci_writel(val, (priv->emac_ctrl_regs + (reg)))
 
-
+#define emac_mdio_read(reg)	davinci_readl((bus->priv + (reg)))
+#define emac_mdio_write(reg, val)	davinci_writel(val, (bus->priv + (reg)))
 /**
  * emac_dump_regs: Dump important EMAC registers to debug terminal
  * @priv: The DaVinci EMAC private adapter structure
@@ -689,77 +689,6 @@ static void emac_dump_regs(struct emac_priv *priv)
 /*************************************************************************
  *  EMAC MDIO/Phy Functionality
  *************************************************************************/
-
-/**
- * emac_netdev_set_ecmd: Set EMAC information to phy
- * @ndev: The DaVinci EMAC network adapter
- * @ecmd: ethtool command
- *
- * Executes ethtool set cmd & sets phy mode
- *
- */
-static int emac_netdev_set_ecmd(struct net_device *ndev,
-				struct ethtool_cmd *ecmd)
-{
-	int speed_duplex = 0;
-	u32 phy_mode = 0;
-
-	if (ecmd->autoneg)
-		phy_mode |= NWAY_AUTO;
-
-	speed_duplex = ecmd->speed + ecmd->duplex;
-	switch (speed_duplex) {
-	case 10:	/* HD10 */
-		phy_mode |= NWAY_HD10;
-		break;
-	case 11: /* FD10 */
-		phy_mode |= NWAY_FD10;
-		break;
-	case 100: /* HD100 */
-		phy_mode |= NWAY_HD100;
-		break;
-	case 101:	/* FD100 */
-		phy_mode |= NWAY_FD100;
-		break;
-	case 1000:	 /* HD100 */
-		phy_mode |= NWAY_HD1000;
-		break;
-	case 1001:	/* FD1000 */
-		phy_mode |= NWAY_FD1000;
-		break;
-	default:
-		return -1;
-	}
-	emac_mdio_set_phy_mode(phy_mode);
-	return 0;
-}
-
-
-/**
- * emac_netdev_get_ecmd: Get EMAC information from phy
- * @ndev: The DaVinci EMAC network adapter
- * @ecmd: ethtool command
- *
- * Executes ethtool get cmd & returns EMAC driver information from phy
- *
- */
-static int emac_netdev_get_ecmd(struct net_device *ndev,
-				struct ethtool_cmd *ecmd)
-{
-	int dplx = emac_mdio_get_duplex();
-
-	/* Hard-coded, but should perhaps be retrieved from davinci_emac_phy */
-	/* TODO: ecmd->supported = emac_mdio_supported_rate(); */
-	/* TODO: ecmd->advertising = emac_mdio_autoneg_rate(); */
-	/* TODO: ecmd->autoneg = emac_mdio_get_autoneg(); */
-	ecmd->speed = emac_mdio_get_speed();
-	ecmd->transceiver = XCVR_EXTERNAL;
-	ecmd->port = PORT_MII;
-	ecmd->phy_address = emac_mdio_get_phy_num();
-	ecmd->duplex = (dplx == 3) ? DUPLEX_FULL : DUPLEX_HALF;
-	return 0;
-}
-
 /**
  * emac_get_drvinfo: Get EMAC driver information
  * @ndev: The DaVinci EMAC network adapter
@@ -786,7 +715,8 @@ static void emac_get_drvinfo(struct net_device *ndev,
 static int emac_get_settings(struct net_device *ndev,
 			     struct ethtool_cmd *ecmd)
 {
-	return (emac_netdev_get_ecmd(ndev, ecmd));
+	struct emac_priv *priv = netdev_priv(ndev);
+	return phy_ethtool_gset(priv->phydev, ecmd);
 }
 
 /**
@@ -799,20 +729,10 @@ static int emac_get_settings(struct net_device *ndev,
  */
 static int emac_set_settings(struct net_device *ndev, struct ethtool_cmd *ecmd)
 {
-	return (emac_netdev_set_ecmd(ndev, ecmd));
+	struct emac_priv *priv = netdev_priv(ndev);
+	return phy_ethtool_sset(priv->phydev, ecmd);
 }
 
-/**
- * emac_get_link: Get EMAC adapter link status
- * @ndev: The DaVinci EMAC network adapter
- *
- * Returns link status	link(1), no link (0)
- *
- */
-static u32 emac_get_link(struct net_device *ndev)
-{
-	return (emac_mdio_is_linked());
-}
 
 /**
  * ethtool_ops: DaVinci EMAC Ethtool structure
@@ -824,9 +744,8 @@ struct ethtool_ops ethtool_ops = {
 	.get_drvinfo = emac_get_drvinfo,
 	.get_settings = emac_get_settings,
 	.set_settings = emac_set_settings,
-	.get_link = emac_get_link,
+	.get_link = ethtool_op_get_link,
 };
-
 
 /**
  * emac_update_phystatus: Update Phy status
@@ -844,25 +763,28 @@ static void emac_update_phystatus(struct emac_priv *priv)
 
 	mac_control = emac_read(EMAC_MACCONTROL);
 
-	/* Get link status from MDIO */
-	priv->link = emac_mdio_is_linked();
-	priv->speed = emac_mdio_get_speed();
-	new_duplex = emac_mdio_get_duplex();
-
-	if (EMAC_SPEED_NO_PHY == cfg_link_speed) {
-		priv->link = 1; /* Link always on when no phy */
-		priv->duplex = EMAC_DUPLEX_UNKNOWN;
-		mac_control |= (EMAC_MACCONTROL_FULLDUPLEXEN);
-	}
+	new_duplex = priv->phydev->duplex;
 
 	/* We get called only if link has changed (speed/duplex/status) */
 	if ((priv->link) && (new_duplex != priv->duplex)) {
 		priv->duplex = new_duplex;
-		if (EMAC_DUPLEX_FULL == priv->duplex)
+		if (DUPLEX_FULL == priv->duplex)
 			mac_control |= (EMAC_MACCONTROL_FULLDUPLEXEN);
 		else
 			mac_control &= ~(EMAC_MACCONTROL_FULLDUPLEXEN);
 	}
+
+	if (priv->speed == SPEED_1000 && cpu_is_davinci_dm646x()) {
+		mac_control = emac_read(EMAC_MACCONTROL);
+		mac_control |= (EMAC_DM646X_MACCONTORL_GMIIEN |
+				EMAC_DM646X_MACCONTORL_GIG |
+				EMAC_DM646X_MACCONTORL_GIGFORCE);
+	} else {
+		/* Clear the GIG bit and GIGFORCE bit */
+		mac_control &= ~(EMAC_DM646X_MACCONTORL_GIGFORCE |
+					EMAC_DM646X_MACCONTORL_GIG);
+	}
+
 	/* Update mac_control if changed */
 	emac_write(EMAC_MACCONTROL, mac_control);
 
@@ -880,81 +802,6 @@ static void emac_update_phystatus(struct emac_priv *priv)
 		if (!netif_queue_stopped(ndev))
 			netif_stop_queue(ndev);
 	}
-}
-
-/* Auto all covers all speeds and duplex modes */
-#define NWAY_AUTO_ALL (NWAY_AUTO | NWAY_HD10 | NWAY_FD10 | NWAY_HD100 | \
-		       NWAY_FD100 | NWAY_HD1000 | NWAY_FD1000)
-
-/**
- * emac_set_phymode: Set phy mode like speed, duplex, auto neg parameters
- * @priv: The DaVinci EMAC private adapter structure
- *
- * Sets phy mode (parameters like speed, duplex, auto negotiation) on the PHY
- *
- */
-static void emac_set_phymode(struct emac_priv *priv)
-{
-	u32 phy_mode;
-
-	/* Check module and config params and set MDIO mode accordingly */
-	if (EMAC_SPEED_NO_PHY == cfg_link_speed) {
-		priv->speed = EMAC_SPEED_NO_PHY;
-		priv->duplex = EMAC_DUPLEX_UNKNOWN;
-		phy_mode = NWAY_NOPHY;
-	} else if (EMAC_SPEED_AUTO == cfg_link_speed) {
-		priv->speed = EMAC_SPEED_AUTO;
-		priv->duplex = EMAC_DUPLEX_UNKNOWN;
-		phy_mode = NWAY_AUTO_ALL;
-	} else if (EMAC_SPEED_10MBPS == cfg_link_speed) {
-		/* Check if bus speed allows 10mbps */
-		if (priv->mdio.mdio_bus_frequency <=
-		    EMAC_MIN_FREQUENCY_FOR_10MBPS) {
-			if (netif_msg_drv(priv)) {
-			dev_warn(EMAC_DEV, "DaVinci EMAC: EMAC Bus freq %d"\
-				 " should be > than %d - for 10 mbps support",
-				 priv->mdio.mdio_bus_frequency,
-				 EMAC_MIN_FREQUENCY_FOR_10MBPS);
-			}
-		}
-		priv->speed = EMAC_SPEED_10MBPS;
-		if (EMAC_DUPLEX_HALF == cfg_link_duplex) {
-			phy_mode = NWAY_HD10;
-			priv->duplex = EMAC_DUPLEX_HALF;
-		} else {
-			phy_mode = NWAY_FD10;
-			priv->duplex = EMAC_DUPLEX_FULL;
-		}
-	} else if (EMAC_SPEED_100MBPS == cfg_link_speed) {
-		if (priv->mdio.mdio_bus_frequency <=
-		    EMAC_MIN_FREQUENCY_FOR_100MBPS) {
-			if (netif_msg_drv(priv)) {
-				dev_warn(EMAC_DEV, "DaVinci EMAC: EMAC Bus "\
-					 "freq %d should be greater than %d"\
-					 " - for 100 mbps support",
-					 priv->mdio.mdio_bus_frequency,
-					 EMAC_MIN_FREQUENCY_FOR_100MBPS);
-			}
-		}
-		priv->speed = EMAC_SPEED_100MBPS;
-		if (EMAC_DUPLEX_HALF == cfg_link_duplex) {
-			phy_mode = NWAY_HD100;
-			priv->duplex = EMAC_DUPLEX_HALF;
-		} else {
-			phy_mode = NWAY_FD100;
-			priv->duplex = EMAC_DUPLEX_FULL;
-		}
-	} else if (EMAC_SPEED_1GBPS == cfg_link_speed) {
-		phy_mode = NWAY_AUTO_ALL; /* Temporarily */
-		priv->speed = EMAC_SPEED_AUTO;
-		priv->duplex = EMAC_DUPLEX_UNKNOWN;
-	} else {
-		phy_mode = NWAY_AUTO_ALL; /* Fall back if wrong params set */
-		priv->speed = EMAC_SPEED_AUTO;
-		priv->duplex = EMAC_DUPLEX_UNKNOWN;
-	}
-	emac_mdio_set_phy_mode(phy_mode);
-	emac_update_phystatus(priv);
 }
 
 /**
@@ -1154,35 +1001,6 @@ static void emac_dev_mcast_set(struct net_device *ndev)
 	/* Set mbp config register */
 	emac_write(EMAC_RXMBPENABLE, mbp_enable);
 }
-
-/**
- * emac_timer_cb: EMAC Phy timer callback
- * @priv: The DaVinci EMAC private adapter structure
- *
- * EMAC uses a PHY poll timer - this callback function probes the PHY
- * periodically to see if the status has changed. PHY auto-negotiation logic
- * is also handled via this callback in the PHY code
- *
- */
-static void emac_timer_cb(struct emac_priv *priv)
-{
-	struct timer_list *p_timer = &priv->periodic_timer;
-	u32 change;
-
-	if (!netif_running(priv->ndev))
-		return;
-
-	if (1 == priv->timer_active) {
-		if (EMAC_SPEED_NO_PHY != cfg_link_speed) {
-			change = emac_mdio_tick();
-			if (unlikely(1 == change))
-				emac_update_phystatus(priv);
-		}
-		p_timer->expires = jiffies + priv->periodic_ticks;
-		add_timer(p_timer);
-	}
-}
-
 
 /*************************************************************************
  *  EMAC Hardware manipulation
@@ -2243,8 +2061,6 @@ end_emac_rx_bdproc:
 static int emac_hw_enable(struct emac_priv *priv)
 {
 	u32 ch, val, mbp_enable, mac_control;
-	u32 mii_mod_id, mii_rev_maj, mii_rev_min;
-	struct timer_list *p_timer = &priv->periodic_timer;
 
 	/* Soft reset */
 	emac_write(EMAC_SOFTRESET, 1);
@@ -2254,47 +2070,12 @@ static int emac_hw_enable(struct emac_priv *priv)
 	/* Disable interrupt & Set pacing for more interrupts initially */
 	emac_int_disable(priv);
 
-	/* Set speed and duplex mode */
-	priv->duplex = EMAC_DUPLEX_UNKNOWN;
-	if (EMAC_SPEED_NO_PHY == cfg_link_speed)
-		priv->speed = EMAC_SPEED_NO_PHY;
-	else if (EMAC_SPEED_AUTO == cfg_link_speed)
-		priv->speed = EMAC_SPEED_AUTO;
-
-	priv->mdio.mdio_base_address = (u32)priv->mdio_regs;
-	priv->mdio.mdio_reset_line = 0;
-	priv->mdio.mdio_intr_line = 0;
-	priv->mdio.phy_mask = EMAC_EVM_PHY_MASK;
-	priv->mdio.MLink_mask = EMAC_EVM_MLINK_MASK;
-	priv->mdio.mdio_bus_frequency = EMAC_EVM_BUS_FREQUENCY;
-	priv->mdio.mdio_clock_frequency = EMAC_EVM_MDIO_FREQUENCY;
-	priv->mdio.mdio_tick_msec = EMAC_DEF_MDIO_TICK_MS;
-
-	/* start MDIO autonegotiation and set phy mode */
-	emac_mdio_get_ver(priv->mdio.mdio_base_address,
-			  &mii_mod_id, &mii_rev_maj, &mii_rev_min);
-	emac_mdio_init(priv->mdio.mdio_base_address,
-		       0, /* instance id */
-		       priv->mdio.phy_mask,
-		       priv->mdio.MLink_mask,
-		       priv->mdio.mdio_bus_frequency,
-		       priv->mdio.mdio_clock_frequency,
-		       EMAC_MDIO_DEBUG); /* debug flag */
-
-	/* set phy mode */
-	emac_set_phymode(priv);
-
-	/* start the tick timer */
-	p_timer->expires = jiffies + priv->periodic_ticks;
-	add_timer(&priv->periodic_timer);
-	priv->timer_active = 1;
-
 	/* Full duplex enable bit set when auto negotiation happens */
 	mac_control =
 		(((EMAC_DEF_TXPRIO_FIXED) ? (EMAC_MACCONTROL_TXPTYPE) : 0x0) |
 		((priv->speed == 1000) ? EMAC_MACCONTROL_GIGABITEN : 0x0) |
 		((EMAC_DEF_TXPACING_EN) ? (EMAC_MACCONTROL_TXPACEEN) : 0x0) |
-		((priv->duplex == EMAC_DUPLEX_FULL) ? 0x1 : 0));
+		((priv->duplex == DUPLEX_FULL) ? 0x1 : 0));
 	emac_write(EMAC_MACCONTROL, mac_control);
 
 	mbp_enable =
@@ -2329,7 +2110,7 @@ static int emac_hw_enable(struct emac_priv *priv)
 	val |= EMAC_RX_CONTROL_RX_ENABLE_VAL;
 	emac_write(EMAC_RXCONTROL, val);
 	emac_write(EMAC_MACINTMASKSET, EMAC_MAC_HOST_ERR_INTMASK_VAL);
-;
+
 	for (ch = 0; ch < EMAC_DEF_MAX_TX_CH; ch++) {
 		emac_write(EMAC_TXHDP(ch), 0);
 		emac_write(EMAC_TXINTMASKSET, (1 << ch));
@@ -2347,7 +2128,6 @@ static int emac_hw_enable(struct emac_priv *priv)
 	val = emac_read(EMAC_MACCONTROL);
 	val |= (EMAC_MACCONTROL_MIIEN);
 	emac_write(EMAC_MACCONTROL, val);
-	emac_update_phystatus(priv);
 
 	/* Enable NAPI and interrupts */
 	napi_enable(&priv->napi);
@@ -2468,6 +2248,118 @@ void emac_poll_controller(struct net_device *ndev)
 }
 #endif
 
+/* PHY/MII bus related */
+
+/* Wait until mdio is ready for next command */
+#define MDIO_WAIT_FOR_USER_ACCESS\
+		while ((emac_mdio_read((MDIO_USERACCESS(0))) &\
+			MDIO_USERACCESS_GO) != 0)
+
+static int emac_mii_read(struct mii_bus *bus, int phy_id, int phy_reg)
+{
+	unsigned int phy_data = 0;
+	unsigned int phy_control;
+
+	/* Wait until mdio is ready for next command */
+	MDIO_WAIT_FOR_USER_ACCESS;
+
+	phy_control = (MDIO_USERACCESS_GO |
+		       MDIO_USERACCESS_READ |
+		       ((phy_reg << 21) & MDIO_USERACCESS_REGADR) |
+		       ((phy_id << 16) & MDIO_USERACCESS_PHYADR) |
+		       (phy_data & MDIO_USERACCESS_DATA));
+	emac_mdio_write(MDIO_USERACCESS(0), phy_control);
+
+	/* Wait until mdio is ready for next command */
+	MDIO_WAIT_FOR_USER_ACCESS;
+
+	return emac_mdio_read(MDIO_USERACCESS(0)) & MDIO_USERACCESS_DATA;
+
+}
+
+static int emac_mii_write(struct mii_bus *bus, int phy_id,
+			  int phy_reg, u16 phy_data)
+{
+
+	unsigned int control;
+
+	/*  until mdio is ready for next command */
+	MDIO_WAIT_FOR_USER_ACCESS;
+
+	control = (MDIO_USERACCESS_GO |
+		   MDIO_USERACCESS_WRITE |
+		   ((phy_reg << 21) & MDIO_USERACCESS_REGADR) |
+		   ((phy_id << 16) & MDIO_USERACCESS_PHYADR) |
+		   (phy_data & MDIO_USERACCESS_DATA));
+	emac_mdio_write(MDIO_USERACCESS(0), control);
+
+	return 0;
+}
+
+static int emac_mii_reset(struct mii_bus *bus)
+{
+	unsigned int clk_div;
+	int mdio_bus_freq = emac_bus_frequency;
+	int mdio_clock_freq = EMAC_EVM_MDIO_FREQUENCY;
+
+	if (mdio_clock_freq & mdio_bus_freq)
+		clk_div = ((mdio_bus_freq / mdio_clock_freq) - 1);
+	else
+		clk_div = 0xFF;
+
+	clk_div &= MDIO_CONTROL_CLKDIV;
+
+	/* Set enable and clock divider in MDIOControl */
+	emac_mdio_write(MDIO_CONTROL, (clk_div | MDIO_CONTROL_ENABLE));
+
+	return 0;
+
+}
+
+static int mii_irqs[PHY_MAX_ADDR] = { PHY_POLL, PHY_POLL };
+
+/* emac_driver: EMAC MII bus structure */
+
+static struct mii_bus *emac_mii;
+
+static void emac_adjust_link(struct net_device *ndev)
+{
+	struct emac_priv *priv = netdev_priv(ndev);
+	struct phy_device *phydev = priv->phydev;
+	unsigned long flags;
+	int new_state = 0;
+
+	spin_lock_irqsave(priv->lock, flags);
+
+	if (phydev->link) {
+		/* check the mode of operation - full/half duplex */
+		if (phydev->duplex != priv->duplex) {
+			new_state = 1;
+			priv->duplex = phydev->duplex;
+		}
+		if (phydev->speed != priv->speed) {
+			new_state = 1;
+			priv->speed = phydev->speed;
+		}
+		if (!priv->link) {
+			new_state = 1;
+			priv->link = 1;
+		}
+
+	} else if (priv->link) {
+		new_state = 1;
+		priv->link = 0;
+		priv->speed = 0;
+		priv->duplex = -1;
+	}
+	if (new_state) {
+		emac_update_phystatus(priv);
+		phy_print_status(priv->phydev);
+	}
+
+	spin_unlock_irqrestore(&priv->lock, flags);
+}
+
 /*************************************************************************
  *  Linux Driver Model
  *************************************************************************/
@@ -2494,7 +2386,6 @@ static int emac_devioctl(struct net_device *ndev, struct ifreq *ifrq, int cmd)
 	return(-EOPNOTSUPP);
 }
 
-typedef void (*timer_tick_func) (unsigned long);
 
 /**
  * emac_dev_open: EMAC device open
@@ -2509,6 +2400,7 @@ typedef void (*timer_tick_func) (unsigned long);
 static int emac_dev_open(struct net_device *ndev)
 {
 	u32 rc, cnt, ch;
+	int phy_addr;
 	struct resource *res;
 	int q, m;
 	int i = 0;
@@ -2524,14 +2416,6 @@ static int emac_dev_open(struct net_device *ndev)
 
 	/* Configuration items */
 	priv->rx_buf_size = EMAC_DEF_MAX_FRAME_SIZE + EMAC_DEF_EXTRA_RXBUF_SIZE;
-
-	/* initialize the timers for the net device */
-	init_timer(&priv->periodic_timer);
-	priv->periodic_ticks = (HZ * EMAC_DEF_MDIO_TICK_MS) / 1000;
-	priv->periodic_timer.expires = 0;
-	priv->timer_active = 0;
-	priv->periodic_timer.data = (unsigned long) priv;
-	priv->periodic_timer.function = (timer_tick_func) emac_timer_cb;
 
 	/* Clear basic hardware */
 	for (ch = 0; ch < EMAC_MAX_TXRX_CHANNELS; ch++) {
@@ -2571,11 +2455,45 @@ static int emac_dev_open(struct net_device *ndev)
 
 	/* Start/Enable EMAC hardware */
 	emac_hw_enable(priv);
+
+	/* find the first phy */
+	priv->phydev = NULL;
+	for (phy_addr = 0; phy_addr < PHY_MAX_ADDR; phy_addr++) {
+		if (priv->mii_bus->phy_map[phy_addr]) {
+			priv->phydev = priv->mii_bus->phy_map[phy_addr];
+			break;
+		}
+	}
+
+	if (!priv->phydev) {
+		printk(KERN_ERR "%s: no PHY found\n", ndev->name);
+		return -1;
+	}
+
+	priv->phydev = phy_connect(ndev, priv->phydev->dev.bus_id,
+				&emac_adjust_link, 0, PHY_INTERFACE_MODE_MII);
+
+	if (IS_ERR(priv->phydev)) {
+		printk(KERN_ERR "%s: Could not attach to PHY\n", ndev->name);
+		return PTR_ERR(priv->phydev);
+	}
+
+	priv->link = 0;
+	priv->speed = 0;
+	priv->duplex = -1;
+
+	printk(KERN_INFO "%s: attached PHY driver [%s] "
+		"(mii_bus:phy_addr=%s, id=%x)\n", ndev->name,
+		priv->phydev->drv->name, priv->phydev->dev.bus_id,
+		priv->phydev->phy_id);
+
 	if (!netif_running(ndev)) /* debug only - to avoid compiler warning */
 		emac_dump_regs(priv);
 
 	if (netif_msg_drv(priv))
 		dev_notice(EMAC_DEV, "DaVinci EMAC: Opened %s\n", ndev->name);
+
+	phy_start(priv->phydev);
 
 	return (0);
 
@@ -2612,10 +2530,6 @@ static int emac_dev_stop(struct net_device *ndev)
 	netif_stop_queue(ndev);
 	napi_disable(&priv->napi);
 
-	/* stop and delete the mdio tick timer */
-	del_timer_sync(&priv->periodic_timer);
-	priv->timer_active = 0;
-
 	netif_carrier_off(ndev);
 	emac_int_disable(priv);
 	emac_stop_txch(priv, EMAC_DEF_TX_CH);
@@ -2623,6 +2537,8 @@ static int emac_dev_stop(struct net_device *ndev)
 	emac_cleanup_txch(priv, EMAC_DEF_TX_CH);
 	emac_cleanup_rxch(priv, EMAC_DEF_RX_CH);
 	emac_write(EMAC_SOFTRESET, 1);
+
+	phy_disconnect(priv->phydev);
 
 	/* Free IRQ */
 	while ((res = platform_get_resource(priv->pdev, IORESOURCE_IRQ, i))) {
@@ -2710,7 +2626,6 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 		return (-EBUSY);
 	}
 	emac_bus_frequency = clk_get_rate(emac_clk);
-
 	/* TODO: Probe PHY here if possible */
 
 	ndev = alloc_etherdev(sizeof(struct emac_priv));
@@ -2750,8 +2665,6 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 
 	rc = ((u32)(priv->emac_base_regs) + EMAC_CONTROL_RAM_OFFSET);
 	priv->emac_ctrl_ram = IO_ADDRESS(rc);
-	priv->mdio_regs = IO_ADDRESS(((u32)(priv->emac_base_regs) +
-				     EMAC_MDIO_REGS_OFFSET));
 
 	/* Note that DaVinci EMAC address region is contingous */
 	if (!request_mem_region((u32)priv->emac_base_regs,
@@ -2767,6 +2680,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	ndev->open = emac_dev_open;   /*  i.e. start device  */
 	ndev->stop = emac_dev_stop;
 	ndev->do_ioctl = emac_devioctl;
+	SET_ETHTOOL_OPS(ndev, &ethtool_ops);
 	ndev->get_stats = emac_dev_getnetstats;
 	ndev->set_multicast_list = emac_dev_mcast_set;
 	ndev->hard_start_xmit = emac_dev_xmit;
@@ -2789,12 +2703,41 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	}
 
 	clk_enable(emac_clk);
+
+	/* MII/Phy intialisation, mdio bus registration */
+	emac_mii = mdiobus_alloc();
+	if (emac_mii == NULL) {
+		rc = -ENOMEM;
+		goto probe_quit;
+	}
+
+	priv->mii_bus = emac_mii;
+	emac_mii->name  = "emac-mii",
+	emac_mii->read  = emac_mii_read,
+	emac_mii->write = emac_mii_write,
+	emac_mii->reset = emac_mii_reset,
+	emac_mii->irq   = mii_irqs,
+	emac_mii->phy_mask = ~(EMAC_EVM_PHY_MASK);
+	/* Base address initialisation for MDIO */
+	emac_mii->priv = (void *)(((priv->emac_base_regs) +
+					EMAC_MDIO_REGS_OFFSET));
+	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%x", priv->pdev->id);
+	emac_mii->reset(emac_mii);
+
+	/* Register the MII bus */
+	rc = mdiobus_register(emac_mii);
+	if (rc)
+		goto mdiobus_quit;
+
 	if (netif_msg_probe(priv)) {
 		dev_notice(EMAC_DEV, "DaVinci EMAC Probe found device "\
 			   "(regs: %p, irq: %d)\n",
 			   (void *)priv->emac_base_regs, ndev->irq);
 	}
 	return (0);
+
+mdiobus_quit:
+	mdiobus_free(emac_mii);
 
 probe_quit:
 	clk_put(emac_clk);
@@ -2813,12 +2756,15 @@ static int __devexit davinci_emac_remove(struct platform_device *pdev)
 {
 	struct resource *base_res;
 	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct emac_priv *priv = netdev_priv(ndev);
 
 	dev_notice(&ndev->dev, "DaVinci EMAC: davinci_emac_remove()\n");
 
 	clk_disable(emac_clk);
 	platform_set_drvdata(pdev, NULL);
 	base_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	mdiobus_unregister(priv->mii_bus);
+	mdiobus_free(priv->mii_bus);
 	release_mem_region(base_res->start, base_res->end - base_res->start);
 	unregister_netdev(ndev);
 	free_netdev(ndev);
