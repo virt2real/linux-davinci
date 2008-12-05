@@ -1205,19 +1205,6 @@ void davinci_stop_dma(int lch)
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
 		int j = lch >> 5;
 		unsigned int mask = (1 << (lch & 0x1f));
-		int i = 0;
-		/* If the dma stop request is for the unused events */
-		while (dma_chan_no_event[i] != -1) {
-			if (dma_chan_no_event[i] == lch) {
-				/* EDMA channels without event association */
-				/* if the requested channel is one of the
-				   unused channels then reset the coresponding
-				   bit of ESR-Event Set Register */
-				return;
-			}
-			i++;
-		}
-		/* EDMA channel with event association */
 		ptr_edmacc_regs->shadow[0].eecr[j] = mask;
 		if (ptr_edmacc_regs->shadow[0].er[j] & mask) {
 			dev_dbg(&edma_dev.dev, "ER%d=%x\n", j,
