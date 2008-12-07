@@ -55,7 +55,32 @@ static void __init evm_init_i2c(void)
 			ARRAY_SIZE(dm355evm_i2c_info));
 }
 
+static struct resource dm355evm_dm9000_rsrc[] = {
+	{
+		/* addr */
+		.start	= 0x04014000,
+		.end	= 0x04014001,
+		.flags	= IORESOURCE_MEM,
+	}, {
+		/* data */
+		.start	= 0x04014002,
+		.end	= 0x04014003,
+		.flags	= IORESOURCE_MEM,
+	}, {
+		.flags	= IORESOURCE_IRQ
+			| IORESOURCE_IRQ_HIGHEDGE /* rising (active high) */,
+	},
+};
+
+static struct platform_device dm355evm_dm9000 = {
+	.name		= "dm9000",
+	.id		= -1,
+	.resource	= dm355evm_dm9000_rsrc,
+	.num_resources	= ARRAY_SIZE(dm355evm_dm9000_rsrc),
+};
+
 static struct platform_device *davinci_evm_devices[] __initdata = {
+	&dm355evm_dm9000,
 };
 
 static struct davinci_uart_config davinci_evm_uart_config __initdata = {
@@ -74,6 +99,11 @@ static void __init dm355_evm_map_io(void)
 static __init void dm355_evm_init(void)
 {
 	davinci_psc_init();
+
+	gpio_request(1, "dm9000");
+	gpio_direction_input(1);
+	dm355evm_dm9000_rsrc[2].start = gpio_to_irq(1);
+
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));
 	evm_init_i2c();
