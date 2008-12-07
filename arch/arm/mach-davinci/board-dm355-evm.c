@@ -14,14 +14,16 @@
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/i2c.h>
-#include <asm/setup.h>
 #include <linux/io.h>
-#include <asm/mach-types.h>
-#include <mach/hardware.h>
+#include <linux/gpio.h>
 
+#include <asm/setup.h>
+#include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
+
+#include <mach/hardware.h>
 #include <mach/psc.h>
 #include <mach/common.h>
 #include <mach/board.h>
@@ -29,14 +31,28 @@
 #include <mach/i2c.h>
 #include <mach/serial.h>
 
+
 static struct davinci_i2c_platform_data i2c_pdata = {
-	.bus_freq	= 20 /* kHz */,
-	.bus_delay	= 100 /* usec */,
+	.bus_freq	= 400	/* kHz */,
+	.bus_delay	= 0	/* usec */,
+};
+
+static struct i2c_board_info dm355evm_i2c_info[] = {
+	{ I2C_BOARD_INFO("dm355evm_msp", 0x25), /* plus irq */ },
+	/* { I2C_BOARD_INFO("tlv320aic3x", 0x1b), }, */
+	/* { I2C_BOARD_INFO("tvp5146", 0x5d), }, */
 };
 
 static void __init evm_init_i2c(void)
 {
 	davinci_init_i2c(&i2c_pdata);
+
+	gpio_request(5, "dm355evm_msp");
+	gpio_direction_input(5);
+	dm355evm_i2c_info[0].irq = gpio_to_irq(5);
+
+	i2c_register_board_info(1, dm355evm_i2c_info,
+			ARRAY_SIZE(dm355evm_i2c_info));
 }
 
 static struct platform_device *davinci_evm_devices[] __initdata = {
