@@ -20,6 +20,8 @@
 #include <sound/soc-dapm.h>
 
 #include <asm/dma.h>
+#include <asm/mach-types.h>
+
 #include <mach/asp.h>
 #include <mach/edma.h>
 
@@ -149,6 +151,7 @@ static struct snd_soc_device evm_snd_devdata = {
 	.codec_data = &evm_aic3x_setup,
 };
 
+/* DM6446 EVM uses ASP0; line-out is a pair of RCA jacks */
 static struct resource evm_snd_resources[] = {
 	{
 		.start = DAVINCI_ASP0_BASE,
@@ -162,22 +165,49 @@ static struct evm_snd_platform_data evm_snd_data = {
 	.rx_dma_ch	= DAVINCI_DMA_ASP0_RX,
 };
 
+/* DM335 EVM uses ASP1; line-out is a stereo mini-jack */
+static struct resource dm335evm_snd_resources[] = {
+	{
+		.start = DAVINCI_ASP1_BASE,
+		.end = DAVINCI_ASP1_BASE + SZ_8K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct evm_snd_platform_data dm335evm_snd_data = {
+	.tx_dma_ch	= DAVINCI_DMA_ASP1_TX,
+	.rx_dma_ch	= DAVINCI_DMA_ASP1_RX,
+};
+
 static struct platform_device *evm_snd_device;
 
 static int __init evm_init(void)
 {
+	struct resource *resources;
+	struct evm_snd_platform_data *data;
+	int index;
 	int ret;
 
-	evm_snd_device = platform_device_alloc("soc-audio", 0);
+	if (machine_is_davinci_evm()) {
+		resources = evm_snd_resources;
+		data = &evm_snd_data;
+		index = 0;
+	} else if (machine_is_davinci_dm355_evm()) {
+		resources = dm335evm_snd_resources;
+		data = &dm335evm_snd_data;
+		index = 1;
+	} else
+		return -EINVAL;
+
+	evm_snd_device = platform_device_alloc("soc-audio", index);
 	if (!evm_snd_device)
 		return -ENOMEM;
 
 	platform_set_drvdata(evm_snd_device, &evm_snd_devdata);
 	evm_snd_devdata.dev = &evm_snd_device->dev;
-	evm_snd_device->dev.platform_data = &evm_snd_data;
+	evm_snd_device->dev.platform_data = data;
 
-	ret = platform_device_add_resources(evm_snd_device, evm_snd_resources,
-					    ARRAY_SIZE(evm_snd_resources));
+	ret = platform_device_add_resources(evm_snd_device, resources, 1);
 	if (ret) {
 		platform_device_put(evm_snd_device);
 		return ret;
