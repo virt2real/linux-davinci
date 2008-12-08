@@ -27,7 +27,7 @@
 #include <asm/mach-types.h>
 #include <asm/plat-sffsdr/sffsdr-fpga.h>
 
-#include <mach/mcbsp.h>
+#include <mach/asp.h>
 #include <mach/edma.h>
 
 #include "../codecs/pcm3008.h"
@@ -98,15 +98,15 @@ static struct snd_soc_device sffsdr_snd_devdata = {
 
 static struct resource sffsdr_snd_resources[] = {
 	{
-		.start = DAVINCI_MCBSP_BASE,
-		.end = DAVINCI_MCBSP_BASE + SZ_8K - 1,
+		.start = DAVINCI_ASP0_BASE,
+		.end = DAVINCI_ASP0_BASE + SZ_8K - 1,
 		.flags = IORESOURCE_MEM,
 	},
 };
 
 static struct evm_snd_platform_data sffsdr_snd_data = {
-	.tx_dma_ch	= DAVINCI_DMA_MCBSP_TX,
-	.rx_dma_ch	= DAVINCI_DMA_MCBSP_RX,
+	.tx_dma_ch	= DAVINCI_DMA_ASP0_TX,
+	.rx_dma_ch	= DAVINCI_DMA_ASP0_RX,
 };
 
 static struct platform_device *sffsdr_snd_device;

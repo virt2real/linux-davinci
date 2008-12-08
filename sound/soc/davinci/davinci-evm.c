@@ -20,7 +20,7 @@
 #include <sound/soc-dapm.h>
 
 #include <asm/dma.h>
-#include <mach/mcbsp.h>
+#include <mach/asp.h>
 #include <mach/edma.h>
 
 #include "../codecs/tlv320aic3x.h"
@@ -151,15 +151,15 @@ static struct snd_soc_device evm_snd_devdata = {
 
 static struct resource evm_snd_resources[] = {
 	{
-		.start = DAVINCI_MCBSP_BASE,
-		.end = DAVINCI_MCBSP_BASE + SZ_8K - 1,
+		.start = DAVINCI_ASP0_BASE,
+		.end = DAVINCI_ASP0_BASE + SZ_8K - 1,
 		.flags = IORESOURCE_MEM,
 	},
 };
 
 static struct evm_snd_platform_data evm_snd_data = {
-	.tx_dma_ch	= DAVINCI_DMA_MCBSP_TX,
-	.rx_dma_ch	= DAVINCI_DMA_MCBSP_RX,
+	.tx_dma_ch	= DAVINCI_DMA_ASP0_TX,
+	.rx_dma_ch	= DAVINCI_DMA_ASP0_RX,
 };
 
 static struct platform_device *evm_snd_device;
