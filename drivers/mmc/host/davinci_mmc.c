@@ -327,17 +327,13 @@ static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n)
 	host->buffer = p;
 }
 
-static void davinci_reinit_chan(void)
+static void davinci_reinit_chan(struct mmc_davinci_host *host)
 {
-	int sync_dev;
+	davinci_stop_dma(host->txdma);
+	davinci_clean_channel(host->txdma);
 
-	sync_dev = DAVINCI_DMA_MMCTXEVT;
-	davinci_stop_dma(sync_dev);
-	davinci_clean_channel(sync_dev);
-
-	sync_dev = DAVINCI_DMA_MMCRXEVT;
-	davinci_stop_dma(sync_dev);
-	davinci_clean_channel(sync_dev);
+	davinci_stop_dma(host->rxdma);
+	davinci_clean_channel(host->rxdma);
 }
 
 static void davinci_abort_dma(struct mmc_davinci_host *host)
@@ -345,9 +341,9 @@ static void davinci_abort_dma(struct mmc_davinci_host *host)
 	int sync_dev = 0;
 
 	if (host->data_dir == DAVINCI_MMC_DATADIR_READ)
-		sync_dev = DAVINCI_DMA_MMCTXEVT;
+		sync_dev = host->rxdma;
 	else
-		sync_dev = DAVINCI_DMA_MMCRXEVT;
+		sync_dev = host->txdma;
 
 	davinci_stop_dma(sync_dev);
 	davinci_clean_channel(sync_dev);
@@ -391,8 +387,8 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 
 static int davinci_release_dma_channels(struct mmc_davinci_host *host)
 {
-	davinci_free_dma(DAVINCI_DMA_MMCTXEVT);
-	davinci_free_dma(DAVINCI_DMA_MMCRXEVT);
+	davinci_free_dma(host->txdma);
+	davinci_free_dma(host->rxdma);
 
 	if (host->edma_ch_details.cnt_chanel) {
 		davinci_free_dma(host->edma_ch_details.chanel_num[0]);
@@ -408,7 +404,7 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	enum dma_event_q queue_no = EVENTQ_0;
 
 	/* Acquire master DMA write channel */
-	r = davinci_request_dma(DAVINCI_DMA_MMCTXEVT, "MMC_WRITE",
+	r = davinci_request_dma(host->txdma, "MMC_WRITE",
 		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
 	if (r != 0) {
 		dev_warn(mmc_dev(host->mmc),
@@ -418,7 +414,7 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	}
 
 	/* Acquire master DMA read channel */
-	r = davinci_request_dma(DAVINCI_DMA_MMCRXEVT, "MMC_READ",
+	r = davinci_request_dma(host->rxdma, "MMC_READ",
 		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
 	if (r != 0) {
 		dev_warn(mmc_dev(host->mmc),
@@ -434,7 +430,7 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 
 	/* Create a DMA slave read channel
 	 * (assuming max segments handled is 2) */
-	sync_dev = DAVINCI_DMA_MMCRXEVT;
+	sync_dev = host->rxdma;
 	r = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "LINK", NULL, NULL,
 		&edma_chan_num, &sync_dev, queue_no);
 	if (r != 0) {
@@ -449,9 +445,9 @@ static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	return 0;
 
 free_master_read:
-	davinci_free_dma(DAVINCI_DMA_MMCRXEVT);
+	davinci_free_dma(host->rxdma);
 free_master_write:
-	davinci_free_dma(DAVINCI_DMA_MMCTXEVT);
+	davinci_free_dma(host->txdma);
 
 	return r;
 }
@@ -520,7 +516,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
 		/*AB Sync Transfer */
-		sync_dev = DAVINCI_DMA_MMCTXEVT;
+		sync_dev = host->txdma;
 
 		src_port = (unsigned int)sg_dma_address(sg);
 		mode_src = INCR;
@@ -538,7 +534,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		sync_mode = ABSYNC;
 
 	} else {
-		sync_dev = DAVINCI_DMA_MMCRXEVT;
+		sync_dev = host->rxdma;
 
 		src_port = (unsigned int)(host->mem_res->start +
 				DAVINCI_MMCDRR);
@@ -566,7 +562,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 					sync_mode);
 
 	davinci_get_dma_params(sync_dev, &temp);
-	if (sync_dev == DAVINCI_DMA_MMCTXEVT) {
+	if (sync_dev == host->txdma) {
 		if (host->option_write == 0) {
 			host->option_write = temp.opt;
 		} else {
@@ -574,7 +570,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 			davinci_set_dma_params(sync_dev, &temp);
 		}
 	}
-	if (sync_dev == DAVINCI_DMA_MMCRXEVT) {
+	if (sync_dev == host->rxdma) {
 		if (host->option_read == 0) {
 			host->option_read = temp.opt;
 		} else {
@@ -612,7 +608,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 			ccnt = count >> ((mmcsd_cfg.rw_threshold == 32)? 5 : 4);
 
-			if (sync_dev == DAVINCI_DMA_MMCTXEVT)
+			if (sync_dev == host->txdma)
 				temp.src = (unsigned int)sg_dma_address(sg);
 			else
 				temp.dst = (unsigned int)sg_dma_address(sg);
@@ -1253,7 +1249,7 @@ static void davinci_mmc_check_status(unsigned long data)
 
 	if (!host->is_card_busy) {
 		if (host->old_card_state ^ host->new_card_state) {
-			davinci_reinit_chan();
+			davinci_reinit_chan(host);
 			init_mmcsd_host(host);
 			mmc_detect_change(host->mmc, 0);
 			spin_lock_irqsave(&host->lock, flags);
@@ -1319,8 +1315,18 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	host = mmc_priv(mmc);
 	host->mmc = mmc;	/* Important */
 
+	r = platform_get_resource(pdev, IORESOURCE_DMA, 0);
+	if (!r)
+		goto out;
+	host->rxdma = r->start;
+
+	r = platform_get_resource(pdev, IORESOURCE_DMA, 1);
+	if (!r)
+		goto out;
+	host->txdma = r->start;
+
 	host->mem_res = mem;
-	host->base = ioremap(r->start, SZ_4K);
+	host->base = ioremap(mem->start, SZ_4K);
 	if (!host->base)
 		goto out;
 
@@ -1414,6 +1420,7 @@ out:
 	if (mem)
 		release_resource(mem);
 
+	dev_dbg(&pdev->dev, "probe err %d\n", ret);
 	return ret;
 }
 

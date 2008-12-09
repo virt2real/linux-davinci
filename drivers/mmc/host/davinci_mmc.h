@@ -178,6 +178,7 @@ struct mmc_davinci_host {
 	u8 *buffer;
 	u32 bytes_left;
 
+	u8 rxdma, txdma;
 	bool use_dma;
 	bool do_dma;
 
