@@ -34,6 +34,9 @@
 
 #define DAVINCI_I2C_BASE	     0x01C21000
 #define DAVINCI_EMAC_CNTRL_REGS_BASE 0x01C80000
+#define DAVINCI_EMAC_CNTRL_MOD_REGS_BASE	0x01C81000
+#define DAVINCI_EMAC_CNTRL_RAM_BASE		0x01C82000
+#define DAVINCI_EMAC_MDIO_REGS_BASE		0x01C84000
 #define DAVINCI_MMCSD0_BASE	     0x01E10000
 #define DM355_MMCSD1_BASE	     0x01E00000
 
@@ -211,9 +214,28 @@ static void davinci_init_wdt(void)
 
 static struct resource emac_resources[] = {
 	{
-		.start = DAVINCI_EMAC_CNTRL_REGS_BASE,
-		.end   = DAVINCI_EMAC_CNTRL_REGS_BASE + 0x4800,
-		.flags = IORESOURCE_MEM,
+		.start	= DAVINCI_EMAC_CNTRL_REGS_BASE,
+		.end 	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "ctrl_regs"
+	},
+	{
+		.start	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE,
+		.end 	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "ctrl_module_regs"
+	},
+	{
+		.start	= DAVINCI_EMAC_CNTRL_RAM_BASE,
+		.end 	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "ctrl_ram"
+	},
+	{
+		.start	= DAVINCI_EMAC_MDIO_REGS_BASE,
+		.end 	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "mdio_regs"
 	},
 	{
 		.start = IRQ_EMACINT,
@@ -236,9 +258,28 @@ static struct platform_device davinci_emac_device = {
 
 static struct resource dm646x_emac_resources[] = {
 	{
-		.start = DAVINCI_EMAC_CNTRL_REGS_BASE,
-		.end   = DAVINCI_EMAC_CNTRL_REGS_BASE + 0x4800,
-		.flags = IORESOURCE_MEM,
+		.start	= DAVINCI_EMAC_CNTRL_REGS_BASE,
+		.end 	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "ctrl_regs"
+	},
+	{
+		.start	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE,
+		.end 	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "ctrl_module_regs"
+	},
+	{
+		.start	= DAVINCI_EMAC_CNTRL_RAM_BASE,
+		.end 	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "ctrl_ram"
+	},
+	{
+		.start	= DAVINCI_EMAC_MDIO_REGS_BASE,
+		.end 	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
+		.flags	= IORESOURCE_MEM,
+		.name	= "mdio_regs"
 	},
 	{
 		.start 	= IRQ_DM646X_EMACRXTHINT,
