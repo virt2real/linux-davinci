@@ -141,11 +141,6 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 /* Buffer descriptor parameters */
 #define EMAC_DEF_TX_MAX_SERVICE 	(32) /* TX max service BD's */
 #define EMAC_DEF_RX_MAX_SERVICE 	(64) /* should = netdev->weight */
-#define EMAC_DEF_TX_NUM_BD		(128) /* Max num of TX BD's */
-#define EMAC_DEF_RX_NUM_BD		(128) /* Max num of RX BD's */
-#if ((EMAC_DEF_TX_NUM_BD + EMAC_DEF_RX_NUM_BD)	> 256)
-#error "Error. DM644x has space for no more than total 256 (TX+RX) BD's"
-#endif
 
 /* config parameters that get tested for operation */
 #define EMAC_MIN_FREQUENCY_FOR_10MBPS	(5500000)
@@ -329,15 +324,6 @@ const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_RXMOFOVERRUNS	0x288
 #define EMAC_RXDMAOVERRUNS	0x28C
 
-
-/* DM644x specifics */
-#define EMAC_BASE_REGS_OFFSET		(0x0)
-#define EMAC_CONTROL_REGS_OFFSET	(0x1000)
-#define EMAC_CONTROL_RAM_OFFSET 	(0x2000)
-#define EMAC_MDIO_REGS_OFFSET		(0x4000)
-#define EMAC_BUFFER_RAM_SIZE		(8 << 10) /* 8K */
-
-
 /* EMAC DM644x control registers */
 #define EMAC_CTRL_EWCTL 	(0x4)
 #define EMAC_CTRL_EWINTTCNT	(0x8)
@@ -499,6 +485,7 @@ struct emac_priv {
 	u32 emac_base_regs;
 	u32 emac_ctrl_regs;
 	void __iomem *emac_ctrl_ram;
+	u32 ctrl_ram_size;
 	struct emac_txch *txch[EMAC_DEF_MAX_TX_CH];
 	struct emac_rxch *rxch[EMAC_DEF_MAX_RX_CH];
 	u32 link; /* 1=link on, 0=link off */
@@ -526,11 +513,11 @@ static struct clk *emac_clk;
 static unsigned long emac_bus_frequency;
 
 /* EMAC internal utility function */
-static u32 emac_base_addr;
-static inline u32 emac_virt_to_phys(u32 addr)
+static inline u32 emac_virt_to_phys(struct emac_priv *priv, u32 addr)
 {
 	/* NOTE: must handle memory and IO addresses */
-	if ((addr & 0xFFFF0000) == emac_base_addr)
+	if ((addr >= (u32)(priv->emac_ctrl_ram)) &&
+		(addr < (u32)(priv->emac_ctrl_ram + priv->ctrl_ram_size)))
 		addr = io_v2p(addr);
 	else
 		addr = virt_to_phys((void *)addr);
@@ -540,7 +527,7 @@ static inline u32 emac_virt_to_phys(u32 addr)
 
 
 /* Cache macros - Packet buffers would be from skb pool which is cached */
-#define EMAC_VIRT2PHYS(x) emac_virt_to_phys((u32)x)
+#define EMAC_VIRT2PHYS(priv, x) emac_virt_to_phys(priv, (u32)x)
 #define EMAC_VIRT_NOCACHE(addr) (addr)
 #define EMAC_CACHE_INVALIDATE(addr, size) \
 	dma_cache_maint((void *)addr, size, DMA_FROM_DEVICE)
@@ -1103,7 +1090,8 @@ irqreturn_t emac_irq(int irq, void *dev_id)
  */
 
 #define EMAC_TX_BD_MEM	(priv->emac_ctrl_ram)
-#define EMAC_RX_BD_MEM	(priv->emac_ctrl_ram + (EMAC_BUFFER_RAM_SIZE >> 1))
+#define EMAC_RX_BD_MEM	(priv->emac_ctrl_ram + \
+			((priv->ctrl_ram_size) >> 1))
 
 /**
  * emac_init_txch: TX channel initialization
@@ -1128,7 +1116,6 @@ static int emac_init_txch(struct emac_priv *priv, u32 ch)
 		return (-ENOMEM);
 	}
 	priv->txch[ch] = txch;
-	txch->num_bd = EMAC_DEF_TX_NUM_BD;
 	txch->service_max = EMAC_DEF_TX_MAX_SERVICE;
 	txch->active_queue_head = 0;
 	txch->active_queue_tail = 0;
@@ -1147,6 +1134,7 @@ static int emac_init_txch(struct emac_priv *priv, u32 ch)
 	/* allocate buffer descriptor pool align every BD on four word
 	 * boundry for future requirements */
 	bd_size = (sizeof(struct emac_tx_bd) + 0xF) & ~0xF;
+	txch->num_bd = (priv->ctrl_ram_size >> 1) / bd_size;
 	txch->alloc_size = (((bd_size * txch->num_bd) + 0xF) & ~0xF);
 
 	/* alloc TX BD memory */
@@ -1327,7 +1315,7 @@ static int emac_tx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 	curr_bd = txch->active_queue_head;
 	if (0 == curr_bd) {
 		emac_write(EMAC_TXCP(ch),
-			   EMAC_VIRT2PHYS(txch->last_hw_bdprocessed));
+			   EMAC_VIRT2PHYS(priv, txch->last_hw_bdprocessed));
 		txch->no_active_pkts++;
 		spin_unlock_irqrestore(&priv->tx_lock, flags);
 		return (0);
@@ -1337,7 +1325,7 @@ static int emac_tx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 	while ((curr_bd) &&
 	      ((frame_status & EMAC_CPPI_OWNERSHIP_BIT) == 0) &&
 	      (pkts_processed < budget)) {
-		emac_write(EMAC_TXCP(ch), EMAC_VIRT2PHYS(curr_bd));
+		emac_write(EMAC_TXCP(ch), EMAC_VIRT2PHYS(priv, curr_bd));
 		txch->active_queue_head = curr_bd->next;
 		if (frame_status & EMAC_CPPI_EOQ_BIT) {
 			if (curr_bd->next) {	/* misqueued packet */
@@ -1412,7 +1400,7 @@ static int emac_send(struct emac_priv *priv, struct emac_netpktobj *pkt, u32 ch)
 
 	txch->bd_pool_head = curr_bd->next;
 	curr_bd->buf_token = buf_list->buf_token;
-	curr_bd->buff_ptr = EMAC_VIRT2PHYS((int *)buf_list->data_ptr);
+	curr_bd->buff_ptr = EMAC_VIRT2PHYS(priv, (int *)buf_list->data_ptr);
 	curr_bd->off_b_len = buf_list->length;
 	curr_bd->h_next = 0;
 	curr_bd->next = 0;
@@ -1427,7 +1415,8 @@ static int emac_send(struct emac_priv *priv, struct emac_netpktobj *pkt, u32 ch)
 		txch->active_queue_head = curr_bd;
 		txch->active_queue_tail = curr_bd;
 		if (1 != txch->queue_active) {
-			emac_write(EMAC_TXHDP(ch), EMAC_VIRT2PHYS(curr_bd));
+			emac_write(EMAC_TXHDP(ch),
+					EMAC_VIRT2PHYS(priv, curr_bd));
 			txch->queue_active = 1;
 		}
 		++txch->queue_reinit;
@@ -1439,10 +1428,11 @@ static int emac_send(struct emac_priv *priv, struct emac_netpktobj *pkt, u32 ch)
 		tail_bd->next = curr_bd;
 		txch->active_queue_tail = curr_bd;
 		tail_bd = EMAC_VIRT_NOCACHE(tail_bd);
-		tail_bd->h_next = (int)EMAC_VIRT2PHYS(curr_bd);
+		tail_bd->h_next = (int)EMAC_VIRT2PHYS(priv, curr_bd);
 		frame_status = tail_bd->mode;
 		if (frame_status & EMAC_CPPI_EOQ_BIT) {
-			emac_write(EMAC_TXHDP(ch), EMAC_VIRT2PHYS(curr_bd));
+			emac_write(EMAC_TXHDP(ch),
+					EMAC_VIRT2PHYS(priv, curr_bd));
 			frame_status &= ~(EMAC_CPPI_EOQ_BIT);
 			tail_bd->mode = frame_status;
 			++txch->end_of_queue_add;
@@ -1592,7 +1582,6 @@ static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 		return (-ENOMEM);
 	}
 	priv->rxch[ch] = rxch;
-	rxch->num_bd = EMAC_DEF_RX_NUM_BD;
 	rxch->buf_size = priv->rx_buf_size;
 	rxch->service_max = EMAC_DEF_RX_MAX_SERVICE;
 	rxch->queue_active = 0;
@@ -1606,6 +1595,7 @@ static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 	/* allocate buffer descriptor pool align every BD on four word
 	 * boundry for future requirements */
 	bd_size = (sizeof(struct emac_rx_bd) + 0xF) & ~0xF;
+	rxch->num_bd = (priv->ctrl_ram_size >> 1) / bd_size;
 	rxch->alloc_size = (((bd_size * rxch->num_bd) + 0xF) & ~0xF);
 	rxch->bd_mem = (char *) EMAC_RX_BD_MEM;
 	memzero(rxch->bd_mem, rxch->alloc_size);
@@ -1630,8 +1620,8 @@ static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 		}
 
 		/* populate the hardware descriptor */
-		curr_bd->h_next = EMAC_VIRT2PHYS(rxch->active_queue_head);
-		curr_bd->buff_ptr = EMAC_VIRT2PHYS(curr_bd->data_ptr);
+		curr_bd->h_next = EMAC_VIRT2PHYS(priv, rxch->active_queue_head);
+		curr_bd->buff_ptr = EMAC_VIRT2PHYS(priv, curr_bd->data_ptr);
 		curr_bd->off_b_len = rxch->buf_size;
 		curr_bd->mode = EMAC_CPPI_OWNERSHIP_BIT;
 
@@ -1880,7 +1870,7 @@ static void emac_addbd_to_rx_queue(struct emac_priv *priv, u32 ch,
 
 	/* populate the hardware descriptor */
 	curr_bd->h_next = 0;
-	curr_bd->buff_ptr = EMAC_VIRT2PHYS(buffer);
+	curr_bd->buff_ptr = EMAC_VIRT2PHYS(priv, buffer);
 	curr_bd->off_b_len = rxch->buf_size;
 	curr_bd->mode = EMAC_CPPI_OWNERSHIP_BIT;
 	curr_bd->next = 0;
@@ -1894,7 +1884,7 @@ static void emac_addbd_to_rx_queue(struct emac_priv *priv, u32 ch,
 	rxch->active_queue_tail = curr_bd;
 	if (0 != rxch->queue_active) {
 		emac_write(EMAC_RXHDP(ch),
-			   EMAC_VIRT2PHYS(rxch->active_queue_head));
+			   EMAC_VIRT2PHYS(priv, rxch->active_queue_head));
 		rxch->queue_active = 1;
 	}
 	} else {
@@ -1905,10 +1895,11 @@ static void emac_addbd_to_rx_queue(struct emac_priv *priv, u32 ch,
 		rxch->active_queue_tail = curr_bd;
 		tail_bd->next = (void *)curr_bd;
 		tail_bd = EMAC_VIRT_NOCACHE(tail_bd);
-		tail_bd->h_next = EMAC_VIRT2PHYS(curr_bd);
+		tail_bd->h_next = EMAC_VIRT2PHYS(priv, curr_bd);
 		frame_status = tail_bd->mode;
 		if (frame_status & EMAC_CPPI_EOQ_BIT) {
-			emac_write(EMAC_RXHDP(ch), EMAC_VIRT2PHYS(curr_bd));
+			emac_write(EMAC_RXHDP(ch),
+					EMAC_VIRT2PHYS(priv, curr_bd));
 			frame_status &= ~(EMAC_CPPI_EOQ_BIT);
 			tail_bd->mode = frame_status;
 			++rxch->end_of_queue_add;
@@ -2004,7 +1995,7 @@ static int emac_rx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 		curr_pkt->num_bufs = 1;
 		curr_pkt->pkt_length =
 			(frame_status & EMAC_RX_BD_PKT_LENGTH_MASK);
-		emac_write(EMAC_RXCP(ch), EMAC_VIRT2PHYS(curr_bd));
+		emac_write(EMAC_RXCP(ch), EMAC_VIRT2PHYS(priv, curr_bd));
 		++rxch->processed_bd;
 		last_bd = curr_bd;
 		curr_bd = last_bd->next;
@@ -2015,7 +2006,7 @@ static int emac_rx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 			if (curr_bd) {
 				++rxch->mis_queued_packets;
 				emac_write(EMAC_RXHDP(ch),
-					   EMAC_VIRT2PHYS(curr_bd));
+					   EMAC_VIRT2PHYS(priv, curr_bd));
 			} else {
 				++rxch->end_of_queue;
 				rxch->queue_active = 0;
@@ -2121,7 +2112,7 @@ static int emac_hw_enable(struct emac_priv *priv)
 		emac_write(EMAC_RXINTMASKSET, (1 << ch));
 		rxch->queue_active = 1;
 		emac_write(EMAC_RXHDP(ch),
-			   EMAC_VIRT2PHYS(rxch->active_queue_head));
+			   EMAC_VIRT2PHYS(priv, rxch->active_queue_head));
 	}
 
 	/* Enable MII */
@@ -2614,8 +2605,7 @@ static struct net_device_stats *emac_dev_getnetstats(struct net_device *ndev)
 static int __devinit davinci_emac_probe(struct platform_device *pdev)
 {
 	int rc = 0;
-	struct resource *base_res;
-	struct resource *irq_res;
+	struct resource *res;
 	struct net_device *ndev;
 	struct emac_priv *priv;
 
@@ -2649,31 +2639,65 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	}
 
 	/* Get EMAC platform data */
-	base_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	irq_res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-	if (base_res == NULL || irq_res == NULL) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting pform res\n");
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_regs");
+	if (!res) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting ctrl res\n");
 		rc = -ENOENT;
 		goto probe_quit;
 	}
-	priv->emac_base_regs = base_res->start;
-	ndev->base_addr = (unsigned long)IO_ADDRESS(base_res->start);
-	emac_base_addr = (u32)ndev->base_addr; /* need to check virt2phys */
-	ndev->irq = (int) irq_res->start;
-	priv->emac_ctrl_regs = ((u32)(base_res->start) +
-				EMAC_CONTROL_REGS_OFFSET);
-
-	rc = ((u32)(priv->emac_base_regs) + EMAC_CONTROL_RAM_OFFSET);
-	priv->emac_ctrl_ram = IO_ADDRESS(rc);
-
-	/* Note that DaVinci EMAC address region is contingous */
+	priv->emac_base_regs = res->start;
+	ndev->base_addr = (unsigned long)IO_ADDRESS(res->start);
 	if (!request_mem_region((u32)priv->emac_base_regs,
-				(base_res->end - base_res->start),
+				(res->end - res->start + 1),
 				ndev->name)) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region()");
+		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
+					 for ctrl regs\n");
 		rc = -ENXIO;
 		goto probe_quit;
 	}
+
+	res = platform_get_resource_byname(pdev,
+					IORESOURCE_MEM, "ctrl_module_regs");
+	if (!res) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting ctrl module \
+					res\n");
+		rc = -ENOENT;
+		goto no_ctrl_mod_res;
+	}
+	priv->emac_ctrl_regs = res->start;
+	if (!request_mem_region((u32)priv->emac_ctrl_regs,
+				(res->end - res->start + 1),
+				ndev->name)) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
+					for ctrl module regs\n");
+		rc = -ENXIO;
+		goto no_ctrl_mod_res;
+	}
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_ram");
+	if (!res) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting ctrl ram res\n");
+		rc = -ENOENT;
+		goto no_ctrl_ram_res;
+	}
+	priv->emac_ctrl_ram = (char *)IO_ADDRESS(res->start);
+	priv->ctrl_ram_size = res->end - res->start + 1;
+	if (!request_mem_region(res->start,
+				(res->end - res->start + 1),
+				ndev->name)) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
+					for ctrl ram regs\n");
+		rc = -ENXIO;
+		goto no_ctrl_ram_res;
+	}
+
+	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+	if (!res) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting irq res\n");
+		rc = -ENOENT;
+		goto no_irq_res;
+	}
+	ndev->irq = res->start;
 
 	/* populate the device structure */
 	ndev->validate_addr = 0;
@@ -2696,10 +2720,8 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	rc = register_netdev(ndev);
 	if (rc) {
 		dev_err(EMAC_DEV, "DaVinci EMAC: Error in register_netdev\n");
-		release_mem_region((u32)priv->emac_base_regs,
-				   (base_res->end - base_res->start));
 		rc = -ENODEV;
-		goto probe_quit;
+		goto netdev_reg_err;
 	}
 
 	clk_enable(emac_clk);
@@ -2707,8 +2729,9 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	/* MII/Phy intialisation, mdio bus registration */
 	emac_mii = mdiobus_alloc();
 	if (emac_mii == NULL) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: Error allocating mii_bus\n");
 		rc = -ENOMEM;
-		goto probe_quit;
+		goto mdio_alloc_err;
 	}
 
 	priv->mii_bus = emac_mii;
@@ -2719,8 +2742,23 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	emac_mii->irq   = mii_irqs,
 	emac_mii->phy_mask = ~(EMAC_EVM_PHY_MASK);
 	/* Base address initialisation for MDIO */
-	emac_mii->priv = (void *)(((priv->emac_base_regs) +
-					EMAC_MDIO_REGS_OFFSET));
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mdio_regs");
+	if (!res) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting mdio res\n");
+		rc = -ENOENT;
+		goto no_mdio_res;
+	}
+
+	emac_mii->priv = (void *)(res->start);
+	if (!request_mem_region(res->start,
+				(res->end - res->start + 1),
+				ndev->name)) {
+		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
+					for mdio regs\n");
+		rc = -ENXIO;
+		goto no_mdio_res;
+	}
+
 	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%x", priv->pdev->id);
 	emac_mii->reset(emac_mii);
 
@@ -2737,7 +2775,25 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	return (0);
 
 mdiobus_quit:
+	release_mem_region(res->start, res->end - res->start + 1);
+
+no_mdio_res:
 	mdiobus_free(emac_mii);
+
+netdev_reg_err:
+mdio_alloc_err:
+no_irq_res:
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_ram");
+	release_mem_region(res->start, res->end - res->start + 1);
+
+no_ctrl_ram_res:
+	res = platform_get_resource_byname(pdev,
+					IORESOURCE_MEM, "ctrl_module_regs");
+	release_mem_region(res->start, res->end - res->start + 1);
+
+no_ctrl_mod_res:
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_regs");
+	release_mem_region(res->start, res->end - res->start + 1);
 
 probe_quit:
 	clk_put(emac_clk);
@@ -2754,7 +2810,8 @@ probe_quit:
  */
 static int __devexit davinci_emac_remove(struct platform_device *pdev)
 {
-	struct resource *base_res;
+	struct resource *res;
+	int i = 0;
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct emac_priv *priv = netdev_priv(ndev);
 
@@ -2762,10 +2819,15 @@ static int __devexit davinci_emac_remove(struct platform_device *pdev)
 
 	clk_disable(emac_clk);
 	platform_set_drvdata(pdev, NULL);
-	base_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	mdiobus_unregister(priv->mii_bus);
 	mdiobus_free(priv->mii_bus);
-	release_mem_region(base_res->start, base_res->end - base_res->start);
+
+	while ((res = platform_get_resource(priv->pdev, IORESOURCE_MEM, i))) {
+		release_mem_region(res->start, res->end - res->start + 1);
+		i++;
+	}
+
 	unregister_netdev(ndev);
 	free_netdev(ndev);
 	clk_disable(emac_clk);
