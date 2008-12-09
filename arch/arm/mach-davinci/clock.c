@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/errno.h>
+#include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
@@ -43,6 +44,63 @@ static unsigned int fixedrate = 27000000;	/* 27 MHZ */
 extern void davinci_psc_config(unsigned int domain, unsigned int id, char enable);
 
 /*
+ * Register a mapping { dev, logical_clockname } --> clock
+ *
+ * Device drivers should always use logical clocknames, so they
+ * don't need to change the physical name when new silicon grows
+ * another instance of that module or changes the clock tree.
+ */
+
+struct clk_mapping {
+	struct device		*dev;
+	const char		*name;
+	struct clk		*clock;
+	struct clk_mapping	*next;
+};
+
+static struct clk_mapping *maplist;
+
+int __init davinci_clk_associate(struct device *dev,
+		const char *logical_clockname,
+		const char *physical_clockname)
+{
+	int			status = -EINVAL;
+	struct clk		*clock;
+	struct clk_mapping	*mapping;
+
+	if (!dev)
+		goto done;
+
+	clock = clk_get(dev, physical_clockname);
+	if (IS_ERR(clock) || !try_module_get(clock->owner))
+		goto done;
+
+	mutex_lock(&clocks_mutex);
+	for (mapping = maplist; mapping; mapping = mapping->next) {
+		if (dev != mapping->dev)
+			continue;
+		if (strcmp(logical_clockname, mapping->name) != 0)
+			continue;
+		goto fail;
+	}
+
+	mapping = kzalloc(sizeof *mapping, GFP_KERNEL);
+	mapping->dev = dev;
+	mapping->name = logical_clockname;
+	mapping->clock = clock;
+
+	mapping->next = maplist;
+	maplist = mapping;
+
+	status = 0;
+fail:
+	mutex_unlock(&clocks_mutex);
+done:
+	WARN_ON(status < 0);
+	return status;
+}
+
+/*
  * Returns a clock. Note that we first try to use device id on the bus
  * and clock name. If this fails, we try to use clock name only.
  */
@@ -50,6 +108,7 @@ struct clk *clk_get(struct device *dev, const char *id)
 {
 	struct clk *p, *clk = ERR_PTR(-ENOENT);
 	int idno;
+	struct clk_mapping *mapping;
 
 	if (dev == NULL || dev->bus != &platform_bus_type)
 		idno = -1;
@@ -58,6 +117,18 @@ struct clk *clk_get(struct device *dev, const char *id)
 
 	mutex_lock(&clocks_mutex);
 
+	/* always prefer logical clock names */
+	if (dev) {
+		for (mapping = maplist; mapping; mapping = mapping->next) {
+			if (dev != mapping->dev)
+				continue;
+			if (strcmp(id, mapping->name) != 0)
+				continue;
+			clk = mapping->clock;
+			goto found;
+		}
+	}
+
 	list_for_each_entry(p, &clocks, node) {
 		if (p->id == idno &&
 		    strcmp(id, p->name) == 0 && try_module_get(p->owner)) {
@@ -65,7 +136,7 @@ struct clk *clk_get(struct device *dev, const char *id)
 			goto found;
 		}
 	}
-	
+
 	list_for_each_entry(p, &clocks, node) {
 		if (strcmp(id, p->name) == 0 && try_module_get(p->owner)) {
 			clk = p;
@@ -323,19 +394,9 @@ static struct clk davinci_dm355_clks[] = {
 		.usecount = 1,
 	},
 	{
-		.name = "EMACCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_EMAC_WRAPPER,
-	},
-	{
 		.name = "I2CCLK",
 		.rate = &fixedrate,
 		.lpsc = DAVINCI_LPSC_I2C,
-	},
-	{
-		.name = "IDECLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_ATA,
 	},
 	{
 		.name = "McBSPCLK0",
@@ -361,6 +422,16 @@ static struct clk davinci_dm355_clks[] = {
 		.name = "SPICLK",
 		.rate = &commonrate,
 		.lpsc = DAVINCI_LPSC_SPI,
+	},
+	{
+		.name = "SPICLK1",
+		.rate = &commonrate,
+		.lpsc = DM355_LPSC_SPI1,
+	},
+	{
+		.name = "SPICLK2",
+		.rate = &commonrate,
+		.lpsc = DM355_LPSC_SPI2,
 	},
 	{
 		.name = "gpio",

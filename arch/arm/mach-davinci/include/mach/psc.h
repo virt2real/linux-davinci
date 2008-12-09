@@ -73,9 +73,13 @@
 #define DAVINCI_LPSC_GEM            39
 #define DAVINCI_LPSC_IMCOP          40
 
+#define DM355_LPSC_TIMER3		5
+#define DM355_LPSC_SPI1			6
 #define DM355_LPSC_MMC_SD1		7
 #define DM355_LPSC_McBSP1		8
 #define DM355_LPSC_PWM3			10
+#define DM355_LPSC_SPI2			11
+#define DM355_LPSC_RTO			12
 
 /*
  * LPSC Assignments

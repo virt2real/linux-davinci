@@ -36,4 +36,7 @@ struct clk {
 #define DM646X_CLOCK_TICK_RATE	148500000
 #define DM355_CLOCK_TICK_RATE	24000000
 
+int davinci_clk_associate(struct device *dev, const char *logical_clockname,
+		const char *physical_clockname);
+
 #endif
