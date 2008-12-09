@@ -170,6 +170,30 @@ static void davinci_init_mmcsd(void) {}
 
 #endif
 
+/*-------------------------------------------------------------------------*/
+
+static struct resource wdt_resources[] = {
+	{
+		.start	= 0x01c21c00,
+		.end	= 0x01c21fff,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device davinci_wdt_device = {
+	.name		= "watchdog",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(wdt_resources),
+	.resource	= wdt_resources,
+};
+
+static void davinci_init_wdt(void)
+{
+	platform_device_register(&davinci_wdt_device);
+}
+
+/*-------------------------------------------------------------------------*/
+
 #if defined(CONFIG_TI_DAVINCI_EMAC) || defined(CONFIG_TI_DAVINCI_EMAC_MODULE)
 
 static struct resource emac_resources[] = {
@@ -272,6 +296,7 @@ static int __init davinci_init_devices(void)
 	 * in alphabetical order so they're easier to sort through.
 	 */
 	davinci_init_mmcsd();
+	davinci_init_wdt();
 
 	return 0;
 }
