@@ -23,13 +23,18 @@
 #include <asm/mach/map.h>
 
 #include <mach/hardware.h>
+#include <mach/edma.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/cpu.h>
 
+#include "clock.h"
+
+
 #define DAVINCI_I2C_BASE	     0x01C21000
 #define DAVINCI_EMAC_CNTRL_REGS_BASE 0x01C80000
-#define DAVINCI_MMC_SD_BASE	     0x01E10000
+#define DAVINCI_MMCSD0_BASE	     0x01E10000
+#define DM355_MMCSD1_BASE	     0x01E00000
 
 static struct resource i2c_resources[] = {
 	{
@@ -56,37 +61,107 @@ void __init davinci_init_i2c(struct davinci_i2c_platform_data *pdata)
 	(void) platform_device_register(&davinci_i2c_device);
 }
 
-#if 	defined(CONFIG_MMC_DAVINCI) || defined(CONFIG_MMC_DAVINCI_MODULE)
+#if	defined(CONFIG_MMC_DAVINCI) || defined(CONFIG_MMC_DAVINCI_MODULE)
 
-static u64 mmc_dma_mask = DMA_32BIT_MASK;
+static u64 mmcsd0_dma_mask = DMA_32BIT_MASK;
 
-static struct resource mmc_resources[] = {
+static struct resource mmcsd0_resources[] = {
 	{
-		.start = DAVINCI_MMC_SD_BASE,
-		.end   = DAVINCI_MMC_SD_BASE + 0x73,
+		.start = DAVINCI_MMCSD0_BASE,
+		.end   = DAVINCI_MMCSD0_BASE + SZ_4K - 1,
 		.flags = IORESOURCE_MEM,
 	},
+	/* IRQs:  MMC/SD, then SDIO */
 	{
 		.start = IRQ_MMCINT,
 		.flags = IORESOURCE_IRQ,
+	}, {
+		.start = IRQ_SDIOINT,
+		.flags = IORESOURCE_IRQ,
+	},
+	/* DMA channels: RX, then TX */
+	{
+		.start = DAVINCI_DMA_MMCRXEVT,
+		.flags = IORESOURCE_DMA,
+	}, {
+		.start = DAVINCI_DMA_MMCTXEVT,
+		.flags = IORESOURCE_DMA,
 	},
 };
 
-static struct platform_device davinci_mmcsd_device = {
+static struct platform_device davinci_mmcsd0_device = {
+	.name = "davinci_mmc",
+	.id = 0,
+	.dev = {
+		.dma_mask = &mmcsd0_dma_mask,
+		.coherent_dma_mask = DMA_32BIT_MASK,
+	},
+	.num_resources = ARRAY_SIZE(mmcsd0_resources),
+	.resource = mmcsd0_resources,
+};
+
+static u64 mmcsd1_dma_mask = DMA_32BIT_MASK;
+
+static struct resource mmcsd1_resources[] = {
+	{
+		.start = DM355_MMCSD1_BASE,
+		.end   = DM355_MMCSD1_BASE + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	/* IRQs:  MMC/SD, then SDIO */
+	{
+		.start = IRQ_DM355_MMCINT1,
+		.flags = IORESOURCE_IRQ,
+	}, {
+		.start = IRQ_DM355_SDIOINT1,
+		.flags = IORESOURCE_IRQ,
+	},
+	/* DMA channels: RX, then TX */
+	{
+		.start = 30,	/* rx */
+		.flags = IORESOURCE_DMA,
+	}, {
+		.start = 31,	/* tx */
+		.flags = IORESOURCE_DMA,
+	},
+};
+
+static struct platform_device davinci_mmcsd1_device = {
 	.name = "davinci_mmc",
 	.id = 1,
 	.dev = {
-		.dma_mask = &mmc_dma_mask,
+		.dma_mask = &mmcsd1_dma_mask,
 		.coherent_dma_mask = DMA_32BIT_MASK,
 	},
-	.num_resources = ARRAY_SIZE(mmc_resources),
-	.resource = mmc_resources,
+	.num_resources = ARRAY_SIZE(mmcsd1_resources),
+	.resource = mmcsd1_resources,
 };
 
 
 static void davinci_init_mmcsd(void)
 {
-	(void) platform_device_register(&davinci_mmcsd_device);
+	if (cpu_is_davinci_dm646x())
+		return;
+
+	/* FIXME:  only register devices the board tells are wired up.
+	 * And update PINMUX, ARM_IRQMUX, and EDMA_EVTMUX here too;
+	 * for example if MMCSD1 is used for SDIO, maybe DAT2 is unused.
+	 *
+	 * FIXME dm6441 (no MMC/SD), dm357 (one), and dm335 (two) are
+	 * not handled right here ...
+	 */
+	if (cpu_is_davinci_dm355()) {
+		davinci_clk_associate(&davinci_mmcsd1_device.dev, "mmc",
+				"MMCSDCLK1");
+		platform_device_register(&davinci_mmcsd1_device);
+		mmcsd0_resources[2].start = IRQ_DM355_SDIOINT0;
+	}
+
+	davinci_clk_associate(&davinci_mmcsd0_device.dev, "mmc",
+			cpu_is_davinci_dm355()
+				? "MMCSDCLK0"
+				: "MMCSDCLK");
+	platform_device_register(&davinci_mmcsd0_device);
 }
 
 #else
