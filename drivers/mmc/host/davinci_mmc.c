@@ -33,6 +33,7 @@
 #include <linux/ioport.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
+#include <linux/err.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/mmc.h>
@@ -1333,12 +1334,14 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	spin_lock_init(&host->lock);
 
 	ret = -ENXIO;
-	host->clk = clk_get(NULL, "MMCSDCLK");
-	if (host->clk) {
+	host->clk = clk_get(&pdev->dev, "mmc");
+	if (!IS_ERR(host->clk)) {
 		clk_enable(host->clk);
 		host->mmc_input_clk = clk_get_rate(host->clk);
-	} else
+	} else {
+		ret = PTR_ERR(host->clk);
 		goto out;
+	}
 
 	init_mmcsd_host(host);
 
@@ -1381,18 +1384,21 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	host->irq = irq;
 	host->sd_support = 1;
 
-	ret = request_irq(irq, mmc_davinci_irq, 0, DRIVER_NAME, host);
+	setup_timer(&host->timer, davinci_mmc_check_status,
+			(unsigned long)host);
+
+	platform_set_drvdata(pdev, host);
+
+	ret = mmc_add_host(mmc);
+	if (ret < 0)
+		goto out;
+
+	ret = request_irq(irq, mmc_davinci_irq, 0, mmc_hostname(mmc), host);
 	if (ret)
 		goto out;
 
-	platform_set_drvdata(pdev, host);
-	mmc_add_host(mmc);
-
-	init_timer(&host->timer);
-	host->timer.data = (unsigned long)host;
-	host->timer.function = davinci_mmc_check_status;
-	host->timer.expires = jiffies + MULTIPILER_TO_HZ * HZ;
-	add_timer(&host->timer);
+	/* start probing for card */
+	mod_timer(&host->timer, jiffies + MULTIPILER_TO_HZ * HZ);
 
 	dev_info(mmc_dev(host->mmc), "Using %s, %d-bit mode\n",
 	    mmcsd_cfg.use_dma ? "DMA" : "PIO",
