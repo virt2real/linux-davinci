@@ -427,7 +427,100 @@ int dm6446evm_eeprom_write(void *buf, off_t off, size_t count)
 }
 EXPORT_SYMBOL(dm6446evm_eeprom_write);
 
+/*
+ * MSP430 supports RTC, card detection, input from IR remote, and
+ * a bit more.  It triggers interrupts on GPIO(7) from pressing
+ * buttons on the IR remote, and for card detect switches.
+ */
+static struct i2c_client *dm6446evm_msp;
+
+static int dm6446evm_msp_probe(struct i2c_client *client,
+		const struct i2c_device_id *id)
+{
+	dm6446evm_msp = client;
+	return 0;
+}
+
+static int dm6446evm_msp_remove(struct i2c_client *client)
+{
+	dm6446evm_msp = NULL;
+	return 0;
+}
+
+static const struct i2c_device_id dm6446evm_msp_ids[] = {
+	{ "dm6446evm_msp", 0, },
+	{ /* end of list */ },
+};
+
+static struct i2c_driver dm6446evm_msp_driver = {
+	.driver.name	= "dm6446evm_msp",
+	.id_table	= dm6446evm_msp_ids,
+	.probe		= dm6446evm_msp_probe,
+	.remove		= dm6446evm_msp_remove,
+};
+
+static int dm6444evm_msp430_get_pins(void)
+{
+	static const char txbuf[2] = { 2, 4, };
+	char buf[4];
+	struct i2c_msg msg[2] = {
+		{
+			.addr = dm6446evm_msp->addr,
+			.flags = 0,
+			.len = 2,
+			.buf = (void __force *)txbuf,
+		},
+		{
+			.addr = dm6446evm_msp->addr,
+			.flags = I2C_M_RD,
+			.len = 4,
+			.buf = buf,
+		},
+	};
+	int status;
+
+	if (!dm6446evm_msp)
+		return -ENXIO;
+
+	/* Command 4 == get input state, returns port 2 and port3 data
+	 *   S Addr W [A] len=2 [A] cmd=4 [A]
+	 *   RS Addr R [A] [len=4] A [cmd=4] A [port2] A [port3] N P
+	 */
+	status = i2c_transfer(dm6446evm_msp->adapter, msg, 2);
+	if (status < 0)
+		return status;
+
+	dev_dbg(&dm6446evm_msp->dev,
+		"PINS: %02x %02x %02x %02x\n",
+		buf[0], buf[1], buf[2], buf[3]);
+
+	return (buf[3] << 8) | buf[2];
+}
+
+static int dm6444evm_mmc_get_cd(int module)
+{
+	int status = dm6444evm_msp430_get_pins();
+
+	return (status < 0) ? status : !(status & BIT(1));
+}
+
+static int dm6444evm_mmc_get_ro(int module)
+{
+	int status = dm6444evm_msp430_get_pins();
+
+	return (status < 0) ? status : status & BIT(6 + 8);
+}
+
+static struct davinci_mmc_config dm6446evm_mmc_config = {
+	.get_cd		= dm6444evm_mmc_get_cd,
+	.get_ro		= dm6444evm_mmc_get_ro,
+	.wires		= 4
+};
+
 static struct i2c_board_info __initdata i2c_info[] =  {
+	{
+		I2C_BOARD_INFO("dm6446evm_msp", 0x23),
+	},
 	{
 		I2C_BOARD_INFO("pcf8574", 0x38),
 		.platform_data	= &pcf_data_u2,
@@ -446,7 +539,6 @@ static struct i2c_board_info __initdata i2c_info[] =  {
 	},
 	/* ALSO:
 	 * - tvl320aic33 audio codec (0x1b)
-	 * - msp430 microcontroller (0x23)
 	 * - tvp5146 video decoder (0x5d)
 	 */
 };
@@ -462,6 +554,7 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 static void __init evm_init_i2c(void)
 {
 	davinci_init_i2c(&i2c_pdata);
+	i2c_add_driver(&dm6446evm_msp_driver);
 	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
 }
 
@@ -504,7 +597,7 @@ static __init void davinci_evm_init(void)
 			     ARRAY_SIZE(davinci_evm_devices));
 	evm_init_i2c();
 
-	davinci_setup_mmc(0, NULL);
+	davinci_setup_mmc(0, &dm6446evm_mmc_config);
 
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
