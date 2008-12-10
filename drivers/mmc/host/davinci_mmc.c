@@ -42,6 +42,7 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 
+#include <mach/board.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
 #include <mach/hardware.h>
@@ -68,8 +69,6 @@ static struct mmcsd_config_def mmcsd_cfg = {
 	32,
 /* To use the DMA or not-- 1- Use DMA, 0-Interrupt mode */
 	1,
-/* flag Indicates 1bit/4bit mode */
-	1
 };
 
 #define RSP_TYPE(x)	((x) & ~(MMC_RSP_BUSY|MMC_RSP_OPCODE))
@@ -1189,16 +1188,32 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static struct mmc_host_ops mmc_davinci_ops = {
-	.request = mmc_davinci_request,
-	.set_ios = mmc_davinci_set_ios,
-	.get_ro = mmc_davinci_get_ro
-};
+static int mmc_davinci_get_cd(struct mmc_host *mmc)
+{
+	struct platform_device *pdev = to_platform_device(mmc->parent);
+	struct davinci_mmc_config *config = pdev->dev.platform_data;
+
+	if (!config || !config->get_cd)
+		return -ENOSYS;
+	return config->get_cd(pdev->id);
+}
 
 static int mmc_davinci_get_ro(struct mmc_host *mmc)
 {
-	return 0;
+	struct platform_device *pdev = to_platform_device(mmc->parent);
+	struct davinci_mmc_config *config = pdev->dev.platform_data;
+
+	if (!config || !config->get_ro)
+		return -ENOSYS;
+	return config->get_ro(pdev->id);
 }
+
+static struct mmc_host_ops mmc_davinci_ops = {
+	.request = mmc_davinci_request,
+	.set_ios = mmc_davinci_set_ios,
+	.get_cd = mmc_davinci_get_cd,
+	.get_ro = mmc_davinci_get_ro,
+};
 
 static void mmc_check_card(unsigned long data)
 {
@@ -1290,11 +1305,14 @@ static void init_mmcsd_host(struct mmc_davinci_host *host)
 
 static int davinci_mmcsd_probe(struct platform_device *pdev)
 {
+	struct davinci_mmc_config *pdata = pdev->dev.platform_data;
 	struct mmc_davinci_host *host = NULL;
 	struct mmc_host *mmc = NULL;
 	struct resource *r, *mem = NULL;
 	int ret = 0, irq = 0;
 	size_t mem_size;
+
+	/* REVISIT:  when we're fully converted, fail if pdata is NULL */
 
 	ret = -ENODEV;
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1345,7 +1363,7 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 
 	init_mmcsd_host(host);
 
-	if (mmcsd_cfg.use_4bit_mode)
+	if (!pdata || pdata->wires == 4 || pdata->wires == 0)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
 
 	mmc->ops = &mmc_davinci_ops;
@@ -1401,8 +1419,8 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	mod_timer(&host->timer, jiffies + MULTIPILER_TO_HZ * HZ);
 
 	dev_info(mmc_dev(host->mmc), "Using %s, %d-bit mode\n",
-	    mmcsd_cfg.use_dma ? "DMA" : "PIO",
-	    mmcsd_cfg.use_4bit_mode ? 4 : 1);
+		mmcsd_cfg.use_dma ? "DMA" : "PIO",
+		(mmc->caps & MMC_CAP_4_BIT_DATA) ? 4 : 1);
 
 	return 0;
 

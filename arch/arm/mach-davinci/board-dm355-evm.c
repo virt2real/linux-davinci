@@ -111,6 +111,8 @@ static __init void dm355_evm_init(void)
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();
 
+	davinci_setup_mmc(0, NULL);
+	davinci_setup_mmc(1, NULL);
 }
 
 static __init void dm355_evm_irq_init(void)

@@ -230,7 +230,6 @@ struct mmc_davinci_host {
 struct mmcsd_config_def {
 	unsigned short rw_threshold;
 	unsigned short use_dma;
-	unsigned short use_4bit_mode;
 };
 
 enum mmcsdevent {
@@ -256,8 +255,6 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 static void mmc_davinci_xfer_done(struct mmc_davinci_host *host,
 				  struct mmc_data *data);
-
-static int mmc_davinci_get_ro(struct mmc_host *mmc);
 
 static void davinci_abort_dma(struct mmc_davinci_host *host);
 

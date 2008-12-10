@@ -22,6 +22,7 @@
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
 
+#include <mach/board.h>
 #include <mach/hardware.h>
 #include <mach/edma.h>
 #include <mach/emac.h>
@@ -138,35 +139,47 @@ static struct platform_device davinci_mmcsd1_device = {
 };
 
 
-static void davinci_init_mmcsd(void)
+void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 {
-	if (cpu_is_davinci_dm646x())
+	struct platform_device	*pdev = NULL;
+	const char		*clockname;
+
+	if (WARN_ON(cpu_is_davinci_dm646x()))
 		return;
 
-	/* FIXME:  only register devices the board tells are wired up.
-	 * And update PINMUX, ARM_IRQMUX, and EDMA_EVTMUX here too;
+	/* REVISIT: update PINMUX, ARM_IRQMUX, and EDMA_EVTMUX here too;
 	 * for example if MMCSD1 is used for SDIO, maybe DAT2 is unused.
 	 *
 	 * FIXME dm6441 (no MMC/SD), dm357 (one), and dm335 (two) are
 	 * not handled right here ...
 	 */
-	if (cpu_is_davinci_dm355()) {
-		davinci_clk_associate(&davinci_mmcsd1_device.dev, "mmc",
-				"MMCSDCLK1");
-		platform_device_register(&davinci_mmcsd1_device);
+	switch (module) {
+	case 1:
+		if (!cpu_is_davinci_dm355())
+			break;
 		mmcsd0_resources[2].start = IRQ_DM355_SDIOINT0;
+		pdev = &davinci_mmcsd1_device;
+		clockname = "MMCSDCLK1";
+		break;
+	case 0:
+		pdev = &davinci_mmcsd0_device;
+		clockname = cpu_is_davinci_dm355() ? "MMCSDCLK0" : "MMCSDCLK";
+		break;
 	}
 
-	davinci_clk_associate(&davinci_mmcsd0_device.dev, "mmc",
-			cpu_is_davinci_dm355()
-				? "MMCSDCLK0"
-				: "MMCSDCLK");
-	platform_device_register(&davinci_mmcsd0_device);
+	if (WARN_ON(!pdev))
+		return;
+
+	pdev->dev.platform_data = config;
+	davinci_clk_associate(&pdev->dev, "mmc", clockname);
+	platform_device_register(pdev);
 }
 
 #else
 
-static void davinci_init_mmcsd(void) {}
+void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
+{
+}
 
 #endif
 
@@ -295,7 +308,6 @@ static int __init davinci_init_devices(void)
 	/* please keep these calls, and their implementations above,
 	 * in alphabetical order so they're easier to sort through.
 	 */
-	davinci_init_mmcsd();
 	davinci_init_wdt();
 
 	return 0;

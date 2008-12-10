@@ -503,6 +503,9 @@ static __init void davinci_evm_init(void)
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));
 	evm_init_i2c();
+
+	davinci_setup_mmc(0, NULL);
+
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();
