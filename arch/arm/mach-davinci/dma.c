@@ -1070,6 +1070,7 @@ int davinci_request_dma(int dev_id, const char *name,
 	}
 	return ret_val;
 }
+EXPORT_SYMBOL(davinci_request_dma);
 
 /******************************************************************************
  *
@@ -1092,6 +1093,7 @@ void davinci_free_dma(int lch)
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_QEND))
 		free_dma_interrupt(dma_chan[lch].tcc);
 }
+EXPORT_SYMBOL(davinci_free_dma);
 
 /******************************************************************************
  *
@@ -1124,6 +1126,7 @@ void davinci_set_dma_src_params(int lch, unsigned long src_port,
 		edma_parm_write(PARM_SRC, j, src_port);
 	}
 }
+EXPORT_SYMBOL(davinci_set_dma_src_params);
 
 /******************************************************************************
  *
@@ -1155,6 +1158,7 @@ void davinci_set_dma_dest_params(int lch, unsigned long dest_port,
 		edma_parm_write(PARM_DST, j, dest_port);
 	}
 }
+EXPORT_SYMBOL(davinci_set_dma_dest_params);
 
 /******************************************************************************
  *
@@ -1176,6 +1180,7 @@ void davinci_set_dma_src_index(int lch, short src_bidx, short src_cidx)
 				0xffff0000, src_cidx);
 	}
 }
+EXPORT_SYMBOL(davinci_set_dma_src_index);
 
 /******************************************************************************
  *
@@ -1197,6 +1202,7 @@ void davinci_set_dma_dest_index(int lch, short dest_bidx, short dest_cidx)
 				0x0000ffff, dest_cidx << 16);
 	}
 }
+EXPORT_SYMBOL(davinci_set_dma_dest_index);
 
 /******************************************************************************
  *
@@ -1229,6 +1235,7 @@ void davinci_set_dma_transfer_params(int lch, unsigned short acnt,
 		edma_parm_write(PARM_CCNT, j, ccnt);
 	}
 }
+EXPORT_SYMBOL(davinci_set_dma_transfer_params);
 
 /******************************************************************************
  *
@@ -1252,6 +1259,7 @@ void davinci_set_dma_params(int lch, edmacc_paramentry_regs * temp)
 		edma_parm_write(PARM_SRC_DST_CIDX, j, temp->src_dst_cidx);
 	}
 }
+EXPORT_SYMBOL(davinci_set_dma_params);
 
 /******************************************************************************
  *
@@ -1275,6 +1283,7 @@ void davinci_get_dma_params(int lch, edmacc_paramentry_regs * temp)
 		temp->src_dst_cidx = edma_parm_read(PARM_SRC_DST_CIDX, j);
 	}
 }
+EXPORT_SYMBOL(davinci_get_dma_params);
 
 /*
  * DMA pause - pauses the dma on the channel passed
@@ -1286,6 +1295,7 @@ void davinci_pause_dma(int lch)
 		edma_shadow0_write_array(SH_EECR, lch >> 5, mask);
 	}
 }
+EXPORT_SYMBOL(davinci_pause_dma);
 /*
  * DMA resume - resumes the dma on the channel passed
  */
@@ -1296,6 +1306,7 @@ void davinci_resume_dma(int lch)
 		edma_shadow0_write_array(SH_EESR, lch >> 5, mask);
 	}
 }
+EXPORT_SYMBOL(davinci_resume_dma);
 /******************************************************************************
  *
  * DMA Start - Starts the dma on the channel passed
@@ -1338,6 +1349,7 @@ int davinci_start_dma(int lch)
 	}
 	return ret_val;
 }
+EXPORT_SYMBOL(davinci_start_dma);
 
 /******************************************************************************
  *
@@ -1389,6 +1401,7 @@ void davinci_stop_dma(int lch)
 		edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
 	}
 }
+EXPORT_SYMBOL(davinci_stop_dma);
 
 /******************************************************************************
  *
@@ -1416,6 +1429,7 @@ void davinci_dma_link_lch(int lch, int lch_que)
 		dma_chan[lch].link_lch = lch_que;
 	}
 }
+EXPORT_SYMBOL(davinci_dma_link_lch);
 
 /******************************************************************************
  *
@@ -1440,6 +1454,7 @@ void davinci_dma_unlink_lch(int lch, int lch_que)
 		dma_chan[lch].link_lch = -1;
 	}
 }
+EXPORT_SYMBOL(davinci_dma_unlink_lch);
 
 /******************************************************************************
  *
@@ -1463,6 +1478,7 @@ void davinci_dma_chain_lch(int lch, int lch_que)
 				((lch_que & 0x3f) << 12) | TCCHEN);
 	}
 }
+EXPORT_SYMBOL(davinci_dma_chain_lch);
 
 /******************************************************************************
  *
@@ -1485,6 +1501,7 @@ void davinci_dma_unchain_lch(int lch, int lch_que)
 		edma_parm_and(PARM_OPT, lch, ~TCCHEN);
 	}
 }
+EXPORT_SYMBOL(davinci_dma_unchain_lch);
 
 /******************************************************************************
  *
@@ -1512,6 +1529,7 @@ void davinci_clean_channel(int ch_no)
 		edma_write(EDMA_CCERRCLR, (1 << 16) | 0x3);
 	}
 }
+EXPORT_SYMBOL(davinci_clean_channel);
 
 /******************************************************************************
  *
@@ -1581,19 +1599,3 @@ int register_dma_interrupts(intr_callback cb1, intr_callback cb2,
 }
 
 arch_initcall(arch_dma_init);
-EXPORT_SYMBOL(davinci_start_dma);
-EXPORT_SYMBOL(davinci_dma_link_lch);
-EXPORT_SYMBOL(davinci_set_dma_params);
-EXPORT_SYMBOL(davinci_get_dma_params);
-EXPORT_SYMBOL(davinci_set_dma_transfer_params);
-EXPORT_SYMBOL(davinci_set_dma_dest_index);
-EXPORT_SYMBOL(davinci_set_dma_src_index);
-EXPORT_SYMBOL(davinci_set_dma_dest_params);
-EXPORT_SYMBOL(davinci_set_dma_src_params);
-EXPORT_SYMBOL(davinci_request_dma);
-EXPORT_SYMBOL(davinci_stop_dma);
-EXPORT_SYMBOL(davinci_clean_channel);
-EXPORT_SYMBOL(davinci_free_dma);
-EXPORT_SYMBOL(davinci_dma_chain_lch);
-EXPORT_SYMBOL(davinci_dma_unchain_lch);
-EXPORT_SYMBOL(davinci_dma_unlink_lch);
