@@ -37,8 +37,26 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 	.bus_delay	= 0	/* usec */,
 };
 
+static int dm355evm_mmc_gpios = -EINVAL;
+
+static void dm355evm_mmcsd_gpios(unsigned gpio)
+{
+	gpio_request(gpio + 0, "mmc0_ro");
+	gpio_request(gpio + 1, "mmc0_cd");
+	gpio_request(gpio + 2, "mmc1_ro");
+	gpio_request(gpio + 3, "mmc1_cd");
+
+	/* we "know" these are input-only so we don't
+	 * need to call gpio_direction_input()
+	 */
+
+	dm355evm_mmc_gpios = gpio;
+}
+
 static struct i2c_board_info dm355evm_i2c_info[] = {
-	{ I2C_BOARD_INFO("dm355evm_msp", 0x25), /* plus irq */ },
+	{ I2C_BOARD_INFO("dm355evm_msp", 0x25),
+		.platform_data = dm355evm_mmcsd_gpios,
+		/* plus irq */ },
 	/* { I2C_BOARD_INFO("tlv320aic3x", 0x1b), }, */
 	/* { I2C_BOARD_INFO("tvp5146", 0x5d), }, */
 };
@@ -96,6 +114,28 @@ static void __init dm355_evm_map_io(void)
 	davinci_map_common_io();
 }
 
+static int dm355evm_mmc_get_cd(int module)
+{
+	if (!gpio_is_valid(dm355evm_mmc_gpios))
+		return -ENXIO;
+	/* low == card present */
+	return !gpio_get_value_cansleep(dm355evm_mmc_gpios + 2 * module + 1);
+}
+
+static int dm355evm_mmc_get_ro(int module)
+{
+	if (!gpio_is_valid(dm355evm_mmc_gpios))
+		return -ENXIO;
+	/* high == card's write protect switch active */
+	return gpio_get_value_cansleep(dm355evm_mmc_gpios + 2 * module + 0);
+}
+
+static struct davinci_mmc_config dm355evm_mmc_config = {
+	.get_cd		= dm355evm_mmc_get_cd,
+	.get_ro		= dm355evm_mmc_get_ro,
+	.wires		= 4,
+};
+
 static __init void dm355_evm_init(void)
 {
 	davinci_psc_init();
@@ -111,8 +151,8 @@ static __init void dm355_evm_init(void)
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();
 
-	davinci_setup_mmc(0, NULL);
-	davinci_setup_mmc(1, NULL);
+	davinci_setup_mmc(0, &dm355evm_mmc_config);
+	davinci_setup_mmc(1, &dm355evm_mmc_config);
 }
 
 static __init void dm355_evm_irq_init(void)
