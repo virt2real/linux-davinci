@@ -182,13 +182,6 @@ struct mmc_davinci_host {
 	bool use_dma;
 	bool do_dma;
 
-	struct timer_list timer;
-	unsigned int is_core_command:1;
-	unsigned int cmd_code;
-	unsigned int old_card_state:1;
-
-	unsigned char sd_support:1;
-
 	struct edma_ch_mmcsd edma_ch_details;
 
 	unsigned int sg_len;
@@ -198,33 +191,8 @@ struct mmc_davinci_host {
 	unsigned int option_read;
 	unsigned int option_write;
 
-	/* Indicates if card being used currently by linux core or not */
-	unsigned int is_card_busy:1;
-
-	/* Indicates if card probe(detection) is currently in progress */
-	unsigned int is_card_detect_progress:1;
-
-	/* Indicates if core is currently initializing the card or not */
-	unsigned int is_init_progress:1;
-
-	/* Indicate whether core request has been queued up or not because
-	 * request has come when card detection/probe was in progress
-	 */
-	unsigned int is_req_queued_up:1;
-
 	/* data structure to queue one request */
 	struct mmc_request *que_mmc_request;
-
-	/* tells whether card is initialized or not */
-	unsigned is_card_initialized:1;
-
-	/* tells current state of card */
-	unsigned int new_card_state:1;
-
-	unsigned int is_card_removed:1;
-
-	/* protect against mmc_check_card */
-	spinlock_t lock;
 };
 
 struct mmcsd_config_def {
