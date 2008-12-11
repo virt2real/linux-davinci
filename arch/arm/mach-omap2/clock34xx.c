@@ -604,10 +604,11 @@ static void omap3_clkoutx2_recalc(struct clk *clk)
 
 	dd = pclk->dpll_data;
 
-	WARN_ON(!dd->idlest_reg || !dd->idlest_mask);
+	WARN_ON(!dd->enable_mask);
 
-	v = cm_read_mod_reg(pclk->prcm_mod, dd->idlest_reg) & dd->idlest_mask;
-	if (!v)
+	v = cm_read_mod_reg(pclk->prcm_mod, dd->control_reg) & dd->enable_mask;
+	v >>= __ffs(dd->enable_mask);
+	if (v != OMAP3XXX_EN_DPLL_LOCKED)
 		clk->rate = clk->parent->rate;
 	else
 		clk->rate = clk->parent->rate * 2;
@@ -630,6 +631,7 @@ static struct clk_functions omap2_clk_functions = {
 	.clk_round_rate		= omap2_clk_round_rate,
 	.clk_set_rate		= omap2_clk_set_rate,
 	.clk_set_parent		= omap2_clk_set_parent,
+	.clk_get_parent		= omap2_clk_get_parent,
 	.clk_disable_unused	= omap2_clk_disable_unused,
 };
 

@@ -43,7 +43,6 @@
 #include <mach/gpio.h>
 #include <mach/gpmc.h>
 #include <mach/hardware.h>
-#include <mach/mmc.h>
 #include <mach/nand.h>
 #include <mach/usb-ehci.h>
 #include <mach/usb-musb.h>
@@ -53,34 +52,34 @@
 #include "mmc-twl4030.h"
 
 
-#define NAND_BLOCK_SIZE SZ_128K
-#define GPMC_CS0_BASE  0x60
-#define GPMC_CS_SIZE   0x30
+#define NAND_BLOCK_SIZE			SZ_128K
+#define GPMC_CS0_BASE			0x60
+#define GPMC_CS_SIZE			0x30
 
 #define OMAP3_PANDORA_TS_GPIO		94
 
 static struct mtd_partition omap3pandora_nand_partitions[] = {
 	{
-		.name           = "xloader",
-		.offset         = 0,			/* Offset = 0x00000 */
-		.size           = 4 * NAND_BLOCK_SIZE,
-		.mask_flags     = MTD_WRITEABLE
+		.name		= "xloader",
+		.offset		= 0,			/* Offset = 0x00000 */
+		.size		= 4 * NAND_BLOCK_SIZE,
+		.mask_flags	= MTD_WRITEABLE
 	}, {
-		.name           = "uboot",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x80000 */
-		.size           = 14 * NAND_BLOCK_SIZE,
+		.name		= "uboot",
+		.offset		= MTDPART_OFS_APPEND,	/* Offset = 0x80000 */
+		.size		= 14 * NAND_BLOCK_SIZE,
 	}, {
-		.name           = "uboot environment",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x240000 */
-		.size           = 2 * NAND_BLOCK_SIZE,
+		.name		= "uboot environment",
+		.offset		= MTDPART_OFS_APPEND,	/* Offset = 0x240000 */
+		.size		= 2 * NAND_BLOCK_SIZE,
 	}, {
-		.name           = "linux",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x280000 */
-		.size           = 32 * NAND_BLOCK_SIZE,
+		.name		= "linux",
+		.offset		= MTDPART_OFS_APPEND,	/* Offset = 0x280000 */
+		.size		= 32 * NAND_BLOCK_SIZE,
 	}, {
-		.name           = "rootfs",
-		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x680000 */
-		.size           = MTDPART_SIZ_FULL,
+		.name		= "rootfs",
+		.offset		= MTDPART_OFS_APPEND,	/* Offset = 0x680000 */
+		.size		= MTDPART_SIZ_FULL,
 	},
 };
 
@@ -172,7 +171,7 @@ static int omap3pandora_twl_gpio_setup(struct device *dev,
 	/* gpio + {0,1} is "mmc{0,1}_cd" (input/IRQ) */
 	omap3pandora_mmc[0].gpio_cd = gpio + 0;
 	omap3pandora_mmc[1].gpio_cd = gpio + 1;
-	hsmmc_init(omap3pandora_mmc);
+	twl4030_mmc_init(omap3pandora_mmc);
 
 	return 0;
 }
@@ -197,7 +196,7 @@ static struct twl4030_platform_data omap3pandora_twldata = {
 
 static struct i2c_board_info __initdata omap3pandora_i2c_boardinfo[] = {
 	{
-		I2C_BOARD_INFO("twl4030", 0x48),
+		I2C_BOARD_INFO("tps65950", 0x48),
 		.flags = I2C_CLIENT_WAKE,
 		.irq = INT_34XX_SYS_NIRQ,
 		.platform_data = &omap3pandora_twldata,
@@ -254,7 +253,7 @@ static struct ads7846_platform_data ads7846_config = {
 
 static struct omap2_mcspi_device_config ads7846_mcspi_config = {
 	.turbo_mode	= 0,
-	.single_channel	= 1,  /* 0: slave, 1: master */
+	.single_channel	= 1,	/* 0: slave, 1: master */
 };
 
 static struct spi_board_info omap3pandora_spi_board_info[] __initdata = {

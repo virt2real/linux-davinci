@@ -32,7 +32,6 @@
 #include <mach/gpio.h>
 #include <mach/keypad.h>
 #include <mach/board.h>
-#include <mach/mmc.h>
 #include <mach/usb-musb.h>
 #include <mach/usb-ehci.h>
 #include <mach/common.h>
@@ -125,7 +124,6 @@ static struct twl4030_keypad_data omap3evm_kp_data = {
 	.keymap		= omap3evm_keymap,
 	.keymapsize	= ARRAY_SIZE(omap3evm_keymap),
 	.rep		= 1,
-	.irq		= TWL4030_MODIRQ_KEYPAD,
 };
 
 static struct twl4030_madc_platform_data omap3evm_madc_data = {
@@ -140,7 +138,7 @@ static struct twl4030_platform_data omap3evm_twldata = {
 	.keypad		= &omap3evm_kp_data,
 	.madc		= &omap3evm_madc_data,
 	.usb		= &omap3evm_usb_data,
-	.power		= &generic3430_t2scripts_data,
+	.power		= GENERIC3430_T2SCRIPTS_DATA,
 	.gpio		= &omap3evm_gpio_data,
 };
 
@@ -257,7 +255,7 @@ static void __init omap3_evm_init(void)
 				ARRAY_SIZE(omap3evm_spi_board_info));
 
 	omap_serial_init();
-	hsmmc_init(mmc);
+	twl4030_mmc_init(mmc);
 	usb_musb_init();
 	usb_ehci_init();
 	omap3evm_flash_init();

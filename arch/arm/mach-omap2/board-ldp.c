@@ -36,7 +36,6 @@
 #include <mach/common.h>
 #include <mach/keypad.h>
 #include <mach/gpmc.h>
-#include <mach/mmc.h>
 #include <mach/usb-musb.h>
 
 #include <asm/io.h>
@@ -101,7 +100,6 @@ static struct twl4030_keypad_data ldp_kp_twl4030_data = {
 	.keymap		= ldp_twl4030_keymap,
 	.keymapsize	= ARRAY_SIZE(ldp_twl4030_keymap),
 	.rep		= 1,
-	.irq		= TWL4030_MODIRQ_KEYPAD,
 };
 
 static struct gpio_keys_button ldp_gpio_keys_buttons[] = {
@@ -341,7 +339,7 @@ static inline void __init ldp_init_smc911x(void)
 				eth_gpio);
 		return;
 	}
-	omap_set_gpio_direction(eth_gpio, 1);
+	gpio_direction_input(eth_gpio);
 }
 
 
@@ -532,7 +530,7 @@ static void __init omap_ldp_init(void)
 	ads7846_dev_init();
 	omap_serial_init();
 	usb_musb_init();
-	hsmmc_init(mmc);
+	twl4030_mmc_init(mmc);
 }
 
 static void __init omap_ldp_map_io(void)

@@ -273,7 +273,6 @@ static struct twl4030_keypad_data omap2evm_kp_data = {
 	.keymap		= omap2evm_keymap,
 	.keymapsize	= ARRAY_SIZE(omap2evm_keymap),
 	.rep		= 1,
-	.irq		= TWL4030_MODIRQ_KEYPAD,
 };
 
 static void __init omap2_evm_init_irq(void)
@@ -360,7 +359,7 @@ static void __init omap2_evm_init(void)
 	spi_register_board_info(omap2evm_spi_board_info,
 				ARRAY_SIZE(omap2evm_spi_board_info));
 	omap_serial_init();
-	hsmmc_init(mmc);
+	twl4030_mmc_init(mmc);
 	omap2evm_flash_init();
 	ads7846_dev_init();
 }

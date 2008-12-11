@@ -35,12 +35,9 @@ obj-$(CONFIG_SPI_SH_SCI)		+= spi_sh_sci.o
 obj-$(CONFIG_SPI_AT25)		+= at25.o
 obj-$(CONFIG_SPI_SPIDEV)	+= spidev.o
 obj-$(CONFIG_SPI_TLE62X0)	+= tle62x0.o
-obj-$(CONFIG_SPI_TSC2101)	+= tsc2101.o
-obj-$(CONFIG_SPI_TSC2102)	+= tsc2102.o
 obj-$(CONFIG_SPI_TSC210X)	+= tsc210x.o
 obj-$(CONFIG_SPI_TSC2301)	+= tsc2301.o
 tsc2301-objs			:= tsc2301-core.o
-tsc2301-$(CONFIG_SPI_TSC2301_AUDIO)	+= tsc2301-mixer.o
 # 	... add above this line ...
 
 # SPI slave controller drivers (upstream link)

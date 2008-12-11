@@ -37,7 +37,6 @@
 #include <mach/mux.h>
 #include <mach/board.h>
 #include <mach/usb-musb.h>
-#include <mach/mmc.h>
 #include <mach/common.h>
 #include <mach/keypad.h>
 #include <mach/gpmc.h>
@@ -182,7 +181,6 @@ static struct twl4030_keypad_data sdp2430_kp_data = {
 	.keymap		= sdp2430_keymap,
 	.keymapsize	= ARRAY_SIZE(sdp2430_keymap),
 	.rep		= 1,
-	.irq		= TWL4030_MODIRQ_KEYPAD,
 };
 
 static int __init msecure_init(void)
@@ -310,7 +308,7 @@ static inline void __init sdp2430_init_smc91x(void)
 	sdp2430_smc91x_resources[0].end = cs_mem_base + 0x30f;
 	udelay(100);
 
-	if (omap_request_gpio(OMAP24XX_ETHR_GPIO_IRQ) < 0) {
+	if (gpio_request(OMAP24XX_ETHR_GPIO_IRQ, "SMC91x irq") < 0) {
 		printk(KERN_ERR "Failed to request GPIO%d for smc91x IRQ\n",
 			OMAP24XX_ETHR_GPIO_IRQ);
 		gpmc_cs_free(eth_cs);
@@ -418,7 +416,7 @@ static void __init omap_2430sdp_init(void)
 	spi_register_board_info(sdp2430_spi_board_info,
 				ARRAY_SIZE(sdp2430_spi_board_info));
 	ads7846_dev_init();
-	hsmmc_init(mmc);
+	twl4030_mmc_init(mmc);
 
 	/* turn off secondary LCD backlight */
 	gpio_direction_output(SECONDARY_LCD_GPIO, 0);

@@ -25,6 +25,7 @@ enum {
 	STI_WRITE,
 };
 
+#if defined(CONFIG_ARCH_OMAP1) || defined(CONFIG_ARCH_OMAP2)
 static int sti_netlink_read(int pid, int seq, void *payload, int size)
 {
 	struct sk_buff *skb;
@@ -55,6 +56,7 @@ nlmsg_failure:
 
 	return -EINVAL;
 }
+#endif
 
 /*
  * We abuse nlmsg_type and nlmsg_flags for our purposes.
@@ -66,7 +68,8 @@ static int sti_netlink_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	void *data;
 	u8 chan, id;
-	int size, ret = 0, len = 0;
+	int size;
+	int ret = 0, len = 0;
 
 	data	= NLMSG_DATA(nlh);
 	chan	= (nlh->nlmsg_flags >> 8) & 0xff;
@@ -77,6 +80,7 @@ static int sti_netlink_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 	case STI_WRITE:
 		sti_channel_write_trace(size, id, data, chan);
 		break;
+#if defined(CONFIG_ARCH_OMAP1) || defined(CONFIG_ARCH_OMAP2)
 	case STI_READ:
 		data = kmalloc(size, GFP_KERNEL);
 		if (!data)
@@ -88,6 +92,7 @@ static int sti_netlink_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 				       data, len);
 		kfree(data);
 		break;
+#endif
 	default:
 		return -ENOTTY;
 	}

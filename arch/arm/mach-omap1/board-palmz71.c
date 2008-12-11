@@ -32,7 +32,6 @@
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
 
-#include <mach/mcbsp.h>
 #include <mach/gpio.h>
 #include <mach/mux.h>
 #include <mach/usb.h>
@@ -179,41 +178,6 @@ static struct platform_device palmz71_spi_device = {
 	.id	= -1,
 };
 
-#define DEFAULT_BITPERSAMPLE 16
-
-static struct omap_mcbsp_reg_cfg mcbsp_regs = {
-	.spcr2	= FREE | FRST | GRST | XRST | XINTM(3),
-	.spcr1	= RINTM(3) | RRST,
-	.rcr2	= RPHASE | RFRLEN2(OMAP_MCBSP_WORD_8) |
-			RWDLEN2(OMAP_MCBSP_WORD_16) | RDATDLY(0),
-	.rcr1	= RFRLEN1(OMAP_MCBSP_WORD_8) | RWDLEN1(OMAP_MCBSP_WORD_16),
-	.xcr2	= XPHASE | XFRLEN2(OMAP_MCBSP_WORD_8) |
-			XWDLEN2(OMAP_MCBSP_WORD_16) | XDATDLY(0) | XFIG,
-	.xcr1	= XFRLEN1(OMAP_MCBSP_WORD_8) | XWDLEN1(OMAP_MCBSP_WORD_16),
-	.srgr1	= FWID(DEFAULT_BITPERSAMPLE - 1),
-	.srgr2	= GSYNC | CLKSP | FSGM | FPER(DEFAULT_BITPERSAMPLE * 2 - 1),
-	.pcr0	= CLKXP | CLKRP,	/* mcbsp: slave */
-};
-
-static struct omap_alsa_codec_config alsa_config = {
-	.name			= "PalmZ71 AIC23",
-	.mcbsp_regs_alsa	= &mcbsp_regs,
-	.codec_configure_dev	= NULL,	/* aic23_configure */
-	.codec_set_samplerate	= NULL,	/* aic23_set_samplerate */
-	.codec_clock_setup	= NULL,	/* aic23_clock_setup */
-	.codec_clock_on		= NULL,	/* aic23_clock_on */
-	.codec_clock_off	= NULL,	/* aic23_clock_off */
-	.get_default_samplerate	= NULL,	/* aic23_get_default_samplerate */
-};
-
-static struct platform_device palmz71_mcbsp1_device = {
-	.name	= "omap_alsa_mcbsp",
-	.id	= 1,
-	.dev = {
-		.platform_data = &alsa_config,
-	},
-};
-
 static struct omap_backlight_config palmz71_backlight_config = {
 	.default_intensity	= 0xa0,
 };
@@ -229,7 +193,6 @@ static struct platform_device palmz71_backlight_device = {
 static struct platform_device *devices[] __initdata = {
 	&palmz71_rom_device,
 	&palmz71_kp_device,
-	&palmz71_mcbsp1_device,
 	&palmz71_lcd_device,
 	&palmz71_irda_device,
 	&palmz71_spi_device,
@@ -315,14 +278,14 @@ palmz71_gpio_setup(int early)
 		gpio_direction_output(1, 1);
 	} else {
 		/* Set MMC/SD host WP pin as input */
-		if (omap_request_gpio(PALMZ71_MMC_WP_GPIO)) {
+		if (gpio_request(PALMZ71_MMC_WP_GPIO, "MMC WP") < 0) {
 			printk(KERN_ERR "Could not reserve WP GPIO!\n");
 			return;
 		}
 		gpio_direction_input(PALMZ71_MMC_WP_GPIO);
 
 		/* Monitor the Power-cable-connected signal */
-		if (omap_request_gpio(PALMZ71_USBDETECT_GPIO)) {
+		if (gpio_request(PALMZ71_USBDETECT_GPIO, "USB detect") < 0) {
 			printk(KERN_ERR
 				"Could not reserve cable signal GPIO!\n");
 			return;
