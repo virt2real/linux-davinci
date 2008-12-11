@@ -1374,7 +1374,9 @@ void davinci_stop_dma(int lch)
 		 * then just set the link field of the corresponding
 		 * param entry to 0xffff
 		 */
-		edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
+		/* don't clear link until audio driver fixed
+		 * edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
+		 */
 	} else if (DAVINCI_EDMA_IS_Q(lch)) {
 		/* for QDMA channels */
 		edma_shadow0_write(SH_QEECR, 1 << (lch - DAVINCI_EDMA_QSTART));
