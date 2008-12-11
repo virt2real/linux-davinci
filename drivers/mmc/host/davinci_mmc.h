@@ -215,8 +215,8 @@ struct mmc_davinci_host {
 	/* data structure to queue one request */
 	struct mmc_request *que_mmc_request;
 
-	/* tells whether card is initizlzed or not */
-	int is_card_initialized:1;
+	/* tells whether card is initialized or not */
+	unsigned is_card_initialized:1;
 
 	/* tells current state of card */
 	unsigned int new_card_state:1;

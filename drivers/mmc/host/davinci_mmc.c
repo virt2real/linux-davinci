@@ -25,8 +25,6 @@
  ver. 1.0: Oct 2005, Purushotam Kumar   Initial version
  ver 1.1:  Nov  2005, Purushotam Kumar  Solved bugs
  ver 1.2:  Jan  2006, Purushotam Kumar   Added card remove insert support
- -
- *
  */
 
 #include <linux/module.h>
@@ -43,20 +41,20 @@
 #include <linux/dma-mapping.h>
 
 #include <mach/board.h>
+#include <mach/edma.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
-#include <mach/hardware.h>
 
 #include "davinci_mmc.h"
-#include <mach/edma.h>
+
 
 extern void davinci_clean_channel(int ch_no);
 
 /* MMCSD Init clock in Hz in opendain mode */
-#define MMCSD_INIT_CLOCK 		200000
+#define MMCSD_INIT_CLOCK		200000
 
-#define DRIVER_NAME 			"davinci_mmc"
-#define TCINTEN 			(0x1<<20)
+#define DRIVER_NAME			"davinci_mmc"
+#define TCINTEN				(0x1<<20)
 
 /* This macro could not be defined to 0 (ZERO) or -ve value.
  * This value is multiplied to "HZ"
@@ -66,9 +64,9 @@ extern void davinci_clean_channel(int ch_no);
 
 static struct mmcsd_config_def mmcsd_cfg = {
 /* read write thresholds (in bytes) can be 16/32 */
-	32,
+	.rw_threshold	= 32,
 /* To use the DMA or not-- 1- Use DMA, 0-Interrupt mode */
-	1,
+	.use_dma	= 1,
 };
 
 #define RSP_TYPE(x)	((x) & ~(MMC_RSP_BUSY|MMC_RSP_OPCODE))
@@ -82,24 +80,23 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	u32 im_val;
 	unsigned long flags;
 
-#ifdef CONFIG_MMC_DEBUG
-	dev_dbg(mmc_dev(host->mmc), "\nMMCSD : CMD%d, argument 0x%08x",
-		cmd->opcode, cmd->arg);
-	switch (RSP_TYPE(mmc_resp_type(cmd))) {
-	case RSP_TYPE(MMC_RSP_R1):
-		dev_dbg(mmc_dev(host->mmc), ", R1/R1b response");
-		break;
-	case RSP_TYPE(MMC_RSP_R2):
-		dev_dbg(mmc_dev(host->mmc), ", R2 response");
-		break;
-	case RSP_TYPE(MMC_RSP_R3):
-		dev_dbg(mmc_dev(host->mmc), ", R3 response");
-		break;
-	default:
-		break;
-	}
-	dev_dbg(mmc_dev(host->mmc), "\n");
-#endif
+	dev_dbg(mmc_dev(host->mmc), "CMD%d, arg 0x%08x%s\n",
+		cmd->opcode, cmd->arg,
+		({ char *s;
+		switch (RSP_TYPE(mmc_resp_type(cmd))) {
+		case RSP_TYPE(MMC_RSP_R1):
+			s = ", R1/R1b response";
+			break;
+		case RSP_TYPE(MMC_RSP_R2):
+			s = ", R2 response";
+			break;
+		case RSP_TYPE(MMC_RSP_R3):
+			s = ", R3 response";
+			break;
+		default:
+			s = "";
+			break;
+		}; s;}));
 	host->cmd = cmd;
 
 	/* Protocol layer does not provide response type,
@@ -722,7 +719,7 @@ static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
 
 static inline void wait_on_data(struct mmc_davinci_host *host)
 {
-	unsigned long timeout = jiffies + usecs_to_jiffies(900000);
+	unsigned long timeout = jiffies + msecs_to_jiffies(900);
 
 	while (time_before(jiffies, timeout)) {
 		if (!(readl(host->base + DAVINCI_MMCST1) & MMCST1_BUSY))
@@ -1345,7 +1342,7 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	host->txdma = r->start;
 
 	host->mem_res = mem;
-	host->base = ioremap(mem->start, SZ_4K);
+	host->base = ioremap(mem->start, mem_size);
 	if (!host->base)
 		goto out;
 
@@ -1353,13 +1350,12 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 
 	ret = -ENXIO;
 	host->clk = clk_get(&pdev->dev, "mmc");
-	if (!IS_ERR(host->clk)) {
-		clk_enable(host->clk);
-		host->mmc_input_clk = clk_get_rate(host->clk);
-	} else {
+	if (IS_ERR(host->clk)) {
 		ret = PTR_ERR(host->clk);
 		goto out;
 	}
+	clk_enable(host->clk);
+	host->mmc_input_clk = clk_get_rate(host->clk);
 
 	init_mmcsd_host(host);
 
@@ -1377,8 +1373,8 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	mmc->ocr_avail = MMC_VDD_32_33;
 
 #ifdef CONFIG_MMC_BLOCK_BOUNCE
-       mmc->max_phys_segs = 1;
-       mmc->max_hw_segs   = 1;
+	mmc->max_phys_segs = 1;
+	mmc->max_hw_segs   = 1;
 #else
 	mmc->max_phys_segs = 2;
 	mmc->max_hw_segs   = 2;
