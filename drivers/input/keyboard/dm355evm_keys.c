@@ -37,8 +37,6 @@ struct dm355evm_keys {
 	int			irq;
 };
 
-#include <linux/gpio.h>
-
 static irqreturn_t dm355evm_keys_irq(int irq, void *_keys)
 {
 	struct dm355evm_keys	*keys = _keys;
