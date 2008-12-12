@@ -13,6 +13,10 @@
 #include <linux/init.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
+#include <linux/mtd/mtd.h>
+#include <linux/mtd/partitions.h>
+#include <linux/mtd/nand.h>
+#include <linux/mtd/onenand_regs.h>
 #include <linux/i2c.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
@@ -31,6 +35,66 @@
 #include <mach/i2c.h>
 #include <mach/serial.h>
 
+#define DAVINCI_ASYNC_EMIF_CONTROL_BASE		0x01e10000
+#define DAVINCI_ASYNC_EMIF_DATA_CE0_BASE	0x02000000
+
+struct mtd_partition davinci_nand_partitions[] = {
+	{
+		.name		= "bootloader",
+		.offset		= 0,
+		.size		= 0x3c0000,
+		.mask_flags	= MTD_WRITEABLE, /* force read-only */
+	}, {
+		.name		= "params",
+		.offset		= MTDPART_OFS_APPEND,
+		.size		= SZ_256K,
+		.mask_flags	= 0,
+	}, {
+		.name		= "kernel",
+		.offset		= MTDPART_OFS_APPEND,
+		.size		= SZ_4M,
+		.mask_flags	= 0,
+	}, {
+		.name		= "filesystem1",
+		.offset		= MTDPART_OFS_APPEND,
+		.size		= SZ_512M,
+		.mask_flags	= 0,
+	}, {
+		.name		= "filesystem2",
+		.offset		= MTDPART_OFS_APPEND,
+		.size		= MTDPART_SIZ_FULL,
+		.mask_flags	= 0,
+	}
+};
+
+static struct flash_platform_data davinci_nand_data = {
+	.parts			= davinci_nand_partitions,
+	.nr_parts		= ARRAY_SIZE(davinci_nand_partitions),
+};
+
+static struct resource davinci_nand_resources[] = {
+	{
+		.start		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE,
+		.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_32M - 1,
+		.flags		= IORESOURCE_MEM,
+	}, {
+		.start		= DAVINCI_ASYNC_EMIF_CONTROL_BASE,
+		.end		= DAVINCI_ASYNC_EMIF_CONTROL_BASE + SZ_4K - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device davinci_nand_device = {
+	.name			= "davinci_nand",
+	.id			= -1,
+
+	.num_resources		= ARRAY_SIZE(davinci_nand_resources),
+	.resource		= davinci_nand_resources,
+
+	.dev			= {
+		.platform_data	= &davinci_nand_data,
+	},
+};
 
 static struct davinci_i2c_platform_data i2c_pdata = {
 	.bus_freq	= 400	/* kHz */,
@@ -99,6 +163,7 @@ static struct platform_device dm355evm_dm9000 = {
 
 static struct platform_device *davinci_evm_devices[] __initdata = {
 	&dm355evm_dm9000,
+	&davinci_nand_device,
 };
 
 static struct davinci_uart_config davinci_evm_uart_config __initdata = {
