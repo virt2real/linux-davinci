@@ -50,6 +50,7 @@
 #include <mach/nand.h>
 #include <mach/mux.h>
 
+#include <asm/mach-types.h>
 #include <asm/mach/flash.h>
 
 #ifdef CONFIG_NAND_FLASH_HW_ECC
@@ -429,28 +430,37 @@ static void __init nand_davinci_flash_init(struct davinci_nand_info *info)
 {
 	u32 regval, tmp;
 
-	/* Check for correct pin mux, reconfigure if necessary */
-	tmp = davinci_readl(DAVINCI_SYSTEM_MODULE_BASE + PINMUX0);
+	/* The following mux setting are for dm6446 only,
+	 * that's why we keep them inside the above conditional
+	 * so we don't mess up other arch's mux settings.
+	 *
+	 * FIXME ideally, this should be done by board support,
+	 * move it there at some point.
+	 */
+	if (machine_is_davinci_evm()) {
+		/* Check for correct pin mux, reconfigure if necessary */
+		tmp = davinci_readl(DAVINCI_SYSTEM_MODULE_BASE + PINMUX0);
 
-	if ((tmp & 0x20020C1F) != 0x00000C1F) {
-		/* Disable HPI and ATA mux */
-		davinci_mux_peripheral(DAVINCI_MUX_HPIEN, 0);
-		davinci_mux_peripheral(DAVINCI_MUX_ATAEN, 0);
+		if ((tmp & 0x20020C1F) != 0x00000C1F) {
+			/* Disable HPI and ATA mux */
+			davinci_mux_peripheral(DAVINCI_MUX_HPIEN, 0);
+			davinci_mux_peripheral(DAVINCI_MUX_ATAEN, 0);
 
-		/* Enable VLYNQ and AEAW */
-		davinci_mux_peripheral(DAVINCI_MUX_AEAW0, 1);
-		davinci_mux_peripheral(DAVINCI_MUX_AEAW1, 1);
-		davinci_mux_peripheral(DAVINCI_MUX_AEAW2, 1);
-		davinci_mux_peripheral(DAVINCI_MUX_AEAW3, 1);
-		davinci_mux_peripheral(DAVINCI_MUX_AEAW4, 1);
-		davinci_mux_peripheral(DAVINCI_MUX_VLSCREN, 1);
-		davinci_mux_peripheral(DAVINCI_MUX_VLYNQEN, 1);
+			/* Enable VLYNQ and AEAW */
+			davinci_mux_peripheral(DAVINCI_MUX_AEAW0, 1);
+			davinci_mux_peripheral(DAVINCI_MUX_AEAW1, 1);
+			davinci_mux_peripheral(DAVINCI_MUX_AEAW2, 1);
+			davinci_mux_peripheral(DAVINCI_MUX_AEAW3, 1);
+			davinci_mux_peripheral(DAVINCI_MUX_AEAW4, 1);
+			davinci_mux_peripheral(DAVINCI_MUX_VLSCREN, 1);
+			davinci_mux_peripheral(DAVINCI_MUX_VLYNQEN, 1);
 
-		regval = davinci_readl(DAVINCI_SYSTEM_MODULE_BASE + PINMUX0);
+			regval = davinci_readl(DAVINCI_SYSTEM_MODULE_BASE + PINMUX0);
 
-		dev_warn(info->dev, "Warning: MUX config for NAND: Set " \
-		       "PINMUX0 reg to 0x%08x, was 0x%08x, should be done " \
-		       "by bootloader.\n", regval, tmp);
+			dev_warn(info->dev, "Warning: MUX config for NAND: Set " \
+					"PINMUX0 reg to 0x%08x, was 0x%08x, should be done " \
+					"by bootloader.\n", regval, tmp);
+		}
 	}
 
 	regval = davinci_nand_readl(info, AWCCR_OFFSET);
