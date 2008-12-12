@@ -261,6 +261,7 @@ static int nand_davinci_memory_bbt(struct mtd_info *mtd,
 	int blocksize = 1 << chip->bbt_erase_shift;
 	uint8_t *buf = chip->buffers->databuf;
 	int len = bd->options & NAND_BBT_SCAN2NDPAGE ? 2 : 1;
+	struct davinci_nand_info *info = to_davinci_nand(mtd);
 
 	/* -numblocks- is 2 times the actual number of eraseblocks */
 	numblocks = mtd->size >> (chip->bbt_erase_shift - 1);
@@ -286,7 +287,7 @@ static int nand_davinci_memory_bbt(struct mtd_info *mtd,
 				   table */
 				chip->bbt[i >> 3] |= 0x03 << (i & 0x6);
 
-				printk(KERN_WARNING "Bad eraseblock %d at " \
+				dev_warn(info->dev, "Bad eraseblock %d at " \
 						    "0x%08x\n", i >> 1,
 						     (unsigned int)from);
 
@@ -300,7 +301,7 @@ static int nand_davinci_memory_bbt(struct mtd_info *mtd,
 		from += blocksize;
 	}
 
-	printk(KERN_NOTICE "Bad block scan: %d out of %d blocks are bad.\n",
+	dev_notice(info->dev, "Bad block scan: %d out of %d blocks are bad.\n",
 			    mtd->ecc_stats.badblocks, numblocks>>1);
 
 	return 0;
@@ -316,6 +317,7 @@ static int nand_davinci_scan_bbt(struct mtd_info *mtd)
 	struct nand_chip *chip = mtd->priv;
 	struct nand_bbt_descr *bd;
 	int len, ret = 0;
+	struct davinci_nand_info *info = to_davinci_nand(mtd);
 
 	chip->bbt_td = NULL;
 	chip->bbt_md = NULL;
@@ -335,14 +337,14 @@ static int nand_davinci_scan_bbt(struct mtd_info *mtd)
 	   table */
 	chip->bbt = kzalloc(len, GFP_KERNEL);
 	if (!chip->bbt) {
-		printk(KERN_ERR "nand_davinci_scan_bbt: Out of memory\n");
+		dev_err(info->dev, "nand_davinci_scan_bbt: Out of memory\n");
 		return -ENOMEM;
 	}
 
 	/* Now try to fill in the BBT */
 	ret = nand_davinci_memory_bbt(mtd, bd);
 	if (ret) {
-		printk(KERN_ERR "nand_davinci_scan_bbt: "
+		dev_err(info->dev, "nand_davinci_scan_bbt: "
 		       "Can't scan flash and build the RAM-based BBT\n");
 
 		kfree(chip->bbt);
@@ -446,7 +448,7 @@ static void __devinit nand_davinci_flash_init(struct davinci_nand_info *info)
 
 		regval = davinci_readl(DAVINCI_SYSTEM_MODULE_BASE + PINMUX0);
 
-		printk(KERN_WARNING "Warning: MUX config for NAND: Set " \
+		dev_warn(info->dev, "Warning: MUX config for NAND: Set " \
 		       "PINMUX0 reg to 0x%08x, was 0x%08x, should be done " \
 		       "by bootloader.\n", regval, tmp);
 	}
