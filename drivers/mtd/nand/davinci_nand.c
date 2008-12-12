@@ -77,18 +77,18 @@ static uint8_t scan_ff_pattern[] = { 0xff, 0xff };
 
 /* BB marker is byte 5 in OOB of page 0 */
 static struct nand_bbt_descr davinci_memorybased_small = {
-	.options = NAND_BBT_SCAN2NDPAGE,
-	.offs = 5,
-	.len = 1,
-	.pattern = scan_ff_pattern
+	.options	= NAND_BBT_SCAN2NDPAGE,
+	.offs		= 5,
+	.len		= 1,
+	.pattern	= scan_ff_pattern
 };
 
 /* BB marker is bytes 0-1 in OOB of page 0 */
 static struct nand_bbt_descr davinci_memorybased_large = {
-	.options = 0,
-	.offs = 0,
-	.len = 2,
-	.pattern = scan_ff_pattern
+	.options	= 0,
+	.offs		= 0,
+	.len		= 2,
+	.pattern	= scan_ff_pattern
 };
 
 inline unsigned int davinci_nand_readl(int offset)
@@ -162,7 +162,7 @@ static int nand_davinci_calculate_ecc(struct mtd_info *mtd,
 {
 	unsigned int ecc_val = nand_davinci_readecc(mtd);
 	/* squeeze 0 middle bits out so that it fits in 3 bytes */
-	unsigned int tmp = (ecc_val&0x0fff)|((ecc_val&0x0fff0000)>>4);
+	unsigned int tmp = (ecc_val & 0x0fff) | ((ecc_val & 0x0fff0000) >> 4);
 	/* invert so that erased block ecc is correct */
 	tmp = ~tmp;
 	ecc_code[0] = (u_char)(tmp);
@@ -183,15 +183,15 @@ static int nand_davinci_correct_data(struct mtd_info *mtd, u_char *dat,
 	u_int32_t diff = eccCalc ^ eccNand;
 
 	if (diff) {
-		if ((((diff>>12)^diff) & 0xfff) == 0xfff) {
+		if ((((diff >> 12) ^ diff) & 0xfff) == 0xfff) {
 			/* Correctable error */
-			if ((diff>>(12+3)) < chip->ecc.size) {
-				dat[diff>>(12+3)] ^= (1 << ((diff>>12)&7));
+			if ((diff >> (12 + 3)) < chip->ecc.size) {
+				dat[diff >> (12 + 3)] ^= (1 << ((diff >> 12) & 7));
 				return 1;
 			} else {
 				return -1;
 			}
-		} else if (!(diff & (diff-1))) {
+		} else if (!(diff & (diff - 1))) {
 			/* Single bit ECC error in the ECC itself,
 			   nothing to fix */
 			return 1;
@@ -360,7 +360,7 @@ static void nand_davinci_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
  */
 static int nand_davinci_dev_ready(struct mtd_info *mtd)
 {
-	return (davinci_nand_readl(NANDFSR_OFFSET) & NAND_BUSY_FLAG);
+	return davinci_nand_readl(NANDFSR_OFFSET) & NAND_BUSY_FLAG;
 }
 
 static void nand_davinci_set_eccsize(struct nand_chip *chip)
@@ -475,16 +475,17 @@ static void __devinit nand_davinci_flash_init(void)
  */
 int __devinit nand_davinci_probe(struct platform_device *pdev)
 {
-	struct flash_platform_data *pdata = pdev->dev.platform_data;
-	struct resource		  *res = pdev->resource;
-	struct resource		  *res2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	struct nand_chip     	  *chip;
-	struct device        	  *dev = NULL;
-	u32                  	  nand_rev_code;
+	struct flash_platform_data	*pdata = pdev->dev.platform_data;
+	struct resource			*res = pdev->resource;
+	struct resource			*res2 = platform_get_resource(pdev,
+						IORESOURCE_MEM, 1);
+	struct nand_chip		*chip;
+	struct device			*dev = NULL;
+	u32				nand_rev_code;
 #ifdef CONFIG_MTD_CMDLINE_PARTS
-	char                 	  *master_name;
-	int 		     	  mtd_parts_nb = 0;
-	struct mtd_partition 	  *mtd_parts = 0;
+	char				*master_name;
+	int				mtd_parts_nb = 0;
+	struct mtd_partition		*mtd_parts = 0;
 #endif
 
 	nand_clock = clk_get(dev, "AEMIFCLK");
@@ -531,36 +532,36 @@ int __devinit nand_davinci_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	chip->IO_ADDR_R   = (void __iomem *)nand_vaddr;
-	chip->IO_ADDR_W   = (void __iomem *)nand_vaddr;
-	chip->chip_delay  = 0;
-	chip->select_chip = nand_davinci_select_chip;
-	chip->options     = 0;
-	chip->ecc.mode	  = DAVINCI_NAND_ECC_MODE;
+	chip->IO_ADDR_R		= (void __iomem *)nand_vaddr;
+	chip->IO_ADDR_W		= (void __iomem *)nand_vaddr;
+	chip->chip_delay	= 0;
+	chip->select_chip	= nand_davinci_select_chip;
+	chip->options		= 0;
+	chip->ecc.mode		= DAVINCI_NAND_ECC_MODE;
 
 	/* Set ECC size and bytes */
 	nand_davinci_set_eccsize(chip);
 	nand_davinci_set_eccbytes(chip);
 
 	/* Set address of hardware control function */
-	chip->cmd_ctrl  = nand_davinci_hwcontrol;
-	chip->dev_ready = nand_davinci_dev_ready;
+	chip->cmd_ctrl		= nand_davinci_hwcontrol;
+	chip->dev_ready		= nand_davinci_dev_ready;
 
 #ifdef CONFIG_NAND_FLASH_HW_ECC
-	chip->ecc.calculate = nand_davinci_calculate_ecc;
-	chip->ecc.correct   = nand_davinci_correct_data;
-	chip->ecc.hwctl     = nand_davinci_enable_hwecc;
+	chip->ecc.calculate	= nand_davinci_calculate_ecc;
+	chip->ecc.correct	= nand_davinci_correct_data;
+	chip->ecc.hwctl		= nand_davinci_enable_hwecc;
 #endif
 
 	/* Speed up the read buffer */
-	chip->read_buf      = nand_davinci_read_buf;
+	chip->read_buf		= nand_davinci_read_buf;
 
 	/* Speed up the creation of the bad block table */
-	chip->scan_bbt      = nand_davinci_scan_bbt;
+	chip->scan_bbt		= nand_davinci_scan_bbt;
 
 	nand_davinci_flash_init();
 
-	nand_davinci_mtd->owner = THIS_MODULE;
+	nand_davinci_mtd->owner	= THIS_MODULE;
 
 	/* Scan to find existence of the device */
 	if (nand_scan(nand_davinci_mtd, 1)) {
@@ -576,7 +577,7 @@ int __devinit nand_davinci_probe(struct platform_device *pdev)
 #ifdef CONFIG_MTD_CMDLINE_PARTS
 	/* Set nand_davinci_mtd->name = 0 temporarily */
 	master_name = nand_davinci_mtd->name;
-	nand_davinci_mtd->name = (char *)0;
+	nand_davinci_mtd->name	= (char *)0;
 
 	/* nand_davinci_mtd->name == 0, means: don't bother checking
 	   <mtd-id> */
@@ -629,16 +630,13 @@ static int __init nand_davinci_init(void)
 }
 module_init(nand_davinci_init);
 
-#ifdef MODULE
 static void __exit nand_davinci_exit(void)
 {
 	platform_driver_unregister(&nand_davinci_driver);
 }
 module_exit(nand_davinci_exit);
-#endif
 
 MODULE_ALIAS(DRIVER_NAME);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Texas Instruments");
-MODULE_DESCRIPTION("Board-specific glue layer for NAND flash on davinci" \
-		   "board");
+MODULE_DESCRIPTION("Davinci NAND flash driver");
