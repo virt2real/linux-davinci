@@ -380,7 +380,7 @@ static int nand_davinci_dev_ready(struct mtd_info *mtd)
 	return davinci_nand_readl(info, NANDFSR_OFFSET) & NAND_BUSY_FLAG;
 }
 
-static void nand_davinci_set_eccsize(struct nand_chip *chip)
+static void __init nand_davinci_set_eccsize(struct nand_chip *chip)
 {
 	chip->ecc.size = 256;
 
@@ -404,7 +404,7 @@ static void nand_davinci_set_eccsize(struct nand_chip *chip)
 #endif
 }
 
-static void nand_davinci_set_eccbytes(struct nand_chip *chip)
+static void __init nand_davinci_set_eccbytes(struct nand_chip *chip)
 {
 	chip->ecc.bytes = 3;
 
@@ -425,7 +425,7 @@ static void nand_davinci_set_eccbytes(struct nand_chip *chip)
 #endif
 }
 
-static void __devinit nand_davinci_flash_init(struct davinci_nand_info *info)
+static void __init nand_davinci_flash_init(struct davinci_nand_info *info)
 {
 	u32 regval, tmp;
 
@@ -487,7 +487,7 @@ static void __devinit nand_davinci_flash_init(struct davinci_nand_info *info)
 	davinci_nand_writel(info, NANDFCR_OFFSET, 0x00000101);
 }
 
-static int __devinit nand_davinci_probe(struct platform_device *pdev)
+static int __init nand_davinci_probe(struct platform_device *pdev)
 {
 	struct flash_platform_data	*pdata = pdev->dev.platform_data;
 	struct davinci_nand_info	*info;
@@ -635,7 +635,7 @@ err_pdata:
 	return ret;
 }
 
-static int nand_davinci_remove(struct platform_device *pdev)
+static int __exit nand_davinci_remove(struct platform_device *pdev)
 {
 	struct davinci_nand_info *info = platform_get_drvdata(pdev);
 
@@ -654,7 +654,7 @@ static int nand_davinci_remove(struct platform_device *pdev)
 
 static struct platform_driver nand_davinci_driver = {
 	.probe		= nand_davinci_probe,
-	.remove		= nand_davinci_remove,
+	.remove		= __exit_p(nand_davinci_remove),
 	.driver		= {
 		.name	= DRIVER_NAME,
 	},
