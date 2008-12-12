@@ -532,8 +532,8 @@ int __devinit nand_davinci_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	chip->IO_ADDR_R		= (void __iomem *)nand_vaddr;
-	chip->IO_ADDR_W		= (void __iomem *)nand_vaddr;
+	chip->IO_ADDR_R		= nand_vaddr;
+	chip->IO_ADDR_W		= nand_vaddr;
 	chip->chip_delay	= 0;
 	chip->select_chip	= nand_davinci_select_chip;
 	chip->options		= 0;
