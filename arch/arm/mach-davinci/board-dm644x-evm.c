@@ -44,6 +44,7 @@
 
 #define DAVINCI_CFC_ATA_BASE		  0x01C66000
 
+#define DAVINCI_ASYNC_EMIF_CONTROL_BASE   0x01e00000
 #define DAVINCI_ASYNC_EMIF_DATA_CE0_BASE  0x02000000
 #define DAVINCI_ASYNC_EMIF_DATA_CE1_BASE  0x04000000
 #define DAVINCI_ASYNC_EMIF_DATA_CE2_BASE  0x06000000
@@ -122,10 +123,16 @@ static struct flash_platform_data davinci_evm_nandflash_data = {
 	.nr_parts	= ARRAY_SIZE(davinci_evm_nandflash_partition),
 };
 
-static struct resource davinci_evm_nandflash_resource = {
-	.start		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE,
-	.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_16M - 1,
-	.flags		= IORESOURCE_MEM,
+static struct resource davinci_evm_nandflash_resource[] = {
+	{
+		.start		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE,
+		.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_16M - 1,
+		.flags		= IORESOURCE_MEM,
+	}, {
+		.start		= DAVINCI_ASYNC_EMIF_CONTROL_BASE,
+		.end		= DAVINCI_ASYNC_EMIF_CONTROL_BASE + SZ_4K - 1,
+		.flags		= IORESOURCE_MEM,
+	},
 };
 
 static struct platform_device davinci_evm_nandflash_device = {
@@ -134,8 +141,8 @@ static struct platform_device davinci_evm_nandflash_device = {
 	.dev		= {
 		.platform_data	= &davinci_evm_nandflash_data,
 	},
-	.num_resources	= 1,
-	.resource	= &davinci_evm_nandflash_resource,
+	.num_resources	= ARRAY_SIZE(davinci_evm_nandflash_resource),
+	.resource	= davinci_evm_nandflash_resource,
 };
 
 static u64 davinci_fb_dma_mask = DMA_32BIT_MASK;

@@ -54,6 +54,7 @@
 #include <mach/serial.h>
 #include <mach/psc.h>
 
+#define DAVINCI_ASYNC_EMIF_CONTROL_BASE   0x01e00000
 #define DAVINCI_ASYNC_EMIF_DATA_CE0_BASE  0x02000000
 
 struct mtd_partition davinci_sffsdr_nandflash_partition[] = {
@@ -82,10 +83,16 @@ static struct flash_platform_data davinci_sffsdr_nandflash_data = {
 	.nr_parts	= ARRAY_SIZE(davinci_sffsdr_nandflash_partition),
 };
 
-static struct resource davinci_sffsdr_nandflash_resource = {
-	.start		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE,
-	.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_16M - 1,
-	.flags		= IORESOURCE_MEM,
+static struct resource davinci_sffsdr_nandflash_resource[] = {
+	{
+		.start		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE,
+		.end		= DAVINCI_ASYNC_EMIF_DATA_CE0_BASE + SZ_16M - 1,
+		.flags		= IORESOURCE_MEM,
+	}, {
+		.start		= DAVINCI_ASYNC_EMIF_CONTROL_BASE,
+		.end		= DAVINCI_ASYNC_EMIF_CONTROL_BASE + SZ_4K - 1,
+		.flags		= IORESOURCE_MEM,
+	},
 };
 
 static struct platform_device davinci_sffsdr_nandflash_device = {
@@ -94,8 +101,8 @@ static struct platform_device davinci_sffsdr_nandflash_device = {
 	.dev		= {
 		.platform_data	= &davinci_sffsdr_nandflash_data,
 	},
-	.num_resources	= 1,
-	.resource	= &davinci_sffsdr_nandflash_resource,
+	.num_resources	= ARRAY_SIZE(davinci_sffsdr_nandflash_resource),
+	.resource	= davinci_sffsdr_nandflash_resource,
 };
 
 /* Get Ethernet address from kernel boot params */

@@ -52,9 +52,6 @@
 
 #include <asm/mach/flash.h>
 
-/* FIXME: this should be passed in using platform_data */
-#define DAVINCI_ASYNC_EMIF_CNTRL_BASE           (0x01E00000)
-
 #ifdef CONFIG_NAND_FLASH_HW_ECC
 #define DAVINCI_NAND_ECC_MODE NAND_ECC_HW3_512
 #else
@@ -65,6 +62,7 @@
 
 static struct clk *nand_clock;
 static void __iomem *nand_vaddr;
+static void __iomem *emif_base;
 
 /*
  * MTD structure for DaVinici board
@@ -95,12 +93,12 @@ static struct nand_bbt_descr davinci_memorybased_large = {
 
 inline unsigned int davinci_nand_readl(int offset)
 {
-	return davinci_readl(DAVINCI_ASYNC_EMIF_CNTRL_BASE + offset);
+	return __raw_readl(emif_base + offset);
 }
 
 inline void davinci_nand_writel(unsigned long value, int offset)
 {
-	davinci_writel(value, DAVINCI_ASYNC_EMIF_CNTRL_BASE + offset);
+	__raw_writel(value, emif_base + offset);
 }
 
 /*
@@ -479,6 +477,7 @@ int __devinit nand_davinci_probe(struct platform_device *pdev)
 {
 	struct flash_platform_data *pdata = pdev->dev.platform_data;
 	struct resource		  *res = pdev->resource;
+	struct resource		  *res2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	struct nand_chip     	  *chip;
 	struct device        	  *dev = NULL;
 	u32                  	  nand_rev_code;
@@ -524,7 +523,8 @@ int __devinit nand_davinci_probe(struct platform_device *pdev)
 	       (nand_rev_code >> 8) & 0xff, nand_rev_code & 0xff);
 
 	nand_vaddr = ioremap(res->start, res->end - res->start);
-	if (nand_vaddr == NULL) {
+	emif_base = ioremap(res2->start, res2->end - res2->start);
+	if (nand_vaddr == NULL || emif_base == NULL) {
 		printk(KERN_ERR "DaVinci NAND: ioremap failed.\n");
 		clk_disable(nand_clock);
 		kfree(nand_davinci_mtd);
@@ -601,6 +601,9 @@ static int nand_davinci_remove(struct platform_device *pdev)
 
 	if (nand_vaddr)
 		iounmap(nand_vaddr);
+
+	if (emif_base)
+		iounmap(emif_base);
 
 	/* Release resources, unregister device */
 	nand_release(nand_davinci_mtd);
