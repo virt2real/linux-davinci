@@ -60,14 +60,18 @@
 
 #define DRIVER_NAME "davinci_nand"
 
-static struct clk *nand_clock;
-static void __iomem *nand_vaddr;
-static void __iomem *emif_base;
+struct davinci_nand_info {
+	struct mtd_info		mtd;
+	struct nand_chip	chip;
 
-/*
- * MTD structure for DaVinici board
- */
-static struct mtd_info *nand_davinci_mtd;
+	struct device		*dev;
+	struct clk		*clk;
+
+	void __iomem		*base;
+	void __iomem		*vaddr;
+};
+
+#define to_davinci_nand(m) container_of(m, struct davinci_nand_info, mtd)
 
 #ifdef CONFIG_MTD_PARTITIONS
 const char *part_probes[] = { "cmdlinepart", NULL };
@@ -91,18 +95,22 @@ static struct nand_bbt_descr davinci_memorybased_large = {
 	.pattern	= scan_ff_pattern
 };
 
-inline unsigned int davinci_nand_readl(int offset)
+static inline unsigned int davinci_nand_readl(struct davinci_nand_info *info,
+		int offset)
 {
-	return __raw_readl(emif_base + offset);
+	return __raw_readl(info->base + offset);
 }
 
-inline void davinci_nand_writel(unsigned long value, int offset)
+static inline void davinci_nand_writel(struct davinci_nand_info *info,
+		int offset, unsigned long value)
 {
-	__raw_writel(value, emif_base + offset);
+	__raw_writel(value, info->base + offset);
 }
 
 /*
  * Hardware specific access to control-lines
+ *
+ * REVISIT avoid casting addresses
  */
 static void nand_davinci_hwcontrol(struct mtd_info *mtd, int cmd,
 				   unsigned int ctrl)
@@ -134,15 +142,18 @@ static void nand_davinci_select_chip(struct mtd_info *mtd, int chip)
 #ifdef CONFIG_NAND_FLASH_HW_ECC
 static void nand_davinci_enable_hwecc(struct mtd_info *mtd, int mode)
 {
+	struct davinci_nand_info *info;
 	u32 retval;
 
+	info = to_davinci_nand(mtd);
+
 	/* Reset ECC hardware */
-	retval = davinci_nand_readl(NANDF1ECC_OFFSET);
+	retval = davinci_nand_readl(info, NANDF1ECC_OFFSET);
 
 	/* Restart ECC hardware */
-	retval = davinci_nand_readl(NANDFCR_OFFSET);
+	retval = davinci_nand_readl(info, NANDFCR_OFFSET);
 	retval |= (1 << 8);
-	davinci_nand_writel(retval, NANDFCR_OFFSET);
+	davinci_nand_writel(info, NANDFCR_OFFSET, retval);
 }
 
 /*
@@ -150,8 +161,10 @@ static void nand_davinci_enable_hwecc(struct mtd_info *mtd, int mode)
  */
 static u32 nand_davinci_readecc(struct mtd_info *mtd)
 {
+	struct davinci_nand_info *info = to_davinci_nand(mtd);
+
 	/* Read register ECC and clear it */
-	return davinci_nand_readl(NANDF1ECC_OFFSET);
+	return davinci_nand_readl(info, NANDF1ECC_OFFSET);
 }
 
 /*
@@ -360,7 +373,9 @@ static void nand_davinci_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
  */
 static int nand_davinci_dev_ready(struct mtd_info *mtd)
 {
-	return davinci_nand_readl(NANDFSR_OFFSET) & NAND_BUSY_FLAG;
+	struct davinci_nand_info *info = to_davinci_nand(mtd);
+
+	return davinci_nand_readl(info, NANDFSR_OFFSET) & NAND_BUSY_FLAG;
 }
 
 static void nand_davinci_set_eccsize(struct nand_chip *chip)
@@ -408,7 +423,7 @@ static void nand_davinci_set_eccbytes(struct nand_chip *chip)
 #endif
 }
 
-static void __devinit nand_davinci_flash_init(void)
+static void __devinit nand_davinci_flash_init(struct davinci_nand_info *info)
 {
 	u32 regval, tmp;
 
@@ -436,9 +451,9 @@ static void __devinit nand_davinci_flash_init(void)
 		       "by bootloader.\n", regval, tmp);
 	}
 
-	regval = davinci_nand_readl(AWCCR_OFFSET);
+	regval = davinci_nand_readl(info, AWCCR_OFFSET);
 	regval |= 0x10000000;
-	davinci_nand_writel(regval, AWCCR_OFFSET);
+	davinci_nand_writel(info, AWCCR_OFFSET, regval);
 
 	/*------------------------------------------------------------------*
 	 *  NAND FLASH CHIP TIMEOUT @ 459 MHz                               *
@@ -459,162 +474,181 @@ static void __devinit nand_davinci_flash_init(void)
 		| (3 << 2)            /* turnAround      ?? ns */
 		| (0 << 0)            /* asyncSize       8-bit bus */
 		;
-	tmp = davinci_nand_readl(A1CR_OFFSET);
+	tmp = davinci_nand_readl(info, A1CR_OFFSET);
 	if (tmp != regval) {
-		printk(KERN_WARNING "Warning: NAND config: Set A1CR " \
+		dev_dbg(info->dev, "Warning: NAND config: Set A1CR " \
 		       "reg to 0x%08x, was 0x%08x, should be done by " \
 		       "bootloader.\n", regval, tmp);
-		davinci_nand_writel(regval, A1CR_OFFSET); /* 0x0434018C */
+		davinci_nand_writel(info, A1CR_OFFSET, regval); /* 0x0434018C */
 	}
 
-	davinci_nand_writel(0x00000101, NANDFCR_OFFSET);
+	davinci_nand_writel(info, NANDFCR_OFFSET, 0x00000101);
 }
 
-/*
- * Main initialization routine
- */
-int __devinit nand_davinci_probe(struct platform_device *pdev)
+static int __devinit nand_davinci_probe(struct platform_device *pdev)
 {
 	struct flash_platform_data	*pdata = pdev->dev.platform_data;
-	struct resource			*res = pdev->resource;
-	struct resource			*res2 = platform_get_resource(pdev,
-						IORESOURCE_MEM, 1);
-	struct nand_chip		*chip;
-	struct device			*dev = NULL;
-	u32				nand_rev_code;
+	struct davinci_nand_info	*info;
+	struct resource			*res1;
+	struct resource			*res2;
 #ifdef CONFIG_MTD_CMDLINE_PARTS
+	struct mtd_partition		*mtd_parts = 0;
 	char				*master_name;
 	int				mtd_parts_nb = 0;
-	struct mtd_partition		*mtd_parts = 0;
 #endif
+	void __iomem			*vaddr;
+	void __iomem			*base;
 
-	nand_clock = clk_get(dev, "AEMIFCLK");
-	if (IS_ERR(nand_clock)) {
-		printk(KERN_ERR "Error %ld getting AEMIFCLK clock?\n",
-		       PTR_ERR(nand_clock));
-		return -1;
+	int				ret;
+	u32				rev;
+
+	if (!pdata) {
+		dev_err(&pdev->dev, "platform_data missing\n");
+		ret = -ENODEV;
+		goto err_pdata;
 	}
 
-	clk_enable(nand_clock);
-
-	/* Allocate memory for MTD device structure and private data */
-	nand_davinci_mtd = kmalloc(sizeof(struct mtd_info) +
-				   sizeof(struct nand_chip), GFP_KERNEL);
-
-	if (!nand_davinci_mtd) {
-		printk(KERN_ERR "Unable to allocate davinci NAND MTD device " \
-		       "structure.\n");
-		clk_disable(nand_clock);
-		return -ENOMEM;
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info) {
+		dev_err(&pdev->dev, "unable to allocate memory\n");
+		ret = -ENOMEM;
+		goto err_nomem;
 	}
 
-	/* Get pointer to private data */
-	chip = (struct nand_chip *) (&nand_davinci_mtd[1]);
+	platform_set_drvdata(pdev, info);
 
-	/* Initialize structures */
-	memset((char *)nand_davinci_mtd, 0, sizeof(struct mtd_info));
-	memset((char *)chip, 0, sizeof(struct nand_chip));
-
-	/* Link the private data with the MTD structure */
-	nand_davinci_mtd->priv = chip;
-
-	nand_rev_code = davinci_nand_readl(NRCSR_OFFSET);
-
-	printk("DaVinci NAND Controller rev. %d.%d\n",
-	       (nand_rev_code >> 8) & 0xff, nand_rev_code & 0xff);
-
-	nand_vaddr = ioremap(res->start, res->end - res->start);
-	emif_base = ioremap(res2->start, res2->end - res2->start);
-	if (nand_vaddr == NULL || emif_base == NULL) {
-		printk(KERN_ERR "DaVinci NAND: ioremap failed.\n");
-		clk_disable(nand_clock);
-		kfree(nand_davinci_mtd);
-		return -ENOMEM;
+	res1 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	res2 = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	if (!res1 || !res2) {
+		dev_err(&pdev->dev, "resource missing\n");
+		ret = -EINVAL;
+		goto err_res;
 	}
 
-	chip->IO_ADDR_R		= nand_vaddr;
-	chip->IO_ADDR_W		= nand_vaddr;
-	chip->chip_delay	= 0;
-	chip->select_chip	= nand_davinci_select_chip;
-	chip->options		= 0;
-	chip->ecc.mode		= DAVINCI_NAND_ECC_MODE;
+	vaddr = ioremap(res1->start, res1->end - res1->start);
+	base = ioremap(res2->start, res2->end - res2->start);
+	if (!vaddr || !base) {
+		dev_err(&pdev->dev, "ioremap failed\n");
+		ret = -EINVAL;
+		goto err_ioremap;
 
-	/* Set ECC size and bytes */
-	nand_davinci_set_eccsize(chip);
-	nand_davinci_set_eccbytes(chip);
+	}
+
+	info->dev		= &pdev->dev;
+	info->base		= base;
+	info->vaddr		= vaddr;
+
+	info->mtd.priv		= &info->chip;
+	info->mtd.name		= dev_name(&pdev->dev);
+	info->mtd.owner		= THIS_MODULE;
+
+	info->chip.IO_ADDR_R	= vaddr;
+	info->chip.IO_ADDR_W	= vaddr;
+	info->chip.chip_delay	= 0;
+	info->chip.select_chip	= nand_davinci_select_chip;
+	info->chip.options	= 0;
+	info->chip.ecc.mode	= DAVINCI_NAND_ECC_MODE;
 
 	/* Set address of hardware control function */
-	chip->cmd_ctrl		= nand_davinci_hwcontrol;
-	chip->dev_ready		= nand_davinci_dev_ready;
-
-#ifdef CONFIG_NAND_FLASH_HW_ECC
-	chip->ecc.calculate	= nand_davinci_calculate_ecc;
-	chip->ecc.correct	= nand_davinci_correct_data;
-	chip->ecc.hwctl		= nand_davinci_enable_hwecc;
-#endif
+	info->chip.cmd_ctrl	= nand_davinci_hwcontrol;
+	info->chip.dev_ready	= nand_davinci_dev_ready;
 
 	/* Speed up the read buffer */
-	chip->read_buf		= nand_davinci_read_buf;
+	info->chip.read_buf      = nand_davinci_read_buf;
 
 	/* Speed up the creation of the bad block table */
-	chip->scan_bbt		= nand_davinci_scan_bbt;
+	info->chip.scan_bbt      = nand_davinci_scan_bbt;
 
-	nand_davinci_flash_init();
+#ifdef CONFIG_NAND_FLASH_HW_ECC
+	/* REVISIT should be using runtime check */
+	info->chip.ecc.calculate = nand_davinci_calculate_ecc;
+	info->chip.ecc.correct   = nand_davinci_correct_data;
+	info->chip.ecc.hwctl     = nand_davinci_enable_hwecc;
+#endif
 
-	nand_davinci_mtd->owner	= THIS_MODULE;
+	info->clk = clk_get(&pdev->dev, "AEMIFCLK");
+	if (IS_ERR(info->clk)) {
+		ret = PTR_ERR(info->clk);
+		dev_dbg(&pdev->dev, "unable to get AEMIFCLK, err %d\n", ret);
+		goto err_clk;
+	}
+
+	ret = clk_enable(info->clk);
+	if (ret < 0) {
+		dev_dbg(&pdev->dev, "unable to enable AEMIFCLK, err %d\n", ret);
+		goto err_clk_enable;
+	}
+
+	/* Set ECC size and bytes */
+	nand_davinci_set_eccsize(&info->chip);
+	nand_davinci_set_eccbytes(&info->chip);
+
+	nand_davinci_flash_init(info);
 
 	/* Scan to find existence of the device */
-	if (nand_scan(nand_davinci_mtd, 1)) {
-		printk(KERN_ERR "Chip Select is not set for NAND\n");
-		clk_disable(nand_clock);
-		kfree(nand_davinci_mtd);
-		return -ENXIO;
+	if (nand_scan(&info->mtd, 1)) {
+		dev_err(&pdev->dev, "chip select is not set for 'NAND'\n");
+		ret = -ENXIO;
+		goto err_scan;
 	}
 
 	/* Register the partitions */
-	add_mtd_partitions(nand_davinci_mtd, pdata->parts, pdata->nr_parts);
+	add_mtd_partitions(&info->mtd, pdata->parts, pdata->nr_parts);
 
 #ifdef CONFIG_MTD_CMDLINE_PARTS
-	/* Set nand_davinci_mtd->name = 0 temporarily */
-	master_name = nand_davinci_mtd->name;
-	nand_davinci_mtd->name	= (char *)0;
+	/* Set info->mtd.name = 0 temporarily */
+	master_name		= info->mtd.name;
+	info->mtd.name		= (char *)0;
 
-	/* nand_davinci_mtd->name == 0, means: don't bother checking
+	/* info->mtd.name == 0, means: don't bother checking
 	   <mtd-id> */
-	mtd_parts_nb = parse_mtd_partitions(nand_davinci_mtd, part_probes,
+	mtd_parts_nb = parse_mtd_partitions(&info->mtd, part_probes,
 					    &mtd_parts, 0);
 
-	/* Restore nand_davinci_mtd->name */
-	nand_davinci_mtd->name = master_name;
+	/* Restore info->mtd.name */
+	info->mtd.name = master_name;
 
-	add_mtd_partitions(nand_davinci_mtd, mtd_parts, mtd_parts_nb);
+	add_mtd_partitions(&info->mtd, mtd_parts, mtd_parts_nb);
 #endif
 
+	rev = davinci_nand_readl(info, NRCSR_OFFSET);
+	dev_info(&pdev->dev, "controller rev. %d.%d\n",
+	       (rev >> 8) & 0xff, rev & 0xff);
+
 	return 0;
+
+err_scan:
+	clk_disable(info->clk);
+
+err_clk_enable:
+	clk_put(info->clk);
+
+err_clk:
+err_ioremap:
+	kfree(info);
+
+err_nomem:
+err_res:
+err_pdata:
+	return ret;
 }
 
-/*
- * Clean up routine
- */
 static int nand_davinci_remove(struct platform_device *pdev)
 {
-	clk_disable(nand_clock);
+	struct davinci_nand_info *info = platform_get_drvdata(pdev);
 
-	if (nand_vaddr)
-		iounmap(nand_vaddr);
+	iounmap(info->base);
+	iounmap(info->vaddr);
 
-	if (emif_base)
-		iounmap(emif_base);
+	nand_release(&info->mtd);
 
-	/* Release resources, unregister device */
-	nand_release(nand_davinci_mtd);
+	clk_disable(info->clk);
+	clk_put(info->clk);
 
-	/* Free the MTD device structure */
-	kfree(nand_davinci_mtd);
+	kfree(info);
 
 	return 0;
 }
-
 
 static struct platform_driver nand_davinci_driver = {
 	.probe		= nand_davinci_probe,
@@ -640,3 +674,4 @@ MODULE_ALIAS(DRIVER_NAME);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Texas Instruments");
 MODULE_DESCRIPTION("Davinci NAND flash driver");
+
