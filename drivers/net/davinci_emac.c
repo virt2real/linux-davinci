@@ -2402,9 +2402,6 @@ static int emac_dev_open(struct net_device *ndev)
 	for (cnt = 0; cnt <= ETH_ALEN; cnt++)
 		ndev->dev_addr[cnt] = priv->mac_addr[cnt];
 
-	spin_lock_init(&priv->tx_lock);
-	spin_lock_init(&priv->rx_lock);
-
 	/* Configuration items */
 	priv->rx_buf_size = EMAC_DEF_MAX_FRAME_SIZE + EMAC_DEF_EXTRA_RXBUF_SIZE;
 
@@ -2630,6 +2627,10 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	priv->pdev = pdev;
 	priv->ndev = ndev;
 	priv->msg_enable = netif_msg_init(debug_level, DAVINCI_EMAC_DEBUG);
+
+	spin_lock_init(&priv->tx_lock);
+	spin_lock_init(&priv->rx_lock);
+	spin_lock_init(&priv->lock);
 
 	/* MAC addr: from platform_data */
 	if (pdev->dev.platform_data) {
