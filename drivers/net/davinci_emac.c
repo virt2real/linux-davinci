@@ -2320,7 +2320,7 @@ static void emac_adjust_link(struct net_device *ndev)
 	unsigned long flags;
 	int new_state = 0;
 
-	spin_lock_irqsave(priv->lock, flags);
+	spin_lock_irqsave(&priv->lock, flags);
 
 	if (phydev->link) {
 		/* check the mode of operation - full/half duplex */
