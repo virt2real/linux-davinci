@@ -29,7 +29,7 @@
  */
 
 /** Pending Items in this driver:
- * 1. Replace emac mdio code with Linux generic mdio infrastructure
+ * 1. use ioremap(), remove davinci_readl()/etc, minimize __force
  * 2. Use Linux cache infrastcture for DMA'ed memory (dma_xxx functions)
  * 3. Add DM646x support (gigabit included)
 */
@@ -386,7 +386,7 @@ struct emac_tx_bd {
 	int buff_ptr;
 	int off_b_len;
 	int mode; /* SOP, EOP, ownership, EOQ, teardown,Qstarv, length */
-	void *next;
+	struct emac_tx_bd __iomem *next;
 	void *buf_token;
 };
 
@@ -402,10 +402,10 @@ struct emac_txch {
 	/* CPPI specific */
 	u32 alloc_size;
 	void __iomem *bd_mem;
-	struct emac_tx_bd *bd_pool_head;
-	struct emac_tx_bd *active_queue_head;
-	struct emac_tx_bd *active_queue_tail;
-	struct emac_tx_bd *last_hw_bdprocessed;
+	struct emac_tx_bd __iomem *bd_pool_head;
+	struct emac_tx_bd __iomem *active_queue_head;
+	struct emac_tx_bd __iomem *active_queue_tail;
+	struct emac_tx_bd __iomem *last_hw_bdprocessed;
 	u32 queue_active;
 	u32 teardown_pending;
 	u32 *tx_complete;
@@ -429,7 +429,7 @@ struct emac_rx_bd {
 	int buff_ptr;
 	int off_b_len;
 	int mode;
-	void *next;
+	struct emac_rx_bd __iomem *next;
 	void *data_ptr;
 	void *buf_token;
 };
@@ -448,9 +448,9 @@ struct emac_rxch {
 	/** CPPI specific */
 	u32 alloc_size;
 	void __iomem *bd_mem;
-	struct emac_rx_bd *bd_pool_head;
-	struct emac_rx_bd *active_queue_head;
-	struct emac_rx_bd *active_queue_tail;
+	struct emac_rx_bd __iomem *bd_pool_head;
+	struct emac_rx_bd __iomem *active_queue_head;
+	struct emac_rx_bd __iomem *active_queue_tail;
 	u32 queue_active;
 	u32 teardown_pending;
 
@@ -513,21 +513,13 @@ static struct clk *emac_clk;
 static unsigned long emac_bus_frequency;
 
 /* EMAC internal utility function */
-static inline u32 emac_virt_to_phys(struct emac_priv *priv, u32 addr)
+static inline u32 emac_virt_to_phys(void __iomem *addr)
 {
-	/* NOTE: must handle memory and IO addresses */
-	if ((addr >= (u32)(priv->emac_ctrl_ram)) &&
-		(addr < (u32)(priv->emac_ctrl_ram + priv->ctrl_ram_size)))
-		addr = io_v2p(addr);
-	else
-		addr = virt_to_phys((void *)addr);
-
-	return addr;
+	return (u32 __force) io_v2p(addr);
 }
 
 
 /* Cache macros - Packet buffers would be from skb pool which is cached */
-#define EMAC_VIRT2PHYS(priv, x) emac_virt_to_phys(priv, (u32)x)
 #define EMAC_VIRT_NOCACHE(addr) (addr)
 #define EMAC_CACHE_INVALIDATE(addr, size) \
 	dma_cache_maint((void *)addr, size, DMA_FROM_DEVICE)
@@ -1106,8 +1098,8 @@ static irqreturn_t emac_irq(int irq, void *dev_id)
 static int emac_init_txch(struct emac_priv *priv, u32 ch)
 {
 	u32 cnt, bd_size;
-	char *mem;
-	struct emac_tx_bd *curr_bd;
+	void __iomem *mem;
+	struct emac_tx_bd __iomem *curr_bd;
 	struct emac_txch *txch = NULL;
 
 	txch = kzalloc(sizeof(struct emac_txch), GFP_KERNEL);
@@ -1142,10 +1134,11 @@ static int emac_init_txch(struct emac_priv *priv, u32 ch)
 	memzero((void __force *)txch->bd_mem, txch->alloc_size);
 
 	/* initialize the BD linked list */
-	mem = (char *)(((u32) txch->bd_mem + 0xF) & ~0xF);
+	mem = (void __force __iomem *)
+			(((u32 __force) txch->bd_mem + 0xF) & ~0xF);
 	txch->bd_pool_head = NULL;
 	for (cnt = 0; cnt < txch->num_bd; cnt++) {
-		curr_bd = (struct emac_tx_bd *) (mem + (cnt * bd_size));
+		curr_bd = mem + (cnt * bd_size);
 		curr_bd->next = txch->bd_pool_head;
 		txch->bd_pool_head = curr_bd;
 	}
@@ -1224,7 +1217,7 @@ static void emac_txch_teardown(struct emac_priv *priv, u32 ch)
 {
 	u32 teardown_cnt = 0xFFFFFFF0; /* Some high value */
 	struct emac_txch *txch = priv->txch[ch];
-	struct emac_tx_bd *curr_bd;
+	struct emac_tx_bd __iomem *curr_bd;
 
 	while ((emac_read(EMAC_TXCP(ch)) & EMAC_TEARDOWN_VALUE) !=
 	       EMAC_TEARDOWN_VALUE) {
@@ -1242,8 +1235,8 @@ static void emac_txch_teardown(struct emac_priv *priv, u32 ch)
 	if (1 == txch->queue_active) {
 		curr_bd = txch->active_queue_head;
 		while (curr_bd != NULL) {
-			emac_net_tx_complete(priv, &(curr_bd->buf_token),
-					     1, ch);
+			emac_net_tx_complete(priv, (void __force *)
+					&curr_bd->buf_token, 1, ch);
 			if (curr_bd != txch->active_queue_tail)
 				curr_bd = curr_bd->next;
 			else
@@ -1297,7 +1290,7 @@ static int emac_tx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 	u32 frame_status;
 	u32 pkts_processed = 0;
 	u32 tx_complete_cnt = 0;
-	struct emac_tx_bd *curr_bd;
+	struct emac_tx_bd __iomem *curr_bd;
 	struct emac_txch *txch = priv->txch[ch];
 	u32 *tx_complete_ptr = txch->tx_complete;
 
@@ -1315,7 +1308,7 @@ static int emac_tx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 	curr_bd = txch->active_queue_head;
 	if (NULL == curr_bd) {
 		emac_write(EMAC_TXCP(ch),
-			   EMAC_VIRT2PHYS(priv, txch->last_hw_bdprocessed));
+			   emac_virt_to_phys(txch->last_hw_bdprocessed));
 		txch->no_active_pkts++;
 		spin_unlock_irqrestore(&priv->tx_lock, flags);
 		return (0);
@@ -1325,7 +1318,7 @@ static int emac_tx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 	while ((curr_bd) &&
 	      ((frame_status & EMAC_CPPI_OWNERSHIP_BIT) == 0) &&
 	      (pkts_processed < budget)) {
-		emac_write(EMAC_TXCP(ch), EMAC_VIRT2PHYS(priv, curr_bd));
+		emac_write(EMAC_TXCP(ch), emac_virt_to_phys(curr_bd));
 		txch->active_queue_head = curr_bd->next;
 		if (frame_status & EMAC_CPPI_EOQ_BIT) {
 			if (curr_bd->next) {	/* misqueued packet */
@@ -1377,7 +1370,7 @@ static int emac_tx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 static int emac_send(struct emac_priv *priv, struct emac_netpktobj *pkt, u32 ch)
 {
 	unsigned long flags;
-	struct emac_tx_bd *curr_bd;
+	struct emac_tx_bd __iomem *curr_bd;
 	struct emac_txch *txch;
 	struct emac_netbufobj *buf_list;
 
@@ -1400,7 +1393,8 @@ static int emac_send(struct emac_priv *priv, struct emac_netpktobj *pkt, u32 ch)
 
 	txch->bd_pool_head = curr_bd->next;
 	curr_bd->buf_token = buf_list->buf_token;
-	curr_bd->buff_ptr = EMAC_VIRT2PHYS(priv, (int *)buf_list->data_ptr);
+	/* FIXME buff_ptr = dma_map_single(... data_ptr ...) */
+	curr_bd->buff_ptr = virt_to_phys(buf_list->data_ptr);
 	curr_bd->off_b_len = buf_list->length;
 	curr_bd->h_next = 0;
 	curr_bd->next = NULL;
@@ -1416,23 +1410,22 @@ static int emac_send(struct emac_priv *priv, struct emac_netpktobj *pkt, u32 ch)
 		txch->active_queue_tail = curr_bd;
 		if (1 != txch->queue_active) {
 			emac_write(EMAC_TXHDP(ch),
-					EMAC_VIRT2PHYS(priv, curr_bd));
+					emac_virt_to_phys(curr_bd));
 			txch->queue_active = 1;
 		}
 		++txch->queue_reinit;
 	} else {
-		register struct emac_tx_bd *tail_bd;
+		register struct emac_tx_bd __iomem *tail_bd;
 		register u32 frame_status;
 
 		tail_bd = txch->active_queue_tail;
 		tail_bd->next = curr_bd;
 		txch->active_queue_tail = curr_bd;
 		tail_bd = EMAC_VIRT_NOCACHE(tail_bd);
-		tail_bd->h_next = (int)EMAC_VIRT2PHYS(priv, curr_bd);
+		tail_bd->h_next = (int)emac_virt_to_phys(curr_bd);
 		frame_status = tail_bd->mode;
 		if (frame_status & EMAC_CPPI_EOQ_BIT) {
-			emac_write(EMAC_TXHDP(ch),
-					EMAC_VIRT2PHYS(priv, curr_bd));
+			emac_write(EMAC_TXHDP(ch), emac_virt_to_phys(curr_bd));
 			frame_status &= ~(EMAC_CPPI_EOQ_BIT);
 			tail_bd->mode = frame_status;
 			++txch->end_of_queue_add;
@@ -1572,8 +1565,8 @@ static void *emac_net_alloc_rx_buf(struct emac_priv *priv, int buf_size,
 static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 {
 	u32 cnt, bd_size;
-	char *mem;
-	struct emac_rx_bd *curr_bd;
+	void __iomem *mem;
+	struct emac_rx_bd __iomem *curr_bd;
 	struct emac_rxch *rxch = NULL;
 
 	rxch = kzalloc(sizeof(struct emac_rxch), GFP_KERNEL);
@@ -1588,9 +1581,8 @@ static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 	rxch->teardown_pending = 0;
 
 	/* save mac address */
-	mem = param;
 	for (cnt = 0; cnt < 6; cnt++)
-		rxch->mac_addr[cnt] = mem[cnt];
+		rxch->mac_addr[cnt] = param[cnt];
 
 	/* allocate buffer descriptor pool align every BD on four word
 	 * boundry for future requirements */
@@ -1602,16 +1594,17 @@ static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 	rxch->pkt_queue.buf_list = &rxch->buf_queue;
 
 	/* allocate RX buffer and initialize the BD linked list */
-	mem = (char *)(((u32) rxch->bd_mem + 0xF) & ~0xF);
+	mem = (void __force __iomem *)
+			(((u32 __force) rxch->bd_mem + 0xF) & ~0xF);
 	rxch->active_queue_head = NULL;
-	rxch->active_queue_tail = (struct emac_rx_bd *) mem;
+	rxch->active_queue_tail = mem;
 	for (cnt = 0; cnt < rxch->num_bd; cnt++) {
-		curr_bd = (struct emac_rx_bd *) (mem + (cnt * bd_size));
+		curr_bd = mem + (cnt * bd_size);
 		/* for future use the last parameter contains the BD ptr */
-		curr_bd->data_ptr = (void *)(emac_net_alloc_rx_buf(priv,
+		curr_bd->data_ptr = emac_net_alloc_rx_buf(priv,
 				    rxch->buf_size,
-				    (void **)&curr_bd->buf_token,
-				    EMAC_DEF_RX_CH));
+				    (void __force **)&curr_bd->buf_token,
+				    EMAC_DEF_RX_CH);
 		if (curr_bd->data_ptr == NULL) {
 			dev_err(EMAC_DEV, "DaVinci EMAC: RX buf mem alloc " \
 				"failed for ch %d\n", ch);
@@ -1620,15 +1613,16 @@ static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 		}
 
 		/* populate the hardware descriptor */
-		curr_bd->h_next = EMAC_VIRT2PHYS(priv, rxch->active_queue_head);
-		curr_bd->buff_ptr = EMAC_VIRT2PHYS(priv, curr_bd->data_ptr);
+		curr_bd->h_next = emac_virt_to_phys(rxch->active_queue_head);
+		/* FIXME buff_ptr = dma_map_single(... data_ptr ...) */
+		curr_bd->buff_ptr = virt_to_phys(curr_bd->data_ptr);
 		curr_bd->off_b_len = rxch->buf_size;
 		curr_bd->mode = EMAC_CPPI_OWNERSHIP_BIT;
 
 		/* write back to hardware memory */
 		BD_CACHE_WRITEBACK_INVALIDATE((u32) curr_bd,
 					      EMAC_BD_LENGTH_FOR_CACHE);
-		curr_bd->next = (void *) rxch->active_queue_head;
+		curr_bd->next = rxch->active_queue_head;
 		rxch->active_queue_head = curr_bd;
 	}
 
@@ -1698,7 +1692,7 @@ static void emac_stop_rxch(struct emac_priv *priv, u32 ch)
 static void emac_cleanup_rxch(struct emac_priv *priv, u32 ch)
 {
 	struct emac_rxch *rxch = priv->rxch[ch];
-	struct emac_rx_bd *curr_bd;
+	struct emac_rx_bd __iomem *curr_bd;
 
 	if (rxch) {
 		/* free the receive buffers previously allocated */
@@ -1863,14 +1857,15 @@ static int emac_dev_setmac_addr(struct net_device *ndev, void *addr)
  *
  */
 static void emac_addbd_to_rx_queue(struct emac_priv *priv, u32 ch,
-				   struct emac_rx_bd *curr_bd, char *buffer,
-				   void *buf_token)
+		struct emac_rx_bd __iomem *curr_bd,
+		char *buffer, void *buf_token)
 {
 	struct emac_rxch *rxch = priv->rxch[ch];
 
 	/* populate the hardware descriptor */
 	curr_bd->h_next = 0;
-	curr_bd->buff_ptr = EMAC_VIRT2PHYS(priv, buffer);
+	/* FIXME buff_ptr = dma_map_single(... buffer ...) */
+	curr_bd->buff_ptr = virt_to_phys(buffer);
 	curr_bd->off_b_len = rxch->buf_size;
 	curr_bd->mode = EMAC_CPPI_OWNERSHIP_BIT;
 	curr_bd->next = NULL;
@@ -1884,22 +1879,22 @@ static void emac_addbd_to_rx_queue(struct emac_priv *priv, u32 ch,
 	rxch->active_queue_tail = curr_bd;
 	if (0 != rxch->queue_active) {
 		emac_write(EMAC_RXHDP(ch),
-			   EMAC_VIRT2PHYS(priv, rxch->active_queue_head));
+			   emac_virt_to_phys(rxch->active_queue_head));
 		rxch->queue_active = 1;
 	}
 	} else {
-		struct emac_rx_bd *tail_bd;
+		struct emac_rx_bd __iomem *tail_bd;
 		u32 frame_status;
 
 		tail_bd = rxch->active_queue_tail;
 		rxch->active_queue_tail = curr_bd;
-		tail_bd->next = (void *)curr_bd;
+		tail_bd->next = curr_bd;
 		tail_bd = EMAC_VIRT_NOCACHE(tail_bd);
-		tail_bd->h_next = EMAC_VIRT2PHYS(priv, curr_bd);
+		tail_bd->h_next = emac_virt_to_phys(curr_bd);
 		frame_status = tail_bd->mode;
 		if (frame_status & EMAC_CPPI_EOQ_BIT) {
 			emac_write(EMAC_RXHDP(ch),
-					EMAC_VIRT2PHYS(priv, curr_bd));
+					emac_virt_to_phys(curr_bd));
 			frame_status &= ~(EMAC_CPPI_EOQ_BIT);
 			tail_bd->mode = frame_status;
 			++rxch->end_of_queue_add;
@@ -1956,7 +1951,8 @@ static int emac_rx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 	u32 frame_status;
 	u32 pkts_processed = 0;
 	char *new_buffer;
-	struct emac_rx_bd *curr_bd, *last_bd;
+	struct emac_rx_bd __iomem *curr_bd;
+	struct emac_rx_bd __iomem *last_bd;
 	struct emac_netpktobj *curr_pkt, pkt_obj;
 	struct emac_netbufobj buf_obj;
 	struct emac_netbufobj *rx_buf_obj;
@@ -1978,9 +1974,9 @@ static int emac_rx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 	       ((frame_status & EMAC_CPPI_OWNERSHIP_BIT) == 0) &&
 	       (pkts_processed < budget)) {
 
-		new_buffer = (void *)(emac_net_alloc_rx_buf(priv,
+		new_buffer = emac_net_alloc_rx_buf(priv,
 					EMAC_DEF_MAX_FRAME_SIZE,
-					&new_buf_token, EMAC_DEF_RX_CH));
+					&new_buf_token, EMAC_DEF_RX_CH);
 		if (unlikely(NULL == new_buffer)) {
 			++rxch->out_of_rx_buffers;
 			goto end_emac_rx_bdproc;
@@ -1995,7 +1991,7 @@ static int emac_rx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 		curr_pkt->num_bufs = 1;
 		curr_pkt->pkt_length =
 			(frame_status & EMAC_RX_BD_PKT_LENGTH_MASK);
-		emac_write(EMAC_RXCP(ch), EMAC_VIRT2PHYS(priv, curr_bd));
+		emac_write(EMAC_RXCP(ch), emac_virt_to_phys(curr_bd));
 		++rxch->processed_bd;
 		last_bd = curr_bd;
 		curr_bd = last_bd->next;
@@ -2006,7 +2002,7 @@ static int emac_rx_bdproc(struct emac_priv *priv, u32 ch, u32 budget,
 			if (curr_bd) {
 				++rxch->mis_queued_packets;
 				emac_write(EMAC_RXHDP(ch),
-					   EMAC_VIRT2PHYS(priv, curr_bd));
+					   emac_virt_to_phys(curr_bd));
 			} else {
 				++rxch->end_of_queue;
 				rxch->queue_active = 0;
@@ -2112,7 +2108,7 @@ static int emac_hw_enable(struct emac_priv *priv)
 		emac_write(EMAC_RXINTMASKSET, (1 << ch));
 		rxch->queue_active = 1;
 		emac_write(EMAC_RXHDP(ch),
-			   EMAC_VIRT2PHYS(priv, rxch->active_queue_head));
+			   emac_virt_to_phys(rxch->active_queue_head));
 	}
 
 	/* Enable MII */
