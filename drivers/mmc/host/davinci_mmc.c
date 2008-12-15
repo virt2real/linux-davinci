@@ -62,6 +62,96 @@ static struct mmcsd_config_def mmcsd_cfg = {
 
 #define RSP_TYPE(x)	((x) & ~(MMC_RSP_BUSY|MMC_RSP_OPCODE))
 
+#define DAVINCI_MMCSD_READ_FIFO(pDst, pRegs, cnt) asm( \
+	"	cmp	%3,#16\n" \
+	"1:	ldrhs	r0,[%1,%2]\n" \
+	"	ldrhs	r1,[%1,%2]\n" \
+	"	ldrhs	r2,[%1,%2]\n" \
+	"	ldrhs	r3,[%1,%2]\n" \
+	"	stmhsia	%0!,{r0,r1,r2,r3}\n" \
+	"	beq	3f\n" \
+	"	subhs	%3,%3,#16\n" \
+	"	cmp	%3,#16\n" \
+	"	bhs	1b\n" \
+	"	tst	%3,#0x0c\n" \
+	"2:	ldrne	r0,[%1,%2]\n" \
+	"	strne	r0,[%0],#4\n" \
+	"	subne	%3,%3,#4\n" \
+	"	tst	%3,#0x0c\n" \
+	"	bne	2b\n" \
+	"	tst	%3,#2\n" \
+	"	ldrneh	r0,[%1,%2]\n" \
+	"	strneh	r0,[%0],#2\n" \
+	"	tst	%3,#1\n" \
+	"	ldrneb	r0,[%1,%2]\n" \
+	"	strneb	r0,[%0],#1\n" \
+	"3:\n" \
+	 : "+r"(pDst) : "r"(pRegs), "i"(DAVINCI_MMCDRR), \
+	 "r"(cnt) : "r0", "r1", "r2", "r3");
+
+#define DAVINCI_MMCSD_WRITE_FIFO(pDst, pRegs, cnt) asm( \
+	"	cmp	%3,#16\n" \
+	"1:	ldmhsia	%0!,{r0,r1,r2,r3}\n" \
+	"	strhs	r0,[%1,%2]\n" \
+	"	strhs	r1,[%1,%2]\n" \
+	"	strhs	r2,[%1,%2]\n" \
+	"	strhs	r3,[%1,%2]\n" \
+	"	beq	3f\n" \
+	"	subhs	%3,%3,#16\n" \
+	"	cmp	%3,#16\n" \
+	"	bhs	1b\n" \
+	"	tst	%3,#0x0c\n" \
+	"2:	ldrne	r0,[%0],#4\n" \
+	"	strne	r0,[%1,%2]\n" \
+	"	subne	%3,%3,#4\n" \
+	"	tst	%3,#0x0c\n" \
+	"	bne	2b\n" \
+	"	tst	%3,#2\n" \
+	"	ldrneh	r0,[%0],#2\n" \
+	"	strneh	r0,[%1,%2]\n" \
+	"	tst	%3,#1\n" \
+	"	ldrneb	r0,[%0],#1\n" \
+	"	strneb	r0,[%1,%2]\n" \
+	"3:\n" \
+	 : "+r"(pDst) : "r"(pRegs), "i"(DAVINCI_MMCDXR), \
+	 "r"(cnt) : "r0", "r1", "r2", "r3");
+
+/* PIO only */
+static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
+{
+	struct scatterlist *sg;
+
+	sg = host->data->sg + host->sg_idx;
+	host->buffer_bytes_left = sg->length;
+	host->buffer = sg_virt(sg);
+	if (host->buffer_bytes_left > host->bytes_left)
+		host->buffer_bytes_left = host->bytes_left;
+}
+
+static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n)
+{
+	u8 *p;
+
+	if (host->buffer_bytes_left == 0) {
+		host->sg_idx++;
+		BUG_ON(host->sg_idx == host->sg_len);
+		mmc_davinci_sg_to_buf(host);
+	}
+
+	p = host->buffer;
+	if (n > host->buffer_bytes_left)
+		n = host->buffer_bytes_left;
+	host->buffer_bytes_left -= n;
+	host->bytes_left -= n;
+
+	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
+		DAVINCI_MMCSD_WRITE_FIFO(p, host->base, n);
+	} else {
+		DAVINCI_MMCSD_READ_FIFO(p, host->base, n);
+	}
+	host->buffer = p;
+}
+
 static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		struct mmc_command *cmd)
 {
@@ -209,93 +299,6 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	writel(im_val, host->base + DAVINCI_MMCIM);
 }
 
-static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
-{
-	if (DMA_COMPLETE != ch_status) {
-		struct mmc_davinci_host *host = (struct mmc_davinci_host *)data;
-		dev_warn(mmc_dev(host->mmc), "[DMA FAILED]");
-		davinci_abort_dma(host);
-	}
-}
-
-#define DAVINCI_MMCSD_READ_FIFO(pDst, pRegs, cnt) asm( \
-	"	cmp	%3,#16\n" \
-	"1:	ldrhs	r0,[%1,%2]\n" \
-	"	ldrhs	r1,[%1,%2]\n" \
-	"	ldrhs	r2,[%1,%2]\n" \
-	"	ldrhs	r3,[%1,%2]\n" \
-	"	stmhsia	%0!,{r0,r1,r2,r3}\n" \
-	"	beq	3f\n" \
-	"	subhs	%3,%3,#16\n" \
-	"	cmp	%3,#16\n" \
-	"	bhs	1b\n" \
-	"	tst	%3,#0x0c\n" \
-	"2:	ldrne	r0,[%1,%2]\n" \
-	"	strne	r0,[%0],#4\n" \
-	"	subne	%3,%3,#4\n" \
-	"	tst	%3,#0x0c\n" \
-	"	bne	2b\n" \
-	"	tst	%3,#2\n" \
-	"	ldrneh	r0,[%1,%2]\n" \
-	"	strneh	r0,[%0],#2\n" \
-	"	tst	%3,#1\n" \
-	"	ldrneb	r0,[%1,%2]\n" \
-	"	strneb	r0,[%0],#1\n" \
-	"3:\n" \
-	 : "+r"(pDst) : "r"(pRegs), "i"(DAVINCI_MMCDRR), \
-	 "r"(cnt) : "r0", "r1", "r2", "r3");
-
-#define DAVINCI_MMCSD_WRITE_FIFO(pDst, pRegs, cnt) asm( \
-	"	cmp	%3,#16\n" \
-	"1:	ldmhsia	%0!,{r0,r1,r2,r3}\n" \
-	"	strhs	r0,[%1,%2]\n" \
-	"	strhs	r1,[%1,%2]\n" \
-	"	strhs	r2,[%1,%2]\n" \
-	"	strhs	r3,[%1,%2]\n" \
-	"	beq	3f\n" \
-	"	subhs	%3,%3,#16\n" \
-	"	cmp	%3,#16\n" \
-	"	bhs	1b\n" \
-	"	tst	%3,#0x0c\n" \
-	"2:	ldrne	r0,[%0],#4\n" \
-	"	strne	r0,[%1,%2]\n" \
-	"	subne	%3,%3,#4\n" \
-	"	tst	%3,#0x0c\n" \
-	"	bne	2b\n" \
-	"	tst	%3,#2\n" \
-	"	ldrneh	r0,[%0],#2\n" \
-	"	strneh	r0,[%1,%2]\n" \
-	"	tst	%3,#1\n" \
-	"	ldrneb	r0,[%0],#1\n" \
-	"	strneb	r0,[%1,%2]\n" \
-	"3:\n" \
-	 : "+r"(pDst) : "r"(pRegs), "i"(DAVINCI_MMCDXR), \
-	 "r"(cnt) : "r0", "r1", "r2", "r3");
-
-static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n)
-{
-	u8 *p;
-
-	if (host->buffer_bytes_left == 0) {
-		host->sg_idx++;
-		BUG_ON(host->sg_idx == host->sg_len);
-		mmc_davinci_sg_to_buf(host);
-	}
-
-	p = host->buffer;
-	if (n > host->buffer_bytes_left)
-		n = host->buffer_bytes_left;
-	host->buffer_bytes_left -= n;
-	host->bytes_left -= n;
-
-	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
-		DAVINCI_MMCSD_WRITE_FIFO(p, host->base, n);
-	} else {
-		DAVINCI_MMCSD_READ_FIFO(p, host->base, n);
-	}
-	host->buffer = p;
-}
-
 static void davinci_abort_dma(struct mmc_davinci_host *host)
 {
 	int sync_dev = 0;
@@ -310,106 +313,13 @@ static void davinci_abort_dma(struct mmc_davinci_host *host)
 
 }
 
-static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
-		struct mmc_request *req)
+static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
 {
-	int use_dma = 1, i;
-	struct mmc_data *data = host->data;
-	int mask = mmcsd_cfg.rw_threshold-1;
-
-	host->sg_len = dma_map_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
-				((data->flags & MMC_DATA_WRITE)
-				? DMA_TO_DEVICE
-				: DMA_FROM_DEVICE));
-
-	/* Decide if we can use DMA */
-	for (i = 0; i < host->sg_len; i++) {
-		if (data->sg[i].length & mask) {
-			use_dma = 0;
-			break;
-		}
+	if (DMA_COMPLETE != ch_status) {
+		struct mmc_davinci_host *host = (struct mmc_davinci_host *)data;
+		dev_warn(mmc_dev(host->mmc), "[DMA FAILED]");
+		davinci_abort_dma(host);
 	}
-
-	if (!use_dma) {
-		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
-				  (data->flags & MMC_DATA_WRITE)
-				? DMA_TO_DEVICE
-				: DMA_FROM_DEVICE);
-		return -1;
-	}
-
-	host->do_dma = 1;
-
-	mmc_davinci_send_dma_request(host, req);
-
-	return 0;
-}
-
-static int davinci_release_dma_channels(struct mmc_davinci_host *host)
-{
-	davinci_free_dma(host->txdma);
-	davinci_free_dma(host->rxdma);
-
-	if (host->edma_ch_details.cnt_chanel) {
-		davinci_free_dma(host->edma_ch_details.chanel_num[0]);
-		host->edma_ch_details.cnt_chanel = 0;
-	}
-
-	return 0;
-}
-
-static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
-{
-	int edma_chan_num, tcc = 0, r, sync_dev;
-	enum dma_event_q queue_no = EVENTQ_0;
-
-	/* Acquire master DMA write channel */
-	r = davinci_request_dma(host->txdma, "MMC_WRITE",
-		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
-	if (r != 0) {
-		dev_warn(mmc_dev(host->mmc),
-				"MMC: davinci_request_dma() failed with %d\n",
-				r);
-		return r;
-	}
-
-	/* Acquire master DMA read channel */
-	r = davinci_request_dma(host->rxdma, "MMC_READ",
-		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
-	if (r != 0) {
-		dev_warn(mmc_dev(host->mmc),
-				"MMC: davinci_request_dma() failed with %d\n",
-				r);
-		goto free_master_write;
-	}
-
-	host->edma_ch_details.cnt_chanel = 0;
-
-	/* currently data Writes are done using single block mode,
-	 * so no DMA slave write channel is required for now */
-
-	/* Create a DMA slave read channel
-	 * (assuming max segments handled is 2) */
-	sync_dev = host->rxdma;
-	r = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "LINK", NULL, NULL,
-		&edma_chan_num, &sync_dev, queue_no);
-	if (r != 0) {
-		dev_warn(mmc_dev(host->mmc),
-			"MMC: davinci_request_dma() failed with %d\n", r);
-		goto free_master_read;
-	}
-
-	host->edma_ch_details.cnt_chanel++;
-	host->edma_ch_details.chanel_num[0] = edma_chan_num;
-
-	return 0;
-
-free_master_read:
-	davinci_free_dma(host->rxdma);
-free_master_write:
-	davinci_free_dma(host->txdma);
-
-	return r;
 }
 
 static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
@@ -592,6 +502,108 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	return 0;
 }
 
+static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
+		struct mmc_request *req)
+{
+	int use_dma = 1, i;
+	struct mmc_data *data = host->data;
+	int mask = mmcsd_cfg.rw_threshold-1;
+
+	host->sg_len = dma_map_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
+				((data->flags & MMC_DATA_WRITE)
+				? DMA_TO_DEVICE
+				: DMA_FROM_DEVICE));
+
+	/* Decide if we can use DMA */
+	for (i = 0; i < host->sg_len; i++) {
+		if (data->sg[i].length & mask) {
+			use_dma = 0;
+			break;
+		}
+	}
+
+	if (!use_dma) {
+		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
+				  (data->flags & MMC_DATA_WRITE)
+				? DMA_TO_DEVICE
+				: DMA_FROM_DEVICE);
+		return -1;
+	}
+
+	host->do_dma = 1;
+
+	mmc_davinci_send_dma_request(host, req);
+
+	return 0;
+}
+
+static int davinci_release_dma_channels(struct mmc_davinci_host *host)
+{
+	davinci_free_dma(host->txdma);
+	davinci_free_dma(host->rxdma);
+
+	if (host->edma_ch_details.cnt_chanel) {
+		davinci_free_dma(host->edma_ch_details.chanel_num[0]);
+		host->edma_ch_details.cnt_chanel = 0;
+	}
+
+	return 0;
+}
+
+static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
+{
+	int edma_chan_num, tcc = 0, r, sync_dev;
+	enum dma_event_q queue_no = EVENTQ_0;
+
+	/* Acquire master DMA write channel */
+	r = davinci_request_dma(host->txdma, "MMC_WRITE",
+		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
+	if (r != 0) {
+		dev_warn(mmc_dev(host->mmc),
+				"MMC: davinci_request_dma() failed with %d\n",
+				r);
+		return r;
+	}
+
+	/* Acquire master DMA read channel */
+	r = davinci_request_dma(host->rxdma, "MMC_READ",
+		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
+	if (r != 0) {
+		dev_warn(mmc_dev(host->mmc),
+				"MMC: davinci_request_dma() failed with %d\n",
+				r);
+		goto free_master_write;
+	}
+
+	host->edma_ch_details.cnt_chanel = 0;
+
+	/* currently data Writes are done using single block mode,
+	 * so no DMA slave write channel is required for now */
+
+	/* Create a DMA slave read channel
+	 * (assuming max segments handled is 2) */
+	sync_dev = host->rxdma;
+	r = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "LINK", NULL, NULL,
+		&edma_chan_num, &sync_dev, queue_no);
+	if (r != 0) {
+		dev_warn(mmc_dev(host->mmc),
+			"MMC: davinci_request_dma() failed with %d\n", r);
+		goto free_master_read;
+	}
+
+	host->edma_ch_details.cnt_chanel++;
+	host->edma_ch_details.chanel_num[0] = edma_chan_num;
+
+	return 0;
+
+free_master_read:
+	davinci_free_dma(host->rxdma);
+free_master_write:
+	davinci_free_dma(host->txdma);
+
+	return r;
+}
+
 static void
 mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 {
@@ -666,18 +678,6 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 		host->do_dma = 0;
 		mmc_davinci_sg_to_buf(host);
 	}
-}
-
-/* PIO only */
-static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
-{
-	struct scatterlist *sg;
-
-	sg = host->data->sg + host->sg_idx;
-	host->buffer_bytes_left = sg->length;
-	host->buffer = sg_virt(sg);
-	if (host->buffer_bytes_left > host->bytes_left)
-		host->buffer_bytes_left = host->bytes_left;
 }
 
 static void mmc_davinci_request(struct mmc_host *mmc, struct mmc_request *req)

@@ -145,7 +145,6 @@
 #define MMCFIFOCTL_ACCWD_2    (2 << 3) /* access width of 2 bytes    */
 #define MMCFIFOCTL_ACCWD_1    (3 << 3) /* access width of 1 byte     */
 
-
 /*
  * Command types
  */
@@ -211,19 +210,5 @@ enum mmcsdevent {
 	MMCSD_EVENT_CARD_EXITBUSY = (1 << 1),
 	MMCSD_EVENT_BLOCK_XFERRED = (1 << 0)
 };
-
-static void init_mmcsd_host(struct mmc_davinci_host *host);
-
-static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n);
-
-static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host);
-
-static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
-					struct mmc_request *req);
-
-static void mmc_davinci_xfer_done(struct mmc_davinci_host *host,
-				  struct mmc_data *data);
-
-static void davinci_abort_dma(struct mmc_davinci_host *host);
 
 #endif /* DAVINCI_MMC_H_ */
