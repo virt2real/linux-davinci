@@ -1,7 +1,5 @@
 /*
- * linux/drivers/mmc/davinci.c
- *
- * TI DaVinci MMC controller file
+ * davinci_mmc.c - TI DaVinci MMC controller file
  *
  * Copyright (C) 2006 Texas Instruments.
  *
@@ -17,14 +15,14 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  * ----------------------------------------------------------------------------
- Modifications:
- ver. 1.0: Oct 2005, Purushotam Kumar   Initial version
- ver 1.1:  Nov  2005, Purushotam Kumar  Solved bugs
- ver 1.2:  Jan  2006, Purushotam Kumar   Added card remove insert support
+ * Modifications:
+ * ver. 1.0: Oct 2005, Purushotam Kumar   Initial version
+ * ver 1.1:  Nov  2005, Purushotam Kumar  Solved bugs
+ * ver 1.2:  Jan  2006, Purushotam Kumar   Added card remove insert support
  */
 
 #include <linux/module.h>
@@ -45,14 +43,9 @@
 
 #include "davinci_mmc.h"
 
-
-extern void davinci_clean_channel(int ch_no);
-
 /* MMCSD Init clock in Hz in opendain mode */
 #define MMCSD_INIT_CLOCK		200000
-
 #define DRIVER_NAME			"davinci_mmc"
-#define TCINTEN				(0x1<<20)
 
 /* This macro could not be defined to 0 (ZERO) or -ve value.
  * This value is multiplied to "HZ"
@@ -93,7 +86,7 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		default:
 			s = "";
 			break;
-		}; s;}));
+		}; s; }));
 	host->cmd = cmd;
 
 	/* Protocol layer does not provide response type,
@@ -224,7 +217,6 @@ static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
 		davinci_abort_dma(host);
 	}
 }
-
 
 #define DAVINCI_MMCSD_READ_FIFO(pDst, pRegs, cnt) asm( \
 	"	cmp	%3,#16\n" \
@@ -452,7 +444,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		/* This should always be true due to an earlier check */
 		acnt = 4;
 		bcnt = mmcsd_cfg.rw_threshold>>2;
-		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32)? 5 : 4);
+		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32) ? 5 : 4);
 	} else if (count < mmcsd_cfg.rw_threshold) {
 		if ((count&3) == 0) {
 			acnt = 4;
@@ -468,7 +460,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	} else {
 		acnt = 4;
 		bcnt = mmcsd_cfg.rw_threshold>>2;
-		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32)? 5 : 4);
+		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32) ? 5 : 4);
 		dev_warn(mmc_dev(host->mmc),
 			"MMC: count of 0x%x unsupported, truncating transfer\n",
 			count);
@@ -574,7 +566,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 			if ((data->blocks == 1) && (count > data->blksz))
 				count = frame;
 
-			ccnt = count >> ((mmcsd_cfg.rw_threshold == 32)? 5 : 4);
+			ccnt = count >> ((mmcsd_cfg.rw_threshold == 32) ? 5 : 4);
 
 			if (sync_dev == host->txdma)
 				temp.src = (unsigned int)sg_dma_address(sg);
@@ -603,7 +595,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 static void
 mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 {
-	int fifo_lev = (mmcsd_cfg.rw_threshold == 32)? MMCFIFOCTL_FIFOLEV : 0;
+	int fifo_lev = (mmcsd_cfg.rw_threshold == 32) ? MMCFIFOCTL_FIFOLEV : 0;
 	int timeout, sg_len;
 
 	host->data = req->data;
@@ -830,7 +822,7 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 
 	if (!cmd) {
 		dev_warn(mmc_dev(host->mmc),
-			"%s(): No cmd ptr\n", __FUNCTION__);
+			"%s(): No cmd ptr\n", __func__);
 		return;
 	}
 
