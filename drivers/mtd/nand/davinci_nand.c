@@ -29,7 +29,15 @@
  *
  *  Overview:
  *   This is a device driver for the NAND flash device found on the
- *   DaVinci board which utilizes the Samsung k9k2g08 part.
+ *   DaVinci DM6446 EVM board which utilizes the Samsung k9k2g08 part.
+ *   (small page NAND).  It should work for some other DaVinci NAND
+ *   configurations, but it ignores the dm355 4-bit ECC hardware.
+ *
+ *   Currently makes assumptions about how the NAND device(s) are wired:
+ *      - connected on the first chipselect, controlled by A1CR
+ *      - single NAND chip
+ *      - ALE and CLE wired to support boot-from-NAND
+ *      - EM_WAIT is connected to the NAND device, not another device
  *
  *  Modifications:
  *  ver. 1.0: Feb 2005, Vinod/Sudhakar
@@ -461,7 +469,53 @@ static void __init nand_davinci_set_eccbytes(struct nand_chip *chip)
 	}
 }
 
-static void __init nand_davinci_flash_init(struct davinci_nand_info *info)
+static void __init nand_dm355evm_flash_init(struct davinci_nand_info *info)
+{
+	u32 val, tmp;
+
+	/*
+	 * For AEMIFCLK at 108.0 MHz (9.26 nsec/tick) these timings:
+	 *  - have small (a few nsec) margins for pcb+socket delays
+	 *  - assume standard mode operations (not cache mode)
+	 *  - are WAY OFF for turnaround not gated by ARM instructions
+	 *
+	 * Write setup (tCS, tDS) min 15 nsec
+	 * Write strobes (tWP) could be subsumed in setup
+	 *
+	 * Read setup (tCEA - tREA) min 5 nsec
+	 * Read strobes (tRP) min 12 nsec
+	 *
+	 * Hold times (tALH, tCLH, tCH, tDH) min 5 nsec
+	 * Read and write cycle times (tRC, tWC) min 25 nsec
+	 * Turnaround (tWHR, tRHW) min 100 nsec
+	 */
+	val = 0
+		| (0 << 31)	/* selectStrobe		normal mode */
+		| (0 << 30)	/* extWait		mbz for NAND */
+
+		/* WRITE: */
+		| (1 << 26)	/* Setup		2 ticks (18 ns) */
+		| (0 << 20)	/* Strobe		1 tick (9 ns) */
+		| (0 << 17)	/* Hold			1 tick (9 ns) */
+
+		/* READ: */
+		| (0 << 13)	/* Setup		1 tick (9 ns) */
+		| (1 << 7)	/* Strobe		2 ticks (18 ns) */
+		| (0 << 4)	/* Hold			1 tick (9 ns) */
+
+		| (3 << 2)	/* turnAround		3 ticks (TOO LOW) */
+		| (0 << 0)	/* asyncSize		eight-bit bus */
+		;
+
+	tmp = davinci_nand_readl(info, A1CR_OFFSET);
+	if (tmp != val) {
+		dev_dbg(info->dev, "NAND config: Set A1CR "
+		       "to 0x%08x, was 0x%08x\n", val, tmp);
+		davinci_nand_writel(info, A1CR_OFFSET, val);
+	}
+}
+
+static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 {
 	u32 regval, tmp;
 
@@ -526,10 +580,8 @@ static void __init nand_davinci_flash_init(struct davinci_nand_info *info)
 		dev_dbg(info->dev, "Warning: NAND config: Set A1CR " \
 		       "reg to 0x%08x, was 0x%08x, should be done by " \
 		       "bootloader.\n", regval, tmp);
-		davinci_nand_writel(info, A1CR_OFFSET, regval); /* 0x0434018C */
+		davinci_nand_writel(info, A1CR_OFFSET, regval);
 	}
-
-	davinci_nand_writel(info, NANDFCR_OFFSET, 0x00000101);
 }
 
 static int __init nand_davinci_probe(struct platform_device *pdev)
@@ -541,7 +593,7 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	void __iomem			*vaddr;
 	void __iomem			*base;
 	int				ret;
-	u32				rev;
+	u32				val;
 
 	if (!pdata) {
 		dev_err(&pdev->dev, "platform_data missing\n");
@@ -640,7 +692,16 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	nand_davinci_set_eccsize(&info->chip);
 	nand_davinci_set_eccbytes(&info->chip);
 
-	nand_davinci_flash_init(info);
+	/* FIXME these don't belong here ... */
+	if (machine_is_davinci_dm355_evm())
+		nand_dm355evm_flash_init(info);
+	if (machine_is_davinci_evm())
+		nand_dm6446evm_flash_init(info);
+
+	/* put "CS2NAND" (CS0) into NAND mode */
+	val = davinci_nand_readl(info, NANDFCR_OFFSET);
+	val |= BIT(0);
+	davinci_nand_writel(info, NANDFCR_OFFSET, val);
 
 	/* Scan to find existence of the device */
 	if (nand_scan(&info->mtd, 1)) {
@@ -703,9 +764,9 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto err_scan;
 
-	rev = davinci_nand_readl(info, NRCSR_OFFSET);
+	val = davinci_nand_readl(info, NRCSR_OFFSET);
 	dev_info(&pdev->dev, "controller rev. %d.%d\n",
-	       (rev >> 8) & 0xff, rev & 0xff);
+	       (val >> 8) & 0xff, val & 0xff);
 
 	return 0;
 
