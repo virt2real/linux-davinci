@@ -67,9 +67,14 @@ static inline int mtd_has_cmdlinepart(void) { return 0; }
 #endif
 
 #ifdef CONFIG_NAND_FLASH_HW_ECC
-#define DAVINCI_NAND_ECC_MODE NAND_ECC_HW3_512
+static inline int is_hw_ecc_1bit(void) { return 1; }
 #else
-#define DAVINCI_NAND_ECC_MODE NAND_ECC_SOFT
+static inline int is_hw_ecc_1bit(void) { return 0; }
+#define NAND_ECC_HW3_256	100
+#define NAND_ECC_HW3_512	101
+#define NAND_ECC_HW6_512	102
+#define NAND_ECC_HW8_512	103
+#define NAND_ECC_HW12_2048	104
 #endif
 
 #define DRIVER_NAME "davinci_nand"
@@ -151,8 +156,7 @@ static void nand_davinci_select_chip(struct mtd_info *mtd, int chip)
 	/* do nothing */
 }
 
-#ifdef CONFIG_NAND_FLASH_HW_ECC
-static void nand_davinci_enable_hwecc(struct mtd_info *mtd, int mode)
+static void nand_davinci_enable_hwecc_1bit(struct mtd_info *mtd, int mode)
 {
 	struct davinci_nand_info *info;
 	u32 retval;
@@ -171,7 +175,7 @@ static void nand_davinci_enable_hwecc(struct mtd_info *mtd, int mode)
 /*
  * Read DaVinci ECC register
  */
-static u32 nand_davinci_readecc(struct mtd_info *mtd)
+static inline u32 nand_davinci_readecc_1bit(struct mtd_info *mtd)
 {
 	struct davinci_nand_info *info = to_davinci_nand(mtd);
 
@@ -182,10 +186,10 @@ static u32 nand_davinci_readecc(struct mtd_info *mtd)
 /*
  * Read DaVinci ECC registers and rework into MTD format
  */
-static int nand_davinci_calculate_ecc(struct mtd_info *mtd,
+static int nand_davinci_calculate_ecc_1bit(struct mtd_info *mtd,
 				      const u_char *dat, u_char *ecc_code)
 {
-	unsigned int ecc_val = nand_davinci_readecc(mtd);
+	unsigned int ecc_val = nand_davinci_readecc_1bit(mtd);
 	/* squeeze 0 middle bits out so that it fits in 3 bytes */
 	unsigned int tmp = (ecc_val & 0x0fff) | ((ecc_val & 0x0fff0000) >> 4);
 	/* invert so that erased block ecc is correct */
@@ -197,7 +201,7 @@ static int nand_davinci_calculate_ecc(struct mtd_info *mtd,
 	return 0;
 }
 
-static int nand_davinci_correct_data(struct mtd_info *mtd, u_char *dat,
+static int nand_davinci_correct_data_1bit(struct mtd_info *mtd, u_char *dat,
 				     u_char *read_ecc, u_char *calc_ecc)
 {
 	struct nand_chip *chip = mtd->priv;
@@ -228,7 +232,6 @@ static int nand_davinci_correct_data(struct mtd_info *mtd, u_char *dat,
 	}
 	return 0;
 }
-#endif
 
 /*
  * Read OOB data from flash.
@@ -415,7 +418,9 @@ static void __init nand_davinci_set_eccsize(struct nand_chip *chip)
 {
 	chip->ecc.size = 256;
 
-#ifdef CONFIG_NAND_FLASH_HW_ECC
+	if (!is_hw_ecc_1bit())
+		return;
+
 	switch (chip->ecc.mode) {
 	case NAND_ECC_HW12_2048:
 		chip->ecc.size = 2048;
@@ -424,7 +429,7 @@ static void __init nand_davinci_set_eccsize(struct nand_chip *chip)
 	case NAND_ECC_HW3_512:
 	case NAND_ECC_HW6_512:
 	case NAND_ECC_HW8_512:
-	chip->ecc.size = 512;
+		chip->ecc.size = 512;
 		break;
 
 	case NAND_ECC_HW3_256:
@@ -432,14 +437,15 @@ static void __init nand_davinci_set_eccsize(struct nand_chip *chip)
 		/* do nothing */
 		break;
 	}
-#endif
 }
 
 static void __init nand_davinci_set_eccbytes(struct nand_chip *chip)
 {
 	chip->ecc.bytes = 3;
 
-#ifdef CONFIG_NAND_FLASH_HW_ECC
+	if (!is_hw_ecc_1bit())
+		return;
+
 	switch (chip->ecc.mode) {
 	case NAND_ECC_HW12_2048:
 		chip->ecc.bytes += 4;
@@ -453,7 +459,6 @@ static void __init nand_davinci_set_eccbytes(struct nand_chip *chip)
 		/* do nothing */
 		break;
 	}
-#endif
 }
 
 static void __init nand_davinci_flash_init(struct davinci_nand_info *info)
@@ -583,7 +588,6 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	info->chip.chip_delay	= 0;
 	info->chip.select_chip	= nand_davinci_select_chip;
 	info->chip.options	= 0;
-	info->chip.ecc.mode	= DAVINCI_NAND_ECC_MODE;
 
 	/* Set address of hardware control function */
 	info->chip.cmd_ctrl	= nand_davinci_hwcontrol;
@@ -596,12 +600,28 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	/* Speed up the creation of the bad block table */
 	info->chip.scan_bbt      = nand_davinci_scan_bbt;
 
-#ifdef CONFIG_NAND_FLASH_HW_ECC
-	/* REVISIT should be using runtime check */
-	info->chip.ecc.calculate = nand_davinci_calculate_ecc;
-	info->chip.ecc.correct   = nand_davinci_correct_data;
-	info->chip.ecc.hwctl     = nand_davinci_enable_hwecc;
-#endif
+	/*
+	 * REVISIT should probably be using runtime check using board's
+	 * platform_data, since three ECC modes (soft, 1bit, 4bit) are
+	 * incompatible at the binary level.  If the board formatted its
+	 * flash for a mode that's not supported by this kernel, bail!
+	 *
+	 * REVISIT dm355 adds an ECC mode that corrects up to 4 error
+	 * bits, using 10 ECC bytes every 512 bytes of data.  And that
+	 * is what TI's original LSP uses... along with quite a hacked
+	 * up "inline OOB" scheme storing those ECC bytes, which happens
+	 * to use (in good blocks) bytes used by factory bad-block marks
+	 * (in bad blocks).  There was evidently a technical issue (now
+	 * fixed?):  Linux seemed to limit ECC data to 32 bytes.
+	 */
+	if (is_hw_ecc_1bit()) {
+		info->chip.ecc.mode	 = NAND_ECC_HW3_512;
+		info->chip.ecc.calculate = nand_davinci_calculate_ecc_1bit;
+		info->chip.ecc.correct   = nand_davinci_correct_data_1bit;
+		info->chip.ecc.hwctl     = nand_davinci_enable_hwecc_1bit;
+	} else {
+		info->chip.ecc.mode	 = NAND_ECC_SOFT;
+	}
 
 	info->clk = clk_get(&pdev->dev, "AEMIFCLK");
 	if (IS_ERR(info->clk)) {
