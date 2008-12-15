@@ -97,6 +97,10 @@ struct davinci_nand_info {
 
 	void __iomem		*base;
 	void __iomem		*vaddr;
+
+	u32			ioaddr;
+	u32			mask_ale;
+	u32			mask_cle;
 };
 
 #define to_davinci_nand(m) container_of(m, struct davinci_nand_info, mtd)
@@ -140,23 +144,22 @@ static inline void davinci_nand_writel(struct davinci_nand_info *info,
 static void nand_davinci_hwcontrol(struct mtd_info *mtd, int cmd,
 				   unsigned int ctrl)
 {
-	struct nand_chip *chip = mtd->priv;
-	u32 IO_ADDR_W = (u32)chip->IO_ADDR_W;
+	struct davinci_nand_info	*info = to_davinci_nand(mtd);
+	u32				addr = info->ioaddr;
+	struct nand_chip		*nand = mtd->priv;
 
 	/* Did the control lines change? */
 	if (ctrl & NAND_CTRL_CHANGE) {
-		IO_ADDR_W &= ~(MASK_ALE|MASK_CLE);
-
 		if ((ctrl & NAND_CTRL_CLE) == NAND_CTRL_CLE)
-			IO_ADDR_W |= MASK_CLE;
+			addr |= info->mask_cle;
 		else if ((ctrl & NAND_CTRL_ALE) == NAND_CTRL_ALE)
-			IO_ADDR_W |= MASK_ALE;
+			addr |= info->mask_ale;
 
-		chip->IO_ADDR_W = (void __iomem *)IO_ADDR_W;
+		nand->IO_ADDR_W = (void __iomem __force *)addr;
 	}
 
 	if (cmd != NAND_CMD_NONE)
-		writeb(cmd, chip->IO_ADDR_W);
+		iowrite8(cmd, nand->IO_ADDR_W);
 }
 
 static void nand_davinci_select_chip(struct mtd_info *mtd, int chip)
@@ -640,6 +643,12 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	info->chip.chip_delay	= 0;
 	info->chip.select_chip	= nand_davinci_select_chip;
 	info->chip.options	= 0;
+
+	info->ioaddr		= (u32 __force) vaddr;
+
+	/* FIXME these masks should come from platform_data */
+	info->mask_ale		= MASK_ALE;
+	info->mask_cle		= MASK_CLE;
 
 	/* Set address of hardware control function */
 	info->chip.cmd_ctrl	= nand_davinci_hwcontrol;
