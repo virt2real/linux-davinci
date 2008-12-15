@@ -356,18 +356,37 @@ static int nand_davinci_scan_bbt(struct mtd_info *mtd)
 }
 
 /*
- * Read from memory register: we can read 4 bytes at a time.
- * The hardware takes care of actually reading the NAND flash.
+ * NOTE:  NAND boot requires ALE == EM_A[1], CLE == EM_A[2], so that's
+ * how these chips are normally wired.  This translates to both 8 and 16
+ * bit busses using ALE == BIT(3) in byte addresses, and CLE == BIT(4).
+ *
+ * For now we assume that configuration, or any other one which ignores
+ * the two LSBs for NAND access ... so we can issue 32-bit reads/writes
+ * and have that transparently morphed into multiple NAND operations.
  */
 static void nand_davinci_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 {
-	int i;
-	int num_words = len >> 2;
-	u32 *p = (u32 *)buf;
 	struct nand_chip *chip = mtd->priv;
 
-	for (i = 0; i < num_words; i++)
-		p[i] = readl(chip->IO_ADDR_R);
+	if ((0x03 & ((unsigned)buf)) == 0 && (0x03 & len) == 0)
+		ioread32_rep(chip->IO_ADDR_R, buf, len >> 2);
+	else if ((0x01 & ((unsigned)buf)) == 0 && (0x01 & len) == 0)
+		ioread16_rep(chip->IO_ADDR_R, buf, len >> 1);
+	else
+		ioread8_rep(chip->IO_ADDR_R, buf, len);
+}
+
+static void nand_davinci_write_buf(struct mtd_info *mtd,
+		const uint8_t *buf, int len)
+{
+	struct nand_chip *chip = mtd->priv;
+
+	if ((0x03 & ((unsigned)buf)) == 0 && (0x03 & len) == 0)
+		iowrite32_rep(chip->IO_ADDR_R, buf, len >> 2);
+	else if ((0x01 & ((unsigned)buf)) == 0 && (0x01 & len) == 0)
+		iowrite16_rep(chip->IO_ADDR_R, buf, len >> 1);
+	else
+		iowrite8_rep(chip->IO_ADDR_R, buf, len);
 }
 
 /*
@@ -565,8 +584,9 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	info->chip.cmd_ctrl	= nand_davinci_hwcontrol;
 	info->chip.dev_ready	= nand_davinci_dev_ready;
 
-	/* Speed up the read buffer */
-	info->chip.read_buf      = nand_davinci_read_buf;
+	/* Speed up buffer I/O */
+	info->chip.read_buf     = nand_davinci_read_buf;
+	info->chip.write_buf    = nand_davinci_write_buf;
 
 	/* Speed up the creation of the bad block table */
 	info->chip.scan_bbt      = nand_davinci_scan_bbt;
