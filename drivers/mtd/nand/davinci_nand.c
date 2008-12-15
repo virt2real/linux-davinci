@@ -53,6 +53,19 @@
 #include <asm/mach-types.h>
 #include <asm/mach/flash.h>
 
+
+#ifdef CONFIG_MTD_PARTITIONS
+static inline int mtd_has_partitions(void) { return 1; }
+#else
+static inline int mtd_has_partitions(void) { return 0; }
+#endif
+
+#ifdef CONFIG_MTD_CMDLINE_PARTS
+static inline int mtd_has_cmdlinepart(void) { return 1; }
+#else
+static inline int mtd_has_cmdlinepart(void) { return 0; }
+#endif
+
 #ifdef CONFIG_NAND_FLASH_HW_ECC
 #define DAVINCI_NAND_ECC_MODE NAND_ECC_HW3_512
 #else
@@ -67,6 +80,7 @@ struct davinci_nand_info {
 
 	struct device		*dev;
 	struct clk		*clk;
+	bool			partitioned;
 
 	void __iomem		*base;
 	void __iomem		*vaddr;
@@ -74,9 +88,6 @@ struct davinci_nand_info {
 
 #define to_davinci_nand(m) container_of(m, struct davinci_nand_info, mtd)
 
-#ifdef CONFIG_MTD_PARTITIONS
-const char *part_probes[] = { "cmdlinepart", NULL };
-#endif
 
 static uint8_t scan_ff_pattern[] = { 0xff, 0xff };
 
@@ -522,14 +533,8 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	struct davinci_nand_info	*info;
 	struct resource			*res1;
 	struct resource			*res2;
-#ifdef CONFIG_MTD_CMDLINE_PARTS
-	struct mtd_partition		*mtd_parts = 0;
-	char				*master_name;
-	int				mtd_parts_nb = 0;
-#endif
 	void __iomem			*vaddr;
 	void __iomem			*base;
-
 	int				ret;
 	u32				rev;
 
@@ -624,24 +629,59 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 		goto err_scan;
 	}
 
-	/* Register the partitions */
-	add_mtd_partitions(&info->mtd, pdata->parts, pdata->nr_parts);
+	if (mtd_has_partitions()) {
+		struct mtd_partition	*mtd_parts = NULL;
+		int			mtd_parts_nb = 0;
 
-#ifdef CONFIG_MTD_CMDLINE_PARTS
-	/* Set info->mtd.name = 0 temporarily */
-	master_name		= info->mtd.name;
-	info->mtd.name		= (char *)0;
+		if (mtd_has_cmdlinepart()) {
+			static const char *probes[] __initconst =
+				{ "cmdlinepart", NULL };
 
-	/* info->mtd.name == 0, means: don't bother checking
-	   <mtd-id> */
-	mtd_parts_nb = parse_mtd_partitions(&info->mtd, part_probes,
-					    &mtd_parts, 0);
+			const char		*master_name;
 
-	/* Restore info->mtd.name */
-	info->mtd.name = master_name;
+			/* Set info->mtd.name = 0 temporarily */
+			master_name		= info->mtd.name;
+			info->mtd.name		= (char *)0;
 
-	add_mtd_partitions(&info->mtd, mtd_parts, mtd_parts_nb);
-#endif
+			/* info->mtd.name == 0, means: don't bother checking
+			   <mtd-id> */
+			mtd_parts_nb = parse_mtd_partitions(&info->mtd, probes,
+							    &mtd_parts, 0);
+
+			/* Restore info->mtd.name */
+			info->mtd.name = master_name;
+		}
+
+		if (mtd_parts_nb <= 0) {
+			mtd_parts = pdata->parts;
+			mtd_parts_nb = pdata->nr_parts;
+		}
+
+		/* Register any partitions */
+		if (mtd_parts_nb > 0) {
+			ret = add_mtd_partitions(&info->mtd,
+					mtd_parts, mtd_parts_nb);
+			if (ret == 0)
+				info->partitioned = true;
+		}
+
+	} else if (pdata->nr_parts) {
+		dev_warn(&pdev->dev, "ignoring %d default partitions on %s\n",
+				pdata->nr_parts, info->mtd.name);
+	}
+
+	/* If there's no partition info, just package the whole chip
+	 * as a single MTD device.
+	 *
+	 * NOTE:  When using the DM355 with large block NAND chips, don't
+	 * use this driver to change data the ROM Boot Loader (RBL) reads
+	 * from one of the first 24 blocks.  See DM355 errata for details.
+	 */
+	if (!info->partitioned)
+		ret = add_mtd_device(&info->mtd) ? -ENODEV : 0;
+
+	if (ret < 0)
+		goto err_scan;
 
 	rev = davinci_nand_readl(info, NRCSR_OFFSET);
 	dev_info(&pdev->dev, "controller rev. %d.%d\n",
@@ -668,6 +708,12 @@ err_pdata:
 static int __exit nand_davinci_remove(struct platform_device *pdev)
 {
 	struct davinci_nand_info *info = platform_get_drvdata(pdev);
+	int status;
+
+	if (mtd_has_partitions() && info->partitioned)
+		status = del_mtd_partitions(&info->mtd);
+	else
+		status = del_mtd_device(&info->mtd);
 
 	iounmap(info->base);
 	iounmap(info->vaddr);
