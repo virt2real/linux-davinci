@@ -162,12 +162,6 @@
 #define MMCSD_INIT_CLOCK		200000
 #define DRIVER_NAME			"davinci_mmc"
 
-/* This macro could not be defined to 0 (ZERO) or -ve value.
- * This value is multiplied to "HZ"
- * while requesting for timer interrupt every time for probing card.
- */
-#define MULTIPILER_TO_HZ 1
-
 struct edma_ch_mmcsd {
 	unsigned char cnt_chanel;
 	unsigned int chanel_num[EDMA_MAX_LOGICAL_CHA_ALLOWED];
