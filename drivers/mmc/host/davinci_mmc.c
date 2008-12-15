@@ -1029,10 +1029,10 @@ static int mmc_davinci_get_ro(struct mmc_host *mmc)
 }
 
 static struct mmc_host_ops mmc_davinci_ops = {
-	.request = mmc_davinci_request,
-	.set_ios = mmc_davinci_set_ios,
-	.get_cd = mmc_davinci_get_cd,
-	.get_ro = mmc_davinci_get_ro,
+	.request	= mmc_davinci_request,
+	.set_ios	= mmc_davinci_set_ios,
+	.get_cd		= mmc_davinci_get_cd,
+	.get_ro		= mmc_davinci_get_ro,
 };
 
 static void init_mmcsd_host(struct mmc_davinci_host *host)
@@ -1135,16 +1135,16 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	mmc->ocr_avail = MMC_VDD_32_33;
 
 #ifdef CONFIG_MMC_BLOCK_BOUNCE
-	mmc->max_phys_segs = 1;
-	mmc->max_hw_segs   = 1;
+	mmc->max_phys_segs	= 1;
+	mmc->max_hw_segs	= 1;
 #else
-	mmc->max_phys_segs = 2;
-	mmc->max_hw_segs   = 2;
+	mmc->max_phys_segs	= 2;
+	mmc->max_hw_segs	= 2;
 #endif
-	mmc->max_blk_size  = 4095;  /* BLEN is 11 bits */
-	mmc->max_blk_count = 65535; /* NBLK is 16 bits */
-	mmc->max_req_size  = mmc->max_blk_size * mmc->max_blk_count;
-	mmc->max_seg_size  = mmc->max_req_size;
+	mmc->max_blk_size	= 4095;  /* BLEN is 11 bits */
+	mmc->max_blk_count	= 65535; /* NBLK is 16 bits */
+	mmc->max_req_size	= mmc->max_blk_size * mmc->max_blk_count;
+	mmc->max_seg_size	= mmc->max_req_size;
 
 	dev_dbg(mmc_dev(host->mmc), "max_phys_segs=%d\n", mmc->max_phys_segs);
 	dev_dbg(mmc_dev(host->mmc), "max_hw_segs=%d\n", mmc->max_hw_segs);
@@ -1237,37 +1237,33 @@ static int davinci_mmcsd_resume(struct platform_device *pdev)
 
 	return mmc_resume_host(host->mmc);
 }
-
 #else
-
 #define davinci_mmcsd_suspend	NULL
 #define davinci_mmcsd_resume	NULL
-
 #endif
 
 static struct platform_driver davinci_mmcsd_driver = {
-	.driver = {
-		.name = DRIVER_NAME,
-		.owner = THIS_MODULE,
+	.driver		= {
+		.name	= DRIVER_NAME,
+		.owner	= THIS_MODULE,
 	},
-	.probe = davinci_mmcsd_probe,
-	.remove = davinci_mmcsd_remove,
-	.suspend = davinci_mmcsd_suspend,
-	.resume = davinci_mmcsd_resume,
+	.probe		= davinci_mmcsd_probe,
+	.remove		= davinci_mmcsd_remove,
+	.suspend	= davinci_mmcsd_suspend,
+	.resume		= davinci_mmcsd_resume,
 };
 
 static int davinci_mmcsd_init(void)
 {
 	return platform_driver_register(&davinci_mmcsd_driver);
 }
+module_init(davinci_mmcsd_init);
 
 static void __exit davinci_mmcsd_exit(void)
 {
 	platform_driver_unregister(&davinci_mmcsd_driver);
 }
-
-module_init(davinci_mmcsd_init);
 module_exit(davinci_mmcsd_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("MMCSD driver for Davinci MMC controller");
+MODULE_DESCRIPTION("MMC/SD driver for Davinci MMC controller");
