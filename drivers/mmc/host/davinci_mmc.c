@@ -53,12 +53,14 @@
  */
 #define MULTIPILER_TO_HZ 1
 
-static struct mmcsd_config_def mmcsd_cfg = {
-/* read write thresholds (in bytes) can be 16/32 */
-	.rw_threshold	= 32,
-/* To use the DMA or not-- 1- Use DMA, 0-Interrupt mode */
-	.use_dma	= 1,
-};
+static unsigned rw_threshold = 32;
+module_param(rw_threshold, uint, S_IRUGO);
+MODULE_PARM_DESC(rw_threshold,
+		"Read/Write threshold, can be 16/32. Default = 32");
+
+static unsigned use_dma = 1;
+module_param(use_dma, uint, S_IRUGO);
+MODULE_PARM_DESC(use_dma, "Wether to use DMA or not. Default = 1");
 
 #define RSP_TYPE(x)	((x) & ~(MMC_RSP_BUSY|MMC_RSP_OPCODE))
 
@@ -364,12 +366,12 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	if ((data->blocks == 1) && (count > data->blksz))
 		count = frame;
 
-	if ((count & (mmcsd_cfg.rw_threshold-1)) == 0) {
+	if ((count & (rw_threshold - 1)) == 0) {
 		/* This should always be true due to an earlier check */
 		acnt = 4;
-		bcnt = mmcsd_cfg.rw_threshold>>2;
-		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32) ? 5 : 4);
-	} else if (count < mmcsd_cfg.rw_threshold) {
+		bcnt = rw_threshold >> 2;
+		num_frames = count >> ((rw_threshold == 32) ? 5 : 4);
+	} else if (count < rw_threshold) {
 		if ((count&3) == 0) {
 			acnt = 4;
 			bcnt = count>>2;
@@ -383,8 +385,8 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		num_frames = 1;
 	} else {
 		acnt = 4;
-		bcnt = mmcsd_cfg.rw_threshold>>2;
-		num_frames = count >> ((mmcsd_cfg.rw_threshold == 32) ? 5 : 4);
+		bcnt = rw_threshold >> 2;
+		num_frames = count >> ((rw_threshold == 32) ? 5 : 4);
 		dev_warn(mmc_dev(host->mmc),
 			"MMC: count of 0x%x unsupported, truncating transfer\n",
 			count);
@@ -490,7 +492,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 			if ((data->blocks == 1) && (count > data->blksz))
 				count = frame;
 
-			ccnt = count >> ((mmcsd_cfg.rw_threshold == 32) ? 5 : 4);
+			ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
 
 			if (sync_dev == host->txdma)
 				temp.src = (unsigned int)sg_dma_address(sg);
@@ -519,9 +521,9 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 		struct mmc_request *req)
 {
-	int use_dma = 1, i;
+	int i;
 	struct mmc_data *data = host->data;
-	int mask = mmcsd_cfg.rw_threshold-1;
+	int mask = rw_threshold - 1;
 
 	host->sg_len = dma_map_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
 				((data->flags & MMC_DATA_WRITE)
@@ -621,7 +623,7 @@ free_master_write:
 static void
 mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 {
-	int fifo_lev = (mmcsd_cfg.rw_threshold == 32) ? MMCFIFOCTL_FIFOLEV : 0;
+	int fifo_lev = (rw_threshold == 32) ? MMCFIFOCTL_FIFOLEV : 0;
 	int timeout, sg_len;
 
 	host->data = req->data;
@@ -682,7 +684,7 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	host->bytes_left = req->data->blocks * req->data->blksz;
 
 	if ((host->use_dma == 1) &&
-		  ((host->bytes_left & (mmcsd_cfg.rw_threshold-1)) == 0) &&
+		  ((host->bytes_left & (rw_threshold - 1)) == 0) &&
 	      (mmc_davinci_start_dma_transfer(host, req) == 0)) {
 		host->buffer = NULL;
 		host->bytes_left = 0;
@@ -873,14 +875,14 @@ static inline int handle_core_command(
 				(host->data_dir == DAVINCI_MMC_DATADIR_WRITE)
 				&& (host->bytes_left > 0)) {
 			/* Buffer almost empty */
-			davinci_fifo_data_trans(host, mmcsd_cfg.rw_threshold);
+			davinci_fifo_data_trans(host, rw_threshold);
 		}
 
 		if ((status & MMCSD_EVENT_READ) &&
 				(host->data_dir == DAVINCI_MMC_DATADIR_READ)
 				&& (host->bytes_left > 0)) {
 			/* Buffer almost empty */
-			davinci_fifo_data_trans(host, mmcsd_cfg.rw_threshold);
+			davinci_fifo_data_trans(host, rw_threshold);
 		}
 		status = readl(host->base + DAVINCI_MMCST0);
 		if (!status)
@@ -897,11 +899,11 @@ static inline int handle_core_command(
 		/* Block sent/received */
 		if (host->data != NULL) {
 			if ((host->do_dma == 0) && (host->bytes_left > 0)) {
-				/* if datasize<mmcsd_cfg.rw_threshold
+				/* if datasize < rw_threshold
 				 * no RX ints are generated
 				 */
 				davinci_fifo_data_trans(host,
-						mmcsd_cfg.rw_threshold);
+						rw_threshold);
 			}
 			end_transfer = 1;
 		} else {
@@ -1152,11 +1154,11 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 	dev_dbg(mmc_dev(host->mmc), "max_req_size=%d\n", mmc->max_req_size);
 	dev_dbg(mmc_dev(host->mmc), "max_seg_size=%d\n", mmc->max_seg_size);
 
-	if (mmcsd_cfg.use_dma)
+	if (use_dma)
 		if (davinci_acquire_dma_channels(host) != 0)
 			goto out;
 
-	host->use_dma = mmcsd_cfg.use_dma;
+	host->use_dma = use_dma;
 	host->irq = irq;
 
 	platform_set_drvdata(pdev, host);
@@ -1170,7 +1172,7 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 		goto out;
 
 	dev_info(mmc_dev(host->mmc), "Using %s, %d-bit mode\n",
-		mmcsd_cfg.use_dma ? "DMA" : "PIO",
+		use_dma ? "DMA" : "PIO",
 		(mmc->caps & MMC_CAP_4_BIT_DATA) ? 4 : 1);
 
 	return 0;

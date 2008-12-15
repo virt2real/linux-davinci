@@ -194,11 +194,6 @@ struct mmc_davinci_host {
 	struct mmc_request *que_mmc_request;
 };
 
-struct mmcsd_config_def {
-	unsigned short rw_threshold;
-	unsigned short use_dma;
-};
-
 enum mmcsdevent {
 	MMCSD_EVENT_EOFCMD = (1 << 2),
 	MMCSD_EVENT_READ = (1 << 10),
