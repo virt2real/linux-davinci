@@ -564,7 +564,7 @@ static int davinci_release_dma_channels(struct mmc_davinci_host *host)
 	return 0;
 }
 
-static int davinci_acquire_dma_channels(struct mmc_davinci_host *host)
+static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 {
 	int edma_chan_num, tcc = 0, r, sync_dev;
 	enum dma_event_q queue_no = EVENTQ_0;
@@ -1061,7 +1061,7 @@ static void init_mmcsd_host(struct mmc_davinci_host *host)
 	udelay(10);
 }
 
-static int davinci_mmcsd_probe(struct platform_device *pdev)
+static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 {
 	struct davinci_mmc_config *pdata = pdev->dev.platform_data;
 	struct mmc_davinci_host *host = NULL;
@@ -1196,10 +1196,11 @@ out:
 		release_resource(mem);
 
 	dev_dbg(&pdev->dev, "probe err %d\n", ret);
+
 	return ret;
 }
 
-static int davinci_mmcsd_remove(struct platform_device *pdev)
+static int __exit davinci_mmcsd_remove(struct platform_device *pdev)
 {
 	struct mmc_davinci_host *host = platform_get_drvdata(pdev);
 
@@ -1247,15 +1248,15 @@ static struct platform_driver davinci_mmcsd_driver = {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
 	},
-	.probe		= davinci_mmcsd_probe,
-	.remove		= davinci_mmcsd_remove,
+	.remove		= __exit_p(davinci_mmcsd_remove),
 	.suspend	= davinci_mmcsd_suspend,
 	.resume		= davinci_mmcsd_resume,
 };
 
-static int davinci_mmcsd_init(void)
+static int __init davinci_mmcsd_init(void)
 {
-	return platform_driver_register(&davinci_mmcsd_driver);
+	return platform_driver_probe(&davinci_mmcsd_driver, 
+				     davinci_mmcsd_probe);
 }
 module_init(davinci_mmcsd_init);
 
