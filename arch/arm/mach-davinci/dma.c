@@ -1255,6 +1255,7 @@ void davinci_set_dma_params(int lch, edmacc_paramentry_regs *temp)
 		edma_parm_write(PARM_SRC_DST_BIDX, j, temp->src_dst_bidx);
 		edma_parm_write(PARM_LINK_BCNTRLD, j, temp->link_bcntrld);
 		edma_parm_write(PARM_SRC_DST_CIDX, j, temp->src_dst_cidx);
+		edma_parm_write(PARM_CCNT, j, temp->ccnt);
 	}
 }
 EXPORT_SYMBOL(davinci_set_dma_params);
@@ -1279,6 +1280,7 @@ void davinci_get_dma_params(int lch, edmacc_paramentry_regs *temp)
 		temp->src_dst_bidx = edma_parm_read(PARM_SRC_DST_BIDX, j);
 		temp->link_bcntrld = edma_parm_read(PARM_LINK_BCNTRLD, j);
 		temp->src_dst_cidx = edma_parm_read(PARM_SRC_DST_CIDX, j);
+		temp->ccnt = edma_parm_read(PARM_CCNT, j);
 	}
 }
 EXPORT_SYMBOL(davinci_get_dma_params);
