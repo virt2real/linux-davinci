@@ -196,7 +196,7 @@ void davinci_psc_config(unsigned int domain, unsigned int id, char enable)
 
 void __init davinci_psc_init(void)
 {
-	if (cpu_is_davinci_dm644x()) {
+	if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm646x()) {
 		davinci_psc_mux = dm6446_psc_mux;
 	} else if (cpu_is_davinci_dm355()) {
 		davinci_psc_mux = dm355_psc_mux;
@@ -205,14 +205,29 @@ void __init davinci_psc_init(void)
 		davinci_psc_mux = nop_psc_mux;
 	}
 
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_VPSSMSTR, 1);
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_VPSSSLV, 1);
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_TPCC, 1);
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_TPTC0, 1);
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_TPTC1, 1);
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_GPIO, 1);
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_USB, 1);
+	if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm355()) {
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_VPSSMSTR, 1);
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_VPSSSLV, 1);
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_TPCC, 1);
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_TPTC0, 1);
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_TPTC1, 1);
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_GPIO, 1);
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_USB, 1);
 
-	/* Turn on WatchDog timer LPSC.	 Needed for RESET to work */
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DAVINCI_LPSC_TIMER2, 1);
+		/* Turn on WatchDog timer LPSC.	 Needed for RESET to work */
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DAVINCI_LPSC_TIMER2, 1);
+	} else if (cpu_is_davinci_dm646x()) {
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DM646X_LPSC_AEMIF, 1);
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
+					DM646X_LPSC_GPIO, 1);
+	}
 }

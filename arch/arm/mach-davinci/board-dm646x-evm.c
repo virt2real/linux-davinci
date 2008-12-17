@@ -117,22 +117,14 @@ static void __init evm_init_i2c(void)
 	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
 }
 
-static void board_init(void)
-{
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DM646X_LPSC_AEMIF, 1);
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, DM646X_LPSC_GPIO, 1);
-}
-
 static void __init davinci_map_io(void)
 {
 	davinci_map_common_io();
-
-	/* Initialize the DaVinci EVM board settigs */
-	board_init();
 }
 
 static __init void evm_init(void)
 {
+	davinci_psc_init();
 	evm_init_i2c();
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
