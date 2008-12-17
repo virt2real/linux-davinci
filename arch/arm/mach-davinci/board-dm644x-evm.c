@@ -366,6 +366,11 @@ evm_u35_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 	gpio_request(gpio + 7, "nCF_SEL");
 	gpio_direction_output(gpio + 7, 1);
 
+	/* irlml6401 switches over 1A, in under 8 msec;
+	 * now it can be managed by nDRV_VBUS ...
+	 */
+	setup_usb(500, 8);
+
 	return 0;
 }
 
@@ -626,9 +631,6 @@ static __init void davinci_evm_init(void)
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();
-
-	/* irlml6401 sustains over 3A, switches 5V in under 8 msec */
-	setup_usb(500, 8);
 
 	/* Register the fixup for PHY on DaVinci */
 	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,

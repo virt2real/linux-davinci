@@ -40,7 +40,7 @@
 #include "musb_core.h"
 
 #ifdef CONFIG_MACH_DAVINCI_EVM
-#define GPIO_nVBUS_DRV		87
+#define GPIO_nVBUS_DRV		120
 #endif
 
 #include "davinci.h"
