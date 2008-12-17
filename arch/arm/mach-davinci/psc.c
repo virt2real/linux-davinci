@@ -218,8 +218,6 @@ void __init davinci_psc_init(void)
 					DAVINCI_LPSC_TPTC1, 1);
 		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
 					DAVINCI_LPSC_GPIO, 1);
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_USB, 1);
 
 		/* Turn on WatchDog timer LPSC.	 Needed for RESET to work */
 		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,

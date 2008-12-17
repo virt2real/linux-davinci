@@ -318,6 +318,11 @@ static struct clk davinci_clks[] = {
 		.lpsc = DAVINCI_LPSC_GPIO,
 	},
 	{
+		.name = "USBCLK",
+		.rate = &commonrate,
+		.lpsc = DAVINCI_LPSC_USB,
+	},
+	{
 		.name = "AEMIFCLK",
 		.rate = &commonrate,
 		.lpsc = DAVINCI_LPSC_AEMIF,
