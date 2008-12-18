@@ -396,18 +396,16 @@ static int request_param(int lch, int dev_id)
 		while (i < DAVINCI_EDMA_NUM_PARAMENTRY) {
 			j = 0, is_break = 1;
 			if ((param_entry_arm[i / 32] & (1 << (i % 32))) &&
-			    (param_entry_use_status[i / 32] & (1 << (i % 32))))
-			{
+			    (param_entry_use_status[i / 32] &
+						(1 << (i % 32)))) {
 				if (dev_id != DAVINCI_EDMA_PARAM_ANY) {
 					while (dma_chan_no_event[j] != -1) {
-						if (dma_chan_no_event[j] == i) {
+						if (dma_chan_no_event[j] == i)
 							is_break = 0;
-						}
 						j++;
 					}
-					if (!is_break) {
+					if (!is_break)
 						break;
-					}
 				} else {
 					break;
 				}
@@ -484,7 +482,8 @@ static int request_dma_interrupt(int lch,
 			dma_intr_use_status[lch / 32] &= (~(1 << (lch % 32)));
 			UNLOCK;
 			free_intr_no = lch;
-			dev_dbg(&edma_dev.dev, "interrupt no=%d\r\n", free_intr_no);
+			dev_dbg(&edma_dev.dev, "interrupt no=%d\r\n",
+					free_intr_no);
 		} else {
 			UNLOCK;
 			dev_dbg(&edma_dev.dev, "EDMA:Error\r\n");
@@ -569,7 +568,8 @@ static int request_dma_interrupt(int lch,
 		dev_dbg(&edma_dev.dev, "ERROR lch = %d\r\n", lch);
 	}
 	if (is_break) {
-		dev_dbg(&edma_dev.dev, "While allocating EDMA channel for QDMA");
+		dev_dbg(&edma_dev.dev,
+				"While allocating EDMA channel for QDMA");
 	}
 	if (DAVINCI_EDMA_IS_Q(lch)) {
 		edma_or_array2(EDMA_DRAE, 0, free_intr_no >> 5,
@@ -664,9 +664,8 @@ static void dma_irq_handler(void)
 			}
 		}
 		cnt++;
-		if (cnt > 10) {
+		if (cnt > 10)
 			break;
-		}
 	}
 	edma_shadow0_write(SH_IEVAL, 1);
 }
@@ -704,9 +703,9 @@ static void dma_ccerr_handler(void)
 							(1 << i));
 					if (intr_data[k].callback) {
 						intr_data[k].callback(k,
-								      DMA_CC_ERROR,
-								      intr_data
-								      [k].data);
+								DMA_CC_ERROR,
+								intr_data
+								[k].data);
 					}
 				}
 			}
@@ -737,9 +736,8 @@ static void dma_ccerr_handler(void)
 			break;
 		}
 		cnt++;
-		if (cnt > 10) {
+		if (cnt > 10)
 			break;
-		}
 	}
 	edma_write(EDMA_EEVAL, 1);
 }
@@ -849,10 +847,10 @@ int davinci_request_dma(int dev_id, const char *name,
 {
 
 	int ret_val = 0, i = 0;
-	static int req_flag = 0;
+	static int req_flag;
 	/* checking the ARM side events */
 	if (dev_id >= 0 && (dev_id < DAVINCI_EDMA_NUM_DMACH)) {
-		if (!(edma_channels_arm[dev_id / 32] & (0x1 << (dev_id % 32)))) {
+		if (!(edma_channels_arm[dev_id / 32] & (1 << (dev_id % 32)))) {
 			dev_dbg(&edma_dev.dev,
 				"dev_id = %d not supported on ARM side\r\n",
 				dev_id);
@@ -931,7 +929,8 @@ int davinci_request_dma(int dev_id, const char *name,
 			*lch = dev_id;
 			dma_chan[*lch].param_no = request_param(*lch, dev_id);
 			if (dma_chan[*lch].param_no == -1) {
-				dev_dbg(&edma_dev.dev, "request_param failed\r\n");
+				dev_dbg(&edma_dev.dev,
+						"request_param failed\r\n");
 				return -EINVAL;
 			} else {
 				dev_dbg(&edma_dev.dev, "param_no=%d\r\n",
@@ -979,11 +978,9 @@ int davinci_request_dma(int dev_id, const char *name,
 						request_dma_interrupt(*lch,
 								callback, data,
 								j, *tcc);
-					if (dma_chan[*lch].tcc == -1) {
+					if (dma_chan[*lch].tcc == -1)
 						return -EINVAL;
-					} else {
-						*tcc = dma_chan[*lch].tcc;
-					}
+					*tcc = dma_chan[*lch].tcc;
 				} else {
 					dma_chan[*lch].tcc = -1;
 				}
@@ -1007,7 +1004,8 @@ int davinci_request_dma(int dev_id, const char *name,
 						"request_param failed\r\n");
 					return -EINVAL;
 				} else {
-					dev_dbg(&edma_dev.dev, "param_no=%d\r\n",
+					dev_dbg(&edma_dev.dev,
+						"param_no=%d\r\n",
 						dma_chan[*lch].param_no);
 				}
 				if (*tcc != -1)
@@ -1244,7 +1242,7 @@ EXPORT_SYMBOL(davinci_set_dma_transfer_params);
  *      lch - logical channel number
  *
  *****************************************************************************/
-void davinci_set_dma_params(int lch, edmacc_paramentry_regs * temp)
+void davinci_set_dma_params(int lch, edmacc_paramentry_regs *temp)
 {
 	if (DAVINCI_EDMA_IS_Q(lch))
 		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
@@ -1268,7 +1266,7 @@ EXPORT_SYMBOL(davinci_set_dma_params);
  *      lch - logical channel number
  *
  *****************************************************************************/
-void davinci_get_dma_params(int lch, edmacc_paramentry_regs * temp)
+void davinci_get_dma_params(int lch, edmacc_paramentry_regs *temp)
 {
 	if (DAVINCI_EDMA_IS_Q(lch))
 		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
@@ -1550,7 +1548,7 @@ static int dma_ccerr_handler_l(int sound_curr_lch, void *ch_status)
 	return IRQ_HANDLED;
 }
 
-static int dma_tc1err_handler_l (int sound_curr_lch, void *ch_status)
+static int dma_tc1err_handler_l(int sound_curr_lch, void *ch_status)
 {
 	dev_dbg(&edma_dev.dev, "dma_tc1err_handler\n");
 	(*cb[2]) ();
