@@ -222,25 +222,25 @@ static void davinci_init_wdt(void)
 static struct resource emac_resources[] = {
 	{
 		.start	= DAVINCI_EMAC_CNTRL_REGS_BASE,
-		.end 	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
+		.end	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "ctrl_regs"
 	},
 	{
 		.start	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE,
-		.end 	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
+		.end	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "ctrl_module_regs"
 	},
 	{
 		.start	= DAVINCI_EMAC_CNTRL_RAM_BASE,
-		.end 	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
+		.end	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "ctrl_ram"
 	},
 	{
 		.start	= DAVINCI_EMAC_MDIO_REGS_BASE,
-		.end 	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
+		.end	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "mdio_regs"
 	},
@@ -254,10 +254,10 @@ static struct resource emac_resources[] = {
 static struct emac_platform_data emac_pdata;
 
 static struct platform_device davinci_emac_device = {
-       .name = "davinci_emac",
-       .id = 1,
-       .num_resources = ARRAY_SIZE(emac_resources),
-       .resource = emac_resources,
+       .name		= "davinci_emac",
+       .id		= 1,
+       .num_resources	= ARRAY_SIZE(emac_resources),
+       .resource	= emac_resources,
        .dev = {
 		.platform_data = &emac_pdata,
 	}
@@ -266,55 +266,55 @@ static struct platform_device davinci_emac_device = {
 static struct resource dm646x_emac_resources[] = {
 	{
 		.start	= DAVINCI_EMAC_CNTRL_REGS_BASE,
-		.end 	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
+		.end	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "ctrl_regs"
 	},
 	{
 		.start	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE,
-		.end 	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
+		.end	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "ctrl_module_regs"
 	},
 	{
 		.start	= DAVINCI_EMAC_CNTRL_RAM_BASE,
-		.end 	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
+		.end	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "ctrl_ram"
 	},
 	{
 		.start	= DAVINCI_EMAC_MDIO_REGS_BASE,
-		.end 	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
+		.end	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
 		.flags	= IORESOURCE_MEM,
 		.name	= "mdio_regs"
 	},
 	{
-		.start 	= IRQ_DM646X_EMACRXTHINT,
-		.end 	= IRQ_DM646X_EMACRXTHINT,
-		.flags 	= IORESOURCE_IRQ,
-	},
-	{
-		.start 	= IRQ_DM646X_EMACRXINT,
-		.end 	= IRQ_DM646X_EMACRXINT,
-		.flags 	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= IRQ_DM646X_EMACTXINT,
-		.end 	= IRQ_DM646X_EMACTXINT,
+		.start	= IRQ_DM646X_EMACRXTHINT,
+		.end	= IRQ_DM646X_EMACRXTHINT,
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
-		.start 	= IRQ_DM646X_EMACMISCINT,
-		.end 	= IRQ_DM646X_EMACMISCINT,
-		.flags 	= IORESOURCE_IRQ,
+		.start	= IRQ_DM646X_EMACRXINT,
+		.end	= IRQ_DM646X_EMACRXINT,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_DM646X_EMACTXINT,
+		.end	= IRQ_DM646X_EMACTXINT,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_DM646X_EMACMISCINT,
+		.end	= IRQ_DM646X_EMACMISCINT,
+		.flags	= IORESOURCE_IRQ,
 	},
 };
 
 static struct platform_device dm646x_emac_device = {
-	.name = "davinci_emac",
-	.id = 1,
-	.num_resources = ARRAY_SIZE(dm646x_emac_resources),
-	.resource = dm646x_emac_resources,
+	.name		= "davinci_emac",
+	.id		= 1,
+	.num_resources	= ARRAY_SIZE(dm646x_emac_resources),
+	.resource	= dm646x_emac_resources,
 	.dev = {
 		.platform_data = &emac_pdata,
 	}
@@ -323,6 +323,9 @@ static struct platform_device dm646x_emac_device = {
 void davinci_init_emac(char *mac_addr)
 {
 	DECLARE_MAC_BUF(buf);
+
+	if (!(cpu_is_davinci_dm644x() || cpu_is_davinci_dm646x()))
+		return;
 
 	/* if valid MAC exists, don't re-register */
 	if (is_valid_ether_addr(emac_pdata.mac_addr))
