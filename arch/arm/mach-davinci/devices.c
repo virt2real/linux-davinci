@@ -38,6 +38,7 @@
 #define DAVINCI_EMAC_CNTRL_RAM_BASE		0x01C82000
 #define DAVINCI_EMAC_MDIO_REGS_BASE		0x01C84000
 #define DAVINCI_MMCSD0_BASE	     0x01E10000
+#define DM355_MMCSD0_BASE	     0x01E11000
 #define DM355_MMCSD1_BASE	     0x01E00000
 
 static struct resource i2c_resources[] = {
@@ -71,6 +72,7 @@ static u64 mmcsd0_dma_mask = DMA_32BIT_MASK;
 
 static struct resource mmcsd0_resources[] = {
 	{
+		/* different on dm355 */
 		.start = DAVINCI_MMCSD0_BASE,
 		.end   = DAVINCI_MMCSD0_BASE + SZ_4K - 1,
 		.flags = IORESOURCE_MEM,
@@ -80,6 +82,7 @@ static struct resource mmcsd0_resources[] = {
 		.start = IRQ_MMCINT,
 		.flags = IORESOURCE_IRQ,
 	}, {
+		/* different on dm355 */
 		.start = IRQ_SDIOINT,
 		.flags = IORESOURCE_IRQ,
 	},
@@ -160,11 +163,15 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 	case 1:
 		if (!cpu_is_davinci_dm355())
 			break;
-		mmcsd0_resources[2].start = IRQ_DM355_SDIOINT0;
 		pdev = &davinci_mmcsd1_device;
 		clockname = "MMCSDCLK1";
 		break;
 	case 0:
+		if (cpu_is_davinci_dm355()) {
+			mmcsd0_resources[0].start = DM355_MMCSD0_BASE;
+			mmcsd0_resources[0].end = DM355_MMCSD0_BASE + SZ_4K - 1;
+			mmcsd0_resources[2].start = IRQ_DM355_SDIOINT0;
+		}
 		pdev = &davinci_mmcsd0_device;
 		clockname = cpu_is_davinci_dm355() ? "MMCSDCLK0" : "MMCSDCLK";
 		break;
