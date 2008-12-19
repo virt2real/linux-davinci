@@ -48,8 +48,8 @@ static void dm6446_psc_mux(unsigned int id)
 {
 	switch (id) {
 	case DAVINCI_LPSC_ATA:
-		davinci_mux_peripheral(DAVINCI_MUX_HDIREN, 1);
-		davinci_mux_peripheral(DAVINCI_MUX_ATAEN, 1);
+		davinci_cfg_reg(DM644X_HDIREN);
+		davinci_cfg_reg(DM644X_ATAEN);
 		break;
 	case DAVINCI_LPSC_MMC_SD:
 		/* VDD power manupulations are done in U-Boot for CPMAC
@@ -57,13 +57,13 @@ static void dm6446_psc_mux(unsigned int id)
 		 */
 		/*Set up the pull regiter for MMC */
 		davinci_writel(0, DAVINCI_SYSTEM_MODULE_BASE + VDD3P3V_PWDN);
-		davinci_mux_peripheral(DAVINCI_MUX_MSTK, 0);
+		davinci_cfg_reg(DM644X_MSTK);
 		break;
 	case DAVINCI_LPSC_I2C:
-		davinci_mux_peripheral(DAVINCI_MUX_I2C, 1);
+		davinci_cfg_reg(DM644X_I2C);
 		break;
 	case DAVINCI_LPSC_McBSP:
-		davinci_mux_peripheral(DAVINCI_MUX_ASP, 1);
+		davinci_cfg_reg(DM644X_MCBSP);
 		break;
 	default:
 		break;
@@ -88,11 +88,12 @@ static void dm355_psc_mux(unsigned int id)
 	switch (id) {
 	case DM355_LPSC_MMC_SD1:	/* MMC1 */
 		/* expose DATA[0..3], CMD, CLK */
-		tmp = davinci_readl(DM355_ARM_PINMUX3);
-		tmp &= ~((3 << 14) | (3 << 12) | (3 << 10) | (3 << 8));
-		tmp |=   (1 << 14) | (1 << 12) | (1 << 10) | (1 << 8)
-				| BIT(7) | BIT(6);
-		davinci_writel(tmp, DM355_ARM_PINMUX3);
+		davinci_cfg_reg(DM355_SD1_CLK);
+		davinci_cfg_reg(DM355_SD1_CMD);
+		davinci_cfg_reg(DM355_SD1_DATA3);
+		davinci_cfg_reg(DM355_SD1_DATA2);
+		davinci_cfg_reg(DM355_SD1_DATA1);
+		davinci_cfg_reg(DM355_SD1_DATA0);
 		break;
 	case DM355_LPSC_McBSP1:		/* ASP1 */
 		/* our ASoC code currently doesn't use these IRQs */
@@ -110,9 +111,7 @@ static void dm355_psc_mux(unsigned int id)
 		break;
 	case DAVINCI_LPSC_MMC_SD:	/* MMC0 */
 		/* expose all 6 MMC0 signals:  CLK, CMD, DATA[0..3] */
-		tmp = davinci_readl(DM355_ARM_PINMUX4);
-		tmp &= ~BIT(2);
-		davinci_writel(tmp, DM355_ARM_PINMUX4);
+		davinci_cfg_reg(DM355_MMCSD0);
 
 		/* support EMDA for MMC0 RX */
 		tmp = davinci_readl(DM355_EDMA_EVTMUX);
@@ -124,9 +123,7 @@ static void dm355_psc_mux(unsigned int id)
 		 * NOTE: SPIO_SDENA0 and/or SPIO_SDENA1
 		 * will need to be set too.
 		 */
-		tmp = davinci_readl(DM355_ARM_PINMUX4);
-		tmp &= ~BIT(1);
-		davinci_writel(tmp, DM355_ARM_PINMUX4);
+		davinci_cfg_reg(DM355_SPI0_SDI);
 		break;
 	}
 }

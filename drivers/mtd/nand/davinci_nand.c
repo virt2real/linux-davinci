@@ -531,23 +531,19 @@ static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 	 */
 	if (machine_is_davinci_evm()) {
 		/* Check for correct pin mux, reconfigure if necessary */
-		tmp = davinci_readl(DAVINCI_SYSTEM_MODULE_BASE + PINMUX0);
+		tmp = davinci_readl(PINMUX0);
 
 		if ((tmp & 0x20020C1F) != 0x00000C1F) {
 			/* Disable HPI and ATA mux */
-			davinci_mux_peripheral(DAVINCI_MUX_HPIEN, 0);
-			davinci_mux_peripheral(DAVINCI_MUX_ATAEN, 0);
+			davinci_cfg_reg(DM644X_HPIEN_DISABLE);
+			davinci_cfg_reg(DM644X_ATAEN_DISABLE);
 
 			/* Enable VLYNQ and AEAW */
-			davinci_mux_peripheral(DAVINCI_MUX_AEAW0, 1);
-			davinci_mux_peripheral(DAVINCI_MUX_AEAW1, 1);
-			davinci_mux_peripheral(DAVINCI_MUX_AEAW2, 1);
-			davinci_mux_peripheral(DAVINCI_MUX_AEAW3, 1);
-			davinci_mux_peripheral(DAVINCI_MUX_AEAW4, 1);
-			davinci_mux_peripheral(DAVINCI_MUX_VLSCREN, 1);
-			davinci_mux_peripheral(DAVINCI_MUX_VLYNQEN, 1);
+			davinci_cfg_reg(DM644X_AEAW);
+			davinci_cfg_reg(DM644X_VLSCREN);
+			davinci_cfg_reg(DM644X_VLYNQEN);
 
-			regval = davinci_readl(DAVINCI_SYSTEM_MODULE_BASE + PINMUX0);
+			regval = davinci_readl(PINMUX0);
 
 			dev_warn(info->dev, "Warning: MUX config for NAND: Set " \
 					"PINMUX0 reg to 0x%08x, was 0x%08x, should be done " \
