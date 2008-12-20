@@ -29,8 +29,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
-
-#include <asm/io.h>
+#include <linux/io.h>
 
 #include <mach/cpu.h>
 #include <mach/memory.h>
@@ -109,9 +108,11 @@
 #define EDMA_SHADOW0	0x2000	/* 4 shadow regions */
 #define EDMA_PARM	0x4000	/* 128 param entries */
 
+#define DAVINCI_DMA_3PCC_BASE	0x01C00000
+
 #define PARM_OFFSET(param_no)	(EDMA_PARM + ((param_no) << 5))
 
-unsigned int edmacc_regs_base;
+static const void __iomem *edmacc_regs_base = IO_ADDRESS(DAVINCI_DMA_3PCC_BASE);
 
 static inline unsigned int edma_read(int offset)
 {
@@ -203,20 +204,44 @@ static inline void edma_parm_or(int offset, int param_no, unsigned or)
 {
 	edma_or(EDMA_PARM + offset + (param_no << 5), or);
 }
-#define DAVINCI_DMA_3PCC_BASE 0x01C00000
 
 static spinlock_t dma_chan_lock;
-static struct device_driver edma_driver;
-static struct platform_device edma_dev;
 
 #define LOCK_INIT     spin_lock_init(&dma_chan_lock)
 #define LOCK          spin_lock(&dma_chan_lock)
 #define UNLOCK        spin_unlock(&dma_chan_lock)
 
-static unsigned int get_edma_base(void)
-{
-	return (unsigned int) IO_ADDRESS(DAVINCI_DMA_3PCC_BASE);
-}
+static struct platform_driver edma_driver = {
+	.driver.name	= "edma",
+};
+
+static struct resource edma_resources[] = {
+	{
+		.start	= DAVINCI_DMA_3PCC_BASE,
+		.end	= DAVINCI_DMA_3PCC_BASE + SZ_64K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc0",
+		.start	= 0x01c10000,
+		.end	= 0x01c10000 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc1",
+		.start	= 0x01c10400,
+		.end	= 0x01c10400 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device edma_dev = {
+	.name		= "edma",
+	.id		= -1,
+	.dev.driver	= &edma_driver.driver,
+	.num_resources	= ARRAY_SIZE(edma_resources),
+	.resource	= edma_resources,
+};
 
 /* Structure containing the dma channel parameters */
 static struct davinci_dma_lch {
@@ -337,13 +362,13 @@ static void map_dmach_param(int ch_no, int param_no)
 	}
 }
 
-static void map_queue_tc(int queue_no, int tc_no)
+static void __init map_queue_tc(int queue_no, int tc_no)
 {
 	int bit = queue_no * 4;
 	edma_modify(EDMA_QUETCMAP, ~(0x7 << bit), ((tc_no & 0x7) << bit));
 }
 
-static void assign_priority_to_queue(int queue_no, int priority)
+static void __init assign_priority_to_queue(int queue_no, int priority)
 {
 	int bit = queue_no * 4;
 	edma_modify(EDMA_QUEPRI, ~(0x7 << bit), ((priority & 0x7) << bit));
@@ -772,19 +797,16 @@ static irqreturn_t dma_tc1err_handler(int irq, void *data)
  * DMA initialisation on davinci
  *
  *****************************************************************************/
-int __init arch_dma_init(void)
+static int __init davinci_dma_init(void)
 {
 	int i;
 	int status;
 
-	edma_driver.name = "edma";
-	edma_dev.name = "dma";
-	edma_dev.id = -1;
-	edma_dev.dev.driver = &edma_driver;
+	platform_driver_register(&edma_driver);
+	platform_device_register(&edma_dev);
 
-	edmacc_regs_base = get_edma_base();
-	dev_dbg(&edma_dev.dev, "DMA REG BASE ADDR=%x\n", edmacc_regs_base);
-	memset(dma_chan, 0x00, sizeof(dma_chan));
+	dev_dbg(&edma_dev.dev, "DMA REG BASE ADDR=%p\n", edmacc_regs_base);
+
 	for (i = 0; i < DAVINCI_EDMA_NUM_PARAMENTRY * PARM_SIZE; i += 4)
 		edma_write(EDMA_PARM + i, 0);
 
@@ -856,7 +878,7 @@ int __init arch_dma_init(void)
 	LOCK_INIT;
 	return 0;
 }
-arch_initcall(arch_dma_init)
+arch_initcall(davinci_dma_init);
 
 /******************************************************************************
  *
