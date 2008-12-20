@@ -213,16 +213,10 @@ static struct platform_device edma_dev;
 #define LOCK          spin_lock(&dma_chan_lock)
 #define UNLOCK        spin_unlock(&dma_chan_lock)
 
-typedef void (*intr_callback) (void);
-static int register_dma_interrupts(intr_callback, intr_callback, intr_callback,
-				   intr_callback);
-
 static unsigned int get_edma_base(void)
 {
 	return (unsigned int) IO_ADDRESS(DAVINCI_DMA_3PCC_BASE);
 }
-
-static intr_callback cb[4];
 
 /* Structure containing the dma channel parameters */
 static struct davinci_dma_lch {
@@ -637,14 +631,17 @@ EXPORT_SYMBOL(davinci_dma_getposition);
  * DMA interrupt handler
  *
  *****************************************************************************/
-static void dma_irq_handler(void)
+static irqreturn_t dma_irq_handler(int irq, void *data)
 {
 	int i;
-	unsigned int cnt;
-	cnt = 0;
+	unsigned int cnt = 0;
+
+	dev_dbg(&edma_dev.dev, "dma_irq_handler\n");
+
 	if ((edma_shadow0_read_array(SH_IPR, 0) == 0)
 	    && (edma_shadow0_read_array(SH_IPR, 1) == 0))
-		return;
+		return IRQ_NONE;
+
 	while (1) {
 		int j;
 		if (edma_shadow0_read_array(SH_IPR, 0))
@@ -671,6 +668,7 @@ static void dma_irq_handler(void)
 			break;
 	}
 	edma_shadow0_write(SH_IEVAL, 1);
+	return IRQ_HANDLED;
 }
 
 /******************************************************************************
@@ -678,15 +676,18 @@ static void dma_irq_handler(void)
  * DMA error interrupt handler
  *
  *****************************************************************************/
-static void dma_ccerr_handler(void)
+static irqreturn_t dma_ccerr_handler(int irq, void *data)
 {
 	int i;
-	unsigned int cnt;
-	cnt = 0;
+	unsigned int cnt = 0;
+
+	dev_dbg(&edma_dev.dev, "dma_ccerr_handler\n");
+
 	if ((edma_read_array(EDMA_EMR, 0) == 0) &&
 	    (edma_read_array(EDMA_EMR, 1) == 0) &&
 	    (edma_read(EDMA_QEMR) == 0) && (edma_read(EDMA_CCERR) == 0))
-		return;
+		return IRQ_NONE;
+
 	while (1) {
 		int j = -1;
 		if (edma_read_array(EDMA_EMR, 0))
@@ -743,26 +744,27 @@ static void dma_ccerr_handler(void)
 			break;
 	}
 	edma_write(EDMA_EEVAL, 1);
+	return IRQ_HANDLED;
 }
 
 /******************************************************************************
  *
- * DMA error interrupt handler
+ * Transfer controller error interrupt handlers
  *
  *****************************************************************************/
-static void dma_tc1err_handler(void)
-{
 
+#define tc_errs_handled	false	/* disabled as long as they're NOPs */
+
+static irqreturn_t dma_tc0err_handler(int irq, void *data)
+{
+	dev_dbg(&edma_dev.dev, "dma_tc0err_handler\n");
+	return IRQ_HANDLED;
 }
 
-/******************************************************************************
- *
- * DMA error interrupt handler
- *
- *****************************************************************************/
-static void dma_tc2err_handler(void)
+static irqreturn_t dma_tc1err_handler(int irq, void *data)
 {
-
+	dev_dbg(&edma_dev.dev, "dma_tc1err_handler\n");
+	return IRQ_HANDLED;
 }
 
 /******************************************************************************
@@ -773,6 +775,8 @@ static void dma_tc2err_handler(void)
 int __init arch_dma_init(void)
 {
 	int i;
+	int status;
+
 	edma_driver.name = "edma";
 	edma_dev.name = "dma";
 	edma_dev.id = -1;
@@ -787,8 +791,41 @@ int __init arch_dma_init(void)
 	if (cpu_is_davinci_dm355()) {
 		/* NOTE conflicts with SPI1_INT{0,1} and SPI2_INT0 */
 		davinci_cfg_reg(DM355_INT_EDMA_CC);
-		davinci_cfg_reg(DM355_INT_EDMA_TC0_ERR);
-		davinci_cfg_reg(DM355_INT_EDMA_TC1_ERR);
+		if (tc_errs_handled) {
+			davinci_cfg_reg(DM355_INT_EDMA_TC0_ERR);
+			davinci_cfg_reg(DM355_INT_EDMA_TC1_ERR);
+		}
+	}
+
+	status = request_irq(IRQ_CCINT0, dma_irq_handler, 0, "edma", NULL);
+	if (status < 0) {
+		dev_dbg(&edma_dev.dev, "request_irq %d failed --> %d\n",
+			IRQ_CCINT0, status);
+		return status;
+	}
+	status = request_irq(IRQ_CCERRINT, dma_ccerr_handler, 0,
+				"edma_error", NULL);
+	if (status < 0) {
+		dev_dbg(&edma_dev.dev, "request_irq %d failed --> %d\n",
+			IRQ_CCERRINT, status);
+		return status;
+	}
+
+	if (tc_errs_handled) {
+		status = request_irq(IRQ_TCERRINT0, dma_tc0err_handler, 0,
+					"edma_tc0", NULL);
+		if (status < 0) {
+			dev_dbg(&edma_dev.dev, "request_irq %d failed --> %d\n",
+				IRQ_TCERRINT0, status);
+			return status;
+		}
+		status = request_irq(IRQ_TCERRINT, dma_tc1err_handler, 0,
+					"edma_tc1", NULL);
+		if (status < 0) {
+			dev_dbg(&edma_dev.dev, "request_irq %d --> %d\n",
+				IRQ_TCERRINT, status);
+			return status;
+		}
 	}
 
 	/* Everything lives on transfer controller 1 until otherwise specified.
@@ -819,6 +856,7 @@ int __init arch_dma_init(void)
 	LOCK_INIT;
 	return 0;
 }
+arch_initcall(arch_dma_init)
 
 /******************************************************************************
  *
@@ -857,7 +895,7 @@ int davinci_request_dma(int dev_id, const char *name,
 {
 
 	int ret_val = 0, i = 0;
-	static int req_flag;
+
 	/* checking the ARM side events */
 	if (dev_id >= 0 && (dev_id < DAVINCI_EDMA_NUM_DMACH)) {
 		if (!(edma_channels_arm[dev_id / 32] & (1 << (dev_id % 32)))) {
@@ -886,17 +924,6 @@ int davinci_request_dma(int dev_id, const char *name,
 			edma_or_array2(EDMA_DRAE, 0, dev_id >> 5,
 					1 << (dev_id & 0x1f));
 		}
-	}
-
-	if (!req_flag) {
-		if (register_dma_interrupts
-		    (dma_irq_handler, dma_ccerr_handler,
-		     dma_tc1err_handler, dma_tc2err_handler)) {
-			dev_dbg(&edma_dev.dev,
-				"register_dma_interrupts failed\r\n");
-			return -EINVAL;
-		} else
-			req_flag = 1;
 	}
 
 	if (dev_id >= 0 && dev_id < (DAVINCI_EDMA_NUM_DMACH)) {
@@ -1540,72 +1567,3 @@ void davinci_clean_channel(int ch_no)
 	}
 }
 EXPORT_SYMBOL(davinci_clean_channel);
-
-/******************************************************************************
- *
- * DMA interrupt handlers
- *
- *****************************************************************************/
-static int dma_irq_handler_l(int sound_curr_lch, void *ch_status)
-{
-	dev_dbg(&edma_dev.dev, "dma_irq_handler\n");
-	(*cb[0]) ();
-	return IRQ_HANDLED;
-}
-
-static int dma_ccerr_handler_l(int sound_curr_lch, void *ch_status)
-{
-	dev_dbg(&edma_dev.dev, "dma_ccerr_handler\n");
-	(*cb[1]) ();
-	return IRQ_HANDLED;
-}
-
-static int dma_tc1err_handler_l(int sound_curr_lch, void *ch_status)
-{
-	dev_dbg(&edma_dev.dev, "dma_tc1err_handler\n");
-	(*cb[2]) ();
-	return IRQ_HANDLED;
-}
-
-static int dma_tc2err_handler_l(int sound_curr_lch, void *ch_status)
-{
-	dev_dbg(&edma_dev.dev, "dma_tc2err_handler\n");
-	(*cb[3]) ();
-	return IRQ_HANDLED;
-}
-
-int register_dma_interrupts(intr_callback cb1, intr_callback cb2,
-			intr_callback cb3, intr_callback cb4)
-{
-	cb[0] = cb1;
-	cb[1] = cb2;
-	cb[2] = cb3;
-	cb[3] = cb4;
-	if (!cb1 || !cb2 || !cb3 || !cb4) {
-		dev_dbg(&edma_dev.dev, "NULL callback\n");
-		return -1;
-	}
-
-	if (request_irq(IRQ_CCINT0, dma_irq_handler_l, 0, "EDMA", NULL)) {
-		dev_dbg(&edma_dev.dev, "request_irq failed\n");
-		return -1;
-	}
-	if (request_irq
-	    (IRQ_CCERRINT, dma_ccerr_handler_l, 0, "EDMA CC Err", NULL)) {
-		dev_dbg(&edma_dev.dev, "request_irq failed\n");
-		return -1;
-	}
-	if (request_irq
-	    (IRQ_TCERRINT0, dma_tc1err_handler_l, 0, "EDMA TC1 Err", NULL)) {
-		dev_dbg(&edma_dev.dev, "request_irq failed\n");
-		return -1;
-	}
-	if (request_irq
-	    (IRQ_TCERRINT, dma_tc2err_handler_l, 0, "EDMA TC2 Err", NULL)) {
-		dev_dbg(&edma_dev.dev, "request_irq failed\n");
-		return -1;
-	}
-	return 0;
-}
-
-arch_initcall(arch_dma_init);
