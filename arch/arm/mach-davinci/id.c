@@ -83,6 +83,7 @@ unsigned int davinci_rev(void)
 {
 	return davinci_revision >> 16;
 }
+EXPORT_SYMBOL(davinci_rev);
 
 void __init davinci_check_revision(void)
 {
