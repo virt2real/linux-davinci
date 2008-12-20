@@ -28,6 +28,7 @@
 #include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/cpu.h>
+#include <mach/mux.h>
 
 #include "clock.h"
 
@@ -163,6 +164,17 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 	case 1:
 		if (!cpu_is_davinci_dm355())
 			break;
+
+		/* REVISIT we may not need all these pins if e.g. this
+		 * is a hard-wired SDIO device...
+		 */
+		davinci_cfg_reg(DM355_SD1_CMD);
+		davinci_cfg_reg(DM355_SD1_CLK);
+		davinci_cfg_reg(DM355_SD1_DATA0);
+		davinci_cfg_reg(DM355_SD1_DATA1);
+		davinci_cfg_reg(DM355_SD1_DATA2);
+		davinci_cfg_reg(DM355_SD1_DATA3);
+
 		pdev = &davinci_mmcsd1_device;
 		clockname = "MMCSDCLK1";
 		break;
@@ -171,6 +183,9 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 			mmcsd0_resources[0].start = DM355_MMCSD0_BASE;
 			mmcsd0_resources[0].end = DM355_MMCSD0_BASE + SZ_4K - 1;
 			mmcsd0_resources[2].start = IRQ_DM355_SDIOINT0;
+
+			/* expose all 6 MMC0 signals:  CLK, CMD, DATA[0..3] */
+			davinci_cfg_reg(DM355_MMCSD0);
 		}
 		pdev = &davinci_mmcsd0_device;
 		clockname = cpu_is_davinci_dm355() ? "MMCSDCLK0" : "MMCSDCLK";

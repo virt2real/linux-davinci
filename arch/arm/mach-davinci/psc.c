@@ -86,15 +86,6 @@ static void dm355_psc_mux(unsigned int id)
 	 * while declaring what pins/irqs/edmas/... we care about.
 	 */
 	switch (id) {
-	case DM355_LPSC_MMC_SD1:	/* MMC1 */
-		/* expose DATA[0..3], CMD, CLK */
-		davinci_cfg_reg(DM355_SD1_CLK);
-		davinci_cfg_reg(DM355_SD1_CMD);
-		davinci_cfg_reg(DM355_SD1_DATA3);
-		davinci_cfg_reg(DM355_SD1_DATA2);
-		davinci_cfg_reg(DM355_SD1_DATA1);
-		davinci_cfg_reg(DM355_SD1_DATA0);
-		break;
 	case DM355_LPSC_McBSP1:		/* ASP1 */
 		/* our ASoC code currently doesn't use these IRQs */
 #if 0
@@ -110,9 +101,6 @@ static void dm355_psc_mux(unsigned int id)
 		davinci_writel(tmp, DM355_EDMA_EVTMUX);
 		break;
 	case DAVINCI_LPSC_MMC_SD:	/* MMC0 */
-		/* expose all 6 MMC0 signals:  CLK, CMD, DATA[0..3] */
-		davinci_cfg_reg(DM355_MMCSD0);
-
 		/* support EMDA for MMC0 RX */
 		tmp = davinci_readl(DM355_EDMA_EVTMUX);
 		tmp &= ~BIT(2);
