@@ -100,12 +100,6 @@ static void dm355_psc_mux(unsigned int id)
 		tmp &= ~(BIT(1) | BIT(0));
 		davinci_writel(tmp, DM355_EDMA_EVTMUX);
 		break;
-	case DAVINCI_LPSC_MMC_SD:	/* MMC0 */
-		/* support EMDA for MMC0 RX */
-		tmp = davinci_readl(DM355_EDMA_EVTMUX);
-		tmp &= ~BIT(2);
-		davinci_writel(tmp, DM355_EDMA_EVTMUX);
-		break;
 	case DAVINCI_LPSC_SPI:			/* SPI0 */
 		/* expose SPI0_SDI
 		 * NOTE: SPIO_SDENA0 and/or SPIO_SDENA1

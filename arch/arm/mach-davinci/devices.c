@@ -186,6 +186,9 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 
 			/* expose all 6 MMC0 signals:  CLK, CMD, DATA[0..3] */
 			davinci_cfg_reg(DM355_MMCSD0);
+
+			/* enable RX EDMA */
+			davinci_cfg_reg(DM355_EVT26_MMC0_RX);
 		}
 		pdev = &davinci_mmcsd0_device;
 		clockname = cpu_is_davinci_dm355() ? "MMCSDCLK0" : "MMCSDCLK";

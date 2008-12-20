@@ -34,6 +34,28 @@
 			.mode = mux_mode,				\
 		},
 
+#define INT_CFG(soc, desc, mode_offset, mode_mask, mux_mode, dbg)	\
+[soc##_##desc] = {							\
+			.name =  #desc,					\
+			.debug = dbg,					\
+			.mux_reg_name = "INTMUX",			\
+			.mux_reg = INTMUX,				\
+			.mask_offset = mode_offset,			\
+			.mask = mode_mask,				\
+			.mode = mux_mode,				\
+		},
+
+#define EVT_CFG(soc, desc, mode_offset, mode_mask, mux_mode, dbg)	\
+[soc##_##desc] = {							\
+			.name =  #desc,					\
+			.debug = dbg,					\
+			.mux_reg_name = "EVTMUX",			\
+			.mux_reg = EVTMUX,				\
+			.mask_offset = mode_offset,			\
+			.mask = mode_mask,				\
+			.mode = mux_mode,				\
+		},
+
 /*
  *	soc	description	mux  mode   mode  mux	 dbg
  *				reg  offset mask  mode
@@ -117,6 +139,14 @@ MUX_CFG(DM355,	MCBSP0_BFSR,	3,   5,     1,	  1,	 false)
 MUX_CFG(DM355,	SPI0_SDI,	4,   1,     1,    0,	 false)
 MUX_CFG(DM355,	SPI0_SDENA0,	4,   0,     1,    0,	 false)
 MUX_CFG(DM355,	SPI0_SDENA1,	3,   28,    1,    1,	 false)
+
+INT_CFG(DM355,  INT_EDMA_CC,	      2,    1,    1,     false)
+INT_CFG(DM355,  INT_EDMA_TC0_ERR,     3,    1,    1,     false)
+INT_CFG(DM355,  INT_EDMA_TC1_ERR,     4,    1,    1,     false)
+
+EVT_CFG(DM355,  EVT8_ASP1_TX,	      0,    1,    0,     false)
+EVT_CFG(DM355,  EVT9_ASP1_RX,	      1,    1,    0,     false)
+EVT_CFG(DM355,  EVT26_MMC0_RX,	      2,    1,    0,     false)
 };
 
 void __init davinci_mux_init(void)

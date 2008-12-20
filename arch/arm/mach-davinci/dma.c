@@ -21,21 +21,24 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  * ----------------------------------------------------------------------------
- *
  */
+#include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
+
 #include <asm/io.h>
+
+#include <mach/cpu.h>
 #include <mach/memory.h>
-#include <linux/kernel.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
-
 #include <mach/edma.h>
+#include <mach/mux.h>
+
 /**************************************************************************\
 * Register Overlay Structure for PARAMENTRY
 \**************************************************************************/
@@ -780,6 +783,13 @@ int __init arch_dma_init(void)
 	memset(dma_chan, 0x00, sizeof(dma_chan));
 	for (i = 0; i < DAVINCI_EDMA_NUM_PARAMENTRY * PARM_SIZE; i += 4)
 		edma_write(EDMA_PARM + i, 0);
+
+	if (cpu_is_davinci_dm355()) {
+		/* NOTE conflicts with SPI1_INT{0,1} and SPI2_INT0 */
+		davinci_cfg_reg(DM355_INT_EDMA_CC);
+		davinci_cfg_reg(DM355_INT_EDMA_TC0_ERR);
+		davinci_cfg_reg(DM355_INT_EDMA_TC1_ERR);
+	}
 
 	/* Everything lives on transfer controller 1 until otherwise specified.
 	 * This way, long transfers on the low priority queue

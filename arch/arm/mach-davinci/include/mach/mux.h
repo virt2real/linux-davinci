@@ -22,12 +22,14 @@
 #include <mach/dm644x.h>
 
 /* System module registers */
-#define PINMUX0                 (DAVINCI_SYSTEM_MODULE_BASE + 0x00)
-#define PINMUX1                 (DAVINCI_SYSTEM_MODULE_BASE + 0x04)
+#define PINMUX0			(DAVINCI_SYSTEM_MODULE_BASE + 0x00)
+#define PINMUX1			(DAVINCI_SYSTEM_MODULE_BASE + 0x04)
 /* dm355 only */
-#define PINMUX2                 (DAVINCI_SYSTEM_MODULE_BASE + 0x08)
-#define PINMUX3                 (DAVINCI_SYSTEM_MODULE_BASE + 0x0c)
-#define PINMUX4                 (DAVINCI_SYSTEM_MODULE_BASE + 0x10)
+#define PINMUX2			(DAVINCI_SYSTEM_MODULE_BASE + 0x08)
+#define PINMUX3			(DAVINCI_SYSTEM_MODULE_BASE + 0x0c)
+#define PINMUX4			(DAVINCI_SYSTEM_MODULE_BASE + 0x10)
+#define INTMUX			(DAVINCI_SYSTEM_MODULE_BASE + 0x18)
+#define EVTMUX			(DAVINCI_SYSTEM_MODULE_BASE + 0x1c)
 
 struct mux_config {
 	char *name;
@@ -119,7 +121,7 @@ enum davinci_dm355_index {
 	DM355_I2C_SDA,
 	DM355_I2C_SCL,
 
-	/* ASP function */
+	/* ASP0 function */
 	DM355_MCBSP0_BDX,
 	DM355_MCBSP0_X,
 	DM355_MCBSP0_BFSX,
@@ -131,6 +133,16 @@ enum davinci_dm355_index {
 	DM355_SPI0_SDI,
 	DM355_SPI0_SDENA0,
 	DM355_SPI0_SDENA1,
+
+	/* IRQ muxing */
+	DM355_INT_EDMA_CC,
+	DM355_INT_EDMA_TC0_ERR,
+	DM355_INT_EDMA_TC1_ERR,
+
+	/* EDMA event muxing */
+	DM355_EVT8_ASP1_TX,
+	DM355_EVT9_ASP1_RX,
+	DM355_EVT26_MMC0_RX,
 };
 
 #ifdef CONFIG_DAVINCI_MUX
