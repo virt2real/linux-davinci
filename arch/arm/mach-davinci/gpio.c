@@ -287,7 +287,7 @@ static int __init davinci_gpio_irq_setup(void)
 	if (IS_ERR(clk)) {
 		printk(KERN_ERR "Error %ld getting gpio clock?\n",
 		       PTR_ERR(clk));
-		return 0;
+		return PTR_ERR(clk);
 	}
 	clk_enable(clk);
 

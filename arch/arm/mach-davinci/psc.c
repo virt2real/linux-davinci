@@ -213,8 +213,6 @@ void __init davinci_psc_init(void)
 					DAVINCI_LPSC_TPTC0, 1);
 		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
 					DAVINCI_LPSC_TPTC1, 1);
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_GPIO, 1);
 
 		/* Turn on WatchDog timer LPSC.	 Needed for RESET to work */
 		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
@@ -222,7 +220,5 @@ void __init davinci_psc_init(void)
 	} else if (cpu_is_davinci_dm646x()) {
 		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
 					DM646X_LPSC_AEMIF, 1);
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DM646X_LPSC_GPIO, 1);
 	}
 }
