@@ -2740,6 +2740,8 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	emac_mii->reset = emac_mii_reset,
 	emac_mii->irq   = mii_irqs,
 	emac_mii->phy_mask = ~(EMAC_EVM_PHY_MASK);
+	emac_mii->parent = &pdev->dev;
+
 	/* Base address initialisation for MDIO */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mdio_regs");
 	if (!res) {
