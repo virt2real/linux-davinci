@@ -1275,13 +1275,9 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 
 	mmc->ops = &mmc_davinci_ops;
 	mmc->f_min = 312500;
-#ifdef CONFIG_MMC_HIGHSPEED /* FIXME: no longer used */
-	mmc->f_max = 50000000;
-	mmc->caps |= MMC_CAP_MMC_HIGHSPEED;
-#else
-	mmc->f_max = 25000000;
-#endif
-	mmc->ocr_avail = MMC_VDD_32_33;
+	mmc->f_max = 52000000;	/* MMCplus @52 MHz; SDHC @50 MHz */
+	mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
+	mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
 
 #ifdef CONFIG_MMC_BLOCK_BOUNCE
 	mmc->max_phys_segs	= 1;
@@ -1301,12 +1297,11 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 	dev_dbg(mmc_dev(host->mmc), "max_req_size=%d\n", mmc->max_req_size);
 	dev_dbg(mmc_dev(host->mmc), "max_seg_size=%d\n", mmc->max_seg_size);
 
-	if (use_dma)
-		if (davinci_acquire_dma_channels(host) != 0)
-			goto out;
-
 	host->use_dma = use_dma;
 	host->irq = irq;
+
+	if (host->use_dma && davinci_acquire_dma_channels(host) != 0)
+		host->use_dma = 0;
 
 	platform_set_drvdata(pdev, host);
 
@@ -1318,8 +1313,10 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 	if (ret)
 		goto out;
 
+	rename_region(mem, mmc_hostname(mmc));
+
 	dev_info(mmc_dev(host->mmc), "Using %s, %d-bit mode\n",
-		use_dma ? "DMA" : "PIO",
+		host->use_dma ? "DMA" : "PIO",
 		(mmc->caps & MMC_CAP_4_BIT_DATA) ? 4 : 1);
 
 	return 0;
@@ -1404,7 +1401,7 @@ static struct platform_driver davinci_mmcsd_driver = {
 
 static int __init davinci_mmcsd_init(void)
 {
-	return platform_driver_probe(&davinci_mmcsd_driver, 
+	return platform_driver_probe(&davinci_mmcsd_driver,
 				     davinci_mmcsd_probe);
 }
 module_init(davinci_mmcsd_init);
