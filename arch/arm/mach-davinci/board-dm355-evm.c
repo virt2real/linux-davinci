@@ -201,6 +201,17 @@ static struct davinci_mmc_config dm355evm_mmc_config = {
 	.wires		= 4,
 };
 
+/* Don't connect anything to J10 unless you're only using USB host
+ * mode *and* have to do so with some kind of gender-bender.  If
+ * you have proper Mini-B or Mini-A cables (or Mini-A adapters)
+ * the ID pin won't need any help.
+ */
+#ifdef CONFIG_USB_MUSB_PERIPHERAL
+#define USB_ID_VALUE	0	/* ID pulled high; *should* float */
+#else
+#define USB_ID_VALUE	1	/* ID pulled low */
+#endif
+
 static __init void dm355_evm_init(void)
 {
 	davinci_psc_init();
@@ -215,6 +226,11 @@ static __init void dm355_evm_init(void)
 	davinci_board_config = davinci_evm_config;
 	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
 	davinci_serial_init();
+
+	gpio_request(2, "usb_id_toggle");
+	gpio_direction_output(2, USB_ID_VALUE);
+	/* irlml6401 switches over 1A in under 8 msec */
+	setup_usb(500, 8);
 
 	davinci_setup_mmc(0, &dm355evm_mmc_config);
 	davinci_setup_mmc(1, &dm355evm_mmc_config);
