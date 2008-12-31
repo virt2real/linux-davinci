@@ -442,7 +442,9 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 {
 	int sync_dev;
 	unsigned char i, j;
-	u16		acnt, bcnt, ccnt;
+	const u16	acnt = 4;
+	const u16	bcnt = rw_threshold >> 2;
+	u16		ccnt;
 	u32		src_port, dst_port;
 	s16		src_bidx, dst_bidx;
 	s16		src_cidx, dst_cidx;
@@ -451,34 +453,11 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	struct scatterlist *sg = &data->sg[0];
 	unsigned	count = sg_dma_len(sg);
 
-	if ((data->blocks == 1) && (count > data->blksz))
-		count = data->blksz;
-
-	if ((count & (rw_threshold - 1)) == 0) {
-		/* This should always be true due to an earlier check */
-		acnt = 4;
-		bcnt = rw_threshold >> 2;
-		ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
-	} else if (count < rw_threshold) {
-		if ((count&3) == 0) {
-			acnt = 4;
-			bcnt = count>>2;
-		} else if ((count&1) == 0) {
-			acnt = 2;
-			bcnt = count>>1;
-		} else {
-			acnt = 1;
-			bcnt = count;
-		}
-		ccnt = 1;
-	} else {
-		acnt = 4;
-		bcnt = rw_threshold >> 2;
-		ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
-		dev_warn(mmc_dev(host->mmc),
-			"MMC: count of 0x%x unsupported, truncating transfer\n",
-			count);
-	}
+	/* If this scatterlist segment (e.g. one page) is bigger than
+	 * the transfer (e.g. a block) don't use the whole segment.
+	 */
+	if (count > host->bytes_left)
+		count = host->bytes_left;
 
 	/*
 	 * A-B Sync transfer:  each DMA request is for one "frame" of
@@ -490,6 +469,8 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	 * The FIFOs are read/written in 4-byte chunks (acnt == 4) and
 	 * EDMA will optimize memory operations to use larger bursts.
 	 */
+	ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
+
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
 		sync_dev = host->txdma;
 
@@ -567,9 +548,6 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 			edma_chan_num = host->edma_ch_details.chanel_num[0];
 
 			count = sg_dma_len(sg);
-			if ((data->blocks == 1) && (count > data->blksz))
-				count = data->blksz;
-
 			ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
 
 			if (sync_dev == host->txdma)
@@ -608,7 +586,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 				? DMA_TO_DEVICE
 				: DMA_FROM_DEVICE));
 
-	/* Decide if we can use DMA */
+	/* no individual DMA segment should need a partial FIFO */
 	for (i = 0; i < host->sg_len; i++) {
 		if (sg_dma_len(data->sg + i) & mask) {
 			dma_unmap_sg(mmc_dev(host->mmc),
@@ -706,7 +684,7 @@ static void
 mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 {
 	int fifo_lev = (rw_threshold == 32) ? MMCFIFOCTL_FIFOLEV : 0;
-	int timeout, sg_len;
+	int timeout;
 
 	host->data = req->data;
 	if (req->data == NULL) {
@@ -760,11 +738,17 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 		break;
 	}
 
-	sg_len = (req->data->blocks == 1) ? 1 : req->data->sg_len;
-	host->sg_len = sg_len;
-
+	host->sg_len = req->data->sg_len;
 	host->bytes_left = req->data->blocks * req->data->blksz;
 
+	/* For now we try to use DMA whenever we won't need partial FIFO
+	 * reads or writes, either for the whole transfer (as tested here)
+	 * or for any individual scatterlist segment (tested when we call
+	 * start_dma_transfer).
+	 *
+	 * While we *could* change that, unusual block sizes are rarely
+	 * used.  The occasional fallback to PIO should't hurt.
+	 */
 	if (host->use_dma && (host->bytes_left & (rw_threshold - 1)) == 0
 			&& mmc_davinci_start_dma_transfer(host, req) == 0) {
 		host->buffer = NULL;
