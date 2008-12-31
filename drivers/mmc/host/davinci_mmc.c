@@ -154,11 +154,7 @@
  */
 #define MAX_CCNT	((1 << 16) - 1)
 
-#ifdef CONFIG_MMC_BLOCK_BOUNCE
 #define NR_SG		1
-#else
-#define NR_SG		2
-#endif
 
 static unsigned rw_threshold = 32;
 module_param(rw_threshold, uint, S_IRUGO);
@@ -168,11 +164,6 @@ MODULE_PARM_DESC(rw_threshold,
 static unsigned __initdata use_dma = 1;
 module_param(use_dma, uint, 0);
 MODULE_PARM_DESC(use_dma, "Whether to use DMA or not. Default = 1");
-
-struct edma_ch_mmcsd {
-	unsigned char cnt_chanel;
-	unsigned int chanel_num[NR_SG - 1];
-};
 
 struct mmc_davinci_host {
 	struct mmc_command *cmd;
@@ -202,13 +193,8 @@ struct mmc_davinci_host {
 	bool use_dma;
 	bool do_dma;
 
-	struct edma_ch_mmcsd edma_ch_details;
-
 	unsigned int sg_len;
 	int sg_idx;
-
-	unsigned int option_read;
-	unsigned int option_write;
 };
 
 
@@ -446,14 +432,12 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 					struct mmc_request *req)
 {
 	int sync_dev;
-	unsigned char i, j;
 	const u16	acnt = 4;
 	const u16	bcnt = rw_threshold >> 2;
 	u16		ccnt;
 	u32		src_port, dst_port;
 	s16		src_bidx, dst_bidx;
 	s16		src_cidx, dst_cidx;
-	edmacc_paramentry_regs temp;
 	struct mmc_data *data = host->data;
 	struct scatterlist *sg = &data->sg[0];
 	unsigned	count = sg_dma_len(sg);
@@ -511,70 +495,6 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 	davinci_set_dma_transfer_params(sync_dev, acnt, bcnt, ccnt, 8, ABSYNC);
 
-	davinci_get_dma_params(sync_dev, &temp);
-	if (sync_dev == host->txdma) {
-		if (host->option_write == 0) {
-			host->option_write = temp.opt;
-		} else {
-			temp.opt = host->option_write;
-			davinci_set_dma_params(sync_dev, &temp);
-		}
-	}
-	if (sync_dev == host->rxdma) {
-		if (host->option_read == 0) {
-			host->option_read = temp.opt;
-		} else {
-			temp.opt = host->option_read;
-			davinci_set_dma_params(sync_dev, &temp);
-		}
-	}
-
-	if (NR_SG > 1 && host->sg_len > 1) {
-		davinci_get_dma_params(sync_dev, &temp);
-		temp.opt &= ~TCINTEN;
-		davinci_set_dma_params(sync_dev, &temp);
-
-		for (i = 0; i < host->sg_len - 1; i++) {
-			int	edma_chan_num;
-
-			sg = &data->sg[i + 1];
-
-			if (i != 0) {
-				j = i - 1;
-				davinci_get_dma_params(
-					host->edma_ch_details.chanel_num[j],
-					&temp);
-				temp.opt &= ~TCINTEN;
-				davinci_set_dma_params(
-					host->edma_ch_details.chanel_num[j],
-					&temp);
-			}
-
-			edma_chan_num = host->edma_ch_details.chanel_num[0];
-
-			count = sg_dma_len(sg);
-			ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
-
-			if (sync_dev == host->txdma)
-				temp.src = (unsigned int)sg_dma_address(sg);
-			else
-				temp.dst = (unsigned int)sg_dma_address(sg);
-			temp.opt |= TCINTEN;
-
-			temp.ccnt = (temp.ccnt & 0xFFFF0000) | (ccnt);
-
-			davinci_set_dma_params(edma_chan_num, &temp);
-			if (i != 0) {
-				j = i - 1;
-				davinci_dma_link_lch(host->edma_ch_details.
-						chanel_num[j],
-						edma_chan_num);
-			}
-		}
-		davinci_dma_link_lch(sync_dev,
-				host->edma_ch_details.chanel_num[0]);
-	}
-
 	davinci_start_dma(sync_dev);
 	return 0;
 }
@@ -617,16 +537,11 @@ davinci_release_dma_channels(struct mmc_davinci_host *host)
 
 	davinci_free_dma(host->txdma);
 	davinci_free_dma(host->rxdma);
-
-	if (host->edma_ch_details.cnt_chanel) {
-		davinci_free_dma(host->edma_ch_details.chanel_num[0]);
-		host->edma_ch_details.cnt_chanel = 0;
-	}
 }
 
 static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 {
-	int edma_chan_num, tcc = 0, r, sync_dev;
+	int edma_chan_num, tcc = 0, r;
 	enum dma_event_q queue_no = EVENTQ_0;
 
 	/* Acquire master DMA write channel */
@@ -649,36 +564,8 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 		goto free_master_write;
 	}
 
-	host->edma_ch_details.cnt_chanel = 0;
-
-	/* REVISIT the NR_SG > 1 code all looks rather dubious...
-	 * example, the comment below about single block mode for
-	 * writes is quite obviously wrong.
-	 */
-	if (NR_SG == 1)
-		return 0;
-
-	/* currently data Writes are done using single block mode,
-	 * so no DMA slave write channel is required for now */
-
-	/* Create a DMA slave read channel
-	 * (assuming max segments handled is 2) */
-	sync_dev = host->rxdma;
-	r = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "LINK", NULL, NULL,
-		&edma_chan_num, &sync_dev, queue_no);
-	if (r != 0) {
-		dev_warn(mmc_dev(host->mmc),
-			"MMC: davinci_request_dma() failed with %d\n", r);
-		goto free_master_read;
-	}
-
-	host->edma_ch_details.cnt_chanel++;
-	host->edma_ch_details.chanel_num[0] = edma_chan_num;
-
 	return 0;
 
-free_master_read:
-	davinci_free_dma(host->rxdma);
 free_master_write:
 	davinci_free_dma(host->txdma);
 
