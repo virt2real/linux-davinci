@@ -442,34 +442,23 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 {
 	int sync_dev;
 	unsigned char i, j;
-	unsigned short acnt, bcnt, ccnt;
-	unsigned int src_port, dst_port, temp_ccnt;
-	enum address_mode mode_src, mode_dst;
-	enum fifo_width fifo_width_src, fifo_width_dst;
-	unsigned short src_bidx, dst_bidx;
-	unsigned short src_cidx, dst_cidx;
-	unsigned short bcntrld;
-	enum sync_dimension sync_mode;
+	u16		acnt, bcnt, ccnt;
+	u32		src_port, dst_port;
+	s16		src_bidx, dst_bidx;
+	s16		src_cidx, dst_cidx;
 	edmacc_paramentry_regs temp;
-	int edma_chan_num;
 	struct mmc_data *data = host->data;
 	struct scatterlist *sg = &data->sg[0];
-	unsigned int count;
-	int num_frames, frame;
-
-#define MAX_C_CNT		MAX_CCNT
-
-	frame = data->blksz;
-	count = sg_dma_len(sg);
+	unsigned	count = sg_dma_len(sg);
 
 	if ((data->blocks == 1) && (count > data->blksz))
-		count = frame;
+		count = data->blksz;
 
 	if ((count & (rw_threshold - 1)) == 0) {
 		/* This should always be true due to an earlier check */
 		acnt = 4;
 		bcnt = rw_threshold >> 2;
-		num_frames = count >> ((rw_threshold == 32) ? 5 : 4);
+		ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
 	} else if (count < rw_threshold) {
 		if ((count&3) == 0) {
 			acnt = 4;
@@ -481,70 +470,60 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 			acnt = 1;
 			bcnt = count;
 		}
-		num_frames = 1;
+		ccnt = 1;
 	} else {
 		acnt = 4;
 		bcnt = rw_threshold >> 2;
-		num_frames = count >> ((rw_threshold == 32) ? 5 : 4);
+		ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
 		dev_warn(mmc_dev(host->mmc),
 			"MMC: count of 0x%x unsupported, truncating transfer\n",
 			count);
 	}
 
-	if (num_frames > MAX_C_CNT) {
-		temp_ccnt = MAX_C_CNT;
-		ccnt = temp_ccnt;
-	} else {
-		ccnt = num_frames;
-		temp_ccnt = ccnt;
-	}
-
+	/*
+	 * A-B Sync transfer:  each DMA request is for one "frame" of
+	 * rw_threshold bytes, broken into "acnt"-size chunks repeated
+	 * "bcnt" times.  Each segment needs "ccnt" such frames; since
+	 * we told the block layer our mmc->max_seg_size limit, we can
+	 * trust it's within bounds.
+	 *
+	 * The FIFOs are read/written in 4-byte chunks (acnt == 4) and
+	 * EDMA will optimize memory operations to use larger bursts.
+	 */
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
-		/*AB Sync Transfer */
 		sync_dev = host->txdma;
 
-		src_port = (unsigned int)sg_dma_address(sg);
-		mode_src = INCR;
-		fifo_width_src = W8BIT;	/* It's not cared as modeDsr is INCR */
+		src_port = sg_dma_address(sg);
 		src_bidx = acnt;
 		src_cidx = acnt * bcnt;
-		dst_port = (unsigned int)(host->mem_res->start +
-				DAVINCI_MMCDXR);
-		/* cannot be FIFO, address not aligned on 32 byte boundary */
-		mode_dst = INCR;
-		fifo_width_dst = W8BIT;	/* It's not cared as modeDsr is INCR */
+
+		dst_port = host->mem_res->start + DAVINCI_MMCDXR;
 		dst_bidx = 0;
 		dst_cidx = 0;
-		bcntrld = 8;
-		sync_mode = ABSYNC;
-
 	} else {
 		sync_dev = host->rxdma;
 
-		src_port = (unsigned int)(host->mem_res->start +
-				DAVINCI_MMCDRR);
-		/* cannot be FIFO, address not aligned on 32 byte boundary */
-		mode_src = INCR;
-		fifo_width_src = W8BIT;
+		src_port = host->mem_res->start + DAVINCI_MMCDRR;
 		src_bidx = 0;
 		src_cidx = 0;
-		dst_port = (unsigned int)sg_dma_address(sg);
-		mode_dst = INCR;
-		fifo_width_dst = W8BIT;	/* It's not cared as modeDsr is INCR */
+
+		dst_port = sg_dma_address(sg);
 		dst_bidx = acnt;
 		dst_cidx = acnt * bcnt;
-		bcntrld = 8;
-		sync_mode = ABSYNC;
 	}
 
-	davinci_set_dma_src_params(sync_dev, src_port, mode_src,
-			fifo_width_src);
-	davinci_set_dma_dest_params(sync_dev, dst_port, mode_dst,
-			fifo_width_dst);
+	/*
+	 * We can't use FIFO mode for the FIFOs because MMC FIFO addresses
+	 * are not 256-bit (32-byte) aligned.  So we use INCR, and the W8BIT
+	 * parameter is ignored.
+	 */
+	davinci_set_dma_src_params(sync_dev, src_port, INCR, W8BIT);
+	davinci_set_dma_dest_params(sync_dev, dst_port, INCR, W8BIT);
+
 	davinci_set_dma_src_index(sync_dev, src_bidx, src_cidx);
 	davinci_set_dma_dest_index(sync_dev, dst_bidx, dst_cidx);
-	davinci_set_dma_transfer_params(sync_dev, acnt, bcnt, ccnt, bcntrld,
-					sync_mode);
+
+	davinci_set_dma_transfer_params(sync_dev, acnt, bcnt, ccnt, 8, ABSYNC);
 
 	davinci_get_dma_params(sync_dev, &temp);
 	if (sync_dev == host->txdma) {
@@ -570,6 +549,8 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		davinci_set_dma_params(sync_dev, &temp);
 
 		for (i = 0; i < host->sg_len - 1; i++) {
+			int	edma_chan_num;
+
 			sg = &data->sg[i + 1];
 
 			if (i != 0) {
@@ -585,11 +566,9 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 			edma_chan_num = host->edma_ch_details.chanel_num[0];
 
-			frame = data->blksz;
 			count = sg_dma_len(sg);
-
 			if ((data->blocks == 1) && (count > data->blksz))
-				count = frame;
+				count = data->blksz;
 
 			ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
 
