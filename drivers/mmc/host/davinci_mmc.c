@@ -92,36 +92,22 @@
 #define MMCCLK_CLKEN          (1 << 8)
 #define MMCCLK_CLKRT_MASK     (0xFF << 0)
 
-/* DAVINCI_MMCST0 definitions */
-#define MMCST0_DATDNE         (1 << 0)
-#define MMCST0_BSYDNE         (1 << 1)
-#define MMCST0_RSPDNE         (1 << 2)
-#define MMCST0_TOUTRD         (1 << 3)
-#define MMCST0_TOUTRS         (1 << 4)
-#define MMCST0_CRCWR          (1 << 5)
-#define MMCST0_CRCRD          (1 << 6)
-#define MMCST0_CRCRS          (1 << 7)
-#define MMCST0_DXRDY          (1 << 9)
-#define MMCST0_DRRDY          (1 << 10)
-#define MMCST0_DATED          (1 << 11)
-#define MMCST0_TRNDNE         (1 << 12)
+/* IRQ bit definitions, for DAVINCI_MMCST0 and DAVINCI_MMCIM */
+#define MMCST0_DATDNE         BIT(0)	/* data done */
+#define MMCST0_BSYDNE         BIT(1)	/* busy done */
+#define MMCST0_RSPDNE         BIT(2)	/* command done */
+#define MMCST0_TOUTRD         BIT(3)	/* data read timeout */
+#define MMCST0_TOUTRS         BIT(4)	/* command response timeout */
+#define MMCST0_CRCWR          BIT(5)	/* data write CRC error */
+#define MMCST0_CRCRD          BIT(6)	/* data read CRC error */
+#define MMCST0_CRCRS          BIT(7)	/* command response CRC error */
+#define MMCST0_DXRDY          BIT(9)	/* data transmit ready (fifo empty) */
+#define MMCST0_DRRDY          BIT(10)	/* data receive ready (data in fifo)*/
+#define MMCST0_DATED          BIT(11)	/* DAT3 edge detect */
+#define MMCST0_TRNDNE         BIT(12)	/* transfer done */
 
 /* DAVINCI_MMCST1 definitions */
 #define MMCST1_BUSY           (1 << 0)
-
-/* DAVINCI_MMCIM definitions */
-#define MMCIM_EDATDNE         (1 << 0)
-#define MMCIM_EBSYDNE         (1 << 1)
-#define MMCIM_ERSPDNE         (1 << 2)
-#define MMCIM_ETOUTRD         (1 << 3)
-#define MMCIM_ETOUTRS         (1 << 4)
-#define MMCIM_ECRCWR          (1 << 5)
-#define MMCIM_ECRCRD          (1 << 6)
-#define MMCIM_ECRCRS          (1 << 7)
-#define MMCIM_EDXRDY          (1 << 9)
-#define MMCIM_EDRRDY          (1 << 10)
-#define MMCIM_EDATED          (1 << 11)
-#define MMCIM_ETRNDNE         (1 << 12)
 
 /* DAVINCI_MMCCMD definitions */
 #define MMCCMD_CMD_MASK       (0x3F << 0)
@@ -149,13 +135,6 @@
 #define MMCFIFOCTL_ACCWD_2    (2 << 3) /* access width of 2 bytes    */
 #define MMCFIFOCTL_ACCWD_1    (3 << 3) /* access width of 1 byte     */
 
-/*
- * Command types
- */
-#define DAVINCI_MMC_CMDTYPE_BC	0
-#define DAVINCI_MMC_CMDTYPE_BCR	1
-#define DAVINCI_MMC_CMDTYPE_AC	2
-#define DAVINCI_MMC_CMDTYPE_ADTC	3
 
 /* MMCSD Init clock in Hz in opendain mode */
 #define MMCSD_INIT_CLOCK		200000
@@ -227,20 +206,6 @@ struct mmc_davinci_host {
 	unsigned int option_write;
 };
 
-enum mmcsdevent {
-	MMCSD_EVENT_EOFCMD = (1 << 2),
-	MMCSD_EVENT_READ = (1 << 10),
-	MMCSD_EVENT_WRITE = (1 << 9),
-	MMCSD_EVENT_ERROR_CMDCRC = (1 << 7),
-	MMCSD_EVENT_ERROR_DATACRC = ((1 << 6) | (1 << 5)),
-	MMCSD_EVENT_ERROR_CMDTIMEOUT = (1 << 4),
-	MMCSD_EVENT_ERROR_DATATIMEOUT = (1 << 3),
-	MMCSD_EVENT_CARD_EXITBUSY = (1 << 1),
-	MMCSD_EVENT_BLOCK_XFERRED = (1 << 0)
-};
-
-
-#define RSP_TYPE(x)	((x) & ~(MMC_RSP_BUSY|MMC_RSP_OPCODE))
 
 #define DAVINCI_MMCSD_READ_FIFO(pDst, pRegs, cnt) asm( \
 	"	cmp	%3,#16\n" \
@@ -336,80 +301,52 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 		struct mmc_command *cmd)
 {
 	u32 cmd_reg = 0;
-	u32 resp_type = 0;
-	u32 cmd_type = 0;
 	u32 im_val;
 
 	dev_dbg(mmc_dev(host->mmc), "CMD%d, arg 0x%08x%s\n",
 		cmd->opcode, cmd->arg,
 		({ char *s;
-		switch (RSP_TYPE(mmc_resp_type(cmd))) {
-		case RSP_TYPE(MMC_RSP_R1):
-			s = ", R1/R1b response";
+		switch (mmc_resp_type(cmd)) {
+		case MMC_RSP_R1:
+			s = ", R1/R5/R6/R7 response";
 			break;
-		case RSP_TYPE(MMC_RSP_R2):
+		case MMC_RSP_R1B:
+			s = ", R1b response";
+			break;
+		case MMC_RSP_R2:
 			s = ", R2 response";
 			break;
-		case RSP_TYPE(MMC_RSP_R3):
-			s = ", R3 response";
+		case MMC_RSP_R3:
+			s = ", R3/R4 response";
 			break;
 		default:
-			s = "";
+			s = ", (R? response)";
 			break;
 		}; s; }));
 	host->cmd = cmd;
 
-	/* Protocol layer does not provide response type,
-	 * but our hardware needs to know exact type, not just size!
-	 */
-	switch (RSP_TYPE(mmc_resp_type(cmd))) {
-	case MMC_RSP_NONE:
-		/* resp 0 */
+	switch (mmc_resp_type(cmd)) {
+	case MMC_RSP_R1B:
+		/* There's some spec confusion about when R1B is
+		 * allowed, but if the card doesn't issue a BUSY
+		 * then it's harmless for us to allow it.
+		 */
+		cmd_reg |= MMCCMD_BSYEXP;
+		/* FALLTHROUGH */
+	case MMC_RSP_R1:		/* 48 bits, CRC */
+		cmd_reg |= MMCCMD_RSPFMT_R1456;
 		break;
-	case RSP_TYPE(MMC_RSP_R1):
-		resp_type = 1;
+	case MMC_RSP_R2:		/* 136 bits, CRC */
+		cmd_reg |= MMCCMD_RSPFMT_R2;
 		break;
-	case RSP_TYPE(MMC_RSP_R2):
-		resp_type = 2;
-		break;
-	case RSP_TYPE(MMC_RSP_R3):
-		resp_type = 3;
+	case MMC_RSP_R3:		/* 48 bits, no CRC */
+		cmd_reg |= MMCCMD_RSPFMT_R3;
 		break;
 	default:
+		cmd_reg |= MMCCMD_RSPFMT_NONE;
+		dev_dbg(mmc_dev(host->mmc), "unknown resp_type %04x\n",
+			mmc_resp_type(cmd));
 		break;
-	}
-
-	/* Protocol layer does not provide command type, but our hardware
-	 * needs it!
-	 * any data transfer means adtc type (but that information is not
-	 * in command structure, so we flagged it into host struct.)
-	 * However, telling bc, bcr and ac apart based on response is
-	 * not foolproof:
-	 * CMD0  = bc  = resp0  CMD15 = ac  = resp0
-	 * CMD2  = bcr = resp2  CMD10 = ac  = resp2
-	 *
-	 * Resolve to best guess with some exception testing:
-	 * resp0 -> bc, except CMD15 = ac
-	 * rest are ac, except if opendrain
-	 */
-
-	if (mmc_cmd_type(cmd) == MMC_CMD_ADTC)
-		cmd_type = DAVINCI_MMC_CMDTYPE_ADTC;
-	else if (mmc_cmd_type(cmd) == MMC_CMD_BC)
-		cmd_type = DAVINCI_MMC_CMDTYPE_BC;
-	else if (mmc_cmd_type(cmd) == MMC_CMD_BCR)
-		cmd_type = DAVINCI_MMC_CMDTYPE_BCR;
-	else
-		cmd_type = DAVINCI_MMC_CMDTYPE_AC;
-
-	/* Set command Busy or not */
-	if (cmd->flags & MMC_RSP_BUSY) {
-		/*
-		 * Linux core sending BUSY which is not defined for cmd 24
-		 * as per mmc standard
-		 */
-		if (cmd->opcode != 24)
-			cmd_reg = cmd_reg | (1 << 8);
 	}
 
 	/* Set command index */
@@ -417,61 +354,51 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 
 	/* Setting initialize clock */
 	if (cmd->opcode == 0)
-		cmd_reg = cmd_reg | (1 << 14);
+		cmd_reg |= MMCCMD_INITCK;
 
 	/* Set for generating DMA Xfer event */
 	if ((host->do_dma == 1) && (host->data != NULL)
 	    && ((cmd->opcode == 18) || (cmd->opcode == 25)
 		|| (cmd->opcode == 24) || (cmd->opcode == 17)))
-		cmd_reg = cmd_reg | (1 << 16);
+		cmd_reg |= MMCCMD_DMATRIG;
 
 	/* Setting whether command involves data transfer or not */
-	if (cmd_type == DAVINCI_MMC_CMDTYPE_ADTC)
-		cmd_reg = cmd_reg | (1 << 13);
+	if (cmd->data)
+		cmd_reg |= MMCCMD_WDATX;
 
 	/* Setting whether stream or block transfer */
 	if (cmd->flags & MMC_DATA_STREAM)
-		cmd_reg = cmd_reg | (1 << 12);
+		cmd_reg |= MMCCMD_STRMTP;
 
 	/* Setting whether data read or write */
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE)
-		cmd_reg = cmd_reg | (1 << 11);
-
-	/* Setting response type */
-	cmd_reg = cmd_reg | (resp_type << 9);
+		cmd_reg |= MMCCMD_DTRW;
 
 	if (host->bus_mode == MMC_BUSMODE_PUSHPULL)
-		cmd_reg = cmd_reg | (1 << 7);
+		cmd_reg |= MMCCMD_PPLEN;
 
 	/* set Command timeout */
 	writel(0xFFFF, host->base + DAVINCI_MMCTOR);
 
 	/* Enable interrupt (calculate here, defer until FIFO is stuffed). */
-	im_val =  MMCSD_EVENT_EOFCMD
-		| MMCSD_EVENT_ERROR_CMDCRC
-		| MMCSD_EVENT_ERROR_DATACRC
-		| MMCSD_EVENT_ERROR_CMDTIMEOUT
-		| MMCSD_EVENT_ERROR_DATATIMEOUT;
+	im_val =  MMCST0_RSPDNE | MMCST0_CRCRS | MMCST0_TOUTRS;
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
-		im_val |= MMCSD_EVENT_BLOCK_XFERRED;
+		im_val |= MMCST0_DATDNE | MMCST0_CRCWR;
 
 		if (!host->do_dma)
-			im_val |= MMCSD_EVENT_WRITE;
+			im_val |= MMCST0_DXRDY;
 	} else if (host->data_dir == DAVINCI_MMC_DATADIR_READ) {
-		im_val |= MMCSD_EVENT_BLOCK_XFERRED;
+		im_val |= MMCST0_DATDNE | MMCST0_CRCRD | MMCST0_TOUTRD;
 
 		if (!host->do_dma)
-			im_val |= MMCSD_EVENT_READ;
+			im_val |= MMCST0_DRRDY;
 	}
 
 	/*
-	 * It is required by controoler b4 WRITE command that
+	 * Before non-DMA WRITE commands the controller needs priming:
 	 * FIFO should be populated with 32 bytes
 	 */
-	if ((host->data_dir == DAVINCI_MMC_DATADIR_WRITE)
-			&& (cmd_type == DAVINCI_MMC_CMDTYPE_ADTC)
-			&& (host->do_dma != 1))
-		/* Fill the FIFO for Tx */
+	if (!host->do_dma && (host->data_dir == DAVINCI_MMC_DATADIR_WRITE))
 		davinci_fifo_data_trans(host, 32);
 
 	writel(cmd->arg, host->base + DAVINCI_MMCARGHL);
@@ -967,8 +894,7 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		/* Send clock cycles, poll completion */
 		writel(0, host->base + DAVINCI_MMCARGHL);
 		writel(MMCCMD_INITCK, host->base + DAVINCI_MMCCMD);
-		while (!(readl(host->base + DAVINCI_MMCST0) &
-				MMCSD_EVENT_EOFCMD))
+		while (!(readl(host->base + DAVINCI_MMCST0) & MMCST0_RSPDNE))
 			cpu_relax();
 	}
 
@@ -1040,35 +966,18 @@ static inline int handle_core_command(
 {
 	int end_command = 0;
 	int end_transfer = 0;
-	unsigned int qstatus;
+	unsigned int qstatus = status;
 
-	qstatus = status;
-	while (1) {
-		if ((status & MMCSD_EVENT_WRITE) &&
-				(host->data_dir == DAVINCI_MMC_DATADIR_WRITE)
-				&& (host->bytes_left > 0)) {
-			/* Buffer almost empty */
-			davinci_fifo_data_trans(host, rw_threshold);
-		}
-
-		if ((status & MMCSD_EVENT_READ) &&
-				(host->data_dir == DAVINCI_MMC_DATADIR_READ)
-				&& (host->bytes_left > 0)) {
-			/* Buffer almost empty */
-			davinci_fifo_data_trans(host, rw_threshold);
-		}
+	/* handle FIFO first when using PIO for data */
+	while (host->bytes_left && (status & (MMCST0_DXRDY | MMCST0_DRRDY))) {
+		davinci_fifo_data_trans(host, rw_threshold);
 		status = readl(host->base + DAVINCI_MMCST0);
 		if (!status)
 			break;
 		qstatus |= status;
-		if (host->data == NULL) {
-			dev_dbg(mmc_dev(host->mmc), "Status is %x at end of "
-				"ISR when host->data is NULL", status);
-			break;
-		}
 	}
 
-	if (qstatus & MMCSD_EVENT_BLOCK_XFERRED) {
+	if (qstatus & MMCST0_DATDNE) {
 		/* Block sent/received */
 		if (host->data != NULL) {
 			if ((host->do_dma == 0) && (host->bytes_left > 0)) {
@@ -1084,7 +993,7 @@ static inline int handle_core_command(
 		}
 	}
 
-	if (qstatus & MMCSD_EVENT_ERROR_DATATIMEOUT) {
+	if (qstatus & MMCST0_TOUTRD) {
 		/* Data timeout */
 		if (host->data) {
 			host->data->error = -ETIMEDOUT;
@@ -1098,7 +1007,7 @@ static inline int handle_core_command(
 		}
 	}
 
-	if (qstatus & MMCSD_EVENT_ERROR_DATACRC) {
+	if (qstatus & (MMCST0_CRCWR | MMCST0_CRCRD)) {
 		u32 temp;
 		/* DAT line portion is disabled and in reset state */
 		temp = readl(host->base + DAVINCI_MMCCTL);
@@ -1122,7 +1031,7 @@ static inline int handle_core_command(
 		}
 	}
 
-	if (qstatus & MMCSD_EVENT_ERROR_CMDTIMEOUT) {
+	if (qstatus & MMCST0_TOUTRS) {
 		if (host->do_dma)
 			davinci_abort_dma(host);
 
@@ -1136,7 +1045,7 @@ static inline int handle_core_command(
 		}
 	}
 
-	if (qstatus & MMCSD_EVENT_ERROR_CMDCRC) {
+	if (qstatus & MMCST0_CRCRS) {
 		/* Command CRC error */
 		dev_dbg(mmc_dev(host->mmc), "Command CRC error\n");
 		if (host->cmd) {
@@ -1147,7 +1056,7 @@ static inline int handle_core_command(
 		}
 	}
 
-	if (qstatus & MMCSD_EVENT_EOFCMD) {
+	if (qstatus & MMCST0_RSPDNE) {
 		/* End of command phase */
 		end_command = 1;
 	}
