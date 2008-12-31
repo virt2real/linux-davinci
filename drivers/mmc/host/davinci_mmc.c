@@ -189,7 +189,13 @@ struct mmc_davinci_host {
 #define DAVINCI_MMC_DATADIR_READ	1
 #define DAVINCI_MMC_DATADIR_WRITE	2
 	unsigned char data_dir;
+
+	/* buffer is used during PIO of one scatterlist segment, and
+	 * is updated along with buffer_bytes_left.  bytes_left applies
+	 * to all N blocks of the PIO transfer.
+	 */
 	u8 *buffer;
+	u32 buffer_bytes_left;
 	u32 bytes_left;
 
 	u8 rxdma, txdma;
@@ -200,7 +206,6 @@ struct mmc_davinci_host {
 
 	unsigned int sg_len;
 	int sg_idx;
-	unsigned int buffer_bytes_left;
 
 	unsigned int option_read;
 	unsigned int option_write;
@@ -289,6 +294,9 @@ static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n)
 	host->buffer_bytes_left -= n;
 	host->bytes_left -= n;
 
+	/* NOTE:  we never transfer more than rw_threshold bytes
+	 * to/from the fifo here; there's no I/O overlap.
+	 */
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
 		DAVINCI_MMCSD_WRITE_FIFO(p, host->base, n);
 	} else {
@@ -356,10 +364,8 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	if (cmd->opcode == 0)
 		cmd_reg |= MMCCMD_INITCK;
 
-	/* Set for generating DMA Xfer event */
-	if ((host->do_dma == 1) && (host->data != NULL)
-	    && ((cmd->opcode == 18) || (cmd->opcode == 25)
-		|| (cmd->opcode == 24) || (cmd->opcode == 17)))
+	/* Enable EDMA transfer triggers */
+	if (host->do_dma)
 		cmd_reg |= MMCCMD_DMATRIG;
 
 	/* Setting whether command involves data transfer or not */
@@ -417,7 +423,6 @@ static void davinci_abort_dma(struct mmc_davinci_host *host)
 
 	davinci_stop_dma(sync_dev);
 	davinci_clean_channel(sync_dev);
-
 }
 
 static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
@@ -869,8 +874,6 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 {
 	host->data = NULL;
 	host->data_dir = DAVINCI_MMC_DATADIR_NONE;
-	if (data->error == 0)
-		data->bytes_xfered += data->blocks * data->blksz;
 
 	if (host->do_dma) {
 		davinci_abort_dma(host);
@@ -879,18 +882,14 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 			     (data->flags & MMC_DATA_WRITE)
 			     ? DMA_TO_DEVICE
 			     : DMA_FROM_DEVICE);
+		host->do_dma = false;
 	}
 
-	if (data->error == -ETIMEDOUT) {
+	if (!data->stop || (host->cmd && host->cmd->error)) {
 		mmc_request_done(host->mmc, data->mrq);
-		return;
-	}
-
-	if (!data->stop) {
-		mmc_request_done(host->mmc, data->mrq);
-		return;
-	}
-	mmc_davinci_start_command(host, data->stop);
+		writel(0, host->base + DAVINCI_MMCIM);
+	} else
+		mmc_davinci_start_command(host, data->stop);
 }
 
 static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
@@ -921,6 +920,7 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 		if (cmd->error == -ETIMEDOUT)
 			cmd->mrq->cmd->retries = 0;
 		mmc_request_done(host->mmc, cmd->mrq);
+		writel(0, host->base + DAVINCI_MMCIM);
 	}
 }
 
@@ -930,6 +930,7 @@ static inline int handle_core_command(
 	int end_command = 0;
 	int end_transfer = 0;
 	unsigned int qstatus = status;
+	struct mmc_data *data = host->data;
 
 	/* handle FIFO first when using PIO for data */
 	while (host->bytes_left && (status & (MMCST0_DXRDY | MMCST0_DRRDY))) {
@@ -941,70 +942,77 @@ static inline int handle_core_command(
 	}
 
 	if (qstatus & MMCST0_DATDNE) {
-		/* Block sent/received */
-		if (host->data != NULL) {
+		/* All blocks sent/received, and CRC checks passed */
+		if (data != NULL) {
 			if ((host->do_dma == 0) && (host->bytes_left > 0)) {
 				/* if datasize < rw_threshold
 				 * no RX ints are generated
 				 */
-				davinci_fifo_data_trans(host,
-						rw_threshold);
+				davinci_fifo_data_trans(host, host->bytes_left);
 			}
 			end_transfer = 1;
+			data->bytes_xfered += data->blocks * data->blksz;
 		} else {
 			dev_warn(mmc_dev(host->mmc), "TC:host->data is NULL\n");
 		}
 	}
 
 	if (qstatus & MMCST0_TOUTRD) {
-		/* Data timeout */
-		if (host->data) {
-			host->data->error = -ETIMEDOUT;
-			dev_dbg(mmc_dev(host->mmc), "MMCSD: Data timeout, "
-				"CMD%d and status is %x\n",
-				host->cmd->opcode, status);
+		/* Read data timeout */
+		data->error = -ETIMEDOUT;
+		end_transfer = 1;
 
-			if (host->cmd)
-				host->cmd->error = -ETIMEDOUT;
-			end_transfer = 1;
-		}
+		/* REVISIT report *actual* bytecount on errors */
+
+		dev_dbg(mmc_dev(host->mmc),
+			"read data timeout, status %x\n",
+			qstatus);
 	}
 
 	if (qstatus & (MMCST0_CRCWR | MMCST0_CRCRD)) {
 		u32 temp;
+
 		/* DAT line portion is disabled and in reset state */
 		temp = readl(host->base + DAVINCI_MMCCTL);
-
 		writel(temp | MMCCTL_CMDRST,
 			host->base + DAVINCI_MMCCTL);
-
 		udelay(10);
-
 		writel(temp & ~MMCCTL_CMDRST,
 			host->base + DAVINCI_MMCCTL);
 
 		/* Data CRC error */
-		if (host->data) {
-			host->data->error = -EILSEQ;
-			dev_dbg(mmc_dev(host->mmc), "MMCSD: Data CRC error, "
-				"bytes left %d\n", host->bytes_left);
-			end_transfer = 1;
-		} else {
-			dev_dbg(mmc_dev(host->mmc), "MMCSD: Data CRC error\n");
+		data->error = -EILSEQ;
+		end_transfer = 1;
+
+		/* REVISIT report *actual* bytecount on errors */
+
+		/* NOTE:  this controller uses CRCWR to report both CRC
+		 * errors and timeouts (on writes).  MMCDRSP values are
+		 * only weakly documented, but 0x9f was clearly a timeout
+		 * case and the two three-bit patterns in various SD specs
+		 * (101, 010) aren't part of it ...
+		 */
+		if (qstatus & MMCST0_CRCWR) {
+			temp = readb(host->base + DAVINCI_MMCDRSP);
+			if (temp == 0x9f)
+				data->error = -ETIMEDOUT;
 		}
+		dev_dbg(mmc_dev(host->mmc), "data %s %s error\n",
+			(qstatus & MMCST0_CRCWR) ? "write" : "read",
+			(data->error == -ETIMEDOUT) ? "timeout" : "CRC");
 	}
 
 	if (qstatus & MMCST0_TOUTRS) {
-		if (host->do_dma)
-			davinci_abort_dma(host);
-
 		/* Command timeout */
 		if (host->cmd) {
 			dev_dbg(mmc_dev(host->mmc), "MMCSD: CMD%d "
 				"timeout, status %x\n",
-				host->cmd->opcode, status);
+				host->cmd->opcode, qstatus);
 			host->cmd->error = -ETIMEDOUT;
-			end_command = 1;
+			if (data)
+				end_transfer = 1;
+			else
+				end_command = 1;
 		}
 	}
 
@@ -1027,7 +1035,7 @@ static inline int handle_core_command(
 	if (end_command)
 		mmc_davinci_cmd_done(host, host->cmd);
 	if (end_transfer)
-		mmc_davinci_xfer_done(host, host->data);
+		mmc_davinci_xfer_done(host, data);
 	return 0;
 }
 
