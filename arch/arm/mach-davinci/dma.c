@@ -29,6 +29,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
+#include <linux/compiler.h>
 #include <linux/io.h>
 
 #include <mach/cpu.h>
@@ -259,27 +260,27 @@ static struct dma_interrupt_data {
 } intr_data[64];
 
 /*
-  Each bit field of the elements bellow indicate the corresponding EDMA channel
+  Each bit field of the elements below indicates corresponding EDMA channel
   availability  on arm side events
 */
-static unsigned long edma_channels_arm[] = {
+static const unsigned long edma_channels_arm[] = {
 	0xffffffff,
 	0xffffffff
 };
 
 /*
-  Each bit field of the elements bellow indicate the corresponding QDMA channel
+  Each bit field of the elements below indicates corresponding QDMA channel
   availability  on arm side events
 */
-static unsigned char qdma_channels_arm[] = {
+static const unsigned char qdma_channels_arm[] = {
 	0x00
 };
 
 /*
-   Each bit field of the elements bellow indicate corresponding PARAM entry
-   availibility on arm side events
+   Each bit field of the elements below indicates corresponding PARAM entry
+   availability on arm side events
 */
-static unsigned long param_entry_arm[] = {
+static const unsigned long param_entry_arm[] = {
 	0xffffffff, 0xffffffff, 0x0000ffff, 0xffffffff,
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -287,7 +288,7 @@ static unsigned long param_entry_arm[] = {
 };
 
 /*
-   Each bit field of the elements bellow indicate whether a PARAM entry
+   Each bit field of the elements below indicates whether a PARAM entry
    is free or in use
    1 - free
    0 - in use
@@ -300,7 +301,7 @@ static unsigned long param_entry_use_status[] = {
 };
 
 /*
-   Each bit field of the elements bellow indicate whether a intrerrupt
+   Each bit field of the elements below indicates whether an interrupt
    is free or in use
    1 - free
    0 - in use
@@ -310,23 +311,28 @@ static unsigned long dma_intr_use_status[] = {
 	0xffffffff
 };
 
-/*
-    This lists the DMA channel numbers which does not have any events
-    associated with it
-*/
-static int dma_chan_no_event[] = {
+/* The edma_noevent bit for each master channel is clear unless
+ * it doesn't trigger DMA events on this platform.  It uses a
+ * bit of SOC-specific initialization code.
+ */
+static DECLARE_BITMAP(edma_noevent, DAVINCI_EDMA_NUM_DMACH);
+
+static const s8 __initconst dma_chan_dm644x_no_event[] = {
 	0, 1, 12, 13, 14, 15, 25, 30, 31, 45, 46, 47, 55, 56, 57, 58, 59, 60,
 	61, 62, 63, -1
 };
+static const s8 __initconst dma_chan_dm355_no_event[] = {
+	12, 13, 24, 56, 57, 58, 59, 60, 61, 62, 63, -1
+};
 
-static int queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
+static const int queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 /* {event queue no, TC no} */
 	{0, 0},
 	{1, 1},
 	{-1, -1}
 };
 
-static int queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
+static const int queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 	/* {event queue no, Priority} */
 	{0, 3},
 	{1, 7},
@@ -334,7 +340,6 @@ static int queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 };
 
 static int qdam_to_param_mapping[8] = { 0 };
-
 
 /*****************************************************************************/
 
@@ -386,7 +391,8 @@ static void __init assign_priority_to_queue(int queue_no, int priority)
  *****************************************************************************/
 static int request_param(int lch, int dev_id)
 {
-	int i = 0, j = 0, is_break = 0;
+	int i = 0;
+
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_DMACH) {
 		/*
 		   In davinci there is 1:1 mapping between edma channels
@@ -416,17 +422,16 @@ static int request_param(int lch, int dev_id)
 
 		LOCK;
 		while (i < DAVINCI_EDMA_NUM_PARAMENTRY) {
-			j = 0, is_break = 1;
 			if ((param_entry_arm[i / 32] & (1 << (i % 32))) &&
 			    (param_entry_use_status[i / 32] &
 						(1 << (i % 32)))) {
+				/* if (dev_id == DAVINCI_DMA_CHANNEL_ANY
+				 *    || DAVINCI_EDMA_IS_Q(dev_id)) ...
+				 */
 				if (dev_id != DAVINCI_EDMA_PARAM_ANY) {
-					while (dma_chan_no_event[j] != -1) {
-						if (dma_chan_no_event[j] == i)
-							is_break = 0;
-						j++;
-					}
-					if (!is_break)
+					if (i >= DAVINCI_EDMA_NUM_DMACH)
+						continue;
+					if (test_bit(i, edma_noevent))
 						break;
 				} else {
 					break;
@@ -491,7 +496,8 @@ static int request_dma_interrupt(int lch,
 				 void *data, int param_no, int requested_tcc)
 {
 	signed int free_intr_no = -1;
-	int i = 0, j = 0, is_break = 0;
+	int i = 0;
+
 	/* edma channels */
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_DMACH) {
 		/* Bitmap dma_intr_use_status is used to identify availabe tcc
@@ -524,17 +530,9 @@ static int request_dma_interrupt(int lch,
 			LOCK;
 			if (dma_intr_use_status[requested_tcc / 32] &
 			    (1 << (requested_tcc % 32))) {
-				j = 0;
-				is_break = 1;
-				while (dma_chan_no_event[j] != -1) {
-					if (dma_chan_no_event[j] ==
-					    requested_tcc) {
-						is_break = 0;
-						break;
-					}
-					j++;
-				}
-				if (!is_break) {
+				if (requested_tcc < DAVINCI_EDMA_NUM_DMACH
+						&& test_bit(requested_tcc,
+								edma_noevent)) {
 					dma_intr_use_status[requested_tcc / 32]
 					    &= (~(1 << (requested_tcc % 32)));
 					free_intr_no = requested_tcc;
@@ -558,18 +556,9 @@ static int request_dma_interrupt(int lch,
 			i = 0;
 			LOCK;
 			while (i < DAVINCI_EDMA_NUM_DMACH) {
-				j = 0;
-				is_break = 1;
 				if (dma_intr_use_status[i / 32] &
 				    (1 << (i % 32))) {
-					while (dma_chan_no_event[j] != -1) {
-						if (dma_chan_no_event[j] == i) {
-							is_break = 0;
-							break;
-						}
-						j++;
-					}
-					if (!is_break) {
+					if (test_bit(i, edma_noevent)) {
 						dma_intr_use_status[i / 32] &=
 						    (~(1 << (i % 32)));
 						free_intr_no = i;
@@ -586,12 +575,10 @@ static int request_dma_interrupt(int lch,
 			}
 			UNLOCK;
 		}
-	} else {
-		dev_dbg(&edma_dev.dev, "ERROR lch = %d\r\n", lch);
 	}
-	if (is_break) {
-		dev_dbg(&edma_dev.dev,
-				"While allocating EDMA channel for QDMA");
+	if (free_intr_no < 0) {
+		dev_dbg(&edma_dev.dev, "no IRQ for channel %d\n", lch);
+		return -EIO;
 	}
 	if (DAVINCI_EDMA_IS_Q(lch)) {
 		edma_or_array2(EDMA_DRAE, 0, free_intr_no >> 5,
@@ -801,6 +788,7 @@ static int __init davinci_dma_init(void)
 {
 	int i;
 	int status;
+	const s8 *noevent;
 
 	platform_driver_register(&edma_driver);
 	platform_device_register(&edma_dev);
@@ -817,6 +805,17 @@ static int __init davinci_dma_init(void)
 			davinci_cfg_reg(DM355_INT_EDMA_TC0_ERR);
 			davinci_cfg_reg(DM355_INT_EDMA_TC1_ERR);
 		}
+		noevent = dma_chan_dm355_no_event;
+	} else if (cpu_is_davinci_dm644x()) {
+		noevent = dma_chan_dm644x_no_event;
+	} else {
+		/* request_dma(DAVINCI_DMA_CHANNEL_ANY) fails */
+		noevent = NULL;
+	}
+
+	if (noevent) {
+		while (*noevent != -1)
+			set_bit(*noevent++, edma_noevent);
 	}
 
 	status = request_irq(IRQ_CCINT0, dma_irq_handler, 0, "edma", NULL);
@@ -1013,17 +1012,24 @@ int davinci_request_dma(int dev_id, const char *name,
 			map_dmach_queue(dev_id, eventq_no);
 			ret_val = 0;
 		}
+
+	/* return some master channel with no event association */
 	} else if (dev_id == DAVINCI_DMA_CHANNEL_ANY) {
 		i = 0;
 		ret_val = 0;
-		while (dma_chan_no_event[i] != -1) {
-			if (!dma_chan[dma_chan_no_event[i]].in_use) {
+		for (;;) {
+			i = find_next_bit(edma_noevent, i,
+					DAVINCI_EDMA_NUM_DMACH);
+			if (i == DAVINCI_EDMA_NUM_DMACH)
+				break;
+			if (!dma_chan[i].in_use) {
 				int j;
-				*lch = dma_chan_no_event[i];
-				j = dma_chan[*lch].param_no =
-						request_param(*lch, dev_id);
+
+				*lch = i;
+				j = request_param(*lch, dev_id);
 				if (j == -1)
 					return -EINVAL;
+				dma_chan[*lch].param_no = j;
 				dev_dbg(&edma_dev.dev, "param_no=%d\r\n", j);
 				if (DAVINCI_EDMA_IS_Q(j)) {
 					edma_or_array(EDMA_QRAE, 0, 1 << (j -
@@ -1047,8 +1053,9 @@ int davinci_request_dma(int dev_id, const char *name,
 				ret_val = 0;
 				break;
 			}
-			i++;
 		}
+
+	/* return some slave channel */
 	} else if (dev_id == DAVINCI_EDMA_PARAM_ANY) {
 		ret_val = 0;
 		for (i = DAVINCI_EDMA_QEND;
@@ -1080,7 +1087,7 @@ int davinci_request_dma(int dev_id, const char *name,
 	}
 	if (!ret_val) {
 		if (DAVINCI_EDMA_IS_Q(dev_id)) {
-			/* Master Channel */
+			/* Channel used for QDMA */
 			unsigned int opt;
 			int temp_ch = dma_chan[*lch].param_no;
 			qdam_to_param_mapping[dev_id - DAVINCI_EDMA_QSTART] =
@@ -1106,7 +1113,7 @@ int davinci_request_dma(int dev_id, const char *name,
 			edma_parm_or(PARM_LINK_BCNTRLD, temp_ch, 0xffff);
 		} else {
 			int j;
-			/* Slave Channel */
+			/* Normal master or slave Channel */
 			LOCK;
 			/* Global structure to identify whether resoures is
 			   available or not */
@@ -1377,20 +1384,17 @@ int davinci_start_dma(int lch)
 {
 	int ret_val = 0;
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
-		int i = 0;
 		int j = lch >> 5;
 		unsigned int mask = (1 << (lch & 0x1f));
-		/* If the dma start request is for the unused events */
-		while (dma_chan_no_event[i] != -1) {
-			if (dma_chan_no_event[i] == lch) {
-				/* EDMA channels without event association */
-				dev_dbg(&edma_dev.dev, "ESR%d=%x\r\n", j,
-					edma_shadow0_read_array(SH_ESR, j));
-				edma_shadow0_write_array(SH_ESR, j, mask);
-				return ret_val;
-			}
-			i++;
+
+		/* EDMA channels without event association */
+		if (test_bit(lch, edma_noevent)) {
+			dev_dbg(&edma_dev.dev, "ESR%d %08x\n", j,
+				edma_shadow0_read_array(SH_ESR, j));
+			edma_shadow0_write_array(SH_ESR, j, mask);
+			return ret_val;
 		}
+
 		/* EDMA channel with event association */
 		dev_dbg(&edma_dev.dev, "ER%d=%x\r\n", j,
 			edma_shadow0_read_array(SH_ER, j));
