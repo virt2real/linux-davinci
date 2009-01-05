@@ -25,23 +25,31 @@
  *  675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-/******************************************************************************
- * DMA driver for DaVinci
- * DMA driver for Davinci abstractes each ParamEntry as a Logical DMA channel
- * for the user.So on Davinci the user can request 128 DAM channels
+
+/*
+ * The EDMA3 framework for DaVinci abstracts DMA Parameter RAM (PaRAM) slots
+ * as logical DMA channels.  There are two types of logical channel:
  *
- * Actual Physical DMA channels = 64 EDMA channels + 8 QDMA channels
+ *  Master	Triggers transfers, usually from a hardware event but
+ *		also manually or by "chaining" from DMA completions.
+ *		Not all PaRAM slots may be masters; and not all masters
+ *		support hardware event triggering.
  *
- * On davinci user can request for two kinds of Logical DMA channels
- * DMA MasterChannel -> ParamEntry which is associated with a DMA channel.
- *                      On Davinci there are (64 + 8) MasterChanneles
- *                      MasterChannel can be triggered by an event or manually
+ *  Slave	A master may be linked to a "slave" PaRAM slot, used to
+ *		reload master parameters when a transfer finishes.  Any
+ *		PaRAM slot may be such a link target.
  *
- * DMA SlaveChannel  -> ParamEntry which is not associated with DMA cahnnel but
- *                      which can be used to associate with MasterChannel.
- *                      On Davinci there are (128-(64 + 8)) SlaveChannels
- *                      SlaveChannel can only be triggered by a MasterChannel
+ * Each PaRAM slot holds a DMA transfer descriptor with destination and
+ * source addresses, a link to the next PaRAM slot (if any), options for
+ * the transfer, and instructions for updating those addresses.
  *
+ * The EDMA Channel Controller (CC) maps requests from master channels
+ * into physical Transfer Controller (TC) requests when the master
+ * triggers.  The two physical DMA channels provided by the TC are thus
+ * shared by many logical channels.
+ *
+ * DaVinci hardware also has a "QDMA" mechanism which is not currently
+ * supported through this interface.  (DSP firmware uses it though.)
  */
 
 #ifndef EDMA_H_
@@ -87,17 +95,11 @@ typedef struct {
 
 #define TRWORD (0x7<<2)
 #define PAENTRY (0x1ff<<5)
-/*if changing the QDMA_TRWORD do appropriate change in davinci_start_dma */
-#define QDMA_TRWORD (7 & 0x7)
 
 /*Used by driver*/
 
 #define DAVINCI_EDMA_NUM_DMACH           64
-#define DAVINCI_EDMA_NUM_QDMACH           8
-#define DAVINCI_EDMA_QSTART DAVINCI_EDMA_NUM_DMACH
-#define DAVINCI_EDMA_QEND (DAVINCI_EDMA_QSTART + DAVINCI_EDMA_NUM_QDMACH)
-#define DAVINCI_EDMA_IS_Q(ch_no) \
-	((ch_no >= DAVINCI_EDMA_QSTART) && (ch_no < DAVINCI_EDMA_QEND))
+
 #define DAVINCI_EDMA_NUM_PARAMENTRY     128
 #define DAVINCI_EDMA_NUM_EVQUE            2
 #define DAVINCI_EDMA_CHMAPEXIST           0
@@ -153,14 +155,6 @@ typedef struct {
 #define DAVINCI_DMA_PWM0                 52
 #define DAVINCI_DMA_PWM1                 53
 #define DAVINCI_DMA_PWM2                 54
-#define DAVINCI_DMA_QDMA0                64
-#define DAVINCI_DMA_QDMA1                65
-#define DAVINCI_DMA_QDMA2                66
-#define DAVINCI_DMA_QDMA3                67
-#define DAVINCI_DMA_QDMA4                68
-#define DAVINCI_DMA_QDMA5                69
-#define DAVINCI_DMA_QDMA6                71
-#define DAVINCI_DMA_QDMA7                72
 
 /*ch_status paramater of callback function possible values*/
 #define DMA_COMPLETE 1

@@ -269,14 +269,6 @@ static const unsigned long edma_channels_arm[] = {
 };
 
 /*
-  Each bit field of the elements below indicates corresponding QDMA channel
-  availability  on arm side events
-*/
-static const unsigned char qdma_channels_arm[] = {
-	0x00
-};
-
-/*
    Each bit field of the elements below indicates corresponding PARAM entry
    availability on arm side events
 */
@@ -339,8 +331,6 @@ static const int queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 	{-1, -1}
 };
 
-static int qdam_to_param_mapping[8] = { 0 };
-
 /*****************************************************************************/
 
 static void map_dmach_queue(int ch_no, int queue_no)
@@ -350,20 +340,6 @@ static void map_dmach_queue(int ch_no, int queue_no)
 		int bit = (ch_no & 0x7) * 4;
 		edma_modify_array(EDMA_DMAQNUM, (ch_no >> 3),
 				~(0x7 << bit), queue_no << bit);
-	} else if (DAVINCI_EDMA_IS_Q(ch_no)) {
-		int bit = (ch_no - DAVINCI_EDMA_QSTART) * 4;
-		edma_modify(EDMA_QDMAQNUM, ~(0x7 << bit), queue_no << bit);
-	}
-}
-
-/* For Davinci this Macro supports mapping only for QDMA channels and PaRam
-   entry */
-static void map_dmach_param(int ch_no, int param_no)
-{
-	if (DAVINCI_EDMA_IS_Q(ch_no)) {
-		edma_modify_array(EDMA_QCHMAP, ch_no - DAVINCI_EDMA_QSTART,
-				~(PAENTRY | TRWORD),
-				((param_no & 0x1ff) << 5) | (QDMA_TRWORD << 2));
 	}
 }
 
@@ -407,12 +383,8 @@ static int request_param(int lch, int dev_id)
 		UNLOCK;
 		return lch;
 	} else {
-		if (dev_id >= DAVINCI_DMA_QDMA0 &&
-		    dev_id <= DAVINCI_DMA_QDMA7) {
-			i = 0;
-		} else if (dev_id == DAVINCI_EDMA_PARAM_ANY) {
+		if (dev_id == DAVINCI_EDMA_PARAM_ANY)
 			i = DAVINCI_EDMA_NUM_DMACH;
-		}
 
 		/* This allocation alogrithm requires complete lock because
 		   availabilty of param entry is checked from structure
@@ -425,10 +397,7 @@ static int request_param(int lch, int dev_id)
 			if ((param_entry_arm[i / 32] & (1 << (i % 32))) &&
 			    (param_entry_use_status[i / 32] &
 						(1 << (i % 32)))) {
-				/* if (dev_id == DAVINCI_DMA_CHANNEL_ANY
-				 *    || DAVINCI_EDMA_IS_Q(dev_id)) ...
-				 */
-				if (dev_id != DAVINCI_EDMA_PARAM_ANY) {
+				if (dev_id == DAVINCI_DMA_CHANNEL_ANY) {
 					if (i >= DAVINCI_EDMA_NUM_DMACH)
 						continue;
 					if (test_bit(i, edma_noevent))
@@ -496,7 +465,6 @@ static int request_dma_interrupt(int lch,
 				 void *data, int param_no, int requested_tcc)
 {
 	signed int free_intr_no = -1;
-	int i = 0;
 
 	/* edma channels */
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_DMACH) {
@@ -519,70 +487,9 @@ static int request_dma_interrupt(int lch,
 		}
 	}
 
-	/* qdma channels */
-	else if (DAVINCI_EDMA_IS_Q(lch)) {
-		if (requested_tcc != TCC_ANY) {
-			/* Complete allocation algo requires lock and as it's
-			   shared resources could be invoked by several thread.
-			   Structure dma_intr_use_status is used to check
-			   whether resource is availabe or not and latter marked
-			   as not available in the same structure */
-			LOCK;
-			if (dma_intr_use_status[requested_tcc / 32] &
-			    (1 << (requested_tcc % 32))) {
-				if (requested_tcc < DAVINCI_EDMA_NUM_DMACH
-						&& test_bit(requested_tcc,
-								edma_noevent)) {
-					dma_intr_use_status[requested_tcc / 32]
-					    &= (~(1 << (requested_tcc % 32)));
-					free_intr_no = requested_tcc;
-					dev_dbg(&edma_dev.dev,
-						"interrupt no=%d\r\n",
-						free_intr_no);
-				} else {
-					UNLOCK;
-					dev_dbg(&edma_dev.dev,
-						"Error - wrong tcc passed\r\n");
-					return -1;
-				}
-				UNLOCK;
-			} else {
-				UNLOCK;
-				dev_dbg(&edma_dev.dev,
-					"Error - wrong tcc passed\r\n");
-				return -1;
-			}
-		} else {
-			i = 0;
-			LOCK;
-			while (i < DAVINCI_EDMA_NUM_DMACH) {
-				if (dma_intr_use_status[i / 32] &
-				    (1 << (i % 32))) {
-					if (test_bit(i, edma_noevent)) {
-						dma_intr_use_status[i / 32] &=
-						    (~(1 << (i % 32)));
-						free_intr_no = i;
-
-						dev_dbg(&edma_dev.dev,
-							"interrupt no=%d\r\n",
-							free_intr_no);
-						break;
-					}
-					i++;
-				} else {
-					i++;
-				}
-			}
-			UNLOCK;
-		}
-	}
 	if (free_intr_no < 0) {
 		dev_dbg(&edma_dev.dev, "no IRQ for channel %d\n", lch);
 		return -EIO;
-	}
-	if (DAVINCI_EDMA_IS_Q(lch)) {
-		edma_or_array2(EDMA_DRAE, 0, free_intr_no >> 5,
-				(1 << (free_intr_no & 0x1f)));
 	}
 	if (free_intr_no >= 0 && free_intr_no < 64) {
 		intr_data[free_intr_no].callback = callback;
@@ -853,7 +760,7 @@ static int __init davinci_dma_init(void)
 	 * This way, long transfers on the low priority queue
 	 * started by the codec engine will not cause audio defects.
 	 */
-	for (i = 0; i < DAVINCI_EDMA_QEND; i++)
+	for (i = 0; i < DAVINCI_EDMA_NUM_DMACH; i++)
 		map_dmach_queue(i, 1);
 
 	i = 0;
@@ -925,26 +832,12 @@ int davinci_request_dma(int dev_id, const char *name,
 				dev_id);
 			return -EINVAL;
 		}
-	} else if (DAVINCI_EDMA_IS_Q(dev_id)) {
-		if (!(qdma_channels_arm[0] &
-		      (0x1 << (dev_id - DAVINCI_EDMA_QSTART)))) {
-
-			dev_dbg(&edma_dev.dev,
-				"dev_id = %d not supported on ARM side\r\n",
-				dev_id);
-			return -EINVAL;
-		}
 	}
 
 	if ((dev_id != DAVINCI_DMA_CHANNEL_ANY) &&
 	    (dev_id != DAVINCI_EDMA_PARAM_ANY)) {
-		if (DAVINCI_EDMA_IS_Q(dev_id)) {
-			edma_or_array(EDMA_QRAE, 0,
-					1 << (dev_id - DAVINCI_EDMA_QSTART));
-		} else {
-			edma_or_array2(EDMA_DRAE, 0, dev_id >> 5,
-					1 << (dev_id & 0x1f));
-		}
+		edma_or_array2(EDMA_DRAE, 0, dev_id >> 5,
+				1 << (dev_id & 0x1f));
 	}
 
 	if (dev_id >= 0 && dev_id < (DAVINCI_EDMA_NUM_DMACH)) {
@@ -978,40 +871,6 @@ int davinci_request_dma(int dev_id, const char *name,
 			davinci_stop_dma(dev_id);
 		} else
 			ret_val = -EINVAL;
-	} else if (DAVINCI_EDMA_IS_Q(dev_id)) {
-		int temp_ch;
-		temp_ch = qdam_to_param_mapping[dev_id - DAVINCI_EDMA_QSTART];
-		if ((temp_ch != -1) && (dma_chan[temp_ch].in_use)) {
-			ret_val = -EINVAL;
-		} else {
-			*lch = dev_id;
-			dma_chan[*lch].param_no = request_param(*lch, dev_id);
-			if (dma_chan[*lch].param_no == -1) {
-				dev_dbg(&edma_dev.dev,
-						"request_param failed\r\n");
-				return -EINVAL;
-			} else {
-				dev_dbg(&edma_dev.dev, "param_no=%d\r\n",
-					dma_chan[*lch].param_no);
-				map_dmach_param(*lch, dma_chan[*lch].param_no);
-			}
-			if (callback) {
-				dma_chan[*lch].tcc =
-				    request_dma_interrupt(*lch, callback, data,
-							  dma_chan[*lch].
-							  param_no, *tcc);
-				if (dma_chan[*lch].tcc == -1) {
-					return -EINVAL;
-				} else {
-					*tcc = dma_chan[*lch].tcc;
-					dev_dbg(&edma_dev.dev, "tcc_no=%d\r\n",
-						dma_chan[*lch].tcc);
-				}
-			} else
-				dma_chan[*lch].tcc = -1;
-			map_dmach_queue(dev_id, eventq_no);
-			ret_val = 0;
-		}
 
 	/* return some master channel with no event association */
 	} else if (dev_id == DAVINCI_DMA_CHANNEL_ANY) {
@@ -1031,13 +890,8 @@ int davinci_request_dma(int dev_id, const char *name,
 					return -EINVAL;
 				dma_chan[*lch].param_no = j;
 				dev_dbg(&edma_dev.dev, "param_no=%d\r\n", j);
-				if (DAVINCI_EDMA_IS_Q(j)) {
-					edma_or_array(EDMA_QRAE, 0, 1 << (j -
-							DAVINCI_EDMA_QSTART));
-				} else {
-					edma_or_array2(EDMA_DRAE, 0, j >> 5,
-							1 << (j & 0x1f));
-				}
+				edma_or_array2(EDMA_DRAE, 0, j >> 5,
+						1 << (j & 0x1f));
 				if (callback) {
 					dma_chan[*lch].tcc =
 						request_dma_interrupt(*lch,
@@ -1058,7 +912,7 @@ int davinci_request_dma(int dev_id, const char *name,
 	/* return some slave channel */
 	} else if (dev_id == DAVINCI_EDMA_PARAM_ANY) {
 		ret_val = 0;
-		for (i = DAVINCI_EDMA_QEND;
+		for (i = DAVINCI_EDMA_NUM_DMACH;
 		     i < DAVINCI_EDMA_NUM_PARAMENTRY; i++) {
 			if (!dma_chan[i].in_use) {
 				dev_dbg(&edma_dev.dev, "any link = %d\r\n", i);
@@ -1086,51 +940,24 @@ int davinci_request_dma(int dev_id, const char *name,
 		ret_val = -EINVAL;
 	}
 	if (!ret_val) {
-		if (DAVINCI_EDMA_IS_Q(dev_id)) {
-			/* Channel used for QDMA */
-			unsigned int opt;
-			int temp_ch = dma_chan[*lch].param_no;
-			qdam_to_param_mapping[dev_id - DAVINCI_EDMA_QSTART] =
-				temp_ch;
-			LOCK;
-			/* It's used global data structure and used to find out
-			   whether channel is available or not */
-			dma_chan[temp_ch].in_use = 1;
-			UNLOCK;
-			dma_chan[temp_ch].dev_id = *lch;
-			dma_chan[temp_ch].tcc = dma_chan[*lch].tcc;
-			dma_chan[temp_ch].param_no = temp_ch;
-			opt = edma_parm_read(PARM_OPT, temp_ch);
-			if (dma_chan[*lch].tcc != -1) {
-				opt &= ~TCC;
-				opt |= ((0x3f & dma_chan[*lch].tcc) << 12);
-				opt |= TCINTEN;
-			} else {
-				opt &= ~TCINTEN;
-			}
-			edma_parm_write(PARM_OPT, temp_ch, opt);
-			/* assign the link field to no link. i.e 0xffff */
-			edma_parm_or(PARM_LINK_BCNTRLD, temp_ch, 0xffff);
+		int j;
+
+		LOCK;
+		/* Global structure to identify whether resoures is
+		   available or not */
+		dma_chan[*lch].in_use = 1;
+		UNLOCK;
+		dma_chan[*lch].dev_id = *lch;
+		j = dma_chan[*lch].param_no;
+		if (dma_chan[*lch].tcc != -1) {
+			edma_parm_modify(PARM_OPT, j, ~TCC,
+				((0x3f & dma_chan[*lch].tcc) << 12)
+				| TCINTEN);
 		} else {
-			int j;
-			/* Normal master or slave Channel */
-			LOCK;
-			/* Global structure to identify whether resoures is
-			   available or not */
-			dma_chan[*lch].in_use = 1;
-			UNLOCK;
-			dma_chan[*lch].dev_id = *lch;
-			j = dma_chan[*lch].param_no;
-			if (dma_chan[*lch].tcc != -1) {
-				edma_parm_modify(PARM_OPT, j, ~TCC,
-					((0x3f & dma_chan[*lch].tcc) << 12)
-					| TCINTEN);
-			} else {
-				edma_parm_and(PARM_OPT, j, ~TCINTEN);
-			}
-			/* assign the link field to no link. i.e 0xffff */
-			edma_parm_or(PARM_LINK_BCNTRLD, j, 0xffff);
+			edma_parm_and(PARM_OPT, j, ~TCINTEN);
 		}
+		/* assign the link field to no link. i.e 0xffff */
+		edma_parm_or(PARM_LINK_BCNTRLD, j, 0xffff);
 	}
 	return ret_val;
 }
@@ -1147,14 +974,12 @@ EXPORT_SYMBOL(davinci_request_dma);
  *****************************************************************************/
 void davinci_free_dma(int lch)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	LOCK;
 	dma_chan[lch].in_use = 0;
 	UNLOCK;
 	free_param(dma_chan[lch].param_no);
 
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_QEND))
+	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH))
 		free_dma_interrupt(dma_chan[lch].tcc);
 }
 EXPORT_SYMBOL(davinci_free_dma);
@@ -1171,8 +996,6 @@ EXPORT_SYMBOL(davinci_free_dma);
 void davinci_set_dma_src_params(int lch, unsigned long src_port,
 				enum address_mode mode, enum fifo_width width)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		int j = dma_chan[lch].param_no;
 		unsigned int i = edma_parm_read(PARM_OPT, j);
@@ -1204,8 +1027,6 @@ EXPORT_SYMBOL(davinci_set_dma_src_params);
 void davinci_set_dma_dest_params(int lch, unsigned long dest_port,
 				 enum address_mode mode, enum fifo_width width)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		int j = dma_chan[lch].param_no;
 		unsigned int i = edma_parm_read(PARM_OPT, j);
@@ -1235,8 +1056,6 @@ EXPORT_SYMBOL(davinci_set_dma_dest_params);
  *****************************************************************************/
 void davinci_set_dma_src_index(int lch, short src_bidx, short src_cidx)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		edma_parm_modify(PARM_SRC_DST_BIDX, dma_chan[lch].param_no,
 				0xffff0000, src_bidx);
@@ -1257,8 +1076,6 @@ EXPORT_SYMBOL(davinci_set_dma_src_index);
  *****************************************************************************/
 void davinci_set_dma_dest_index(int lch, short dest_bidx, short dest_cidx)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		edma_parm_modify(PARM_SRC_DST_BIDX, dma_chan[lch].param_no,
 				0x0000ffff, dest_bidx << 16);
@@ -1284,8 +1101,6 @@ void davinci_set_dma_transfer_params(int lch, unsigned short acnt,
 				     unsigned short bcntrld,
 				     enum sync_dimension sync_mode)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		int j = dma_chan[lch].param_no;
 		edma_parm_modify(PARM_LINK_BCNTRLD, j,
@@ -1310,8 +1125,6 @@ EXPORT_SYMBOL(davinci_set_dma_transfer_params);
  *****************************************************************************/
 void davinci_set_dma_params(int lch, edmacc_paramentry_regs *temp)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		int j = dma_chan[lch].param_no;
 		edma_parm_write(PARM_OPT, j, temp->opt);
@@ -1335,8 +1148,6 @@ EXPORT_SYMBOL(davinci_set_dma_params);
  *****************************************************************************/
 void davinci_get_dma_params(int lch, edmacc_paramentry_regs *temp)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		int j = dma_chan[lch].param_no;
 		temp->opt = edma_parm_read(PARM_OPT, j);
@@ -1405,8 +1216,6 @@ int davinci_start_dma(int lch)
 		edma_shadow0_write_array(SH_EESR, j, mask);
 		dev_dbg(&edma_dev.dev, "EER%d=%x\r\n", j,
 			edma_shadow0_read_array(SH_EER, j));
-	} else if (DAVINCI_EDMA_IS_Q(lch)) {
-		edma_shadow0_write(SH_QEESR, 1 << (lch - DAVINCI_EDMA_QSTART));
 	} else {		/* for slaveChannels */
 		ret_val = -EINVAL;
 	}
@@ -1452,14 +1261,7 @@ void davinci_stop_dma(int lch)
 		/* don't clear link until audio driver fixed
 		 * edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
 		 */
-	} else if (DAVINCI_EDMA_IS_Q(lch)) {
-		/* for QDMA channels */
-		edma_shadow0_write(SH_QEECR, 1 << (lch - DAVINCI_EDMA_QSTART));
-		dev_dbg(&edma_dev.dev, "QER=%x\r\n", edma_shadow0_read(SH_QER));
-		dev_dbg(&edma_dev.dev, "QEER=%x\r\n",
-				edma_shadow0_read(SH_QEER));
-	} else if ((lch >= DAVINCI_EDMA_QEND) &&
-		   (lch < DAVINCI_EDMA_NUM_PARAMENTRY)) {
+	} else {
 		/* for slaveChannels */
 		edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
 	}
@@ -1479,10 +1281,6 @@ EXPORT_SYMBOL(davinci_stop_dma);
  *****************************************************************************/
 void davinci_dma_link_lch(int lch, int lch_que)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
-	if (DAVINCI_EDMA_IS_Q(lch_que))
-		lch_que = qdam_to_param_mapping[lch_que - DAVINCI_EDMA_QSTART];
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_PARAMENTRY) &&
 	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_PARAMENTRY)) {
 		/* program LINK */
@@ -1506,10 +1304,6 @@ EXPORT_SYMBOL(davinci_dma_link_lch);
  *****************************************************************************/
 void davinci_dma_unlink_lch(int lch, int lch_que)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
-	if (DAVINCI_EDMA_IS_Q(lch_que))
-		lch_que = qdam_to_param_mapping[lch_que - DAVINCI_EDMA_QSTART];
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_PARAMENTRY) &&
 	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_PARAMENTRY)) {
 		edma_parm_or(PARM_LINK_BCNTRLD, dma_chan[lch].param_no,
@@ -1530,12 +1324,8 @@ EXPORT_SYMBOL(davinci_dma_unlink_lch);
  *****************************************************************************/
 void davinci_dma_chain_lch(int lch, int lch_que)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
-	if (DAVINCI_EDMA_IS_Q(lch_que))
-		lch_que = qdam_to_param_mapping[lch_que - DAVINCI_EDMA_QSTART];
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_QEND) &&
-	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_QEND)) {
+	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH) &&
+	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_DMACH)) {
 		/* program tcc */
 		edma_parm_modify(PARM_OPT, lch, ~TCC,
 				((lch_que & 0x3f) << 12) | TCCHEN);
@@ -1554,13 +1344,9 @@ EXPORT_SYMBOL(davinci_dma_chain_lch);
  *****************************************************************************/
 void davinci_dma_unchain_lch(int lch, int lch_que)
 {
-	if (DAVINCI_EDMA_IS_Q(lch))
-		lch = qdam_to_param_mapping[lch - DAVINCI_EDMA_QSTART];
-	if (DAVINCI_EDMA_IS_Q(lch_que))
-		lch_que = qdam_to_param_mapping[lch_que - DAVINCI_EDMA_QSTART];
 	/* reset TCCHEN */
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_QEND) &&
-	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_QEND)) {
+	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH) &&
+	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_DMACH)) {
 		edma_parm_and(PARM_OPT, lch, ~TCCHEN);
 	}
 }
