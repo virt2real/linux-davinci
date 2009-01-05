@@ -102,7 +102,7 @@
 
 #define PARM_OFFSET(param_no)	(EDMA_PARM + ((param_no) << 5))
 
-static const void __iomem *edmacc_regs_base = IO_ADDRESS(DAVINCI_DMA_3PCC_BASE);
+#define edmacc_regs_base	IO_ADDRESS(DAVINCI_DMA_3PCC_BASE)
 
 /*****************************************************************************/
 
@@ -277,12 +277,11 @@ queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 
 static void map_dmach_queue(int ch_no, int queue_no)
 {
+	int bit = (ch_no & 0x7) * 4;
+
 	queue_no &= 7;
-	if (ch_no < DAVINCI_EDMA_NUM_DMACH) {
-		int bit = (ch_no & 0x7) * 4;
-		edma_modify_array(EDMA_DMAQNUM, (ch_no >> 3),
-				~(0x7 << bit), queue_no << bit);
-	}
+	edma_modify_array(EDMA_DMAQNUM, (ch_no >> 3),
+			~(0x7 << bit), queue_no << bit);
 }
 
 static void __init map_queue_tc(int queue_no, int tc_no)
@@ -632,6 +631,7 @@ int davinci_request_dma(int dev_id, const char *name,
 			int *tcc, enum dma_event_q eventq_no)
 {
 	int tcc_val = tcc ? *tcc : TCC_ANY;
+	struct edmacc_param param = { .opt = 0, };
 
 	/* REVISIT:  tcc would be better as a non-pointer parameter */
 	switch (tcc_val) {
@@ -703,20 +703,16 @@ alloc_master:
 		return -EINVAL;
 	}
 
-	/* Optionally fire Transfer Complete interrupts.
-	 *
-	 * REVISIT: probably worth zeroing the whole PaRAM
-	 * structure, so other flag values (like ITCINTEN
-	 * and chaining options) are defined...
-	 */
+	/* Optionally fire Transfer Complete interrupts */
 	if (tcc_val != TCC_ANY)
-		edma_parm_modify(PARM_OPT, dev_id, ~TCC,
-			((0x3f & tcc_val) << 12) | TCINTEN);
-	else
-		edma_parm_and(PARM_OPT, dev_id, ~TCINTEN);
+		param.opt = ((0x3f & tcc_val) << 12) | TCINTEN;
 
 	/* init the link field to no link. i.e 0xffff */
-	edma_parm_or(PARM_LINK_BCNTRLD, dev_id, 0xffff);
+	param.link_bcntrld = 0xffff;
+
+	/* init channel with a dummy PaRAM set */
+	param.ccnt = 1;
+	memcpy_toio(edmacc_regs_base + PARM_OFFSET(dev_id), &param, PARM_SIZE);
 
 	/* non-status return values */
 	*lch = dev_id;
@@ -912,52 +908,34 @@ EXPORT_SYMBOL(davinci_set_dma_transfer_params);
 /**
  * davinci_set_dma_params - write PaRAM data for channel
  * @lch: logical channel being configured
- * @temp: channel configuration to be used
+ * @param: channel configuration to be used
  *
  * Use this to assign all parameters of a transfer at once.  This
  * allows more efficient setup of transfers than issuing multiple
  * calls to set up those parameters in small pieces, and provides
  * complete control over all transfer options.
  */
-void davinci_set_dma_params(int lch, struct edmacc_param *temp)
+void davinci_set_dma_params(int lch, struct edmacc_param *param)
 {
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = lch;
-
-		edma_parm_write(PARM_OPT, j, temp->opt);
-		edma_parm_write(PARM_SRC, j, temp->src);
-		edma_parm_write(PARM_A_B_CNT, j, temp->a_b_cnt);
-		edma_parm_write(PARM_DST, j, temp->dst);
-		edma_parm_write(PARM_SRC_DST_BIDX, j, temp->src_dst_bidx);
-		edma_parm_write(PARM_LINK_BCNTRLD, j, temp->link_bcntrld);
-		edma_parm_write(PARM_SRC_DST_CIDX, j, temp->src_dst_cidx);
-		edma_parm_write(PARM_CCNT, j, temp->ccnt);
-	}
+	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
+	memcpy_toio(edmacc_regs_base + PARM_OFFSET(lch), param, PARM_SIZE);
 }
 EXPORT_SYMBOL(davinci_set_dma_params);
 
 /**
  * davinci_get_dma_params - read PaRAM data for channel
  * @lch: logical channel being queried
- * @temp: where to store current channel configuration
+ * @param: where to store current channel configuration
  *
  * Use this to read the Parameter RAM for a channel, perhaps to
  * save them as a template for later reuse.
  */
-void davinci_get_dma_params(int lch, struct edmacc_param *temp)
+void davinci_get_dma_params(int lch, struct edmacc_param *param)
 {
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = lch;
-
-		temp->opt = edma_parm_read(PARM_OPT, j);
-		temp->src = edma_parm_read(PARM_SRC, j);
-		temp->a_b_cnt = edma_parm_read(PARM_A_B_CNT, j);
-		temp->dst = edma_parm_read(PARM_DST, j);
-		temp->src_dst_bidx = edma_parm_read(PARM_SRC_DST_BIDX, j);
-		temp->link_bcntrld = edma_parm_read(PARM_LINK_BCNTRLD, j);
-		temp->src_dst_cidx = edma_parm_read(PARM_SRC_DST_CIDX, j);
-		temp->ccnt = edma_parm_read(PARM_CCNT, j);
-	}
+	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
+	memcpy_fromio(param, edmacc_regs_base + PARM_OFFSET(lch), PARM_SIZE);
 }
 EXPORT_SYMBOL(davinci_get_dma_params);
 
@@ -1049,21 +1027,10 @@ void davinci_stop_dma(int lch)
 		unsigned int mask = (1 << (lch & 0x1f));
 
 		edma_shadow0_write_array(SH_EECR, j, mask);
-		if (edma_shadow0_read_array(SH_ER, j) & mask) {
-			dev_dbg(&edma_dev.dev, "ER%d %08x\n", j,
-				edma_shadow0_read_array(SH_ER, j));
-			edma_shadow0_write_array(SH_ECR, j, mask);
-		}
-		if (edma_shadow0_read_array(SH_SER, j) & mask) {
-			dev_dbg(&edma_dev.dev, "SER%d %08x\n", j,
-				edma_shadow0_read_array(SH_SER, j));
-			edma_shadow0_write_array(SH_SECR, j, mask);
-		}
-		if (edma_read_array(EDMA_EMR, j) & mask) {
-			dev_dbg(&edma_dev.dev, "EMR%d %08x\n", j,
-				edma_read_array(EDMA_EMR, j));
-			edma_write_array(EDMA_EMCR, j, mask);
-		}
+		edma_shadow0_write_array(SH_ECR, j, mask);
+		edma_shadow0_write_array(SH_SECR, j, mask);
+		edma_write_array(EDMA_EMCR, j, mask);
+
 		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
 				edma_shadow0_read_array(SH_EER, j));
 		/*
