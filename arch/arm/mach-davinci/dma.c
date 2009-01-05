@@ -1,11 +1,7 @@
 /*
- * linux/arch/arm/mach-davinci/dma.c
- *
- * TI DaVinci DMA file
+ * arch/arm/mach-davinci/dma.c - EDMA3 support for DaVinci
  *
  * Copyright (C) 2006 Texas Instruments.
- *
- * ----------------------------------------------------------------------------
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,10 +13,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- * ----------------------------------------------------------------------------
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -39,9 +34,8 @@
 #include <mach/edma.h>
 #include <mach/mux.h>
 
-/**************************************************************************\
-* Register Overlay Structure for PARAMENTRY
-\**************************************************************************/
+
+/* Offsets matching "struct edmacc_param" */
 #define PARM_OPT		0x00
 #define PARM_SRC		0x04
 #define PARM_A_B_CNT		0x08
@@ -50,11 +44,10 @@
 #define PARM_LINK_BCNTRLD	0x14
 #define PARM_SRC_DST_CIDX	0x18
 #define PARM_CCNT		0x1c
+
 #define PARM_SIZE		0x20
 
-/**************************************************************************\
-* Register Overlay Structure for SHADOW
-\**************************************************************************/
+/* Offsets for EDMA CC global channel registers and their shadows */
 #define SH_ER		0x00	/* 64 bits */
 #define SH_ECR		0x08	/* 64 bits */
 #define SH_ESR		0x10	/* 64 bits */
@@ -78,13 +71,11 @@
 #define SH_QSECR	0x94
 #define SH_SIZE		0x200
 
-/**************************************************************************\
-* Register Overlay Structure
-\**************************************************************************/
+/* Offsets for EDMA CC global registers */
 #define EDMA_REV	0x0000
 #define EDMA_CCCFG	0x0004
 #define EDMA_QCHMAP	0x0200	/* 8 registers */
-#define EDMA_DMAQNUM	0x0240	/* 8 registers */
+#define EDMA_DMAQNUM	0x0240	/* 8 registers (4 on OMAP-L1xx) */
 #define EDMA_QDMAQNUM	0x0260
 #define EDMA_QUETCMAP	0x0280
 #define EDMA_QUEPRI	0x0284
@@ -102,11 +93,9 @@
 #define EDMA_QWMTHRA	0x0620
 #define EDMA_QWMTHRB	0x0624
 #define EDMA_CCSTAT	0x0640
-#define EDMA_AETCTL	0x0700
-#define EDMA_AETSTAT	0x0704
-#define EDMA_AETCMD	0x0708
-#define EDMA_M		0x1000	/* not referenced */
-#define EDMA_SHADOW0	0x2000	/* 4 shadow regions */
+
+#define EDMA_M		0x1000	/* global channel registers */
+#define EDMA_SHADOW0	0x2000	/* 4 regions shadowing global channels */
 #define EDMA_PARM	0x4000	/* 128 param entries */
 
 #define DAVINCI_DMA_3PCC_BASE	0x01C00000
@@ -114,6 +103,8 @@
 #define PARM_OFFSET(param_no)	(EDMA_PARM + ((param_no) << 5))
 
 static const void __iomem *edmacc_regs_base = IO_ADDRESS(DAVINCI_DMA_3PCC_BASE);
+
+/*****************************************************************************/
 
 static inline unsigned int edma_read(int offset)
 {
@@ -206,6 +197,8 @@ static inline void edma_parm_or(int offset, int param_no, unsigned or)
 	edma_or(EDMA_PARM + offset + (param_no << 5), or);
 }
 
+/*****************************************************************************/
+
 static struct platform_driver edma_driver = {
 	.driver.name	= "edma",
 };
@@ -238,10 +231,7 @@ static struct platform_device edma_dev = {
 	.resource	= edma_resources,
 };
 
-/* Structure containing the dma channel parameters */
-static struct davinci_dma_lch {
-	int param_no;
-} dma_chan[DAVINCI_EDMA_NUM_PARAMENTRY];
+/*****************************************************************************/
 
 static struct dma_interrupt_data {
 	void (*callback) (int lch, unsigned short ch_status, void *data);
@@ -267,14 +257,16 @@ static const s8 __initconst dma_chan_dm355_no_event[] = {
 	12, 13, 24, 56, 57, 58, 59, 60, 61, 62, 63, -1
 };
 
-static const int queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
+static const int __initconst
+queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 /* {event queue no, TC no} */
 	{0, 0},
 	{1, 1},
 	{-1, -1}
 };
 
-static const int queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
+static const int __initconst
+queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 	/* {event queue no, Priority} */
 	{0, 3},
 	{1, 7},
@@ -337,7 +329,7 @@ setup_dma_interrupt(unsigned lch,
  **/
 void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst)
 {
-	edmacc_paramentry_regs temp;
+	struct edmacc_param temp;
 
 	davinci_get_dma_params(lch, &temp);
 	if (src != NULL)
@@ -651,8 +643,6 @@ int davinci_request_dma(int dev_id, const char *name,
 			return -EBUSY;
 
 alloc_master:
-		*lch = dev_id;
-		dma_chan[*lch].param_no = dev_id;
 		tcc_val = (tcc && callback) ? dev_id : TCC_ANY;
 
 		/* ensure access through shadow region 0 */
@@ -697,36 +687,36 @@ alloc_master:
 					DAVINCI_EDMA_NUM_PARAMENTRY, dev_id);
 			if (dev_id == DAVINCI_EDMA_NUM_PARAMENTRY)
 				return -ENOMEM;
-			if (!test_and_set_bit(dev_id, edma_inuse)) {
-				*lch = dev_id;
-				dma_chan[*lch].param_no = dev_id;
+			if (!test_and_set_bit(dev_id, edma_inuse))
 				break;
-			}
 		}
 		break;
 
 	default:
 		return -EINVAL;
 	}
-	if (1) {
-		int j;
 
-		j = dma_chan[*lch].param_no;
-		if (tcc_val != TCC_ANY) {
-			edma_parm_modify(PARM_OPT, j, ~TCC,
-				((0x3f & tcc_val) << 12)
-				| TCINTEN);
-		} else {
-			edma_parm_and(PARM_OPT, j, ~TCINTEN);
-		}
-		/* assign the link field to no link. i.e 0xffff */
-		edma_parm_or(PARM_LINK_BCNTRLD, j, 0xffff);
+	/* Optionally fire Transfer Complete interrupts.
+	 *
+	 * REVISIT: probably worth zeroing the whole PaRAM
+	 * structure, so other flag values (like ITCINTEN
+	 * and chaining options) are defined...
+	 */
+	if (tcc_val != TCC_ANY)
+		edma_parm_modify(PARM_OPT, dev_id, ~TCC,
+			((0x3f & tcc_val) << 12) | TCINTEN);
+	else
+		edma_parm_and(PARM_OPT, dev_id, ~TCINTEN);
 
-		if (tcc)
-			*tcc = tcc_val;
-		dev_dbg(&edma_dev.dev, "alloc lch %d, tcc %d\n",
-				*lch, tcc_val);
-	}
+	/* init the link field to no link. i.e 0xffff */
+	edma_parm_or(PARM_LINK_BCNTRLD, dev_id, 0xffff);
+
+	/* non-status return values */
+	*lch = dev_id;
+	if (tcc)
+		*tcc = tcc_val;
+
+	dev_dbg(&edma_dev.dev, "alloc lch %d, tcc %d\n", dev_id, tcc_val);
 	return 0;
 }
 EXPORT_SYMBOL(davinci_request_dma);
@@ -767,8 +757,9 @@ void davinci_set_dma_src_params(int lch, unsigned long src_port,
 				enum address_mode mode, enum fifo_width width)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = dma_chan[lch].param_no;
+		int j = lch;
 		unsigned int i = edma_parm_read(PARM_OPT, j);
+
 		if (mode) {
 			/* set SAM and program FWID */
 			i = (i & ~(EDMA_FWID)) | (SAM | ((width & 0x7) << 8));
@@ -798,8 +789,9 @@ void davinci_set_dma_dest_params(int lch, unsigned long dest_port,
 				 enum address_mode mode, enum fifo_width width)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = dma_chan[lch].param_no;
+		int j = lch;
 		unsigned int i = edma_parm_read(PARM_OPT, j);
+
 		if (mode) {
 			/* set DAM and program FWID */
 			i = (i & ~(EDMA_FWID)) | (DAM | ((width & 0x7) << 8));
@@ -827,9 +819,9 @@ EXPORT_SYMBOL(davinci_set_dma_dest_params);
 void davinci_set_dma_src_index(int lch, short src_bidx, short src_cidx)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		edma_parm_modify(PARM_SRC_DST_BIDX, dma_chan[lch].param_no,
+		edma_parm_modify(PARM_SRC_DST_BIDX, lch,
 				0xffff0000, src_bidx);
-		edma_parm_modify(PARM_SRC_DST_CIDX, dma_chan[lch].param_no,
+		edma_parm_modify(PARM_SRC_DST_CIDX, lch,
 				0xffff0000, src_cidx);
 	}
 }
@@ -847,9 +839,9 @@ EXPORT_SYMBOL(davinci_set_dma_src_index);
 void davinci_set_dma_dest_index(int lch, short dest_bidx, short dest_cidx)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		edma_parm_modify(PARM_SRC_DST_BIDX, dma_chan[lch].param_no,
+		edma_parm_modify(PARM_SRC_DST_BIDX, lch,
 				0x0000ffff, dest_bidx << 16);
-		edma_parm_modify(PARM_SRC_DST_CIDX, dma_chan[lch].param_no,
+		edma_parm_modify(PARM_SRC_DST_CIDX, lch,
 				0x0000ffff, dest_cidx << 16);
 	}
 }
@@ -872,7 +864,8 @@ void davinci_set_dma_transfer_params(int lch, unsigned short acnt,
 				     enum sync_dimension sync_mode)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = dma_chan[lch].param_no;
+		int j = lch;
+
 		edma_parm_modify(PARM_LINK_BCNTRLD, j,
 				0x0000ffff, bcntrld << 16);
 		if (sync_mode == ASYNC)
@@ -893,10 +886,11 @@ EXPORT_SYMBOL(davinci_set_dma_transfer_params);
  *      lch - logical channel number
  *
  *****************************************************************************/
-void davinci_set_dma_params(int lch, edmacc_paramentry_regs *temp)
+void davinci_set_dma_params(int lch, struct edmacc_param *temp)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = dma_chan[lch].param_no;
+		int j = lch;
+
 		edma_parm_write(PARM_OPT, j, temp->opt);
 		edma_parm_write(PARM_SRC, j, temp->src);
 		edma_parm_write(PARM_A_B_CNT, j, temp->a_b_cnt);
@@ -916,10 +910,11 @@ EXPORT_SYMBOL(davinci_set_dma_params);
  *      lch - logical channel number
  *
  *****************************************************************************/
-void davinci_get_dma_params(int lch, edmacc_paramentry_regs *temp)
+void davinci_get_dma_params(int lch, struct edmacc_param *temp)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = dma_chan[lch].param_no;
+		int j = lch;
+
 		temp->opt = edma_parm_read(PARM_OPT, j);
 		temp->src = edma_parm_read(PARM_SRC, j);
 		temp->a_b_cnt = edma_parm_read(PARM_A_B_CNT, j);
@@ -939,6 +934,7 @@ void davinci_pause_dma(int lch)
 {
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
 		unsigned int mask = (1 << (lch & 0x1f));
+
 		edma_shadow0_write_array(SH_EECR, lch >> 5, mask);
 	}
 }
@@ -950,10 +946,12 @@ void davinci_resume_dma(int lch)
 {
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
 		unsigned int mask = (1 << (lch & 0x1f));
+
 		edma_shadow0_write_array(SH_EESR, lch >> 5, mask);
 	}
 }
 EXPORT_SYMBOL(davinci_resume_dma);
+
 /******************************************************************************
  *
  * DMA Start - Starts the dma on the channel passed
@@ -1054,9 +1052,9 @@ void davinci_dma_link_lch(int lch, int lch_que)
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_PARAMENTRY) &&
 	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_PARAMENTRY)) {
 		/* program LINK */
-		edma_parm_modify(PARM_LINK_BCNTRLD, dma_chan[lch].param_no,
+		edma_parm_modify(PARM_LINK_BCNTRLD, lch,
 				0xffff0000,
-				PARM_OFFSET(dma_chan[lch_que].param_no));
+				PARM_OFFSET(lch_que));
 	}
 }
 EXPORT_SYMBOL(davinci_dma_link_lch);
@@ -1075,7 +1073,7 @@ void davinci_dma_unlink_lch(int lch, int lch_que)
 {
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_PARAMENTRY) &&
 	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_PARAMENTRY)) {
-		edma_parm_or(PARM_LINK_BCNTRLD, dma_chan[lch].param_no,
+		edma_parm_or(PARM_LINK_BCNTRLD, lch,
 				0xffff);
 	}
 }

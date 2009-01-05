@@ -55,13 +55,8 @@
 #ifndef EDMA_H_
 #define EDMA_H_
 
-/*Used by driver*/
-
-
-/**************************************************************************\
-* Register Overlay Structure for PARAMENTRY
-\**************************************************************************/
-typedef struct {
+/* PaRAM slots are laid out like this */
+struct edmacc_param {
 	unsigned int opt;
 	unsigned int src;
 	unsigned int a_b_cnt;
@@ -70,7 +65,10 @@ typedef struct {
 	unsigned int link_bcntrld;
 	unsigned int src_dst_cidx;
 	unsigned int ccnt;
-} edmacc_paramentry_regs;
+};
+
+/* don't use this typedef any more; it will be removed */
+typedef struct edmacc_param edmacc_paramentry_regs;
 
 
 #define CCINT0_INTERRUPT     16
@@ -78,25 +76,22 @@ typedef struct {
 #define TCERRINT0_INTERRUPT   18
 #define TCERRINT1_INTERRUPT   19
 
-#define SAM (1)
-#define DAM (1<<1)
-#define SYNCDIM (1<<2)
-#define STATIC (1<<3)
-#define EDMA_FWID (0x7<<8)
-#define TCCMODE (0x1<<11)
-#define TCC (0x3f<<12)
-#define WIMODE (0x1<<19)
-#define TCINTEN (0x1<<20)
-#define ITCINTEN (0x1<<21)
-#define TCCHEN (0x1<<22)
-#define ITCCHEN (0x1<<23)
-#define SECURE (0x1<<30)
-#define PRIV (0x1<<31)
+/* fields in edmacc_param.opt */
+#define SAM		BIT(0)
+#define DAM		BIT(1)
+#define SYNCDIM		BIT(2)
+#define STATIC		BIT(3)
+#define EDMA_FWID	(0x07 << 8)
+#define TCCMODE		BIT(11)
+#define TCC		(0x3f << 12)
+#define TCINTEN		BIT(20)
+#define ITCINTEN	BIT(21)
+#define TCCHEN		BIT(22)
+#define ITCCHEN		BIT(23)
 
 #define TRWORD (0x7<<2)
 #define PAENTRY (0x1ff<<5)
 
-/*Used by driver*/
 
 #define DAVINCI_EDMA_NUM_DMACH           64
 
@@ -273,7 +268,7 @@ void davinci_set_dma_transfer_params(int lch, unsigned short acnt,
  *      lch - logical channel number
  *
  *****************************************************************************/
-void davinci_set_dma_params(int lch, edmacc_paramentry_regs * temp);
+void davinci_set_dma_params(int lch, struct edmacc_param *params);
 
 /******************************************************************************
  *
@@ -282,7 +277,7 @@ void davinci_set_dma_params(int lch, edmacc_paramentry_regs * temp);
  *      lch - logical channel number
  *
  *****************************************************************************/
-void davinci_get_dma_params(int lch, edmacc_paramentry_regs * temp);
+void davinci_get_dma_params(int lch, struct edmacc_param *params);
 
 /******************************************************************************
  * davinci_start_dma -  Starts the dma on the channel passed
