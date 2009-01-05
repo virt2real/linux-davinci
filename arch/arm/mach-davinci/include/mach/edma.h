@@ -105,8 +105,15 @@ typedef struct edmacc_param edmacc_paramentry_regs;
 
 #define TCC_ANY    -1
 
+/* special values understood by davinci_request_dma() */
 #define DAVINCI_EDMA_PARAM_ANY            -2
 #define DAVINCI_DMA_CHANNEL_ANY           -1
+
+/* Drivers should avoid using these symbolic names for dm644x
+ * channels, and use platform_device IORESOURCE_DMA resources
+ * instead.  (Other DaVinci chips have different peripherals
+ * and thus have different DMA channel mappings.)
+ */
 #define DAVINCI_DMA_MCBSP_TX              2
 #define DAVINCI_DMA_MCBSP_RX              3
 #define DAVINCI_DMA_VPSS_HIST             4
@@ -182,123 +189,24 @@ enum sync_dimension {
 	ABSYNC = 1
 };
 
-int davinci_request_dma(int dev_id,
-			const char *dev_name,
-			void (*callback) (int lch, unsigned short ch_status,
-					  void *data), void *data, int *lch,
-			int *tcc, enum dma_event_q
-    );
+int davinci_request_dma(int dev_id, const char *dev_name,
+	void (*callback)(int lch, unsigned short ch_status, void *data),
+	void *data, int *lch, int *tcc, enum dma_event_q);
+void davinci_free_dma(int lch);
 
-/******************************************************************************
- * davinci_set_dma_src_params - DMA source parameters setup
- *
- * lch         - channel for which the source parameters to be configured
- * src_port    - Source port address
- * addressMode - indicates whether the address mode is FIFO or not
- * fifoWidth   - valied only if addressMode is FIFO, indicates the vidth of
- *                FIFO
- *             0 - 8 bit
- *             1 - 16 bit
- *             2 - 32 bit
- *             3 - 64 bit
- *             4 - 128 bit
- *             5 - 256 bit
- *****************************************************************************/
-void davinci_set_dma_src_params(int lch, unsigned long src_port,
+void davinci_set_dma_src_params(int lch, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width);
-
-/******************************************************************************
- * davinci_set_dma_dest_params - DMA destination parameters setup
- *
- * lch         - channel or param device for destination parameters to be
- *               configured
- * dest_port   - Destination port address
- * addressMode - indicates whether the address mode is FIFO or not
- * fifoWidth   - valied only if addressMode is FIFO,indicates the vidth of FIFO
- *             0 - 8 bit
- *             1 - 16 bit
- *             2 - 32 bit
- *             3 - 64 bit
- *             4 - 128 bit
- *             5 - 256 bit
- *
- *****************************************************************************/
-void davinci_set_dma_dest_params(int lch, unsigned long dest_port,
+void davinci_set_dma_dest_params(int lch, dma_addr_t dest_port,
 				 enum address_mode mode, enum fifo_width);
+void davinci_set_dma_src_index(int lch, s16 src_bidx, s16 src_cidx);
+void davinci_set_dma_dest_index(int lch, s16 dest_bidx, s16 dest_cidx);
+void davinci_set_dma_transfer_params(int lch, u16 acnt, u16 bcnt, u16 ccnt,
+		u16 bcnt_rld, enum sync_dimension sync_mode);
 
-/******************************************************************************
- * davinci_set_dma_src_index - DMA source index setup
- *
- * lch     - channel or param device for configuration of source index
- * srcbidx - source B-register index
- * srccidx - source C-register index
- *
- *****************************************************************************/
-void davinci_set_dma_src_index(int lch, short srcbidx, short srccidx);
-
-/******************************************************************************
- * davinci_set_dma_dest_index - DMA destination index setup
- *
- * lch      - channel or param device for configuration of destination index
- * destbidx - dest B-register index
- * destcidx - dest C-register index
- *
- *****************************************************************************/
-void davinci_set_dma_dest_index(int lch, short destbidx, short destcidx);
-
-/******************************************************************************
- * davinci_set_dma_transfer_params -  DMA transfer parameters setup
- *
- * lch  - channel or param device for configuration of aCount, bCount and
- *        cCount regs.
- * aCnt - aCnt register value to be configured
- * bCnt - bCnt register value to be configured
- * cCnt - cCnt register value to be configured
- *
- *****************************************************************************/
-void davinci_set_dma_transfer_params(int lch, unsigned short acnt,
-				     unsigned short bcnt, unsigned short ccnt,
-				     unsigned short bcntrld,
-				     enum sync_dimension sync_mode);
-
-/******************************************************************************
- *
- * davinci_set_dma_params -
- * ARGUMENTS:
- *      lch - logical channel number
- *
- *****************************************************************************/
 void davinci_set_dma_params(int lch, struct edmacc_param *params);
-
-/******************************************************************************
- *
- * davinci_get_dma_params -
- * ARGUMENTS:
- *      lch - logical channel number
- *
- *****************************************************************************/
 void davinci_get_dma_params(int lch, struct edmacc_param *params);
 
-/******************************************************************************
- * davinci_start_dma -  Starts the dma on the channel passed
- *
- * lch - logical channel number
- *
- * Note:    This API can be used only on DMA MasterChannel
- *
- * Return: zero on success
- *        -EINVAL on failure, i.e if requested for the slave channels
- *
- *****************************************************************************/
 int davinci_start_dma(int lch);
-
-/******************************************************************************
- * davinci_stop_dma -  Stops the dma on the channel passed
- *
- * lch - logical channel number
- *
- * Note:    This API can be used on MasterChannel and SlaveChannel
- *****************************************************************************/
 void davinci_stop_dma(int lch);
 
 /******************************************************************************
@@ -359,25 +267,6 @@ void davinci_dma_chain_lch(int lch_head, int lch_queue);
  *****************************************************************************/
 void davinci_dma_unchain_lch(int lch_head, int lch_queue);
 
-/******************************************************************************
- *
- * Free DMA channel - Free the dma channel number passed
- *
- * ARGUMENTS:
- * lch - dma channel number to get free
- *
- *****************************************************************************/
-void davinci_free_dma(int lch);
-
-/**
- * davinci_dma_getposition - returns the current transfer points
- * @lch: logical channel number
- * @src: source port position
- * @dst: destination port position
- *
- * Returns current source and destination address of a paticular
- * DMA channel
- **/
 void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst);
 void davinci_clean_channel(int lch);
 void davinci_pause_dma(int lch);

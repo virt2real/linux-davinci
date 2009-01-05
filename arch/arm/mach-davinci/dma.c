@@ -321,12 +321,12 @@ setup_dma_interrupt(unsigned lch,
 /**
  * davinci_dma_getposition - returns the current transfer points
  * @lch: logical channel number
- * @src: source port position
- * @dst: destination port position
+ * @src: pointer to source port position
+ * @dst: pointer to destination port position
  *
- * Returns current source and destination address of a paticular
- * DMA channel
- **/
+ * Returns current source and destination address of a particular
+ * DMA channel.  The channel should not be active when this is called.
+ */
 void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst)
 {
 	struct edmacc_param temp;
@@ -363,7 +363,7 @@ static irqreturn_t dma_irq_handler(int irq, void *data)
 			j = 1;
 		else
 			break;
-		dev_dbg(&edma_dev.dev, "IPR%d =%x\r\n", j,
+		dev_dbg(&edma_dev.dev, "IPR%d %08x\n", j,
 				edma_shadow0_read_array(SH_IPR, j));
 		for (i = 0; i < 32; i++) {
 			int k = (j << 5) + i;
@@ -408,7 +408,7 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 		else if (edma_read_array(EDMA_EMR, 1))
 			j = 1;
 		if (j >= 0) {
-			dev_dbg(&edma_dev.dev, "EMR%d =%x\r\n", j,
+			dev_dbg(&edma_dev.dev, "EMR%d %08x\n", j,
 					edma_read_array(EDMA_EMR, j));
 			for (i = 0; i < 32; i++) {
 				int k = (j << 5) + i;
@@ -427,22 +427,29 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 				}
 			}
 		} else if (edma_read(EDMA_QEMR)) {
-			dev_dbg(&edma_dev.dev, "QEMR =%x\r\n",
+			dev_dbg(&edma_dev.dev, "QEMR %02x\n",
 				edma_read(EDMA_QEMR));
 			for (i = 0; i < 8; i++) {
 				if (edma_read(EDMA_QEMR) & (1 << i)) {
 					/* Clear the corresponding IPR bits */
 					edma_write(EDMA_QEMCR, 1 << i);
 					edma_shadow0_write(SH_QSECR, (1 << i));
+
+					/* NOTE:  not reported!! */
 				}
 			}
 		} else if (edma_read(EDMA_CCERR)) {
-			dev_dbg(&edma_dev.dev, "CCERR =%x\r\n",
+			dev_dbg(&edma_dev.dev, "CCERR %08x\n",
 				edma_read(EDMA_CCERR));
+			/* FIXME:  CCERR.BIT(16) ignored!  much better
+			 * to just write CCERRCLR with CCERR value...
+			 */
 			for (i = 0; i < 8; i++) {
 				if (edma_read(EDMA_CCERR) & (1 << i)) {
 					/* Clear the corresponding IPR bits */
 					edma_write(EDMA_CCERRCLR, 1 << i);
+
+					/* NOTE:  not reported!! */
 				}
 			}
 		}
@@ -721,15 +728,15 @@ alloc_master:
 }
 EXPORT_SYMBOL(davinci_request_dma);
 
-/******************************************************************************
+/**
+ * davinci_free_dma - deallocate a DMA channel
+ * @lch: dma channel returned from davinci_request_dma()
  *
- * DMA channel free: Free dma channle
- * Arguments:
- *      dev_id     - request for the param entry device id
- *
- * Return: zero on success, or corresponding error no on failure
- *
- *****************************************************************************/
+ * This deallocates the resources allocated by davinci_request_dma().
+ * Callers are responsible for ensuring the channel is inactive, and
+ * will not be reactivated by linking, chaining, or software calls to
+ * davinci_start_dma().
+ */
 void davinci_free_dma(int lch)
 {
 	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
@@ -744,16 +751,18 @@ void davinci_free_dma(int lch)
 }
 EXPORT_SYMBOL(davinci_free_dma);
 
-/******************************************************************************
+/**
+ * davinci_set_dma_src_params - set initial DMA source address in PaRAM
+ * @lch: logical channel being configured
+ * @src_port: physical address of source (memory, controller FIFO, etc)
+ * @addressMode: INCR, except in very rare cases
+ * @fifoWidth: ignored unless @addressMode is FIFO, else specifies the
+ *	width to use when addressing the fifo (e.g. W8BIT, W32BIT)
  *
- * DMA source parameters setup
- * ARGUMENTS:
- *      lch         - channel for which the source parameters to be configured
- *      src_port    - Source port address
- *      addressMode - indicates wether addressing mode is fifo.
- *
- *****************************************************************************/
-void davinci_set_dma_src_params(int lch, unsigned long src_port,
+ * Note that the source address is modified during the DMA transfer
+ * according to davinci_set_dma_src_index().
+ */
+void davinci_set_dma_src_params(int lch, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width width)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
@@ -776,16 +785,18 @@ void davinci_set_dma_src_params(int lch, unsigned long src_port,
 }
 EXPORT_SYMBOL(davinci_set_dma_src_params);
 
-/******************************************************************************
+/**
+ * davinci_set_dma_dest_params - set initial DMA destination address in PaRAM
+ * @lch: logical channel being configured
+ * @dest_port: physical address of destination (memory, controller FIFO, etc)
+ * @addressMode: INCR, except in very rare cases
+ * @fifoWidth: ignored unless @addressMode is FIFO, else specifies the
+ *	width to use when addressing the fifo (e.g. W8BIT, W32BIT)
  *
- * DMA destination parameters setup
- * ARGUMENTS:
- *    lch - channel or param device for destination parameters to be configured
- *    dest_port    - Destination port address
- *    addressMode  - indicates wether addressing mode is fifo.
- *
- *****************************************************************************/
-void davinci_set_dma_dest_params(int lch, unsigned long dest_port,
+ * Note that the destination address is modified during the DMA transfer
+ * according to davinci_set_dma_dest_index().
+ */
+void davinci_set_dma_dest_params(int lch, dma_addr_t dest_port,
 				 enum address_mode mode, enum fifo_width width)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
@@ -807,16 +818,17 @@ void davinci_set_dma_dest_params(int lch, unsigned long dest_port,
 }
 EXPORT_SYMBOL(davinci_set_dma_dest_params);
 
-/******************************************************************************
+/**
+ * davinci_set_dma_src_index - configure DMA source address indexing
+ * @lch: logical channel being configured
+ * @src_bidx: byte offset between source arrays in a frame
+ * @src_cidx: byte offset between source frames in a block
  *
- * DMA source index setup
- * ARGUMENTS:
- *      lch     - channel or param device for configuration of source index
- *      srcbidx - source B-register index
- *      srccidx - source C-register index
- *
- *****************************************************************************/
-void davinci_set_dma_src_index(int lch, short src_bidx, short src_cidx)
+ * Offsets are specified to support either contiguous or discontiguous
+ * memory transfers, or repeated access to a hardware register, as needed.
+ * When accessing hardware registers, both offsets are normally zero.
+ */
+void davinci_set_dma_src_index(int lch, s16 src_bidx, s16 src_cidx)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		edma_parm_modify(PARM_SRC_DST_BIDX, lch,
@@ -827,16 +839,17 @@ void davinci_set_dma_src_index(int lch, short src_bidx, short src_cidx)
 }
 EXPORT_SYMBOL(davinci_set_dma_src_index);
 
-/******************************************************************************
+/**
+ * davinci_set_dma_dest_index - configure DMA destination address indexing
+ * @lch: logical channel being configured
+ * @dest_bidx: byte offset between destination arrays in a frame
+ * @dest_cidx: byte offset between destination frames in a block
  *
- * DMA destination index setup
- * ARGUMENTS:
- *      lch    - channel or param device for configuration of destination index
- *      srcbidx - dest B-register index
- *      srccidx - dest C-register index
- *
- *****************************************************************************/
-void davinci_set_dma_dest_index(int lch, short dest_bidx, short dest_cidx)
+ * Offsets are specified to support either contiguous or discontiguous
+ * memory transfers, or repeated access to a hardware register, as needed.
+ * When accessing hardware registers, both offsets are normally zero.
+ */
+void davinci_set_dma_dest_index(int lch, s16 dest_bidx, s16 dest_cidx)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		edma_parm_modify(PARM_SRC_DST_BIDX, lch,
@@ -847,27 +860,44 @@ void davinci_set_dma_dest_index(int lch, short dest_bidx, short dest_cidx)
 }
 EXPORT_SYMBOL(davinci_set_dma_dest_index);
 
-/******************************************************************************
+/**
+ * davinci_set_dma_transfer_params - configure DMA transfer parameters
+ * @lch: logical channel being configured
+ * @acnt: how many bytes per array (at least one)
+ * @bcnt: how many arrays per frame (at least one)
+ * @ccnt: how many frames per block (at least one)
+ * @bcnt_rld: used only for A-Synchronized transfers; this specifies
+ *	the value to reload into bcnt when it decrements to zero
+ * @sync_mode: ASYNC or ABSYNC
  *
- * DMA transfer parameters setup
- * ARGUMENTS:
- *      lch  - channel or param device for configuration of aCount, bCount and
- *         cCount regs.
- *      acnt - acnt register value to be configured
- *      bcnt - bcnt register value to be configured
- *      ccnt - ccnt register value to be configured
+ * See the EDMA3 documentation to understand how to configure and link
+ * transfers using the fields in PaRAM slots.  If you are not doing it
+ * all at once with davinci_set_dma_params() you will use this routine
+ * plus two calls each for source and destination, setting the initial
+ * address and saying how to index that address.
  *
- *****************************************************************************/
-void davinci_set_dma_transfer_params(int lch, unsigned short acnt,
-				     unsigned short bcnt, unsigned short ccnt,
-				     unsigned short bcntrld,
-				     enum sync_dimension sync_mode)
+ * An example of an A-Synchronized transfer is a serial link using a
+ * single word shift register.  In that case, @acnt would be equal to
+ * that word size; the serial controller issues a DMA synchronization
+ * event to transfer each word, and memory access by the DMA transfer
+ * controller will be word-at-a-time.
+ *
+ * An example of an AB-Synchronized transfer is a device using a FIFO.
+ * In that case, @acnt equals the FIFO width and @bcnt equals its depth.
+ * The controller with the FIFO issues DMA synchronization events when
+ * the FIFO threshold is reached, and the DMA transfer controller will
+ * transfer one frame to (or from) the FIFO.  It will probably use
+ * efficient burst modes to access memory.
+ */
+void davinci_set_dma_transfer_params(int lch,
+		u16 acnt, u16 bcnt, u16 ccnt,
+		u16 bcnt_rld, enum sync_dimension sync_mode)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
 		int j = lch;
 
 		edma_parm_modify(PARM_LINK_BCNTRLD, j,
-				0x0000ffff, bcntrld << 16);
+				0x0000ffff, bcnt_rld << 16);
 		if (sync_mode == ASYNC)
 			edma_parm_and(PARM_OPT, j, ~SYNCDIM);
 		else
@@ -879,13 +909,16 @@ void davinci_set_dma_transfer_params(int lch, unsigned short acnt,
 }
 EXPORT_SYMBOL(davinci_set_dma_transfer_params);
 
-/******************************************************************************
+/**
+ * davinci_set_dma_params - write PaRAM data for channel
+ * @lch: logical channel being configured
+ * @temp: channel configuration to be used
  *
- * davinci_set_dma_params -
- * ARGUMENTS:
- *      lch - logical channel number
- *
- *****************************************************************************/
+ * Use this to assign all parameters of a transfer at once.  This
+ * allows more efficient setup of transfers than issuing multiple
+ * calls to set up those parameters in small pieces, and provides
+ * complete control over all transfer options.
+ */
 void davinci_set_dma_params(int lch, struct edmacc_param *temp)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
@@ -903,13 +936,14 @@ void davinci_set_dma_params(int lch, struct edmacc_param *temp)
 }
 EXPORT_SYMBOL(davinci_set_dma_params);
 
-/******************************************************************************
+/**
+ * davinci_get_dma_params - read PaRAM data for channel
+ * @lch: logical channel being queried
+ * @temp: where to store current channel configuration
  *
- * davinci_get_dma_params -
- * ARGUMENTS:
- *      lch - logical channel number
- *
- *****************************************************************************/
+ * Use this to read the Parameter RAM for a channel, perhaps to
+ * save them as a template for later reuse.
+ */
 void davinci_get_dma_params(int lch, struct edmacc_param *temp)
 {
 	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
@@ -952,16 +986,21 @@ void davinci_resume_dma(int lch)
 }
 EXPORT_SYMBOL(davinci_resume_dma);
 
-/******************************************************************************
+/**
+ * davinci_start_dma - start dma on a master channel
+ * @lch: logical master channel being activated
  *
- * DMA Start - Starts the dma on the channel passed
- * ARGUMENTS:
- *      lch - logical channel number
+ * Channels with event associations will be triggered by their hardware
+ * events, and channels without such associations will be triggered by
+ * software.  (At this writing there is no interface for using software
+ * triggers except with channels that don't support hardware triggers.)
  *
- *****************************************************************************/
+ * Returns zero on success, else negative errno.
+ */
 int davinci_start_dma(int lch)
 {
 	int ret_val = 0;
+
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
 		int j = lch >> 5;
 		unsigned int mask = (1 << (lch & 0x1f));
@@ -975,14 +1014,14 @@ int davinci_start_dma(int lch)
 		}
 
 		/* EDMA channel with event association */
-		dev_dbg(&edma_dev.dev, "ER%d=%x\r\n", j,
+		dev_dbg(&edma_dev.dev, "ER%d %08x\n", j,
 			edma_shadow0_read_array(SH_ER, j));
 		/* Clear any pending error */
 		edma_write_array(EDMA_EMCR, j, mask);
 		/* Clear any SER */
 		edma_shadow0_write_array(SH_SECR, j, mask);
 		edma_shadow0_write_array(SH_EESR, j, mask);
-		dev_dbg(&edma_dev.dev, "EER%d=%x\r\n", j,
+		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
 			edma_shadow0_read_array(SH_EER, j));
 	} else {		/* for slaveChannels */
 		ret_val = -EINVAL;
@@ -991,35 +1030,41 @@ int davinci_start_dma(int lch)
 }
 EXPORT_SYMBOL(davinci_start_dma);
 
-/******************************************************************************
+/**
+ * davinci_stop_dma - stops dma on the channel passed
+ * @lch: logical channel being deactivated
  *
- * DMA Stop - Stops the dma on the channel passed
- * ARGUMENTS:
- *      lch - logical channel number
- *
- *****************************************************************************/
+ * When @lch is a master channel, any active transfer is paused and
+ * all pending hardware events are cleared.  The current transfer
+ * may not be resumed, and the channel's Parameter RAM should be
+ * reinitialized before being reused.
+ */
 void davinci_stop_dma(int lch)
 {
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
+	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
+
+	if (lch < DAVINCI_EDMA_NUM_DMACH) {
 		int j = lch >> 5;
 		unsigned int mask = (1 << (lch & 0x1f));
+
 		edma_shadow0_write_array(SH_EECR, j, mask);
 		if (edma_shadow0_read_array(SH_ER, j) & mask) {
-			dev_dbg(&edma_dev.dev, "ER%d=%x\n", j,
+			dev_dbg(&edma_dev.dev, "ER%d %08x\n", j,
 				edma_shadow0_read_array(SH_ER, j));
 			edma_shadow0_write_array(SH_ECR, j, mask);
 		}
 		if (edma_shadow0_read_array(SH_SER, j) & mask) {
-			dev_dbg(&edma_dev.dev, "SER%d=%x\n", j,
+			dev_dbg(&edma_dev.dev, "SER%d %08x\n", j,
 				edma_shadow0_read_array(SH_SER, j));
 			edma_shadow0_write_array(SH_SECR, j, mask);
 		}
 		if (edma_read_array(EDMA_EMR, j) & mask) {
-			dev_dbg(&edma_dev.dev, "EMR%d=%x\n", j,
+			dev_dbg(&edma_dev.dev, "EMR%d %08x\n", j,
 				edma_read_array(EDMA_EMR, j));
 			edma_write_array(EDMA_EMCR, j, mask);
 		}
-		dev_dbg(&edma_dev.dev, "EER%d=%x\r\n", j,
+		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
 				edma_shadow0_read_array(SH_EER, j));
 		/*
 		 * if the requested channel is one of the event channels
@@ -1134,7 +1179,7 @@ void davinci_clean_channel(int ch_no)
 	if ((ch_no >= 0) && (ch_no < DAVINCI_EDMA_NUM_DMACH)) {
 		int j = (ch_no >> 5);
 		unsigned int mask = 1 << (ch_no & 0x1f);
-		dev_dbg(&edma_dev.dev, "EMR%d =%x\r\n", j,
+		dev_dbg(&edma_dev.dev, "EMR%d %08x\n", j,
 				edma_read_array(EDMA_EMR, j));
 		edma_shadow0_write_array(SH_ECR, j, mask);
 		/* Clear the corresponding EMR bits */
