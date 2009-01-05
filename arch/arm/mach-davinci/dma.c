@@ -246,10 +246,7 @@ static struct platform_device edma_dev = {
 
 /* Structure containing the dma channel parameters */
 static struct davinci_dma_lch {
-	int dev_id;
 	int in_use;		/* 1-used 0-unused */
-	int link_lch;
-	int dma_running;
 	int param_no;
 	int tcc;
 } dma_chan[DAVINCI_EDMA_NUM_PARAMENTRY];
@@ -258,26 +255,6 @@ static struct dma_interrupt_data {
 	void (*callback) (int lch, unsigned short ch_status, void *data);
 	void *data;
 } intr_data[DAVINCI_EDMA_NUM_DMACH];
-
-/*
-  Each bit field of the elements below indicates corresponding EDMA channel
-  availability  on arm side events
-*/
-static const unsigned long edma_channels_arm[] = {
-	0xffffffff,
-	0xffffffff
-};
-
-/*
-   Each bit field of the elements below indicates corresponding PARAM entry
-   availability on arm side events
-*/
-static const unsigned long param_entry_arm[] = {
-	0xffffffff, 0xffffffff, 0x0000ffff, 0xffffffff,
-	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff
-};
 
 /*
    Each bit field of the elements below indicates whether a PARAM entry
@@ -383,8 +360,7 @@ static int request_param(int lch, int dev_id)
 
 		LOCK;
 		while (i < DAVINCI_EDMA_NUM_PARAMENTRY) {
-			if ((param_entry_arm[i / 32] & (1 << (i % 32))) &&
-			    (param_entry_use_status[i / 32] &
+			if ((param_entry_use_status[i / 32] &
 						(1 << (i % 32)))) {
 				if (dev_id == DAVINCI_DMA_CHANNEL_ANY) {
 					if (i >= DAVINCI_EDMA_NUM_DMACH)
@@ -754,16 +730,6 @@ int davinci_request_dma(int dev_id, const char *name,
 
 	int ret_val = 0, i = 0;
 
-	/* checking the ARM side events */
-	if (dev_id >= 0 && (dev_id < DAVINCI_EDMA_NUM_DMACH)) {
-		if (!(edma_channels_arm[dev_id / 32] & (1 << (dev_id % 32)))) {
-			dev_dbg(&edma_dev.dev,
-				"dev_id = %d not supported on ARM side\r\n",
-				dev_id);
-			return -EINVAL;
-		}
-	}
-
 	if ((dev_id != DAVINCI_DMA_CHANNEL_ANY) &&
 	    (dev_id != DAVINCI_EDMA_PARAM_ANY)) {
 		edma_or_array2(EDMA_DRAE, 0, dev_id >> 5,
@@ -861,7 +827,6 @@ int davinci_request_dma(int dev_id, const char *name,
 		   available or not */
 		dma_chan[*lch].in_use = 1;
 		UNLOCK;
-		dma_chan[*lch].dev_id = *lch;
 		j = dma_chan[*lch].param_no;
 		if (dma_chan[*lch].tcc != -1) {
 			edma_parm_modify(PARM_OPT, j, ~TCC,
@@ -1204,7 +1169,6 @@ void davinci_dma_link_lch(int lch, int lch_que)
 		edma_parm_modify(PARM_LINK_BCNTRLD, dma_chan[lch].param_no,
 				0xffff0000,
 				PARM_OFFSET(dma_chan[lch_que].param_no));
-		dma_chan[lch].link_lch = lch_que;
 	}
 }
 EXPORT_SYMBOL(davinci_dma_link_lch);
@@ -1225,7 +1189,6 @@ void davinci_dma_unlink_lch(int lch, int lch_que)
 	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_PARAMENTRY)) {
 		edma_parm_or(PARM_LINK_BCNTRLD, dma_chan[lch].param_no,
 				0xffff);
-		dma_chan[lch].link_lch = -1;
 	}
 }
 EXPORT_SYMBOL(davinci_dma_unlink_lch);
