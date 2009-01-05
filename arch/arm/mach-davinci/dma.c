@@ -206,12 +206,6 @@ static inline void edma_parm_or(int offset, int param_no, unsigned or)
 	edma_or(EDMA_PARM + offset + (param_no << 5), or);
 }
 
-static spinlock_t dma_chan_lock;
-
-#define LOCK_INIT     spin_lock_init(&dma_chan_lock)
-#define LOCK          spin_lock(&dma_chan_lock)
-#define UNLOCK        spin_unlock(&dma_chan_lock)
-
 static struct platform_driver edma_driver = {
 	.driver.name	= "edma",
 };
@@ -246,9 +240,7 @@ static struct platform_device edma_dev = {
 
 /* Structure containing the dma channel parameters */
 static struct davinci_dma_lch {
-	int in_use;		/* 1-used 0-unused */
 	int param_no;
-	int tcc;
 } dma_chan[DAVINCI_EDMA_NUM_PARAMENTRY];
 
 static struct dma_interrupt_data {
@@ -256,18 +248,10 @@ static struct dma_interrupt_data {
 	void *data;
 } intr_data[DAVINCI_EDMA_NUM_DMACH];
 
-/*
-   Each bit field of the elements below indicates whether a PARAM entry
-   is free or in use
-   1 - free
-   0 - in use
-*/
-static unsigned long param_entry_use_status[] = {
-	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-	0xffffffff
-};
+/* The edma_inuse bit for each PaRAM slot is clear unless the
+ * channel is in use ... by ARM or DSP, for QDMA, or whatever.
+ */
+static DECLARE_BITMAP(edma_inuse, DAVINCI_EDMA_NUM_PARAMENTRY);
 
 /* The edma_noevent bit for each master channel is clear unless
  * it doesn't trigger DMA events on this platform.  It uses a
@@ -321,93 +305,6 @@ static void __init assign_priority_to_queue(int queue_no, int priority)
 	edma_modify(EDMA_QUEPRI, ~(0x7 << bit), ((priority & 0x7) << bit));
 }
 
-/******************************************************************************
- *
- * DMA Param entry requests: Requests for the param structure entry for the dma
- *                          channel passed
- * Arguments:
- *      lch  - logical channel for which param entry is being requested.
- *
- * Return: param number on success, or negative error number on failure
- *
- *****************************************************************************/
-static int request_param(int lch, int dev_id)
-{
-	int i = 0;
-
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_DMACH) {
-		/*
-		   In davinci there is 1:1 mapping between edma channels
-		   and param sets
-		 */
-		LOCK;
-		/* It maintains param entry availability bitmap which
-		   could be updated by several thread  same channel
-		   and so requires protection
-		 */
-		param_entry_use_status[lch / 32] &= (~(1 << (lch % 32)));
-		UNLOCK;
-		return lch;
-	} else {
-		if (dev_id == DAVINCI_EDMA_PARAM_ANY)
-			i = DAVINCI_EDMA_NUM_DMACH;
-
-		/* This allocation alogrithm requires complete lock because
-		   availabilty of param entry is checked from structure
-		   param_entry_use_status and same struct is updated back also
-		   once allocated
-		 */
-
-		LOCK;
-		while (i < DAVINCI_EDMA_NUM_PARAMENTRY) {
-			if ((param_entry_use_status[i / 32] &
-						(1 << (i % 32)))) {
-				if (dev_id == DAVINCI_DMA_CHANNEL_ANY) {
-					if (i >= DAVINCI_EDMA_NUM_DMACH)
-						continue;
-					if (test_bit(i, edma_noevent))
-						break;
-				} else {
-					break;
-				}
-				i++;
-			} else {
-				i++;
-			}
-		}
-		if (i < DAVINCI_EDMA_NUM_PARAMENTRY) {
-			param_entry_use_status[i / 32] &= (~(1 << (i % 32)));
-			UNLOCK;
-			dev_dbg(&edma_dev.dev, "param no=%d\r\n", i);
-			return i;
-		} else {
-			UNLOCK;
-			return -1;	/* no free param */
-		}
-	}
-}
-
-/******************************************************************************
- *
- * Free dma param entry: Freethe param entry number passed
- * Arguments:
- *      param_no - Param entry to be released or freed out
- *
- * Return: N/A
- *
- *****************************************************************************/
-static void free_param(int param_no)
-{
-	if (param_no >= 0 && param_no < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		LOCK;
-		/* This is global data structure and could be accessed
-		   by several thread
-		 */
-		param_entry_use_status[param_no / 32] |= (1 << (param_no % 32));
-		UNLOCK;
-	}
-}
-
 static inline void
 setup_dma_interrupt(unsigned lch,
 	void (*callback)(int lch, unsigned short ch_status, void *data),
@@ -422,7 +319,6 @@ setup_dma_interrupt(unsigned lch,
 	intr_data[lch].data = data;
 
 	if (callback) {
-		dma_chan[lch].tcc = lch;
 		edma_shadow0_write_array(SH_ICR, lch >> 5,
 				(1 << (lch & 0x1f)));
 		edma_shadow0_write_array(SH_IESR, lch >> 5,
@@ -687,150 +583,138 @@ static int __init davinci_dma_init(void)
 		edma_write_array2(EDMA_DRAE, i, 1, 0x0);
 		edma_write_array(EDMA_QRAE, i, 0x0);
 	}
-	LOCK_INIT;
 	return 0;
 }
 arch_initcall(davinci_dma_init);
 
-/******************************************************************************
+/**
+ * davinci_request_dma - allocate a DMA channel
+ * @dev_id: specific DMA channel; else DAVINCI_DMA_CHANNEL_ANY to
+ *	allocate some master channel without a hardware event, or
+ *	DAVINCI_EDMA_PARAM_ANY to allocate some slave channel.
+ * @name: name associated with @dev_id
+ * @callback: to be issued on DMA completion or errors (master only)
+ * @data: passed to callback (master only)
+ * @lch: used to return the number of the allocated event channel; pass
+ *	this later to davinci_free_dma()
+ * @tcc: may be NULL; else an input for masters, an output for slaves.
+ * @eventq_no: an EVENTQ_* constant, used to choose which Transfer
+ *	Controller (TC) executes requests on this channel (master only)
  *
- * DMA channel requests: Requests for the dma device passed if it is free
+ * Returns zero on success, else negative errno.
  *
- * Arguments:
- *      dev_id     - request for the param entry device id
- *      dev_name   - device name
- *      callback   - pointer to the channel callback.
- *      Arguments:
- *          lch  - channel no, which is the IPR bit position,
- *		   indicating from which channel the interrupt arised.
- *          data - channel private data, which is received as one of the
- *		   arguments in davinci_request_dma.
- *      data - private data for the channel to be requested, which is used to
- *                   pass as a parameter in the callback function
- *		     in irq handler.
- *      lch - contains the device id allocated
- *  tcc        - Transfer Completion Code, used to set the IPR register bit
- *                   after transfer completion on that channel.
- *  eventq_no  - Event Queue no to which the channel will be associated with
- *               (valied only if you are requesting for a DMA MasterChannel)
- *               Values : 0 to 7
- *                       -1 for Default queue
- * INPUT:   dev_id
- * OUTPUT:  *dma_ch_out
+ * The @tcc parameter may be null, indicating default behavior:  no
+ * transfer completion callbacks are issued, but masters use @callback
+ * and @data (if provided) to report transfer errors.  Else masters use
+ * it as an output, returning either what @lch returns (and enabling
+ * transfer completion interrupts), or TCC_ANY if there is no callback.
+ * Slaves use @tcc as an input:  TCC_ANY gives the default behavior,
+ * else it specifies a transfer completion @callback to be used.
  *
- * Return: zero on success, or corresponding error no on failure
+ * These TCC settings are stored in PaRAM slots, so they may be updated
+ * later.  In particular, reloading a master PaRAM entry from a slave
+ * (via linking) overwrites everything, including those TCC settings.
  *
- *****************************************************************************/
+ * DMA transfers start from a master channel using davinci_start_dma()
+ * or by chaining.  When the transfer described in that master's PaRAM
+ * slot completes, its PaRAM data may be reloaded from a linked slave.
+ *
+ * DMA errors are only reported to the @callback associated with that
+ * master channel, but transfer completion callbacks can be sent to
+ * another master channel.  Drivers must not use DMA transfer completion
+ * callbacks (@tcc) for master channels they did not allocate.  (The
+ * same applies to transfer chaining, since the same @tcc codes are
+ * used both to trigger completion interrupts and to chain transfers.)
+ */
 int davinci_request_dma(int dev_id, const char *name,
 			void (*callback) (int lch, unsigned short ch_status,
 					  void *data),
 			void *data, int *lch,
 			int *tcc, enum dma_event_q eventq_no)
 {
+	int tcc_val = tcc ? *tcc : TCC_ANY;
 
-	int ret_val = 0, i = 0;
+	/* REVISIT:  tcc would be better as a non-pointer parameter */
+	switch (tcc_val) {
+	case TCC_ANY:
+	case 0 ... DAVINCI_EDMA_NUM_DMACH - 1:
+		break;
+	default:
+		return -EINVAL;
+	}
 
-	if ((dev_id != DAVINCI_DMA_CHANNEL_ANY) &&
-	    (dev_id != DAVINCI_EDMA_PARAM_ANY)) {
+	switch (dev_id) {
+
+	/* Allocate a specific master channel, e.g. for MMC1 RX or ASP0 TX */
+	case 0 ... DAVINCI_EDMA_NUM_DMACH - 1:
+		if (test_and_set_bit(dev_id, edma_inuse))
+			return -EBUSY;
+
+alloc_master:
+		*lch = dev_id;
+		dma_chan[*lch].param_no = dev_id;
+		tcc_val = (tcc && callback) ? dev_id : TCC_ANY;
+
+		/* ensure access through shadow region 0 */
 		edma_or_array2(EDMA_DRAE, 0, dev_id >> 5,
 				1 << (dev_id & 0x1f));
-	}
 
-	if (dev_id >= 0 && dev_id < (DAVINCI_EDMA_NUM_DMACH)) {
-		/* The 64 Channels are mapped to the first 64 PARAM entries */
-		if (!dma_chan[dev_id].in_use) {
-			*lch = dev_id;
-			dma_chan[*lch].param_no = request_param(*lch, dev_id);
-			if (dma_chan[*lch].param_no == -1) {
-				return -EINVAL;
-			} else
-				dev_dbg(&edma_dev.dev, "param_no=%d\r\n",
-					dma_chan[*lch].param_no);
+		if (callback)
+			setup_dma_interrupt(dev_id, callback, data);
 
-			if (callback)
-				setup_dma_interrupt(dev_id, callback, data);
-			else
-				dma_chan[*lch].tcc = -1;
+		map_dmach_queue(dev_id, eventq_no);
 
-			map_dmach_queue(dev_id, eventq_no);
-			ret_val = 0;
-			/* ensure no events are pending */
-			davinci_stop_dma(dev_id);
-		} else
-			ret_val = -EINVAL;
+		/* ensure no events are pending */
+		davinci_stop_dma(dev_id);
+		break;
+
+	/* Allocate a specific slave channel, mostly to reserve it
+	 * as part of a set of resources allocated to a DSP.
+	 */
+	case DAVINCI_EDMA_NUM_DMACH ... DAVINCI_EDMA_NUM_PARAMENTRY - 1:
+		if (test_and_set_bit(dev_id, edma_inuse))
+			return -EBUSY;
+		break;
 
 	/* return some master channel with no event association */
-	} else if (dev_id == DAVINCI_DMA_CHANNEL_ANY) {
-		i = 0;
-		ret_val = 0;
+	case DAVINCI_DMA_CHANNEL_ANY:
+		dev_id = 0;
 		for (;;) {
-			i = find_next_bit(edma_noevent, i,
-					DAVINCI_EDMA_NUM_DMACH);
-			if (i == DAVINCI_EDMA_NUM_DMACH)
-				break;
-			if (!dma_chan[i].in_use) {
-				int j;
-
-				*lch = i;
-				j = request_param(*lch, dev_id);
-				if (j == -1)
-					return -EINVAL;
-				dma_chan[*lch].param_no = j;
-				dev_dbg(&edma_dev.dev, "param_no=%d\r\n", j);
-				edma_or_array2(EDMA_DRAE, 0, j >> 5,
-						1 << (j & 0x1f));
-
-				if (callback)
-					setup_dma_interrupt(i, callback, data);
-				else
-					dma_chan[*lch].tcc = -1;
-
-				map_dmach_queue(*lch, eventq_no);
-				ret_val = 0;
-				break;
-			}
+			dev_id = find_next_bit(edma_noevent,
+					DAVINCI_EDMA_NUM_DMACH, dev_id);
+			if (dev_id == DAVINCI_EDMA_NUM_DMACH)
+				return -ENOMEM;
+			if (!test_and_set_bit(dev_id, edma_inuse))
+				goto alloc_master;
 		}
+		break;
 
 	/* return some slave channel */
-	} else if (dev_id == DAVINCI_EDMA_PARAM_ANY) {
-		ret_val = 0;
-		for (i = DAVINCI_EDMA_NUM_DMACH;
-		     i < DAVINCI_EDMA_NUM_PARAMENTRY; i++) {
-			if (!dma_chan[i].in_use) {
-				dev_dbg(&edma_dev.dev, "any link = %d\r\n", i);
-				*lch = i;
-				dma_chan[*lch].param_no =
-				    request_param(*lch, dev_id);
-				if (dma_chan[*lch].param_no == -1) {
-					dev_dbg(&edma_dev.dev,
-						"request_param failed\r\n");
-					return -EINVAL;
-				} else {
-					dev_dbg(&edma_dev.dev,
-						"param_no=%d\r\n",
-						dma_chan[*lch].param_no);
-				}
-				if (tcc)
-					dma_chan[*lch].tcc = *tcc;
-				ret_val = 0;
+	case DAVINCI_EDMA_PARAM_ANY:
+		dev_id = DAVINCI_EDMA_NUM_DMACH;
+		for (;;) {
+			dev_id = find_next_zero_bit(edma_inuse,
+					DAVINCI_EDMA_NUM_PARAMENTRY, dev_id);
+			if (dev_id == DAVINCI_EDMA_NUM_PARAMENTRY)
+				return -ENOMEM;
+			if (!test_and_set_bit(dev_id, edma_inuse)) {
+				*lch = dev_id;
+				dma_chan[*lch].param_no = dev_id;
 				break;
 			}
 		}
-	} else {
-		ret_val = -EINVAL;
+		break;
+
+	default:
+		return -EINVAL;
 	}
-	if (!ret_val) {
+	if (1) {
 		int j;
 
-		LOCK;
-		/* Global structure to identify whether resoures is
-		   available or not */
-		dma_chan[*lch].in_use = 1;
-		UNLOCK;
 		j = dma_chan[*lch].param_no;
-		if (dma_chan[*lch].tcc != -1) {
+		if (tcc_val != TCC_ANY) {
 			edma_parm_modify(PARM_OPT, j, ~TCC,
-				((0x3f & dma_chan[*lch].tcc) << 12)
+				((0x3f & tcc_val) << 12)
 				| TCINTEN);
 		} else {
 			edma_parm_and(PARM_OPT, j, ~TCINTEN);
@@ -839,9 +723,11 @@ int davinci_request_dma(int dev_id, const char *name,
 		edma_parm_or(PARM_LINK_BCNTRLD, j, 0xffff);
 
 		if (tcc)
-			*tcc = dma_chan[*lch].tcc;
+			*tcc = tcc_val;
+		dev_dbg(&edma_dev.dev, "alloc lch %d, tcc %d\n",
+				*lch, tcc_val);
 	}
-	return ret_val;
+	return 0;
 }
 EXPORT_SYMBOL(davinci_request_dma);
 
@@ -856,13 +742,15 @@ EXPORT_SYMBOL(davinci_request_dma);
  *****************************************************************************/
 void davinci_free_dma(int lch)
 {
-	LOCK;
-	dma_chan[lch].in_use = 0;
-	UNLOCK;
-	free_param(dma_chan[lch].param_no);
+	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
 
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH))
+	if (lch < DAVINCI_EDMA_NUM_DMACH) {
 		setup_dma_interrupt(lch, NULL, NULL);
+		/* REVISIT should probably take out shadow region 0 */
+	}
+
+	clear_bit(lch, edma_inuse);
 }
 EXPORT_SYMBOL(davinci_free_dma);
 

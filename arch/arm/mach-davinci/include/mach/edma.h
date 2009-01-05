@@ -187,38 +187,6 @@ enum sync_dimension {
 	ABSYNC = 1
 };
 
-/******************************************************************************
- * davinci_request_dma - request for the Davinci DMA channel
- *
- * dev_id - DMA channel number
- *
- * EX: DAVINCI_DMA_MCBSP_TX - For requesting a DMA MasterChannel with MCBSP_TX
- *     event association
- *
- *     DAVINCI_DMA_ANY - For requesting a DMA Masterchannel which does not has
- *     event association
- *
- *     DAVINCI_DMA_LINK - for requesting a DMA SlaveChannel
- *
- * dev_name   - name of the dma channel in human readable format
- * callback   - channel callback function (valied only if you are requesting
- *              for a DMA MasterChannel)
- * data       - private data for the channel to be requested
- * lch        - contains the device id allocated
- * tcc        - specifies the channel number on which the interrupt is
- *              generated
- *              Valied for QDMA and PARAM channes
- * eventq_no  - Event Queue no to which the channel will be associated with
- *              (valied only if you are requesting for a DMA MasterChannel)
- *              Values : EVENTQ_0/EVENTQ_1 for event queue 0/1.
- *                       EVENTQ_DEFAULT for Default queue
- *
- * Return: zero on success,
- *         -EINVAL - if the requested channel is not supported on the ARM side events
- *         -EBUSY - if the requested channel is already in use
- *          EREQDMA - if failed to request the dma channel
- *
- *****************************************************************************/
 int davinci_request_dma(int dev_id,
 			const char *dev_name,
 			void (*callback) (int lch, unsigned short ch_status,
