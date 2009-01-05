@@ -257,7 +257,7 @@ static struct davinci_dma_lch {
 static struct dma_interrupt_data {
 	void (*callback) (int lch, unsigned short ch_status, void *data);
 	void *data;
-} intr_data[64];
+} intr_data[DAVINCI_EDMA_NUM_DMACH];
 
 /*
   Each bit field of the elements below indicates corresponding EDMA channel
@@ -289,17 +289,6 @@ static unsigned long param_entry_use_status[] = {
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
 	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-	0xffffffff
-};
-
-/*
-   Each bit field of the elements below indicates whether an interrupt
-   is free or in use
-   1 - free
-   0 - in use
-*/
-static unsigned long dma_intr_use_status[] = {
-	0xffffffff,
 	0xffffffff
 };
 
@@ -443,85 +432,25 @@ static void free_param(int param_no)
 	}
 }
 
-/******************************************************************************
- *
- * DMA interrupt requests: Requests for the interrupt on the free channel
- *
- * Arguments:
- *      lch - logical channel number for which the interrupt is to be requested
- *            for the free channel.
- *      callback - callback function registered for the requested interrupt
- *                 channel
- *      data - channel private data.
- *
- * Return: free interrupt channel number on success, or negative error number
- *              on failure
- *
- *****************************************************************************/
-static int request_dma_interrupt(int lch,
-				 void (*callback) (int lch,
-						   unsigned short ch_status,
-						   void *data),
-				 void *data, int param_no, int requested_tcc)
+static inline void
+setup_dma_interrupt(unsigned lch,
+	void (*callback)(int lch, unsigned short ch_status, void *data),
+	void *data)
 {
-	signed int free_intr_no = -1;
-
-	/* edma channels */
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_DMACH) {
-		/* Bitmap dma_intr_use_status is used to identify availabe tcc
-		   for interrupt purpose. This could be modified by several
-		   thread and same structure is checked availabilty as well as
-		   updated once it's found that resource is avialable */
-		LOCK;
-		if (dma_intr_use_status[lch / 32] & (1 << (lch % 32))) {
-			/* in use */
-			dma_intr_use_status[lch / 32] &= (~(1 << (lch % 32)));
-			UNLOCK;
-			free_intr_no = lch;
-			dev_dbg(&edma_dev.dev, "interrupt no=%d\r\n",
-					free_intr_no);
-		} else {
-			UNLOCK;
-			dev_dbg(&edma_dev.dev, "EDMA:Error\r\n");
-			return -1;
-		}
+	if (!callback) {
+		edma_shadow0_write_array(SH_IECR, lch >> 5,
+				(1 << (lch & 0x1f)));
 	}
 
-	if (free_intr_no < 0) {
-		dev_dbg(&edma_dev.dev, "no IRQ for channel %d\n", lch);
-		return -EIO;
-	}
-	if (free_intr_no >= 0 && free_intr_no < 64) {
-		intr_data[free_intr_no].callback = callback;
-		intr_data[free_intr_no].data = data;
-		edma_shadow0_write_array(SH_IESR, free_intr_no >> 5,
-				(1 << (free_intr_no & 0x1f)));
-	}
-	return free_intr_no;
-}
+	intr_data[lch].callback = callback;
+	intr_data[lch].data = data;
 
-/******************************************************************************
- *
- * Free the dma interrupt: Releases the dma interrupt on the channel
- *
- * Arguments:
- *      intr_no - interrupt number on the channel to be released or freed out
- *
- * Return: N/A
- *
- *****************************************************************************/
-static void free_dma_interrupt(int intr_no)
-{
-	if (intr_no >= 0 && intr_no < 64) {
-		edma_shadow0_write_array(SH_ICR, intr_no >> 5,
-				(1 << (intr_no & 0x1f)));
-		LOCK;
-		/* Global structure and could be modified by several task */
-		dma_intr_use_status[intr_no >> 5] |= (1 << (intr_no & 0x1f));
-		UNLOCK;
-		intr_data[intr_no].callback = NULL;
-		intr_data[intr_no].data = NULL;
-
+	if (callback) {
+		dma_chan[lch].tcc = lch;
+		edma_shadow0_write_array(SH_ICR, lch >> 5,
+				(1 << (lch & 0x1f)));
+		edma_shadow0_write_array(SH_IESR, lch >> 5,
+				(1 << (lch & 0x1f)));
 	}
 }
 
@@ -545,6 +474,7 @@ void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst)
 		*dst = temp.dst;
 }
 EXPORT_SYMBOL(davinci_dma_getposition);
+
 /******************************************************************************
  *
  * DMA interrupt handler
@@ -850,19 +780,10 @@ int davinci_request_dma(int dev_id, const char *name,
 			} else
 				dev_dbg(&edma_dev.dev, "param_no=%d\r\n",
 					dma_chan[*lch].param_no);
-			if (callback) {
-				dma_chan[*lch].tcc =
-				    request_dma_interrupt(*lch, callback, data,
-							  dma_chan[*lch].
-							  param_no, *tcc);
-				if (dma_chan[*lch].tcc == -1) {
-					return -EINVAL;
-				} else {
-					*tcc = dma_chan[*lch].tcc;
-					dev_dbg(&edma_dev.dev, "tcc_no=%d\r\n",
-						dma_chan[*lch].tcc);
-				}
-			} else
+
+			if (callback)
+				setup_dma_interrupt(dev_id, callback, data);
+			else
 				dma_chan[*lch].tcc = -1;
 
 			map_dmach_queue(dev_id, eventq_no);
@@ -892,17 +813,12 @@ int davinci_request_dma(int dev_id, const char *name,
 				dev_dbg(&edma_dev.dev, "param_no=%d\r\n", j);
 				edma_or_array2(EDMA_DRAE, 0, j >> 5,
 						1 << (j & 0x1f));
-				if (callback) {
-					dma_chan[*lch].tcc =
-						request_dma_interrupt(*lch,
-								callback, data,
-								j, *tcc);
-					if (dma_chan[*lch].tcc == -1)
-						return -EINVAL;
-					*tcc = dma_chan[*lch].tcc;
-				} else {
+
+				if (callback)
+					setup_dma_interrupt(i, callback, data);
+				else
 					dma_chan[*lch].tcc = -1;
-				}
+
 				map_dmach_queue(*lch, eventq_no);
 				ret_val = 0;
 				break;
@@ -928,10 +844,8 @@ int davinci_request_dma(int dev_id, const char *name,
 						"param_no=%d\r\n",
 						dma_chan[*lch].param_no);
 				}
-				if (*tcc != -1)
+				if (tcc)
 					dma_chan[*lch].tcc = *tcc;
-				else
-					dma_chan[*lch].tcc = -1;
 				ret_val = 0;
 				break;
 			}
@@ -958,6 +872,9 @@ int davinci_request_dma(int dev_id, const char *name,
 		}
 		/* assign the link field to no link. i.e 0xffff */
 		edma_parm_or(PARM_LINK_BCNTRLD, j, 0xffff);
+
+		if (tcc)
+			*tcc = dma_chan[*lch].tcc;
 	}
 	return ret_val;
 }
@@ -980,7 +897,7 @@ void davinci_free_dma(int lch)
 	free_param(dma_chan[lch].param_no);
 
 	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH))
-		free_dma_interrupt(dma_chan[lch].tcc);
+		setup_dma_interrupt(lch, NULL, NULL);
 }
 EXPORT_SYMBOL(davinci_free_dma);
 
