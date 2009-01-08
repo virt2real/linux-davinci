@@ -29,6 +29,8 @@
 #include <mach/pm.h>
 #include <mach/clockdomain.h>
 #include <mach/powerdomain.h>
+#include <mach/serial.h>
+#include <mach/control.h>
 
 #include "cm.h"
 #include "cm-regbits-34xx.h"
@@ -171,9 +173,15 @@ static void omap_sram_idle(void)
 	disable_smartreflex(SR2);
 
 	omap2_gpio_prepare_for_retention();
+	omap_uart_prepare_idle(0);
+	omap_uart_prepare_idle(1);
+	omap_uart_prepare_idle(2);
 
 	_omap_sram_idle(NULL, save_state);
 
+	omap_uart_resume_idle(2);
+	omap_uart_resume_idle(1);
+	omap_uart_resume_idle(0);
 	omap2_gpio_resume_after_retention();
 
 	/* Enable smartreflex after WFI */
@@ -210,6 +218,11 @@ static int omap3_fclks_active(void)
 				  CM_FCLKEN);
 	fck_per = cm_read_mod_reg(OMAP3430_PER_MOD,
 				  CM_FCLKEN);
+
+	/* Ignore UART clocks.  These are handled by UART core (serial.c) */
+	fck_core1 &= ~(OMAP3430_EN_UART1 | OMAP3430_EN_UART2);
+	fck_per &= ~OMAP3430_EN_UART3;
+
 	if (fck_core1 | fck_core3 | fck_sgx | fck_dss |
 	    fck_cam | fck_per | fck_usbhost)
 		return 1;
@@ -219,6 +232,8 @@ static int omap3_fclks_active(void)
 static int omap3_can_sleep(void)
 {
 	if (!enable_dyn_sleep)
+		return 0;
+	if (!omap_uart_can_sleep())
 		return 0;
 	if (omap3_fclks_active())
 		return 0;
@@ -312,6 +327,7 @@ static int omap3_pm_suspend(void)
 			goto restore;
 	}
 
+	omap_uart_prepare_suspend();
 	omap_sram_idle();
 
 restore:
@@ -363,8 +379,57 @@ static struct platform_suspend_ops omap_pm_ops = {
 	.valid		= suspend_valid_only_mem,
 };
 
+
+/**
+ * omap3_iva_idle(): ensure IVA is in idle so it can be put into
+ *                   retention
+ *
+ * In cases where IVA2 is activated by bootcode, it may prevent
+ * full-chip retention or off-mode because it is not idle.  This
+ * function forces the IVA2 into idle state so it can go
+ * into retention/off and thus allow full-chip retention/off.
+ *
+ **/
+static void __init omap3_iva_idle(void)
+{
+	/* ensure IVA2 clock is disabled */
+	cm_write_mod_reg(0, OMAP3430_IVA2_MOD, CM_FCLKEN);
+
+	/* Reset IVA2 */
+	prm_write_mod_reg(OMAP3430_RST1_IVA2 |
+			  OMAP3430_RST2_IVA2 |
+			  OMAP3430_RST3_IVA2,
+			  OMAP3430_IVA2_MOD, RM_RSTCTRL);
+
+	/* Enable IVA2 clock */
+	cm_write_mod_reg(OMAP3430_CM_FCLKEN_IVA2_EN_IVA2, 
+			 OMAP3430_IVA2_MOD, CM_FCLKEN);
+
+	/* Set IVA2 boot mode to 'idle' */
+	omap_ctrl_writel(OMAP3_IVA2_BOOTMOD_IDLE,
+			 OMAP343X_CONTROL_IVA2_BOOTMOD);
+
+	/* Un-reset IVA2 */
+	prm_write_mod_reg(0, OMAP3430_IVA2_MOD, RM_RSTCTRL);
+
+	/* Disable IVA2 clock */
+	cm_write_mod_reg(0, OMAP3430_IVA2_MOD, CM_FCLKEN);
+
+	/* Reset IVA2 */
+	prm_write_mod_reg(OMAP3430_RST1_IVA2 |
+			  OMAP3430_RST2_IVA2 |
+			  OMAP3430_RST3_IVA2,
+			  OMAP3430_IVA2_MOD, RM_RSTCTRL);
+}
+
 static void __init prcm_setup_regs(void)
 {
+	/* reset modem */
+	prm_write_mod_reg(OMAP3430_RM_RSTCTRL_CORE_MODEM_SW_RSTPWRON |
+			  OMAP3430_RM_RSTCTRL_CORE_MODEM_SW_RST,
+			  CORE_MOD, RM_RSTCTRL);
+	prm_write_mod_reg(0, CORE_MOD, RM_RSTCTRL);
+
 	/* XXX Reset all wkdeps. This should be done when initializing
 	 * powerdomains */
 	prm_write_mod_reg(0, OMAP3430_IVA2_MOD, PM_WKDEP);
@@ -505,15 +570,19 @@ static void __init prcm_setup_regs(void)
 			     OMAP3_PRM_CLKSRC_CTRL_OFFSET);
 
 	/* setup wakup source */
-	prm_write_mod_reg(OMAP3430_EN_IO | OMAP3430_EN_GPIO1 | OMAP3430_EN_GPT1,
+	prm_write_mod_reg(OMAP3430_EN_IO | OMAP3430_EN_GPIO1 |
+			  OMAP3430_EN_GPT1 | OMAP3430_EN_GPT12,
 			  WKUP_MOD, PM_WKEN);
 	/* No need to write EN_IO, that is always enabled */
-	prm_write_mod_reg(OMAP3430_EN_GPIO1 | OMAP3430_EN_GPT1,
+	prm_write_mod_reg(OMAP3430_EN_GPIO1 | OMAP3430_EN_GPT1 |
+			  OMAP3430_EN_GPT12,
 			  WKUP_MOD, OMAP3430_PM_MPUGRPSEL);
 	/* For some reason IO doesn't generate wakeup event even if
 	 * it is selected to mpu wakeup goup */
 	prm_write_mod_reg(OMAP3430_IO_EN | OMAP3430_WKUP_EN,
 			OCP_MOD, OMAP2_PRM_IRQENABLE_MPU_OFFSET);
+
+	omap3_iva_idle();
 }
 
 static int __init pwrdms_setup(struct powerdomain *pwrdm)

@@ -34,7 +34,7 @@
 #include <linux/delay.h>
 #include <linux/usb/otg.h>
 #include <linux/i2c/twl4030.h>
-#include <mach/usb.h>
+
 
 /* Register defines */
 
@@ -234,19 +234,6 @@
 #define GPIO_USB_4PIN_ULPI_2430C	(3 << 0)
 
 
-/* bits in OTG_CTRL */
-#define	OTG_XCEIV_OUTPUTS \
-	(OTG_ASESSVLD|OTG_BSESSEND|OTG_BSESSVLD|OTG_VBUSVLD|OTG_ID)
-#define	OTG_XCEIV_INPUTS \
-	(OTG_PULLDOWN|OTG_PULLUP|OTG_DRV_VBUS|OTG_PD_VBUS|OTG_PU_VBUS|OTG_PU_ID)
-#define	OTG_CTRL_BITS \
-	(OTG_A_BUSREQ|OTG_A_SETB_HNPEN|OTG_B_BUSREQ|OTG_B_HNPEN|OTG_BUSDROP)
-	/* and OTG_PULLUP is sometimes written */
-
-#define	OTG_CTRL_MASK	(OTG_DRIVER_SEL| \
-	OTG_XCEIV_OUTPUTS|OTG_XCEIV_INPUTS| \
-	OTG_CTRL_BITS)
-
 
 enum linkstat {
 	USB_LINK_UNKNOWN = 0,
@@ -285,13 +272,18 @@ static int twl4030_i2c_write_u8_verify(struct twl4030_usb *twl,
 	    (twl4030_i2c_read_u8(module, &check, address) >= 0) &&
 						(check == data))
 		return 0;
+	dev_dbg(twl->dev, "Write%d[%d,0x%x] wrote %02x but read %02x\n",
+			1, module, address, check, data);
+
 	/* Failed once: Try again */
 	if ((twl4030_i2c_write_u8(module, data, address) >= 0) &&
 	    (twl4030_i2c_read_u8(module, &check, address) >= 0) &&
 						(check == data))
 		return 0;
-	/* Failed again: Return error */
+	dev_dbg(twl->dev, "Write%d[%d,0x%x] wrote %02x but read %02x\n",
+			2, module, address, check, data);
 
+	/* Failed again: Return error */
 	return -EBUSY;
 }
 
@@ -304,23 +296,9 @@ static inline int twl4030_usb_write(struct twl4030_usb *twl,
 	int ret = 0;
 
 	ret = twl4030_i2c_write_u8(TWL4030_MODULE_USB, data, address);
-	if (ret >= 0) {
-#if 0	/* debug */
-		u8 data1;
-		if (twl4030_i2c_read_u8(TWL4030_MODULE_USB, &data1,
-					address) < 0)
-			dev_err(twl->dev, "re-read failed\n");
-		else
-			dev_dbg(twl->dev,
-			       "Write %s wrote %x read %x from reg %x\n",
-			       (data1 == data) ? "succeed" : "mismatch",
-			       data, data1, address);
-#endif
-	} else {
-		dev_warn(twl->dev,
+	if (ret < 0)
+		dev_dbg(twl->dev,
 			"TWL4030:USB:Write[0x%x] Error %d\n", address, ret);
-	}
-
 	return ret;
 }
 
@@ -333,7 +311,7 @@ static inline int twl4030_readb(struct twl4030_usb *twl, u8 module, u8 address)
 	if (ret >= 0)
 		ret = data;
 	else
-		dev_warn(twl->dev,
+		dev_dbg(twl->dev,
 			"TWL4030:readb[0x%x,0x%x] Error %d\n",
 					module, address, ret);
 
@@ -380,6 +358,10 @@ static enum linkstat twl4030_usb_linkstat(struct twl4030_usb *twl)
 	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
 			status, status, linkstat);
 
+	/* REVISIT this assumes host and peripheral controllers
+	 * are registered, and that both are active...
+	 */
+
 	spin_lock_irq(&twl->lock);
 	twl->linkstat = linkstat;
 	if (linkstat == USB_LINK_ID) {
@@ -406,13 +388,12 @@ static void twl4030_usb_set_mode(struct twl4030_usb *twl, int mode)
 					FUNC_CTRL_XCVRSELECT_MASK |
 					FUNC_CTRL_OPMODE_MASK);
 		break;
-/*
-	case T2_USB_MODE_CEA2011_3PIN:
-		twl4030_cea2011_3_pin_FS_setup(twl);
-		break;
-*/
-	default:
+	case -1:
 		/* FIXME: power on defaults */
+		break;
+	default:
+		dev_err(twl->dev, "unsupported T2 transceiver mode %d\n",
+				mode);
 		break;
 	};
 }
@@ -586,30 +567,14 @@ static int twl4030_set_peripheral(struct otg_transceiver *x,
 		struct usb_gadget *gadget)
 {
 	struct twl4030_usb *twl;
-	u32 l;
 
 	if (!x)
 		return -ENODEV;
 
 	twl = xceiv_to_twl(x);
-
-	if (!gadget) {
-		omap_writew(0, OTG_IRQ_EN);
-		twl4030_phy_suspend(twl, 1);
-		twl->otg.gadget = NULL;
-
-		return -ENODEV;
-	}
-
 	twl->otg.gadget = gadget;
-	twl4030_phy_resume(twl);
-
-	l = omap_readl(OTG_CTRL) & OTG_CTRL_MASK;
-	l &= ~(OTG_XCEIV_OUTPUTS|OTG_CTRL_BITS);
-	l |= OTG_ID;
-	omap_writel(l, OTG_CTRL);
-
-	twl->otg.state = OTG_STATE_B_IDLE;
+	if (!gadget)
+		twl->otg.state = OTG_STATE_UNDEFINED;
 
 	return 0;
 }
@@ -622,24 +587,9 @@ static int twl4030_set_host(struct otg_transceiver *x, struct usb_bus *host)
 		return -ENODEV;
 
 	twl = xceiv_to_twl(x);
-
-	if (!host) {
-		omap_writew(0, OTG_IRQ_EN);
-		twl4030_phy_suspend(twl, 1);
-		twl->otg.host = NULL;
-
-		return -ENODEV;
-	}
-
 	twl->otg.host = host;
-	twl4030_phy_resume(twl);
-
-	twl4030_usb_set_bits(twl, TWL4030_OTG_CTRL,
-			TWL4030_OTG_CTRL_DMPULLDOWN
-				| TWL4030_OTG_CTRL_DPPULLDOWN);
-
-	twl4030_usb_set_bits(twl, FUNC_CTRL, FUNC_CTRL_SUSPENDM);
-	twl4030_usb_set_bits(twl, TWL4030_OTG_CTRL, TWL4030_OTG_CTRL_DRVVBUS);
+	if (!host)
+		twl->otg.state = OTG_STATE_UNDEFINED;
 
 	return 0;
 }
@@ -650,14 +600,14 @@ static int __init twl4030_usb_probe(struct platform_device *pdev)
 	struct twl4030_usb	*twl;
 	int			status;
 
+	if (!pdata) {
+		dev_dbg(&pdev->dev, "platform_data not available\n");
+		return -EINVAL;
+	}
+
 	twl = kzalloc(sizeof *twl, GFP_KERNEL);
 	if (!twl)
 		return -ENOMEM;
-
-	if (!pdata) {
-		dev_info(&pdev->dev, "platform_data not available\n");
-		return -EINVAL;
-	}
 
 	twl->dev		= &pdev->dev;
 	twl->irq		= platform_get_irq(pdev, 0);
@@ -746,7 +696,7 @@ static int __exit twl4030_usb_remove(struct platform_device *pdev)
 
 static struct platform_driver twl4030_usb_driver = {
 	.probe		= twl4030_usb_probe,
-	.remove		= __exit_p(twl4030_remove),
+	.remove		= __exit_p(twl4030_usb_remove),
 	.driver		= {
 		.name	= "twl4030_usb",
 		.owner	= THIS_MODULE,

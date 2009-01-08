@@ -48,14 +48,22 @@
 /**
  * omap3_dpll_recalc - recalculate DPLL rate
  * @clk: DPLL struct clk
+ * @parent_rate: rate of the DPLL's parent clock
+ * @rate_storage: flag indicating whether current or temporary rate is changing
  *
  * Recalculate and propagate the DPLL rate.
  */
-static void omap3_dpll_recalc(struct clk *clk)
+static void omap3_dpll_recalc(struct clk *clk, unsigned long parent_rate,
+			      u8 rate_storage)
 {
-	clk->rate = omap2_get_dpll_rate(clk);
+	unsigned long rate;
 
-	propagate_rate(clk);
+	rate = omap2_get_dpll_rate(clk, parent_rate);
+
+	if (rate_storage == CURRENT_RATE)
+		clk->rate = rate;
+	else if (rate_storage == TEMP_RATE)
+		clk->temp_rate = rate;
 }
 
 /* _omap3_dpll_write_clken - write clken_bits arg to a DPLL's enable bits */
@@ -280,9 +288,6 @@ static int omap3_noncore_dpll_enable(struct clk *clk)
 	else
 		r = _omap3_noncore_dpll_lock(clk);
 
-	if (!r)
-		clk->rate = omap2_get_dpll_rate(clk);
-
 	return r;
 }
 
@@ -394,7 +399,7 @@ static int omap3_noncore_dpll_set_rate(struct clk *clk, unsigned long rate)
 	if (!dd)
 		return -EINVAL;
 
-	if (rate == omap2_get_dpll_rate(clk))
+	if (rate == omap2_get_dpll_rate(clk, clk->parent->rate))
 		return 0;
 
 	if (dd->bypass_clk->rate == rate &&
@@ -428,8 +433,6 @@ static int omap3_noncore_dpll_set_rate(struct clk *clk, unsigned long rate)
 			clk->rate = rate;
 
 	}
-
-	omap3_dpll_recalc(clk);
 
 	return 0;
 }
@@ -488,12 +491,8 @@ static int omap3_core_dpll_m2_set_rate(struct clk *clk, unsigned long rate)
 	WARN_ON(new_div != 1 && new_div != 2);
 
 	/* REVISIT: Add SDRC_MR changing to this code also */
-	local_irq_disable();
 	omap3_configure_core_dpll(sp->rfr_ctrl, sp->actim_ctrla,
 				  sp->actim_ctrlb, new_div);
-	local_irq_enable();
-
-	omap2_clksel_recalc(clk);
 
 	return 0;
 }
@@ -584,14 +583,18 @@ static void omap3_dpll_deny_idle(struct clk *clk)
 /**
  * omap3_clkoutx2_recalc - recalculate DPLL X2 output virtual clock rate
  * @clk: DPLL output struct clk
+ * @parent_rate: rate of the parent clock of @clk
+ * @rate_storage: flag indicating whether current or temporary rate is changing
  *
  * Using parent clock DPLL data, look up DPLL state.  If locked, set our
  * rate to the dpll_clk * 2; otherwise, just use dpll_clk.
  */
-static void omap3_clkoutx2_recalc(struct clk *clk)
+static void omap3_clkoutx2_recalc(struct clk *clk, unsigned long parent_rate,
+				  u8 rate_storage)
 {
 	const struct dpll_data *dd;
 	u32 v;
+	unsigned long rate;
 	struct clk *pclk;
 
 	/* Walk up the parents of clk, looking for a DPLL */
@@ -606,15 +609,17 @@ static void omap3_clkoutx2_recalc(struct clk *clk)
 
 	WARN_ON(!dd->enable_mask);
 
+	rate = parent_rate;
+
 	v = cm_read_mod_reg(pclk->prcm_mod, dd->control_reg) & dd->enable_mask;
 	v >>= __ffs(dd->enable_mask);
-	if (v != OMAP3XXX_EN_DPLL_LOCKED)
-		clk->rate = clk->parent->rate;
-	else
-		clk->rate = clk->parent->rate * 2;
+	if (v == OMAP3XXX_EN_DPLL_LOCKED)
+		rate *= 2;
 
-	if (clk->flags & RATE_PROPAGATES)
-		propagate_rate(clk);
+	if (rate_storage == CURRENT_RATE)
+		clk->rate = rate;
+	else if (rate_storage == TEMP_RATE)
+		clk->temp_rate = rate;
 }
 
 /* Common clock code */
@@ -626,6 +631,7 @@ static void omap3_clkoutx2_recalc(struct clk *clk)
 #if defined(CONFIG_ARCH_OMAP3)
 
 static struct clk_functions omap2_clk_functions = {
+	.clk_register		= omap2_clk_register,
 	.clk_enable		= omap2_clk_enable,
 	.clk_disable		= omap2_clk_disable,
 	.clk_round_rate		= omap2_clk_round_rate,
@@ -665,7 +671,7 @@ static int __init omap2_clk_arch_init(void)
 
 	/* REVISIT: not yet ready for 343x */
 #if 0
-	if (omap2_select_table_rate(&virt_prcm_set, mpurate))
+	if (clk_set_rate(&virt_prcm_set, mpurate))
 		printk(KERN_ERR "Could not find matching MPU rate\n");
 #endif
 
@@ -722,10 +728,8 @@ int __init omap2_clk_init(void)
 	for (clkp = onchip_34xx_clks;
 	     clkp < onchip_34xx_clks + ARRAY_SIZE(onchip_34xx_clks);
 	     clkp++) {
-		if ((*clkp)->flags & cpu_clkflg) {
+		if ((*clkp)->flags & cpu_clkflg)
 			clk_register(*clkp);
-			omap2_init_clk_clkdm(*clkp);
-		}
 	}
 
 	/* REVISIT: Not yet ready for OMAP3 */
