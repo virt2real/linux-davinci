@@ -192,7 +192,7 @@ static int davinci_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 static int davinci_pcm_prepare(struct snd_pcm_substream *substream)
 {
 	struct davinci_runtime_data *prtd = substream->runtime->private_data;
-	edmacc_paramentry_regs temp;
+	struct edmacc_param temp;
 
 	prtd->period = 0;
 	davinci_pcm_enqueue_dma(substream);

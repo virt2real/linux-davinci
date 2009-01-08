@@ -67,10 +67,6 @@ struct edmacc_param {
 	unsigned int ccnt;
 };
 
-/* don't use this typedef any more; it will be removed */
-typedef struct edmacc_param edmacc_paramentry_regs;
-
-
 #define CCINT0_INTERRUPT     16
 #define CCERRINT_INTERRUPT   17
 #define TCERRINT0_INTERRUPT   18
