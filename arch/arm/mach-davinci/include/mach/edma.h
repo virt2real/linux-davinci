@@ -245,28 +245,6 @@ void davinci_dma_link_lch(int lch_head, int lch_queue);
  *****************************************************************************/
 void davinci_dma_unlink_lch(int lch_head, int lch_queue);
 
-/******************************************************************************
- *
- * DMA channel chain - chains the two logical channels passed through by
- * ARGUMENTS:
- * lch_head - logical channel number, from which the link field is to be removed
- * lch_queue - logical channel number or the param entry number, which is to be
- *             unlinked from lch_head
- *
- *****************************************************************************/
-void davinci_dma_chain_lch(int lch_head, int lch_queue);
-
-/******************************************************************************
- *
- * DMA channel unchain - unchain the two logical channels passed through by
- * ARGUMENTS:
- * lch_head - logical channel number, from which the link field is to be removed
- * lch_queue - logical channel number or the param entry number, which is to be
- *             unlinked from lch_head
- *
- *****************************************************************************/
-void davinci_dma_unchain_lch(int lch_head, int lch_queue);
-
 void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst);
 void davinci_clean_channel(int lch);
 void davinci_pause_dma(int lch);

@@ -1126,45 +1126,6 @@ EXPORT_SYMBOL(davinci_dma_unlink_lch);
 
 /******************************************************************************
  *
- * DMA channel chain - chains the two logical channels passed through by
- * ARGUMENTS:
- * lch - logical channel number, where the tcc field is to be set
- * lch_que - logical channel number or the param entry number, which is to be
- *             chained to lch
- *
- *****************************************************************************/
-void davinci_dma_chain_lch(int lch, int lch_que)
-{
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH) &&
-	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_DMACH)) {
-		/* program tcc */
-		edma_parm_modify(PARM_OPT, lch, ~TCC,
-				((lch_que & 0x3f) << 12) | TCCHEN);
-	}
-}
-EXPORT_SYMBOL(davinci_dma_chain_lch);
-
-/******************************************************************************
- *
- * DMA channel unchain - unchain the two logical channels passed through by
- * ARGUMENTS:
- * lch - logical channel number, from which the tcc field is to be removed
- * lch_que - logical channel number or the param entry number, which is to be
- *             unchained from lch
- *
- *****************************************************************************/
-void davinci_dma_unchain_lch(int lch, int lch_que)
-{
-	/* reset TCCHEN */
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH) &&
-	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_DMACH)) {
-		edma_parm_and(PARM_OPT, lch, ~TCCHEN);
-	}
-}
-EXPORT_SYMBOL(davinci_dma_unchain_lch);
-
-/******************************************************************************
- *
  * It cleans ParamEntry qand bring back EDMA to initial state if media has
  * been removed before EDMA has finished.It is usedful for removable media.
  * Arguments:
