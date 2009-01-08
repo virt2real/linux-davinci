@@ -65,6 +65,10 @@ static void dm6446_psc_mux(unsigned int id)
 	case DAVINCI_LPSC_McBSP:
 		davinci_cfg_reg(DM644X_MCBSP);
 		break;
+	case DAVINCI_LPSC_VLYNQ:
+		davinci_cfg_reg(DM644X_VLYNQEN);
+		davinci_cfg_reg(DM644X_VLYNQWD);
+		break;
 	default:
 		break;
 	}
