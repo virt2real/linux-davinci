@@ -193,8 +193,17 @@ struct mmc_davinci_host {
 	bool use_dma;
 	bool do_dma;
 
-	unsigned int sg_len;
-	int sg_idx;
+	/* Scatterlist DMA uses one or more parameter RAM entries:
+	 * the main one (associated with rxdma or txdma) plus zero or
+	 * more links.  The entries for a given transfer differ only
+	 * by memory buffer (address, length) and link field.
+	 */
+	struct edmacc_param	tx_template;
+	struct edmacc_param	rx_template;
+
+	/* For PIO we walk scatterlists one segment at a time. */
+	unsigned int		sg_len;
+	int			sg_idx;
 };
 
 
@@ -428,42 +437,33 @@ static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
 	}
 }
 
-static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
-					struct mmc_request *req)
+/* Set up tx or rx template, to be modified and updated later */
+static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
+		bool tx, struct edmacc_param *template)
 {
-	int sync_dev;
+	int		sync_dev;
 	const u16	acnt = 4;
 	const u16	bcnt = rw_threshold >> 2;
-	u16		ccnt;
-	u32		src_port, dst_port;
+	const u16	ccnt = 0;
+	u32		src_port = 0;
+	u32		dst_port = 0;
 	s16		src_bidx, dst_bidx;
 	s16		src_cidx, dst_cidx;
-	struct mmc_data *data = host->data;
-	struct scatterlist *sg = &data->sg[0];
-	unsigned	count = sg_dma_len(sg);
-
-	/* If this scatterlist segment (e.g. one page) is bigger than
-	 * the transfer (e.g. a block) don't use the whole segment.
-	 */
-	if (count > host->bytes_left)
-		count = host->bytes_left;
 
 	/*
 	 * A-B Sync transfer:  each DMA request is for one "frame" of
 	 * rw_threshold bytes, broken into "acnt"-size chunks repeated
 	 * "bcnt" times.  Each segment needs "ccnt" such frames; since
-	 * we told the block layer our mmc->max_seg_size limit, we can
-	 * trust it's within bounds.
+	 * we tell the block layer our mmc->max_seg_size limit, we can
+	 * trust (later) that it's within bounds.
 	 *
 	 * The FIFOs are read/written in 4-byte chunks (acnt == 4) and
 	 * EDMA will optimize memory operations to use larger bursts.
 	 */
-	ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
-
-	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
+	if (tx) {
 		sync_dev = host->txdma;
 
-		src_port = sg_dma_address(sg);
+		/* src_prt, ccnt, and link to be set up later */
 		src_bidx = acnt;
 		src_cidx = acnt * bcnt;
 
@@ -477,7 +477,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		src_bidx = 0;
 		src_cidx = 0;
 
-		dst_port = sg_dma_address(sg);
+		/* dst_prt, ccnt, and link to be set up later */
 		dst_bidx = acnt;
 		dst_cidx = acnt * bcnt;
 	}
@@ -495,7 +495,43 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 	davinci_set_dma_transfer_params(sync_dev, acnt, bcnt, ccnt, 8, ABSYNC);
 
-	davinci_start_dma(sync_dev);
+	davinci_get_dma_params(sync_dev, template);
+
+	/* don't bother with irqs or chaining */
+	template->opt &= ~(ITCCHEN | TCCHEN | ITCINTEN | TCINTEN);
+}
+
+static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
+		struct mmc_request *req)
+{
+	struct edmacc_param	regs;
+	struct mmc_data		*data = host->data;
+	struct scatterlist	*sg = &data->sg[0];
+	unsigned		count = sg_dma_len(sg);
+	int			lch;
+
+	/* If this scatterlist segment (e.g. one page) is bigger than
+	 * the transfer (e.g. a block) don't use the whole segment.
+	 */
+	if (count > host->bytes_left)
+		count = host->bytes_left;
+
+	/* Update the fields in "regs" that change, and write
+	 * them to EDMA parameter RAM
+	 */
+	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
+		lch = host->txdma;
+		regs = host->tx_template;
+		regs.src = sg_dma_address(sg);
+	} else {
+		lch = host->rxdma;
+		regs = host->rx_template;
+		regs.dst = sg_dma_address(sg);
+	}
+	regs.ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
+	davinci_set_dma_params(lch, &regs);
+
+	davinci_start_dma(lch);
 	return 0;
 }
 
@@ -541,11 +577,12 @@ davinci_release_dma_channels(struct mmc_davinci_host *host)
 
 static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 {
-	int edma_chan_num, tcc = 0, r;
-	enum dma_event_q queue_no = EVENTQ_0;
+	const char		*hostname = mmc_hostname(host->mmc);
+	int			edma_chan_num, tcc = 0, r;
+	enum dma_event_q	queue_no = EVENTQ_0;
 
 	/* Acquire master DMA write channel */
-	r = davinci_request_dma(host->txdma, "MMC_WRITE",
+	r = davinci_request_dma(host->txdma, hostname,
 		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
 	if (r != 0) {
 		dev_warn(mmc_dev(host->mmc),
@@ -553,9 +590,10 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 				r);
 		return r;
 	}
+	mmc_davinci_dma_setup(host, true, &host->tx_template);
 
 	/* Acquire master DMA read channel */
-	r = davinci_request_dma(host->rxdma, "MMC_READ",
+	r = davinci_request_dma(host->rxdma, hostname,
 		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
 	if (r != 0) {
 		dev_warn(mmc_dev(host->mmc),
@@ -563,6 +601,7 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 				r);
 		goto free_master_write;
 	}
+	mmc_davinci_dma_setup(host, false, &host->rx_template);
 
 	return 0;
 
