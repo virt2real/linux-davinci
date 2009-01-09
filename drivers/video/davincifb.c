@@ -51,20 +51,20 @@
 /*
  * display controller register I/O routines
  */
-static __inline__ u32 dispc_reg_in(u32 offset)
+static __inline__ u32 dispc_reg_in(u32 reg)
 {
-	return (inl(offset));
+	return davinci_readl(reg);
 }
-static __inline__ u32 dispc_reg_out(u32 offset, u32 val)
+static __inline__ u32 dispc_reg_out(u32 reg, u32 val)
 {
-	outl(val, offset);
+	davinci_writel(val, reg);
 	return (val);
 }
-static __inline__ u32 dispc_reg_merge(u32 offset, u32 val, u32 mask)
+static __inline__ u32 dispc_reg_merge(u32 reg, u32 val, u32 mask)
 {
-	u32 addr = offset;
-	u32 new_val = (inl(addr) & ~mask) | (val & mask);
-	outl(new_val, addr);
+	u32 new_val = (davinci_readl(reg) & ~mask) | (val & mask);
+
+	davinci_writel(new_val, reg);
 	return (new_val);
 }
 

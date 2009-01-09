@@ -16,9 +16,9 @@
 #include <mach/io.h>
 
 /* Base registers */
-#define	VPBE_REG_BASE				IO_ADDRESS(0x01c72780)
-#define	VENC_REG_BASE				IO_ADDRESS(0x01c72400)
-#define	OSD_REG_BASE				IO_ADDRESS(0x01c72600)
+#define	VPBE_REG_BASE				0x01c72780
+#define	VENC_REG_BASE				0x01c72400
+#define	OSD_REG_BASE				0x01c72600
 #define OSD_REG_SIZE				0x00000180
 
 /* VPBE Global Registers */
@@ -26,7 +26,7 @@
 #define	VPBE_PCR				(VPBE_BASE + 0x4)
 
 /* VPSS Clock Control Register */
-#define	VPSS_CLKCTL				IO_ADDRESS(0x01c40044)
+#define	VPSS_CLKCTL				0x01c40044
 
 /* VPBE Video Encoder / Digital LCD Subsystem Registers (VENC) */
 #define	VENC_VMOD				(VENC_REG_BASE + 0x00)
