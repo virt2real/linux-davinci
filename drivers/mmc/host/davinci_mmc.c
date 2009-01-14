@@ -37,6 +37,7 @@
 #include <linux/dma-mapping.h>
 
 #include <mach/board.h>
+#include <mach/cpu.h>
 #include <mach/edma.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
@@ -1113,8 +1114,11 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 
 	mmc->ops = &mmc_davinci_ops;
 	mmc->f_min = 312500;
-	mmc->f_max = 52000000;	/* MMCplus @52 MHz; SDHC @50 MHz */
-	mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
+	mmc->f_max = 25000000;
+	if (cpu_is_davinci_dm355()) {
+		mmc->f_max = 50000000;
+		mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
+	}
 	mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
 
 	/* with no iommu coalescing pages, each phys_seg is a hw_seg */
