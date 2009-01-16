@@ -75,6 +75,9 @@ MUX_CFG(DM644X, I2C,		1,   7,     1,	  1,	 false)
 
 MUX_CFG(DM644X, MCBSP,		1,   10,    1,	  1,	 false)
 
+MUX_CFG(DM644X, UART1,		1,   1,     1,	  1,	 true)
+MUX_CFG(DM644X, UART2,		1,   2,     1,	  1,	 true)
+
 MUX_CFG(DM644X, PWM0,		1,   4,     1,	  1,	 false)
 
 MUX_CFG(DM644X, PWM1,		1,   5,     1,	  1,	 false)

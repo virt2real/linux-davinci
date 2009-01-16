@@ -62,6 +62,12 @@ enum davinci_dm644x_index {
 	/* ASP function */
 	DM644X_MCBSP,
 
+	/* UART1 */
+	DM644X_UART1,
+
+	/* UART2 */
+	DM644X_UART2,
+
 	/* PWM0 */
 	DM644X_PWM0,
 
