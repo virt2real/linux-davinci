@@ -13,4 +13,4 @@ obj-$(CONFIG_DAVINCI_MUX)		+= mux.o mux_cfg.o
 obj-$(CONFIG_MACH_DAVINCI_EVM)  	+= board-dm644x-evm.o
 obj-$(CONFIG_MACH_DAVINCI_DM646X_EVM)	+= board-dm646x-evm.o
 obj-$(CONFIG_MACH_DAVINCI_DM355_EVM)	+= board-dm355-evm.o
-obj-$(CONFIG_MACH_DAVINCI_SFFSDR)	+= board-sffsdr.o
+obj-$(CONFIG_MACH_SFFSDR)		+= board-sffsdr.o
