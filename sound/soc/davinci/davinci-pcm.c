@@ -97,11 +97,11 @@ static void davinci_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 		dst_bidx = data_type;
 	}
 
-	davinci_set_dma_src_params(lch, src, INCR, W8BIT);
-	davinci_set_dma_dest_params(lch, dst, INCR, W8BIT);
-	davinci_set_dma_src_index(lch, src_bidx, 0);
-	davinci_set_dma_dest_index(lch, dst_bidx, 0);
-	davinci_set_dma_transfer_params(lch, data_type, count, 1, 0, ASYNC);
+	edma_set_src(lch, src, INCR, W8BIT);
+	edma_set_dest(lch, dst, INCR, W8BIT);
+	edma_set_src_index(lch, src_bidx, 0);
+	edma_set_dest_index(lch, dst_bidx, 0);
+	edma_set_transfer_params(lch, data_type, count, 1, 0, ASYNC);
 
 	prtd->period++;
 	if (unlikely(prtd->period >= runtime->periods))

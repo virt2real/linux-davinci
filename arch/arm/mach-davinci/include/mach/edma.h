@@ -195,13 +195,13 @@ int edma_alloc_slot(int slot);
 void edma_free_slot(unsigned slot);
 
 /* calls that operate on part of a parameter RAM slot */
-void davinci_set_dma_src_params(int lch, dma_addr_t src_port,
+void edma_set_src(unsigned slot, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width);
-void davinci_set_dma_dest_params(int lch, dma_addr_t dest_port,
+void edma_set_dest(unsigned slot, dma_addr_t dest_port,
 				 enum address_mode mode, enum fifo_width);
-void davinci_set_dma_src_index(int lch, s16 src_bidx, s16 src_cidx);
-void davinci_set_dma_dest_index(int lch, s16 dest_bidx, s16 dest_cidx);
-void davinci_set_dma_transfer_params(int lch, u16 acnt, u16 bcnt, u16 ccnt,
+void edma_set_src_index(unsigned slot, s16 src_bidx, s16 src_cidx);
+void edma_set_dest_index(unsigned slot, s16 dest_bidx, s16 dest_cidx);
+void edma_set_transfer_params(unsigned slot, u16 acnt, u16 bcnt, u16 ccnt,
 		u16 bcnt_rld, enum sync_dimension sync_mode);
 void edma_link(unsigned from, unsigned to);
 void edma_unlink(unsigned from);

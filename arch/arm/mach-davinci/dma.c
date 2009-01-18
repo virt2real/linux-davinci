@@ -754,22 +754,21 @@ EXPORT_SYMBOL(edma_free_slot);
 /* Parameter RAM operations (i) -- read/write partial slots */
 
 /**
- * davinci_set_dma_src_params - set initial DMA source address in PaRAM
- * @lch: logical channel being configured
+ * edma_set_src - set initial DMA source address in parameter RAM slot
+ * @slot: parameter RAM slot being configured
  * @src_port: physical address of source (memory, controller FIFO, etc)
  * @addressMode: INCR, except in very rare cases
  * @fifoWidth: ignored unless @addressMode is FIFO, else specifies the
  *	width to use when addressing the fifo (e.g. W8BIT, W32BIT)
  *
  * Note that the source address is modified during the DMA transfer
- * according to davinci_set_dma_src_index().
+ * according to edma_set_src_index().
  */
-void davinci_set_dma_src_params(int lch, dma_addr_t src_port,
+void edma_set_src(unsigned slot, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width width)
 {
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = lch;
-		unsigned int i = edma_parm_read(PARM_OPT, j);
+	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+		unsigned int i = edma_parm_read(PARM_OPT, slot);
 
 		if (mode) {
 			/* set SAM and program FWID */
@@ -778,32 +777,31 @@ void davinci_set_dma_src_params(int lch, dma_addr_t src_port,
 			/* clear SAM */
 			i &= ~SAM;
 		}
-		edma_parm_write(PARM_OPT, j, i);
+		edma_parm_write(PARM_OPT, slot, i);
 
 		/* set the source port address
 		   in source register of param structure */
-		edma_parm_write(PARM_SRC, j, src_port);
+		edma_parm_write(PARM_SRC, slot, src_port);
 	}
 }
-EXPORT_SYMBOL(davinci_set_dma_src_params);
+EXPORT_SYMBOL(edma_set_src);
 
 /**
- * davinci_set_dma_dest_params - set initial DMA destination address in PaRAM
- * @lch: logical channel being configured
+ * edma_set_dest - set initial DMA destination address in parameter RAM slot
+ * @slot: parameter RAM slot being configured
  * @dest_port: physical address of destination (memory, controller FIFO, etc)
  * @addressMode: INCR, except in very rare cases
  * @fifoWidth: ignored unless @addressMode is FIFO, else specifies the
  *	width to use when addressing the fifo (e.g. W8BIT, W32BIT)
  *
  * Note that the destination address is modified during the DMA transfer
- * according to davinci_set_dma_dest_index().
+ * according to edma_set_dest_index().
  */
-void davinci_set_dma_dest_params(int lch, dma_addr_t dest_port,
+void edma_set_dest(unsigned slot, dma_addr_t dest_port,
 				 enum address_mode mode, enum fifo_width width)
 {
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = lch;
-		unsigned int i = edma_parm_read(PARM_OPT, j);
+	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+		unsigned int i = edma_parm_read(PARM_OPT, slot);
 
 		if (mode) {
 			/* set DAM and program FWID */
@@ -812,17 +810,17 @@ void davinci_set_dma_dest_params(int lch, dma_addr_t dest_port,
 			/* clear DAM */
 			i &= ~DAM;
 		}
-		edma_parm_write(PARM_OPT, j, i);
+		edma_parm_write(PARM_OPT, slot, i);
 		/* set the destination port address
 		   in dest register of param structure */
-		edma_parm_write(PARM_DST, j, dest_port);
+		edma_parm_write(PARM_DST, slot, dest_port);
 	}
 }
-EXPORT_SYMBOL(davinci_set_dma_dest_params);
+EXPORT_SYMBOL(edma_set_dest);
 
 /**
- * davinci_set_dma_src_index - configure DMA source address indexing
- * @lch: logical channel being configured
+ * edma_set_src_index - configure DMA source address indexing
+ * @slot: parameter RAM slot being configured
  * @src_bidx: byte offset between source arrays in a frame
  * @src_cidx: byte offset between source frames in a block
  *
@@ -830,20 +828,20 @@ EXPORT_SYMBOL(davinci_set_dma_dest_params);
  * memory transfers, or repeated access to a hardware register, as needed.
  * When accessing hardware registers, both offsets are normally zero.
  */
-void davinci_set_dma_src_index(int lch, s16 src_bidx, s16 src_cidx)
+void edma_set_src_index(unsigned slot, s16 src_bidx, s16 src_cidx)
 {
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		edma_parm_modify(PARM_SRC_DST_BIDX, lch,
+	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+		edma_parm_modify(PARM_SRC_DST_BIDX, slot,
 				0xffff0000, src_bidx);
-		edma_parm_modify(PARM_SRC_DST_CIDX, lch,
+		edma_parm_modify(PARM_SRC_DST_CIDX, slot,
 				0xffff0000, src_cidx);
 	}
 }
-EXPORT_SYMBOL(davinci_set_dma_src_index);
+EXPORT_SYMBOL(edma_set_src_index);
 
 /**
- * davinci_set_dma_dest_index - configure DMA destination address indexing
- * @lch: logical channel being configured
+ * edma_set_dest_index - configure DMA destination address indexing
+ * @slot: parameter RAM slot being configured
  * @dest_bidx: byte offset between destination arrays in a frame
  * @dest_cidx: byte offset between destination frames in a block
  *
@@ -851,20 +849,20 @@ EXPORT_SYMBOL(davinci_set_dma_src_index);
  * memory transfers, or repeated access to a hardware register, as needed.
  * When accessing hardware registers, both offsets are normally zero.
  */
-void davinci_set_dma_dest_index(int lch, s16 dest_bidx, s16 dest_cidx)
+void edma_set_dest_index(unsigned slot, s16 dest_bidx, s16 dest_cidx)
 {
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		edma_parm_modify(PARM_SRC_DST_BIDX, lch,
+	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+		edma_parm_modify(PARM_SRC_DST_BIDX, slot,
 				0x0000ffff, dest_bidx << 16);
-		edma_parm_modify(PARM_SRC_DST_CIDX, lch,
+		edma_parm_modify(PARM_SRC_DST_CIDX, slot,
 				0x0000ffff, dest_cidx << 16);
 	}
 }
-EXPORT_SYMBOL(davinci_set_dma_dest_index);
+EXPORT_SYMBOL(edma_set_dest_index);
 
 /**
- * davinci_set_dma_transfer_params - configure DMA transfer parameters
- * @lch: logical channel being configured
+ * edma_set_transfer_params - configure DMA transfer parameters
+ * @slot: parameter RAM slot being configured
  * @acnt: how many bytes per array (at least one)
  * @bcnt: how many arrays per frame (at least one)
  * @ccnt: how many frames per block (at least one)
@@ -891,25 +889,23 @@ EXPORT_SYMBOL(davinci_set_dma_dest_index);
  * transfer one frame to (or from) the FIFO.  It will probably use
  * efficient burst modes to access memory.
  */
-void davinci_set_dma_transfer_params(int lch,
+void edma_set_transfer_params(unsigned slot,
 		u16 acnt, u16 bcnt, u16 ccnt,
 		u16 bcnt_rld, enum sync_dimension sync_mode)
 {
-	if (lch >= 0 && lch < DAVINCI_EDMA_NUM_PARAMENTRY) {
-		int j = lch;
-
-		edma_parm_modify(PARM_LINK_BCNTRLD, j,
+	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+		edma_parm_modify(PARM_LINK_BCNTRLD, slot,
 				0x0000ffff, bcnt_rld << 16);
 		if (sync_mode == ASYNC)
-			edma_parm_and(PARM_OPT, j, ~SYNCDIM);
+			edma_parm_and(PARM_OPT, slot, ~SYNCDIM);
 		else
-			edma_parm_or(PARM_OPT, j, SYNCDIM);
+			edma_parm_or(PARM_OPT, slot, SYNCDIM);
 		/* Set the acount, bcount, ccount registers */
-		edma_parm_write(PARM_A_B_CNT, j, (bcnt << 16) | acnt);
-		edma_parm_write(PARM_CCNT, j, ccnt);
+		edma_parm_write(PARM_A_B_CNT, slot, (bcnt << 16) | acnt);
+		edma_parm_write(PARM_CCNT, slot, ccnt);
 	}
 }
-EXPORT_SYMBOL(davinci_set_dma_transfer_params);
+EXPORT_SYMBOL(edma_set_transfer_params);
 
 /**
  * edma_link - link one parameter RAM slot to another

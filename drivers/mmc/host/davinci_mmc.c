@@ -442,7 +442,7 @@ static void mmc_davinci_dma_cb(unsigned channel, u16 ch_status, void *data)
 static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
 		bool tx, struct edmacc_param *template)
 {
-	int		sync_dev;
+	unsigned	sync_dev;
 	const u16	acnt = 4;
 	const u16	bcnt = rw_threshold >> 2;
 	const u16	ccnt = 0;
@@ -488,13 +488,13 @@ static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
 	 * are not 256-bit (32-byte) aligned.  So we use INCR, and the W8BIT
 	 * parameter is ignored.
 	 */
-	davinci_set_dma_src_params(sync_dev, src_port, INCR, W8BIT);
-	davinci_set_dma_dest_params(sync_dev, dst_port, INCR, W8BIT);
+	edma_set_src(sync_dev, src_port, INCR, W8BIT);
+	edma_set_dest(sync_dev, dst_port, INCR, W8BIT);
 
-	davinci_set_dma_src_index(sync_dev, src_bidx, src_cidx);
-	davinci_set_dma_dest_index(sync_dev, dst_bidx, dst_cidx);
+	edma_set_src_index(sync_dev, src_bidx, src_cidx);
+	edma_set_dest_index(sync_dev, dst_bidx, dst_cidx);
 
-	davinci_set_dma_transfer_params(sync_dev, acnt, bcnt, ccnt, 8, ABSYNC);
+	edma_set_transfer_params(sync_dev, acnt, bcnt, ccnt, 8, ABSYNC);
 
 	edma_read_slot(sync_dev, template);
 
