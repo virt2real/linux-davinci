@@ -190,6 +190,7 @@ int davinci_request_dma(int dev_id, const char *dev_name,
 	void *data, int *lch, int *tcc, enum dma_event_q);
 void davinci_free_dma(int lch);
 
+/* calls that operate on part of a parameter RAM slot */
 void davinci_set_dma_src_params(int lch, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width);
 void davinci_set_dma_dest_params(int lch, dma_addr_t dest_port,
@@ -198,48 +199,15 @@ void davinci_set_dma_src_index(int lch, s16 src_bidx, s16 src_cidx);
 void davinci_set_dma_dest_index(int lch, s16 dest_bidx, s16 dest_cidx);
 void davinci_set_dma_transfer_params(int lch, u16 acnt, u16 bcnt, u16 ccnt,
 		u16 bcnt_rld, enum sync_dimension sync_mode);
+void edma_link(unsigned from, unsigned to);
+void edma_unlink(unsigned from);
 
+/* calls that operate on an entire parameter RAM slot */
 void edma_write_slot(unsigned slot, const struct edmacc_param *params);
 void edma_read_slot(unsigned slot, struct edmacc_param *params);
 
 int davinci_start_dma(int lch);
 void davinci_stop_dma(int lch);
-
-/******************************************************************************
- * davinci_dma_link_lch - Link two Logical channels
- *
- * lch_head  - logical channel number, in which the link field is linked to the
- *             the param pointed to by lch_queue
- *             Can be a MasterChannel or SlaveChannel
- * lch_queue - logical channel number or the param entry number, which is to be
- *             linked to the lch_head
- *             Must be a SlaveChannel
- *
- *                     |---------------|
- *                     v               |
- *      Ex:    ch1--> ch2-->ch3-->ch4--|
- *
- *             ch1 must be a MasterChannel
- *
- *             ch2, ch3, ch4 must be SlaveChannels
- *
- * Note:       After channel linking,the user should not update any PaRam entry
- *             of MasterChannel ( In the above example ch1 )
- *
- *****************************************************************************/
-void davinci_dma_link_lch(int lch_head, int lch_queue);
-
-/******************************************************************************
- * davinci_dma_unlink_lch - unlink the two logical channels passed through by
- *                          setting the link field of head to 0xffff.
- *
- * lch_head  - logical channel number, from which the link field is to be
- *             removed
- * lch_queue - logical channel number or the param entry number,which is to be
- *             unlinked from lch_head
- *
- *****************************************************************************/
-void davinci_dma_unlink_lch(int lch_head, int lch_queue);
 
 void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst);
 void davinci_clean_channel(int lch);

@@ -156,7 +156,7 @@ static int davinci_pcm_dma_request(struct snd_pcm_substream *substream)
 	}
 
 	/* Link parameter RAM to itself in loopback */
-	davinci_dma_link_lch(prtd->slave_lch, prtd->slave_lch);
+	edma_link(prtd->slave_lch, prtd->slave_lch);
 
 	return 0;
 }
@@ -260,7 +260,7 @@ static int davinci_pcm_close(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct davinci_runtime_data *prtd = runtime->private_data;
 
-	davinci_dma_unlink_lch(prtd->slave_lch, prtd->slave_lch);
+	edma_unlink(prtd->slave_lch);
 
 	davinci_free_dma(prtd->slave_lch);
 	davinci_free_dma(prtd->master_lch);

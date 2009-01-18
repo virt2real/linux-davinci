@@ -909,6 +909,38 @@ void davinci_set_dma_transfer_params(int lch,
 }
 EXPORT_SYMBOL(davinci_set_dma_transfer_params);
 
+/**
+ * edma_link - link one parameter RAM slot to another
+ * @from: parameter RAM slot originating the link
+ * @to: parameter RAM slot which is the link target
+ *
+ * The originating slot should not be part of any active DMA transfer.
+ */
+void edma_link(unsigned from, unsigned to)
+{
+	if (from >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
+	if (to >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
+	edma_parm_modify(PARM_LINK_BCNTRLD, from, 0xffff0000, PARM_OFFSET(to));
+}
+EXPORT_SYMBOL(edma_link);
+
+/**
+ * edma_unlink - cut link from one parameter RAM slot
+ * @from: parameter RAM slot originating the link
+ *
+ * The originating slot should not be part of any active DMA transfer.
+ * Its link is set to 0xffff.
+ */
+void edma_unlink(unsigned from)
+{
+	if (from >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
+	edma_parm_or(PARM_LINK_BCNTRLD, from, 0xffff);
+}
+EXPORT_SYMBOL(edma_unlink);
+
 /*-----------------------------------------------------------------------*/
 
 /* Parameter RAM operations (ii) -- read/write whole parameter sets */
@@ -1059,49 +1091,6 @@ void davinci_stop_dma(int lch)
 	}
 }
 EXPORT_SYMBOL(davinci_stop_dma);
-
-/******************************************************************************
- *
- * DMA channel link - link the two logical channels passed through by linking
- *		the link field of head to the param pointed by the lch_que.
- * ARGUMENTS:
- * lch  - logical channel number, in which the link field is linked
- *                  to the param pointed to by lch_que
- * lch_que - logical channel number or the param entry number, which is to be
- *                  linked to the lch
- *
- *****************************************************************************/
-void davinci_dma_link_lch(int lch, int lch_que)
-{
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_PARAMENTRY) &&
-	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_PARAMENTRY)) {
-		/* program LINK */
-		edma_parm_modify(PARM_LINK_BCNTRLD, lch,
-				0xffff0000,
-				PARM_OFFSET(lch_que));
-	}
-}
-EXPORT_SYMBOL(davinci_dma_link_lch);
-
-/******************************************************************************
- *
- * DMA channel unlink - unlink the two logical channels passed through by
- *                   setting the link field of head to 0xffff.
- * ARGUMENTS:
- * lch - logical channel number, from which the link field is to be removed
- * lch_que - logical channel number or the param entry number, which is to be
- *             unlinked from lch
- *
- *****************************************************************************/
-void davinci_dma_unlink_lch(int lch, int lch_que)
-{
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_PARAMENTRY) &&
-	    (lch_que >= 0) && (lch_que < DAVINCI_EDMA_NUM_PARAMENTRY)) {
-		edma_parm_or(PARM_LINK_BCNTRLD, lch,
-				0xffff);
-	}
-}
-EXPORT_SYMBOL(davinci_dma_unlink_lch);
 
 /******************************************************************************
  *
