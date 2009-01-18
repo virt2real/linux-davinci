@@ -58,7 +58,7 @@ struct davinci_runtime_data {
 	spinlock_t lock;
 	int period;		/* current DMA period */
 	int master_lch;		/* Master DMA channel */
-	int slave_lch;		/* Slave DMA channel */
+	int slave_lch;		/* linked parameter RAM reload slot */
 	struct davinci_pcm_dma_params *params;	/* DMA params */
 };
 
@@ -147,7 +147,7 @@ static int davinci_pcm_dma_request(struct snd_pcm_substream *substream)
 	if (ret)
 		return ret;
 
-	/* Request slave DMA channel */
+	/* Request parameter RAM reload slot */
 	ret = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "Link",
 				  NULL, NULL, &prtd->slave_lch, &tcc, EVENTQ_0);
 	if (ret) {
@@ -155,7 +155,7 @@ static int davinci_pcm_dma_request(struct snd_pcm_substream *substream)
 		return ret;
 	}
 
-	/* Link slave DMA channel in loopback */
+	/* Link parameter RAM to itself in loopback */
 	davinci_dma_link_lch(prtd->slave_lch, prtd->slave_lch);
 
 	return 0;
@@ -197,9 +197,9 @@ static int davinci_pcm_prepare(struct snd_pcm_substream *substream)
 	prtd->period = 0;
 	davinci_pcm_enqueue_dma(substream);
 
-	/* Get slave channel dma params for master channel startup */
-	davinci_get_dma_params(prtd->slave_lch, &temp);
-	davinci_set_dma_params(prtd->master_lch, &temp);
+	/* Copy self-linked parameter RAM entry into master channel */
+	edma_read_slot(prtd->slave_lch, &temp);
+	edma_write_slot(prtd->master_lch, &temp);
 
 	return 0;
 }

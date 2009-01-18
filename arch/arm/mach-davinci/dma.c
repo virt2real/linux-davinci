@@ -330,7 +330,7 @@ void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst)
 {
 	struct edmacc_param temp;
 
-	davinci_get_dma_params(lch, &temp);
+	edma_read_slot(lch, &temp);
 	if (src != NULL)
 		*src = temp.src;
 	if (dst != NULL)
@@ -747,6 +747,10 @@ void davinci_free_dma(int lch)
 }
 EXPORT_SYMBOL(davinci_free_dma);
 
+/*-----------------------------------------------------------------------*/
+
+/* Parameter RAM operations (i) -- read/write partial slots */
+
 /**
  * davinci_set_dma_src_params - set initial DMA source address in PaRAM
  * @lch: logical channel being configured
@@ -868,7 +872,7 @@ EXPORT_SYMBOL(davinci_set_dma_dest_index);
  *
  * See the EDMA3 documentation to understand how to configure and link
  * transfers using the fields in PaRAM slots.  If you are not doing it
- * all at once with davinci_set_dma_params() you will use this routine
+ * all at once with edma_write_slot(), you will use this routine
  * plus two calls each for source and destination, setting the initial
  * address and saying how to index that address.
  *
@@ -905,39 +909,47 @@ void davinci_set_dma_transfer_params(int lch,
 }
 EXPORT_SYMBOL(davinci_set_dma_transfer_params);
 
+/*-----------------------------------------------------------------------*/
+
+/* Parameter RAM operations (ii) -- read/write whole parameter sets */
+
 /**
- * davinci_set_dma_params - write PaRAM data for channel
- * @lch: logical channel being configured
- * @param: channel configuration to be used
+ * edma_write_slot - write parameter RAM data for slot
+ * @slot: number of parameter RAM slot being modified
+ * @param: data to be written into parameter RAM slot
  *
  * Use this to assign all parameters of a transfer at once.  This
  * allows more efficient setup of transfers than issuing multiple
  * calls to set up those parameters in small pieces, and provides
  * complete control over all transfer options.
  */
-void davinci_set_dma_params(int lch, struct edmacc_param *param)
+void edma_write_slot(unsigned slot, const struct edmacc_param *param)
 {
-	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (slot >= DAVINCI_EDMA_NUM_PARAMENTRY)
 		return;
-	memcpy_toio(edmacc_regs_base + PARM_OFFSET(lch), param, PARM_SIZE);
+	memcpy_toio(edmacc_regs_base + PARM_OFFSET(slot), param, PARM_SIZE);
 }
-EXPORT_SYMBOL(davinci_set_dma_params);
+EXPORT_SYMBOL(edma_write_slot);
 
 /**
- * davinci_get_dma_params - read PaRAM data for channel
- * @lch: logical channel being queried
- * @param: where to store current channel configuration
+ * edma_read_slot - read parameter RAM data from slot
+ * @slot: number of parameter RAM slot being copied
+ * @param: where to store copy of parameter RAM data
  *
- * Use this to read the Parameter RAM for a channel, perhaps to
+ * Use this to read data from a parameter RAM slot, perhaps to
  * save them as a template for later reuse.
  */
-void davinci_get_dma_params(int lch, struct edmacc_param *param)
+void edma_read_slot(unsigned slot, struct edmacc_param *param)
 {
-	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (slot >= DAVINCI_EDMA_NUM_PARAMENTRY)
 		return;
-	memcpy_fromio(param, edmacc_regs_base + PARM_OFFSET(lch), PARM_SIZE);
+	memcpy_fromio(param, edmacc_regs_base + PARM_OFFSET(slot), PARM_SIZE);
 }
-EXPORT_SYMBOL(davinci_get_dma_params);
+EXPORT_SYMBOL(edma_read_slot);
+
+/*-----------------------------------------------------------------------*/
+
+/* Various EDMA channel control operations */
 
 /*
  * DMA pause - pauses the dma on the channel passed

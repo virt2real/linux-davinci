@@ -199,8 +199,8 @@ void davinci_set_dma_dest_index(int lch, s16 dest_bidx, s16 dest_cidx);
 void davinci_set_dma_transfer_params(int lch, u16 acnt, u16 bcnt, u16 ccnt,
 		u16 bcnt_rld, enum sync_dimension sync_mode);
 
-void davinci_set_dma_params(int lch, struct edmacc_param *params);
-void davinci_get_dma_params(int lch, struct edmacc_param *params);
+void edma_write_slot(unsigned slot, const struct edmacc_param *params);
+void edma_read_slot(unsigned slot, struct edmacc_param *params);
 
 int davinci_start_dma(int lch);
 void davinci_stop_dma(int lch);

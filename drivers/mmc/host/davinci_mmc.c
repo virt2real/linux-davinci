@@ -496,7 +496,7 @@ static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
 
 	davinci_set_dma_transfer_params(sync_dev, acnt, bcnt, ccnt, 8, ABSYNC);
 
-	davinci_get_dma_params(sync_dev, template);
+	edma_read_slot(sync_dev, template);
 
 	/* don't bother with irqs or chaining */
 	template->opt &= ~(ITCCHEN | TCCHEN | ITCINTEN | TCINTEN);
@@ -530,7 +530,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		regs.dst = sg_dma_address(sg);
 	}
 	regs.ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
-	davinci_set_dma_params(lch, &regs);
+	edma_write_slot(lch, &regs);
 
 	davinci_start_dma(lch);
 	return 0;
