@@ -210,8 +210,8 @@ void edma_unlink(unsigned from);
 void edma_write_slot(unsigned slot, const struct edmacc_param *params);
 void edma_read_slot(unsigned slot, struct edmacc_param *params);
 
-int davinci_start_dma(int lch);
-void davinci_stop_dma(int lch);
+int edma_start(unsigned channel);
+void edma_stop(unsigned channel);
 
 void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst);
 void davinci_clean_channel(int lch);

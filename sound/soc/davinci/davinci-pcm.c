@@ -184,12 +184,12 @@ static int davinci_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		davinci_start_dma(prtd->master_lch);
+		edma_start(prtd->master_lch);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		davinci_stop_dma(prtd->master_lch);
+		edma_stop(prtd->master_lch);
 		break;
 	default:
 		ret = -EINVAL;

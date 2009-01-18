@@ -417,7 +417,7 @@ static void davinci_abort_dma(struct mmc_davinci_host *host)
 	else
 		sync_dev = host->txdma;
 
-	davinci_stop_dma(sync_dev);
+	edma_stop(sync_dev);
 	davinci_clean_channel(sync_dev);
 }
 
@@ -532,7 +532,7 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	regs.ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
 	edma_write_slot(lch, &regs);
 
-	davinci_start_dma(lch);
+	edma_start(lch);
 	return 0;
 }
 

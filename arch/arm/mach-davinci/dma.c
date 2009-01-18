@@ -612,7 +612,7 @@ arch_initcall(davinci_dma_init);
  * be used only for software triggering or event chaining, channels not
  * mapped to hardware events (or mapped to unused events) are preferable.
  *
- * DMA transfers start from a channel using davinci_start_dma(), or by
+ * DMA transfers start from a channel using edma_start(), or by
  * chaining.  When the transfer described in that channel's parameter RAM
  * slot completes, that slot's data may be reloaded through a link.
  *
@@ -650,7 +650,7 @@ int edma_alloc_channel(int channel,
 	edma_or_array2(EDMA_DRAE, 0, channel >> 5, 1 << (channel & 0x1f));
 
 	/* ensure no events are pending */
-	davinci_stop_dma(channel);
+	edma_stop(channel);
 	memcpy_toio(edmacc_regs_base + PARM_OFFSET(channel),
 			&dummy_paramset, PARM_SIZE);
 
@@ -673,7 +673,7 @@ EXPORT_SYMBOL(edma_alloc_channel);
  *
  * Callers are responsible for ensuring the channel is inactive, and
  * will not be reactivated by linking, chaining, or software calls to
- * davinci_start_dma().
+ * edma_start().
  */
 void edma_free_channel(unsigned channel)
 {
@@ -1011,8 +1011,8 @@ void davinci_resume_dma(int lch)
 EXPORT_SYMBOL(davinci_resume_dma);
 
 /**
- * davinci_start_dma - start dma on a channel
- * @lch: logical channel being activated
+ * edma_start - start dma on a channel
+ * @channel: channel being activated
  *
  * Channels with event associations will be triggered by their hardware
  * events, and channels without such associations will be triggered by
@@ -1021,20 +1021,18 @@ EXPORT_SYMBOL(davinci_resume_dma);
  *
  * Returns zero on success, else negative errno.
  */
-int davinci_start_dma(int lch)
+int edma_start(unsigned channel)
 {
-	int ret_val = 0;
-
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
-		int j = lch >> 5;
-		unsigned int mask = (1 << (lch & 0x1f));
+	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+		int j = channel >> 5;
+		unsigned int mask = (1 << (channel & 0x1f));
 
 		/* EDMA channels without event association */
-		if (test_bit(lch, edma_noevent)) {
+		if (test_bit(channel, edma_noevent)) {
 			dev_dbg(&edma_dev.dev, "ESR%d %08x\n", j,
 				edma_shadow0_read_array(SH_ESR, j));
 			edma_shadow0_write_array(SH_ESR, j, mask);
-			return ret_val;
+			return 0;
 		}
 
 		/* EDMA channel with event association */
@@ -1047,30 +1045,27 @@ int davinci_start_dma(int lch)
 		edma_shadow0_write_array(SH_EESR, j, mask);
 		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
 			edma_shadow0_read_array(SH_EER, j));
-	} else {
-		ret_val = -EINVAL;
+		return 0;
 	}
-	return ret_val;
+
+	return -EINVAL;
 }
-EXPORT_SYMBOL(davinci_start_dma);
+EXPORT_SYMBOL(edma_start);
 
 /**
- * davinci_stop_dma - stops dma on the channel passed
- * @lch: logical channel being deactivated
+ * edma_stop - stops dma on the channel passed
+ * @channel: channel being deactivated
  *
  * When @lch is a channel, any active transfer is paused and
  * all pending hardware events are cleared.  The current transfer
  * may not be resumed, and the channel's Parameter RAM should be
  * reinitialized before being reused.
  */
-void davinci_stop_dma(int lch)
+void edma_stop(unsigned channel)
 {
-	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
-		return;
-
-	if (lch < DAVINCI_EDMA_NUM_DMACH) {
-		int j = lch >> 5;
-		unsigned int mask = (1 << (lch & 0x1f));
+	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+		int j = channel >> 5;
+		unsigned int mask = (1 << (channel & 0x1f));
 
 		edma_shadow0_write_array(SH_EECR, j, mask);
 		edma_shadow0_write_array(SH_ECR, j, mask);
@@ -1079,19 +1074,13 @@ void davinci_stop_dma(int lch)
 
 		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
 				edma_shadow0_read_array(SH_EER, j));
-		/*
-		 * if the requested channel is one of the event channels
-		 * then just set the link field of the corresponding
-		 * param entry to 0xffff
+
+		/* REVISIT:  consider guarding against inappropriate event
+		 * chaining by overwriting with dummy_paramset.
 		 */
-		/* don't clear link until audio driver fixed
-		 * edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
-		 */
-	} else {
-		edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
 	}
 }
-EXPORT_SYMBOL(davinci_stop_dma);
+EXPORT_SYMBOL(edma_stop);
 
 /******************************************************************************
  *
