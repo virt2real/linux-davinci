@@ -108,12 +108,12 @@ static void davinci_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 		prtd->period = 0;
 }
 
-static void davinci_pcm_dma_irq(int lch, u16 ch_status, void *data)
+static void davinci_pcm_dma_irq(unsigned channel, u16 ch_status, void *data)
 {
 	struct snd_pcm_substream *substream = data;
 	struct davinci_runtime_data *prtd = substream->runtime->private_data;
 
-	DPRINTK("lch=%d, status=0x%x\n", lch, ch_status);
+	DPRINTK("channel=%d, status=0x%x\n", channel, ch_status);
 
 	if (unlikely(ch_status != DMA_COMPLETE))
 		return;
@@ -132,7 +132,7 @@ static int davinci_pcm_dma_request(struct snd_pcm_substream *substream)
 	struct davinci_runtime_data *prtd = substream->runtime->private_data;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct davinci_pcm_dma_params *dma_data = rtd->dai->cpu_dai->dma_data;
-	int tcc = TCC_ANY;
+	struct edmacc_param p_ram;
 	int ret;
 
 	if (!dma_data)
@@ -141,22 +141,34 @@ static int davinci_pcm_dma_request(struct snd_pcm_substream *substream)
 	prtd->params = dma_data;
 
 	/* Request master DMA channel */
-	ret = davinci_request_dma(prtd->params->channel, prtd->params->name,
+	ret = edma_alloc_channel(prtd->params->channel,
 				  davinci_pcm_dma_irq, substream,
-				  &prtd->master_lch, &tcc, EVENTQ_0);
-	if (ret)
+				  EVENTQ_0);
+	if (ret < 0)
 		return ret;
+	prtd->master_lch = ret;
 
 	/* Request parameter RAM reload slot */
-	ret = davinci_request_dma(DAVINCI_EDMA_PARAM_ANY, "Link",
-				  NULL, NULL, &prtd->slave_lch, &tcc, EVENTQ_0);
-	if (ret) {
-		davinci_free_dma(prtd->master_lch);
+	ret = edma_alloc_slot(EDMA_SLOT_ANY);
+	if (ret < 0) {
+		edma_free_channel(prtd->master_lch);
 		return ret;
 	}
+	prtd->slave_lch = ret;
 
-	/* Link parameter RAM to itself in loopback */
-	edma_link(prtd->slave_lch, prtd->slave_lch);
+	/* Issue transfer completion IRQ when the channel completes a
+	 * transfer, then always reload from the same slot (by a kind
+	 * of loopback link).  The completion IRQ handler will update
+	 * the reload slot with a new buffer.
+	 *
+	 * REVISIT save p_ram here after setting up everything except
+	 * the buffer and its length (ccnt) ... use it as a template
+	 * so davinci_pcm_enqueue_dma() takes less time in IRQ.
+	 */
+	edma_read_slot(prtd->slave_lch, &p_ram);
+	p_ram.opt |= TCINTEN | EDMA_TCC(prtd->master_lch);
+	p_ram.link_bcntrld = prtd->slave_lch << 5;
+	edma_write_slot(prtd->slave_lch, &p_ram);
 
 	return 0;
 }
@@ -262,8 +274,8 @@ static int davinci_pcm_close(struct snd_pcm_substream *substream)
 
 	edma_unlink(prtd->slave_lch);
 
-	davinci_free_dma(prtd->slave_lch);
-	davinci_free_dma(prtd->master_lch);
+	edma_free_slot(prtd->slave_lch);
+	edma_free_channel(prtd->master_lch);
 
 	kfree(prtd);
 

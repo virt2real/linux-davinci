@@ -27,26 +27,29 @@
  */
 
 /*
- * The EDMA3 framework for DaVinci abstracts DMA Parameter RAM (PaRAM) slots
- * as logical DMA channels.  There are two types of logical channel:
+ * This EDMA3 programming framework exposes two basic kinds of resource:
  *
- *  Master	Triggers transfers, usually from a hardware event but
+ *  Channel	Triggers transfers, usually from a hardware event but
  *		also manually or by "chaining" from DMA completions.
- *		Not all PaRAM slots may be masters; and not all masters
- *		support hardware event triggering.
+ *		Each channel is coupled to a Parameter RAM (PaRAM) slot.
  *
- *  Slave	A master may be linked to a "slave" PaRAM slot, used to
- *		reload master parameters when a transfer finishes.  Any
- *		PaRAM slot may be such a link target.
+ *  Slot	Each PaRAM slot holds a DMA transfer descriptor (PaRAM
+ *		"set"), source and destination addresses, a link to a
+ *		next PaRAM slot (if any), options for the transfer, and
+ *		instructions for updating those addresses.  There are
+ *		more than twice as many slots as event channels.
  *
- * Each PaRAM slot holds a DMA transfer descriptor with destination and
- * source addresses, a link to the next PaRAM slot (if any), options for
- * the transfer, and instructions for updating those addresses.
+ * Each PaRAM set describes a sequence of transfers, either for one large
+ * buffer or for several discontiguous smaller buffers.  An EDMA transfer
+ * is driven only from a channel, which performs the transfers specified
+ * in its PaRAM slot until there are no more transfers.  When that last
+ * transfer completes, the "link" field may be used to reload the channel's
+ * PaRAM slot with a new transfer descriptor.
  *
- * The EDMA Channel Controller (CC) maps requests from master channels
- * into physical Transfer Controller (TC) requests when the master
- * triggers.  The two physical DMA channels provided by the TC are thus
- * shared by many logical channels.
+ * The EDMA Channel Controller (CC) maps requests from channels into physical
+ * Transfer Controller (TC) requests when the channel triggers (by hardware
+ * or software events, or by chaining).  The two physical DMA channels provided
+ * by the TCs are thus shared by many logical channels.
  *
  * DaVinci hardware also has a "QDMA" mechanism which is not currently
  * supported through this interface.  (DSP firmware uses it though.)
@@ -79,7 +82,7 @@ struct edmacc_param {
 #define STATIC		BIT(3)
 #define EDMA_FWID	(0x07 << 8)
 #define TCCMODE		BIT(11)
-#define TCC		(0x3f << 12)
+#define EDMA_TCC(t)	((t) << 12)
 #define TCINTEN		BIT(20)
 #define ITCINTEN	BIT(21)
 #define TCCHEN		BIT(22)
@@ -97,13 +100,6 @@ struct edmacc_param {
 #define DAVINCI_EDMA_NUM_REGIONS          4
 #define DAVINCI_EDMA_MEMPROTECT           0
 
-#define DAVINCI_NUM_UNUSEDCH             21
-
-#define TCC_ANY    -1
-
-/* special values understood by davinci_request_dma() */
-#define DAVINCI_EDMA_PARAM_ANY            -2
-#define DAVINCI_DMA_CHANNEL_ANY           -1
 
 /* Drivers should avoid using these symbolic names for dm644x
  * channels, and use platform_device IORESOURCE_DMA resources
@@ -185,10 +181,18 @@ enum sync_dimension {
 	ABSYNC = 1
 };
 
-int davinci_request_dma(int dev_id, const char *dev_name,
-	void (*callback)(int lch, unsigned short ch_status, void *data),
-	void *data, int *lch, int *tcc, enum dma_event_q);
-void davinci_free_dma(int lch);
+#define EDMA_CHANNEL_ANY		-1	/* for edma_alloc_channel() */
+#define EDMA_SLOT_ANY			-1	/* for edma_alloc_slot() */
+
+/* alloc/free DMA channels and their dedicated parameter RAM slots */
+int edma_alloc_channel(int channel,
+	void (*callback)(unsigned channel, u16 ch_status, void *data),
+	void *data, enum dma_event_q);
+void edma_free_channel(unsigned channel);
+
+/* alloc/free parameter RAM slots */
+int edma_alloc_slot(int slot);
+void edma_free_slot(unsigned slot);
 
 /* calls that operate on part of a parameter RAM slot */
 void davinci_set_dma_src_params(int lch, dma_addr_t src_port,

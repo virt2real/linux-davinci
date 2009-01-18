@@ -234,7 +234,7 @@ static struct platform_device edma_dev = {
 /*****************************************************************************/
 
 static struct dma_interrupt_data {
-	void (*callback) (int lch, unsigned short ch_status, void *data);
+	void (*callback)(unsigned channel, unsigned short ch_status, void *data);
 	void *data;
 } intr_data[DAVINCI_EDMA_NUM_DMACH];
 
@@ -243,11 +243,17 @@ static struct dma_interrupt_data {
  */
 static DECLARE_BITMAP(edma_inuse, DAVINCI_EDMA_NUM_PARAMENTRY);
 
-/* The edma_noevent bit for each master channel is clear unless
+/* The edma_noevent bit for each channel is clear unless
  * it doesn't trigger DMA events on this platform.  It uses a
  * bit of SOC-specific initialization code.
  */
 static DECLARE_BITMAP(edma_noevent, DAVINCI_EDMA_NUM_DMACH);
+
+/* dummy param set used to (re)initialize parameter RAM slots */
+static const struct edmacc_param dummy_paramset = {
+	.link_bcntrld = 0xffff,
+	.ccnt = 1,
+};
 
 static const s8 __initconst dma_chan_dm644x_no_event[] = {
 	0, 1, 12, 13, 14, 15, 25, 30, 31, 45, 46, 47, 55, 56, 57, 58, 59, 60,
@@ -298,7 +304,7 @@ static void __init assign_priority_to_queue(int queue_no, int priority)
 
 static inline void
 setup_dma_interrupt(unsigned lch,
-	void (*callback)(int lch, unsigned short ch_status, void *data),
+	void (*callback)(unsigned channel, u16 ch_status, void *data),
 	void *data)
 {
 	if (!callback) {
@@ -502,8 +508,9 @@ static int __init davinci_dma_init(void)
 
 	dev_dbg(&edma_dev.dev, "DMA REG BASE ADDR=%p\n", edmacc_regs_base);
 
-	for (i = 0; i < DAVINCI_EDMA_NUM_PARAMENTRY * PARM_SIZE; i += 4)
-		edma_write(EDMA_PARM + i, 0);
+	for (i = 0; i < DAVINCI_EDMA_NUM_PARAMENTRY; i++)
+		memcpy_toio(edmacc_regs_base + PARM_OFFSET(i),
+				&dummy_paramset, PARM_SIZE);
 
 	if (cpu_is_davinci_dm355()) {
 		/* NOTE conflicts with SPI1_INT{0,1} and SPI2_INT0 */
@@ -516,7 +523,7 @@ static int __init davinci_dma_init(void)
 	} else if (cpu_is_davinci_dm644x()) {
 		noevent = dma_chan_dm644x_no_event;
 	} else {
-		/* request_dma(DAVINCI_DMA_CHANNEL_ANY) fails */
+		/* alloc_channel(EDMA_CHANNEL_ANY) fails */
 		noevent = NULL;
 	}
 
@@ -585,167 +592,162 @@ static int __init davinci_dma_init(void)
 }
 arch_initcall(davinci_dma_init);
 
+/*-----------------------------------------------------------------------*/
+
+/* Resource alloc/free:  dma channels, parameter RAM slots */
+
 /**
- * davinci_request_dma - allocate a DMA channel
- * @dev_id: specific DMA channel; else DAVINCI_DMA_CHANNEL_ANY to
- *	allocate some master channel without a hardware event, or
- *	DAVINCI_EDMA_PARAM_ANY to allocate some slave channel.
- * @name: name associated with @dev_id
- * @callback: to be issued on DMA completion or errors (master only)
- * @data: passed to callback (master only)
- * @lch: used to return the number of the allocated event channel; pass
- *	this later to davinci_free_dma()
- * @tcc: may be NULL; else an input for masters, an output for slaves.
+ * edma_alloc_channel - allocate DMA channel and paired parameter RAM
+ * @channel: specific channel to allocate; negative for "any unmapped channel"
+ * @callback: optional; to be issued on DMA completion or errors
+ * @data: passed to callback
  * @eventq_no: an EVENTQ_* constant, used to choose which Transfer
- *	Controller (TC) executes requests on this channel (master only)
+ *	Controller (TC) executes requests using this channel
  *
- * Returns zero on success, else negative errno.
+ * This allocates a DMA channel and its associated parameter RAM slot.
+ * The parameter RAM is initialized to hold a dummy transfer.
  *
- * The @tcc parameter may be null, indicating default behavior:  no
- * transfer completion callbacks are issued, but masters use @callback
- * and @data (if provided) to report transfer errors.  Else masters use
- * it as an output, returning either what @lch returns (and enabling
- * transfer completion interrupts), or TCC_ANY if there is no callback.
- * Slaves use @tcc as an input:  TCC_ANY gives the default behavior,
- * else it specifies a transfer completion @callback to be used.
+ * Normal use is to pass a specific channel number as @channel, to make
+ * use of hardware events mapped to that channel.  When the channel will
+ * be used only for software triggering or event chaining, channels not
+ * mapped to hardware events (or mapped to unused events) are preferable.
  *
- * These TCC settings are stored in PaRAM slots, so they may be updated
- * later.  In particular, reloading a master PaRAM entry from a slave
- * (via linking) overwrites everything, including those TCC settings.
+ * DMA transfers start from a channel using davinci_start_dma(), or by
+ * chaining.  When the transfer described in that channel's parameter RAM
+ * slot completes, that slot's data may be reloaded through a link.
  *
- * DMA transfers start from a master channel using davinci_start_dma()
- * or by chaining.  When the transfer described in that master's PaRAM
- * slot completes, its PaRAM data may be reloaded from a linked slave.
+ * DMA errors are only reported to the @callback associated with the
+ * channel driving that transfer, but transfer completion callbacks can
+ * be sent to another channel under control of the TCC field in
+ * the option word of the transfer's parameter RAM set.  Drivers must not
+ * use DMA transfer completion callbacks for channels they did not allocate.
+ * (The same applies to TCC codes used in transfer chaining.)
  *
- * DMA errors are only reported to the @callback associated with that
- * master channel, but transfer completion callbacks can be sent to
- * another master channel.  Drivers must not use DMA transfer completion
- * callbacks (@tcc) for master channels they did not allocate.  (The
- * same applies to transfer chaining, since the same @tcc codes are
- * used both to trigger completion interrupts and to chain transfers.)
+ * Returns the number of the channel, else negative errno.
  */
-int davinci_request_dma(int dev_id, const char *name,
-			void (*callback) (int lch, unsigned short ch_status,
-					  void *data),
-			void *data, int *lch,
-			int *tcc, enum dma_event_q eventq_no)
+int edma_alloc_channel(int channel,
+		void (*callback)(unsigned channel, u16 ch_status, void *data),
+		void *data,
+		enum dma_event_q eventq_no)
 {
-	int tcc_val = tcc ? *tcc : TCC_ANY;
-	struct edmacc_param param = { .opt = 0, };
-
-	/* REVISIT:  tcc would be better as a non-pointer parameter */
-	switch (tcc_val) {
-	case TCC_ANY:
-	case 0 ... DAVINCI_EDMA_NUM_DMACH - 1:
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	switch (dev_id) {
-
-	/* Allocate a specific master channel, e.g. for MMC1 RX or ASP0 TX */
-	case 0 ... DAVINCI_EDMA_NUM_DMACH - 1:
-		if (test_and_set_bit(dev_id, edma_inuse))
-			return -EBUSY;
-
-alloc_master:
-		tcc_val = (tcc && callback) ? dev_id : TCC_ANY;
-
-		/* ensure access through shadow region 0 */
-		edma_or_array2(EDMA_DRAE, 0, dev_id >> 5,
-				1 << (dev_id & 0x1f));
-
-		if (callback)
-			setup_dma_interrupt(dev_id, callback, data);
-
-		map_dmach_queue(dev_id, eventq_no);
-
-		/* ensure no events are pending */
-		davinci_stop_dma(dev_id);
-		break;
-
-	/* Allocate a specific slave channel, mostly to reserve it
-	 * as part of a set of resources allocated to a DSP.
-	 */
-	case DAVINCI_EDMA_NUM_DMACH ... DAVINCI_EDMA_NUM_PARAMENTRY - 1:
-		if (test_and_set_bit(dev_id, edma_inuse))
-			return -EBUSY;
-		break;
-
-	/* return some master channel with no event association */
-	case DAVINCI_DMA_CHANNEL_ANY:
-		dev_id = 0;
+	if (channel < 0) {
+		channel = 0;
 		for (;;) {
-			dev_id = find_next_bit(edma_noevent,
-					DAVINCI_EDMA_NUM_DMACH, dev_id);
-			if (dev_id == DAVINCI_EDMA_NUM_DMACH)
+			channel = find_next_zero_bit(edma_inuse,
+					DAVINCI_EDMA_NUM_DMACH, channel);
+			if (channel == DAVINCI_EDMA_NUM_DMACH)
 				return -ENOMEM;
-			if (!test_and_set_bit(dev_id, edma_inuse))
-				goto alloc_master;
-		}
-		break;
-
-	/* return some slave channel */
-	case DAVINCI_EDMA_PARAM_ANY:
-		dev_id = DAVINCI_EDMA_NUM_DMACH;
-		for (;;) {
-			dev_id = find_next_zero_bit(edma_inuse,
-					DAVINCI_EDMA_NUM_PARAMENTRY, dev_id);
-			if (dev_id == DAVINCI_EDMA_NUM_PARAMENTRY)
-				return -ENOMEM;
-			if (!test_and_set_bit(dev_id, edma_inuse))
+			if (!test_and_set_bit(channel, edma_inuse))
 				break;
 		}
-		break;
-
-	default:
+	} else if (channel >= DAVINCI_EDMA_NUM_DMACH) {
 		return -EINVAL;
+	} else if (test_and_set_bit(channel, edma_inuse)) {
+		return -EBUSY;
 	}
 
-	/* Optionally fire Transfer Complete interrupts */
-	if (tcc_val != TCC_ANY)
-		param.opt = ((0x3f & tcc_val) << 12) | TCINTEN;
+	/* ensure access through shadow region 0 */
+	edma_or_array2(EDMA_DRAE, 0, channel >> 5, 1 << (channel & 0x1f));
 
-	/* init the link field to no link. i.e 0xffff */
-	param.link_bcntrld = 0xffff;
+	/* ensure no events are pending */
+	davinci_stop_dma(channel);
+	memcpy_toio(edmacc_regs_base + PARM_OFFSET(channel),
+			&dummy_paramset, PARM_SIZE);
 
-	/* init channel with a dummy PaRAM set */
-	param.ccnt = 1;
-	memcpy_toio(edmacc_regs_base + PARM_OFFSET(dev_id), &param, PARM_SIZE);
+	if (callback)
+		setup_dma_interrupt(channel, callback, data);
 
-	/* non-status return values */
-	*lch = dev_id;
-	if (tcc)
-		*tcc = tcc_val;
+	map_dmach_queue(channel, eventq_no);
 
-	dev_dbg(&edma_dev.dev, "alloc lch %d, tcc %d\n", dev_id, tcc_val);
-	return 0;
+	return channel;
 }
-EXPORT_SYMBOL(davinci_request_dma);
+EXPORT_SYMBOL(edma_alloc_channel);
+
 
 /**
- * davinci_free_dma - deallocate a DMA channel
- * @lch: dma channel returned from davinci_request_dma()
+ * edma_free_channel - deallocate DMA channel
+ * @channel: dma channel returned from edma_alloc_channel()
  *
- * This deallocates the resources allocated by davinci_request_dma().
+ * This deallocates the DMA channel and associated parameter RAM slot
+ * allocated by edma_alloc_channel().
+ *
  * Callers are responsible for ensuring the channel is inactive, and
  * will not be reactivated by linking, chaining, or software calls to
  * davinci_start_dma().
  */
-void davinci_free_dma(int lch)
+void edma_free_channel(unsigned channel)
 {
-	if (lch < 0 || lch >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (channel >= DAVINCI_EDMA_NUM_DMACH)
 		return;
 
-	if (lch < DAVINCI_EDMA_NUM_DMACH) {
-		setup_dma_interrupt(lch, NULL, NULL);
-		/* REVISIT should probably take out shadow region 0 */
+	setup_dma_interrupt(channel, NULL, NULL);
+	/* REVISIT should probably take out of shadow region 0 */
+
+	memcpy_toio(edmacc_regs_base + PARM_OFFSET(channel),
+			&dummy_paramset, PARM_SIZE);
+	clear_bit(channel, edma_inuse);
+}
+EXPORT_SYMBOL(edma_free_channel);
+
+/**
+ * edma_alloc_slot - allocate DMA parameter RAM
+ * @slot: specific slot to allocate; negative for "any unused slot"
+ *
+ * This allocates a parameter RAM slot, initializing it to hold a
+ * dummy transfer.  Slots allocated using this routine have not been
+ * mapped to a hardware DMA channel, and will normally be used by
+ * linking to them from a slot associated with a DMA channel.
+ *
+ * Normal use is to pass EDMA_SLOT_ANY as the @slot, but specific
+ * slots may be allocated on behalf of DSP firmware.
+ *
+ * Returns the number of the slot, else negative errno.
+ */
+int edma_alloc_slot(int slot)
+{
+	if (slot < 0) {
+		slot = DAVINCI_EDMA_NUM_DMACH;
+		for (;;) {
+			slot = find_next_zero_bit(edma_inuse,
+					DAVINCI_EDMA_NUM_PARAMENTRY, slot);
+			if (slot == DAVINCI_EDMA_NUM_PARAMENTRY)
+				return -ENOMEM;
+			if (!test_and_set_bit(slot, edma_inuse))
+				break;
+		}
+	} else if (slot < DAVINCI_EDMA_NUM_DMACH
+			|| slot >= DAVINCI_EDMA_NUM_PARAMENTRY) {
+		return -EINVAL;
+	} else if (test_and_set_bit(slot, edma_inuse)) {
+		return -EBUSY;
 	}
 
-	clear_bit(lch, edma_inuse);
+	memcpy_toio(edmacc_regs_base + PARM_OFFSET(slot),
+			&dummy_paramset, PARM_SIZE);
+
+	return slot;
 }
-EXPORT_SYMBOL(davinci_free_dma);
+EXPORT_SYMBOL(edma_alloc_slot);
+
+/**
+ * edma_free_slot - deallocate DMA parameter RAM
+ * @slot: parameter RAM slot returned from edma_alloc_slot()
+ *
+ * This deallocates the parameter RAM slot allocated by edma_alloc_slot().
+ * Callers are responsible for ensuring the slot is inactive, and will
+ * not be activated.
+ */
+void edma_free_slot(unsigned slot)
+{
+	if (slot < DAVINCI_EDMA_NUM_DMACH
+			|| slot >= DAVINCI_EDMA_NUM_PARAMENTRY)
+		return;
+
+	memcpy_toio(edmacc_regs_base + PARM_OFFSET(slot),
+			&dummy_paramset, PARM_SIZE);
+	clear_bit(slot, edma_inuse);
+}
+EXPORT_SYMBOL(edma_free_slot);
 
 /*-----------------------------------------------------------------------*/
 
@@ -1009,8 +1011,8 @@ void davinci_resume_dma(int lch)
 EXPORT_SYMBOL(davinci_resume_dma);
 
 /**
- * davinci_start_dma - start dma on a master channel
- * @lch: logical master channel being activated
+ * davinci_start_dma - start dma on a channel
+ * @lch: logical channel being activated
  *
  * Channels with event associations will be triggered by their hardware
  * events, and channels without such associations will be triggered by
@@ -1045,7 +1047,7 @@ int davinci_start_dma(int lch)
 		edma_shadow0_write_array(SH_EESR, j, mask);
 		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
 			edma_shadow0_read_array(SH_EER, j));
-	} else {		/* for slaveChannels */
+	} else {
 		ret_val = -EINVAL;
 	}
 	return ret_val;
@@ -1056,7 +1058,7 @@ EXPORT_SYMBOL(davinci_start_dma);
  * davinci_stop_dma - stops dma on the channel passed
  * @lch: logical channel being deactivated
  *
- * When @lch is a master channel, any active transfer is paused and
+ * When @lch is a channel, any active transfer is paused and
  * all pending hardware events are cleared.  The current transfer
  * may not be resumed, and the channel's Parameter RAM should be
  * reinitialized before being reused.
@@ -1086,7 +1088,6 @@ void davinci_stop_dma(int lch)
 		 * edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
 		 */
 	} else {
-		/* for slaveChannels */
 		edma_parm_or(PARM_LINK_BCNTRLD, lch, 0xffff);
 	}
 }

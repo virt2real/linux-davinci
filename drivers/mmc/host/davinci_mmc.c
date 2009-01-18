@@ -421,7 +421,7 @@ static void davinci_abort_dma(struct mmc_davinci_host *host)
 	davinci_clean_channel(sync_dev);
 }
 
-static void mmc_davinci_dma_cb(int lch, u16 ch_status, void *data)
+static void mmc_davinci_dma_cb(unsigned channel, u16 ch_status, void *data)
 {
 	if (DMA_COMPLETE != ch_status) {
 		struct mmc_davinci_host *host = data;
@@ -499,7 +499,7 @@ static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
 	edma_read_slot(sync_dev, template);
 
 	/* don't bother with irqs or chaining */
-	template->opt &= ~(ITCCHEN | TCCHEN | ITCINTEN | TCINTEN);
+	template->opt |= sync_dev << 12;
 }
 
 static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
@@ -572,34 +572,28 @@ davinci_release_dma_channels(struct mmc_davinci_host *host)
 	if (!host->use_dma)
 		return;
 
-	davinci_free_dma(host->txdma);
-	davinci_free_dma(host->rxdma);
+	edma_free_channel(host->txdma);
+	edma_free_channel(host->rxdma);
 }
 
 static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 {
-	const char		*hostname = mmc_hostname(host->mmc);
-	int			edma_chan_num, tcc = 0, r;
-	enum dma_event_q	queue_no = EVENTQ_0;
+	int			r;
 
 	/* Acquire master DMA write channel */
-	r = davinci_request_dma(host->txdma, hostname,
-		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
-	if (r != 0) {
-		dev_warn(mmc_dev(host->mmc),
-				"MMC: davinci_request_dma() failed with %d\n",
-				r);
+	r = edma_alloc_channel(host->txdma, mmc_davinci_dma_cb, host, EVENTQ_0);
+	if (r < 0) {
+		dev_warn(mmc_dev(host->mmc), "alloc %s channel err %d\n",
+				"tx", r);
 		return r;
 	}
 	mmc_davinci_dma_setup(host, true, &host->tx_template);
 
 	/* Acquire master DMA read channel */
-	r = davinci_request_dma(host->rxdma, hostname,
-		mmc_davinci_dma_cb, host, &edma_chan_num, &tcc, queue_no);
-	if (r != 0) {
-		dev_warn(mmc_dev(host->mmc),
-				"MMC: davinci_request_dma() failed with %d\n",
-				r);
+	r = edma_alloc_channel(host->rxdma, mmc_davinci_dma_cb, host, EVENTQ_0);
+	if (r < 0) {
+		dev_warn(mmc_dev(host->mmc), "alloc %s channel err %d\n",
+				"rx", r);
 		goto free_master_write;
 	}
 	mmc_davinci_dma_setup(host, false, &host->rx_template);
@@ -607,7 +601,7 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	return 0;
 
 free_master_write:
-	davinci_free_dma(host->txdma);
+	edma_free_channel(host->txdma);
 
 	return r;
 }
