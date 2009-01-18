@@ -227,7 +227,7 @@ davinci_pcm_pointer(struct snd_pcm_substream *substream)
 
 	spin_lock(&prtd->lock);
 
-	davinci_dma_getposition(prtd->master_lch, &src, &dst);
+	edma_get_position(prtd->master_lch, &src, &dst);
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		count = src - runtime->dma_addr;
 	else

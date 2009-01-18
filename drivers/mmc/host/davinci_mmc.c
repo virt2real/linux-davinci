@@ -418,7 +418,7 @@ static void davinci_abort_dma(struct mmc_davinci_host *host)
 		sync_dev = host->txdma;
 
 	edma_stop(sync_dev);
-	davinci_clean_channel(sync_dev);
+	edma_clean_channel(sync_dev);
 }
 
 static void mmc_davinci_dma_cb(unsigned channel, u16 ch_status, void *data)

@@ -199,6 +199,7 @@ void edma_set_src(unsigned slot, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width);
 void edma_set_dest(unsigned slot, dma_addr_t dest_port,
 				 enum address_mode mode, enum fifo_width);
+void edma_get_position(unsigned slot, dma_addr_t *src, dma_addr_t *dst);
 void edma_set_src_index(unsigned slot, s16 src_bidx, s16 src_cidx);
 void edma_set_dest_index(unsigned slot, s16 dest_bidx, s16 dest_cidx);
 void edma_set_transfer_params(unsigned slot, u16 acnt, u16 bcnt, u16 ccnt,
@@ -210,14 +211,14 @@ void edma_unlink(unsigned from);
 void edma_write_slot(unsigned slot, const struct edmacc_param *params);
 void edma_read_slot(unsigned slot, struct edmacc_param *params);
 
+/* channel control operations */
 int edma_start(unsigned channel);
 void edma_stop(unsigned channel);
+void edma_clean_channel(unsigned channel);
+void edma_pause(unsigned channel);
+void edma_resume(unsigned channel);
 
-void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst);
-void davinci_clean_channel(int lch);
-void davinci_pause_dma(int lch);
-void davinci_resume_dma(int lch);
-
+/* UNRELATED TO DMA */
 int davinci_alloc_iram(unsigned size);
 void davinci_free_iram(unsigned addr, unsigned size);
 #endif

@@ -323,27 +323,6 @@ setup_dma_interrupt(unsigned lch,
 	}
 }
 
-/**
- * davinci_dma_getposition - returns the current transfer points
- * @lch: logical channel number
- * @src: pointer to source port position
- * @dst: pointer to destination port position
- *
- * Returns current source and destination address of a particular
- * DMA channel.  The channel should not be active when this is called.
- */
-void davinci_dma_getposition(int lch, dma_addr_t *src, dma_addr_t *dst)
-{
-	struct edmacc_param temp;
-
-	edma_read_slot(lch, &temp);
-	if (src != NULL)
-		*src = temp.src;
-	if (dst != NULL)
-		*dst = temp.dst;
-}
-EXPORT_SYMBOL(davinci_dma_getposition);
-
 /******************************************************************************
  *
  * DMA interrupt handler
@@ -819,6 +798,27 @@ void edma_set_dest(unsigned slot, dma_addr_t dest_port,
 EXPORT_SYMBOL(edma_set_dest);
 
 /**
+ * edma_get_position - returns the current transfer points
+ * @slot: parameter RAM slot being examined
+ * @src: pointer to source port position
+ * @dst: pointer to destination port position
+ *
+ * Returns current source and destination addresses for a particular
+ * parameter RAM slot.  Its channel should not be active when this is called.
+ */
+void edma_get_position(unsigned slot, dma_addr_t *src, dma_addr_t *dst)
+{
+	struct edmacc_param temp;
+
+	edma_read_slot(slot, &temp);
+	if (src != NULL)
+		*src = temp.src;
+	if (dst != NULL)
+		*dst = temp.dst;
+}
+EXPORT_SYMBOL(edma_get_position);
+
+/**
  * edma_set_src_index - configure DMA source address indexing
  * @slot: parameter RAM slot being configured
  * @src_bidx: byte offset between source arrays in a frame
@@ -981,30 +981,38 @@ EXPORT_SYMBOL(edma_read_slot);
 
 /* Various EDMA channel control operations */
 
-/*
- * DMA pause - pauses the dma on the channel passed
+/**
+ * edma_pause - pause dma on a channel
+ * @channel: on which edma_start() has been called
+ *
+ * This temporarily disables EDMA hardware events on the specified channel,
+ * preventing them from triggering new transfers on its behalf
  */
-void davinci_pause_dma(int lch)
+void edma_pause(unsigned channel)
 {
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
-		unsigned int mask = (1 << (lch & 0x1f));
+	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+		unsigned int mask = (1 << (channel & 0x1f));
 
-		edma_shadow0_write_array(SH_EECR, lch >> 5, mask);
+		edma_shadow0_write_array(SH_EECR, channel >> 5, mask);
 	}
 }
-EXPORT_SYMBOL(davinci_pause_dma);
-/*
- * DMA resume - resumes the dma on the channel passed
- */
-void davinci_resume_dma(int lch)
-{
-	if ((lch >= 0) && (lch < DAVINCI_EDMA_NUM_DMACH)) {
-		unsigned int mask = (1 << (lch & 0x1f));
+EXPORT_SYMBOL(edma_pause);
 
-		edma_shadow0_write_array(SH_EESR, lch >> 5, mask);
+/**
+ * edma_resume - resumes dma on a paused channel
+ * @channel: on which edma_pause() has been called
+ *
+ * This re-enables EDMA hardware events on the specified channel.
+ */
+void edma_resume(unsigned channel)
+{
+	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+		unsigned int mask = (1 << (channel & 0x1f));
+
+		edma_shadow0_write_array(SH_EESR, channel >> 5, mask);
 	}
 }
-EXPORT_SYMBOL(davinci_resume_dma);
+EXPORT_SYMBOL(edma_resume);
 
 /**
  * edma_start - start dma on a channel
@@ -1087,13 +1095,16 @@ EXPORT_SYMBOL(edma_stop);
  *
  * Return: zero on success, or corresponding error no on failure
  *
+ * FIXME this should not be needed ... edma_stop() should suffice.
+ *
  *****************************************************************************/
 
-void davinci_clean_channel(int ch_no)
+void edma_clean_channel(unsigned channel)
 {
-	if ((ch_no >= 0) && (ch_no < DAVINCI_EDMA_NUM_DMACH)) {
-		int j = (ch_no >> 5);
-		unsigned int mask = 1 << (ch_no & 0x1f);
+	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+		int j = (channel >> 5);
+		unsigned int mask = 1 << (channel & 0x1f);
+
 		dev_dbg(&edma_dev.dev, "EMR%d %08x\n", j,
 				edma_read_array(EDMA_EMR, j));
 		edma_shadow0_write_array(SH_ECR, j, mask);
@@ -1104,4 +1115,4 @@ void davinci_clean_channel(int ch_no)
 		edma_write(EDMA_CCERRCLR, (1 << 16) | 0x3);
 	}
 }
-EXPORT_SYMBOL(davinci_clean_channel);
+EXPORT_SYMBOL(edma_clean_channel);
