@@ -281,9 +281,13 @@ queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 
 /*****************************************************************************/
 
-static void map_dmach_queue(int ch_no, int queue_no)
+static void map_dmach_queue(unsigned ch_no, enum dma_event_q queue_no)
 {
 	int bit = (ch_no & 0x7) * 4;
+
+	/* default to low priority queue */
+	if (queue_no == EVENTQ_DEFAULT)
+		queue_no = EVENTQ_1;
 
 	queue_no &= 7;
 	edma_modify_array(EDMA_DMAQNUM, (ch_no >> 3),
@@ -547,7 +551,7 @@ static int __init davinci_dma_init(void)
 	 * started by the codec engine will not cause audio defects.
 	 */
 	for (i = 0; i < DAVINCI_EDMA_NUM_DMACH; i++)
-		map_dmach_queue(i, 1);
+		map_dmach_queue(i, EVENTQ_1);
 
 	i = 0;
 	/* Event queue to TC mapping */
@@ -581,7 +585,8 @@ arch_initcall(davinci_dma_init);
  * @callback: optional; to be issued on DMA completion or errors
  * @data: passed to callback
  * @eventq_no: an EVENTQ_* constant, used to choose which Transfer
- *	Controller (TC) executes requests using this channel
+ *	Controller (TC) executes requests using this channel.  Use
+ *	EVENTQ_DEFAULT unless you really need a high priority queue.
  *
  * This allocates a DMA channel and its associated parameter RAM slot.
  * The parameter RAM is initialized to hold a dummy transfer.

@@ -581,7 +581,8 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	int			r;
 
 	/* Acquire master DMA write channel */
-	r = edma_alloc_channel(host->txdma, mmc_davinci_dma_cb, host, EVENTQ_0);
+	r = edma_alloc_channel(host->txdma, mmc_davinci_dma_cb, host,
+			EVENTQ_DEFAULT);
 	if (r < 0) {
 		dev_warn(mmc_dev(host->mmc), "alloc %s channel err %d\n",
 				"tx", r);
@@ -590,7 +591,8 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	mmc_davinci_dma_setup(host, true, &host->tx_template);
 
 	/* Acquire master DMA read channel */
-	r = edma_alloc_channel(host->rxdma, mmc_davinci_dma_cb, host, EVENTQ_0);
+	r = edma_alloc_channel(host->rxdma, mmc_davinci_dma_cb, host,
+			EVENTQ_DEFAULT);
 	if (r < 0) {
 		dev_warn(mmc_dev(host->mmc), "alloc %s channel err %d\n",
 				"rx", r);
