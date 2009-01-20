@@ -423,6 +423,9 @@ static void davinci_abort_dma(struct mmc_davinci_host *host)
 	edma_clean_channel(sync_dev);
 }
 
+static void
+mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data);
+
 static void mmc_davinci_dma_cb(unsigned channel, u16 ch_status, void *data)
 {
 	if (DMA_COMPLETE != ch_status) {
@@ -435,8 +438,8 @@ static void mmc_davinci_dma_cb(unsigned channel, u16 ch_status, void *data)
 		dev_warn(mmc_dev(host->mmc), "DMA %s error\n",
 			(host->data->flags & MMC_DATA_WRITE)
 				? "write" : "read");
-		davinci_abort_dma(host);
 		host->data->error = -EIO;
+		mmc_davinci_xfer_done(host, host->data);
 	}
 }
 
@@ -868,6 +871,25 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 	}
 }
 
+static void
+davinci_abort_data(struct mmc_davinci_host *host, struct mmc_data *data)
+{
+	u32 temp;
+
+	/* record how much data we transferred */
+	temp = readl(host->base + DAVINCI_MMCNBLC);
+	data->bytes_xfered += (data->blocks - temp) * data->blksz;
+
+	/* reset command and data state machines */
+	temp = readl(host->base + DAVINCI_MMCCTL);
+	writel(temp | MMCCTL_CMDRST | MMCCTL_DATRST,
+		host->base + DAVINCI_MMCCTL);
+
+	temp &= ~(MMCCTL_CMDRST | MMCCTL_DATRST);
+	udelay(10);
+	writel(temp, host->base + DAVINCI_MMCCTL);
+}
+
 static inline int handle_core_command(
 		struct mmc_davinci_host *host, unsigned int status)
 {
@@ -906,29 +928,17 @@ static inline int handle_core_command(
 		data->error = -ETIMEDOUT;
 		end_transfer = 1;
 
-		/* REVISIT report *actual* bytecount on errors */
-
 		dev_dbg(mmc_dev(host->mmc),
 			"read data timeout, status %x\n",
 			qstatus);
+
+		davinci_abort_data(host, data);
 	}
 
 	if (qstatus & (MMCST0_CRCWR | MMCST0_CRCRD)) {
-		u32 temp;
-
-		/* DAT line portion is disabled and in reset state */
-		temp = readl(host->base + DAVINCI_MMCCTL);
-		writel(temp | MMCCTL_CMDRST,
-			host->base + DAVINCI_MMCCTL);
-		udelay(10);
-		writel(temp & ~MMCCTL_CMDRST,
-			host->base + DAVINCI_MMCCTL);
-
 		/* Data CRC error */
 		data->error = -EILSEQ;
 		end_transfer = 1;
-
-		/* REVISIT report *actual* bytecount on errors */
 
 		/* NOTE:  this controller uses CRCWR to report both CRC
 		 * errors and timeouts (on writes).  MMCDRSP values are
@@ -937,13 +947,16 @@ static inline int handle_core_command(
 		 * (101, 010) aren't part of it ...
 		 */
 		if (qstatus & MMCST0_CRCWR) {
-			temp = readb(host->base + DAVINCI_MMCDRSP);
+			u32 temp = readb(host->base + DAVINCI_MMCDRSP);
+
 			if (temp == 0x9f)
 				data->error = -ETIMEDOUT;
 		}
 		dev_dbg(mmc_dev(host->mmc), "data %s %s error\n",
 			(qstatus & MMCST0_CRCWR) ? "write" : "read",
 			(data->error == -ETIMEDOUT) ? "timeout" : "CRC");
+
+		davinci_abort_data(host, data);
 	}
 
 	if (qstatus & MMCST0_TOUTRS) {
@@ -953,9 +966,10 @@ static inline int handle_core_command(
 				"timeout, status %x\n",
 				host->cmd->opcode, qstatus);
 			host->cmd->error = -ETIMEDOUT;
-			if (data)
+			if (data) {
 				end_transfer = 1;
-			else
+				davinci_abort_data(host, data);
+			} else
 				end_command = 1;
 		}
 	}
