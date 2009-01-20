@@ -508,10 +508,9 @@ static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
 }
 
 static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
-		struct mmc_request *req)
+		struct mmc_data *data)
 {
 	struct edmacc_param	regs;
-	struct mmc_data		*data = host->data;
 	struct scatterlist	*sg = &data->sg[0];
 	unsigned		count = sg_dma_len(sg);
 	int			lch;
@@ -542,10 +541,9 @@ static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 }
 
 static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
-		struct mmc_request *req)
+		struct mmc_data *data)
 {
 	int i;
-	struct mmc_data *data = host->data;
 	int mask = rw_threshold - 1;
 
 	host->sg_len = dma_map_sg(mmc_dev(host->mmc), data->sg, data->sg_len,
@@ -566,7 +564,7 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 	}
 
 	host->do_dma = 1;
-	mmc_davinci_send_dma_request(host, req);
+	mmc_davinci_send_dma_request(host, data);
 
 	return 0;
 }
@@ -637,37 +635,35 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 {
 	int fifo_lev = (rw_threshold == 32) ? MMCFIFOCTL_FIFOLEV : 0;
 	int timeout;
+	struct mmc_data *data = req->data;
 
-	host->data = req->data;
-	if (req->data == NULL) {
+	host->data = data;
+	if (data == NULL) {
 		host->data_dir = DAVINCI_MMC_DATADIR_NONE;
 		writel(0, host->base + DAVINCI_MMCBLEN);
 		writel(0, host->base + DAVINCI_MMCNBLK);
 		return;
 	}
 
-	/* Init idx */
-	host->sg_idx = 0;
-
 	dev_dbg(mmc_dev(host->mmc),
 		"MMCSD : Data xfer (%s %s), "
 		"DTO %d cycles + %d ns, %d blocks of %d bytes\n",
-		(req->data->flags & MMC_DATA_STREAM) ? "stream" : "block",
-		(req->data->flags & MMC_DATA_WRITE) ? "write" : "read",
-		req->data->timeout_clks, req->data->timeout_ns,
-		req->data->blocks, req->data->blksz);
+		(data->flags & MMC_DATA_STREAM) ? "stream" : "block",
+		(data->flags & MMC_DATA_WRITE) ? "write" : "read",
+		data->timeout_clks, data->timeout_ns,
+		data->blocks, data->blksz);
 
 	/* Convert ns to clock cycles by assuming 20MHz frequency
 	 * 1 cycle at 20MHz = 500 ns
 	 */
-	timeout = req->data->timeout_clks + req->data->timeout_ns / 500;
+	timeout = data->timeout_clks + data->timeout_ns / 500;
 	if (timeout > 0xffff)
 		timeout = 0xffff;
 
 	writel(timeout, host->base + DAVINCI_MMCTOD);
-	writel(req->data->blocks, host->base + DAVINCI_MMCNBLK);
-	writel(req->data->blksz, host->base + DAVINCI_MMCBLEN);
-	host->data_dir = (req->data->flags & MMC_DATA_WRITE)
+	writel(data->blocks, host->base + DAVINCI_MMCNBLK);
+	writel(data->blksz, host->base + DAVINCI_MMCBLEN);
+	host->data_dir = (data->flags & MMC_DATA_WRITE)
 			? DAVINCI_MMC_DATADIR_WRITE
 			: DAVINCI_MMC_DATADIR_READ;
 
@@ -686,12 +682,10 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 		writel(fifo_lev | MMCFIFOCTL_FIFODIR_RD,
 			host->base + DAVINCI_MMCFIFOCTL);
 		break;
-	default:
-		break;
 	}
 
-	host->sg_len = req->data->sg_len;
-	host->bytes_left = req->data->blocks * req->data->blksz;
+	host->buffer = NULL;
+	host->bytes_left = data->blocks * data->blksz;
 
 	/* For now we try to use DMA whenever we won't need partial FIFO
 	 * reads or writes, either for the whole transfer (as tested here)
@@ -702,11 +696,13 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	 * used.  The occasional fallback to PIO should't hurt.
 	 */
 	if (host->use_dma && (host->bytes_left & (rw_threshold - 1)) == 0
-			&& mmc_davinci_start_dma_transfer(host, req) == 0) {
-		host->buffer = NULL;
+			&& mmc_davinci_start_dma_transfer(host, data) == 0) {
+		/* zero this to ensure we take no PIO paths */
 		host->bytes_left = 0;
 	} else {
 		/* Revert to CPU Copy */
+		host->sg_idx = 0;
+		host->sg_len = data->sg_len;
 		mmc_davinci_sg_to_buf(host);
 	}
 }
