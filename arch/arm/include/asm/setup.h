@@ -143,10 +143,6 @@ struct tag_omap {
 	u8 data[0];
 };
 
-struct tag_davinci {
-	u8 data[0];
-};
-
 /* footbridge memory clock, see arch/arm/mach-footbridge/arch.c */
 #define ATAG_MEMCLK	0x41000402
 
@@ -176,11 +172,6 @@ struct tag {
 		 * OMAP specific
                  */
                 struct tag_omap         omap;
-
-		/*
-		 * DaVinci specific
-		 */
-		struct tag_davinci	davinci;
 
 		/*
 		 * DC21285 specific

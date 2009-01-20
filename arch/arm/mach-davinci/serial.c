@@ -110,10 +110,9 @@ static void __init davinci_serial_reset(struct plat_serial8250_port *p)
 				 UART_DM646X_SCR_TX_WATERMARK);
 }
 
-void __init davinci_serial_init(void)
+void __init davinci_serial_init(struct davinci_uart_config *info)
 {
 	int i;
-	const struct davinci_uart_config *info;
 	char name[16];
 	struct clk *uart_clk;
 	struct device *dev = &serial_device.dev;
@@ -123,12 +122,6 @@ void __init davinci_serial_init(void)
 	 * You have to mux them off in device drivers later on
 	 * if not needed.
 	 */
-
-	info = davinci_get_config(DAVINCI_TAG_UART, struct davinci_uart_config);
-
-	if (info == NULL)
-		return;
-
 	for (i = 0; i < DAVINCI_MAX_NR_UARTS; i++) {
 		struct plat_serial8250_port *p = serial_platform_data + i;
 
@@ -148,8 +141,7 @@ void __init davinci_serial_init(void)
 		}
 
 		if (!(info->enabled_uarts & (1 << i))) {
-			p->membase = 0;
-			p->mapbase = 0;
+			p->flags = 0;
 			continue;
 		}
 

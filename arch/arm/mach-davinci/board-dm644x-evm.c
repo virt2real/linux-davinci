@@ -582,12 +582,8 @@ static struct platform_device *davinci_evm_devices[] __initdata = {
 	&ide_dev,
 };
 
-static struct davinci_uart_config davinci_evm_uart_config __initdata = {
+static struct davinci_uart_config uart_config __initdata = {
 	.enabled_uarts = (1 << 0),
-};
-
-static struct davinci_board_config_kernel davinci_evm_config[] __initdata = {
-	{ DAVINCI_TAG_UART,	&davinci_evm_uart_config },
 };
 
 static void __init
@@ -628,9 +624,7 @@ static __init void davinci_evm_init(void)
 
 	davinci_setup_mmc(0, &dm6446evm_mmc_config);
 
-	davinci_board_config = davinci_evm_config;
-	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
-	davinci_serial_init();
+	davinci_serial_init(&uart_config);
 
 	/* Register the fixup for PHY on DaVinci */
 	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,

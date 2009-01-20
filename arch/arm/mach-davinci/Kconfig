@@ -87,23 +87,6 @@ config DAVINCI_RESET_CLOCKS
 	  probably do not want this option enabled until your
 	  device drivers work properly.
 
-config DAVINCI_BOOT_TAG
-	bool "DaVinci bootloader information passing"
-        depends on ARCH_DAVINCI_DM644x
-        default n
-        help
-          Say Y, if you have a bootloader which passes information
-          about your board and its peripheral configuration.
-
-comment "DaVinci Options"
-
-config DAVINCI_BLK_DEV_CF
-	bool "TI DaVinci CF Card Support"
-	default Y
-	depends on BLK_DEV_DAVINCI
-	help
-	  Configure this option to enable CF Card support.
-
 endmenu
 
 endif

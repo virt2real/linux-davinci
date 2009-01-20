@@ -141,12 +141,8 @@ static struct platform_device *davinci_sffsdr_devices[] __initdata = {
 	&davinci_sffsdr_nandflash_device,
 };
 
-static struct davinci_uart_config davinci_sffsdr_uart_config __initdata = {
+static struct davinci_uart_config uart_config __initdata = {
 	.enabled_uarts = (1 << 0),
-};
-
-static struct davinci_board_config_kernel davinci_sffsdr_config[] __initdata = {
-	{ DAVINCI_TAG_UART, &davinci_sffsdr_uart_config },
 };
 
 static void __init davinci_sffsdr_map_io(void)
@@ -160,9 +156,7 @@ static __init void davinci_sffsdr_init(void)
 	platform_add_devices(davinci_sffsdr_devices,
 			     ARRAY_SIZE(davinci_sffsdr_devices));
 	sffsdr_init_i2c();
-	davinci_board_config = davinci_sffsdr_config;
-	davinci_board_config_size = ARRAY_SIZE(davinci_sffsdr_config);
-	davinci_serial_init();
+	davinci_serial_init(&uart_config);
 	davinci_init_emac(davinci_sffsdr_mac_addr);
 	setup_usb(0, 0); /* We support only peripheral mode. */
 }

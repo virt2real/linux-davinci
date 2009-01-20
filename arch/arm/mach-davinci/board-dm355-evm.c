@@ -166,12 +166,8 @@ static struct platform_device *davinci_evm_devices[] __initdata = {
 	&davinci_nand_device,
 };
 
-static struct davinci_uart_config davinci_evm_uart_config __initdata = {
+static struct davinci_uart_config uart_config __initdata = {
 	.enabled_uarts = (1 << 0),
-};
-
-static struct davinci_board_config_kernel davinci_evm_config[] __initdata = {
-	{ DAVINCI_TAG_UART,	&davinci_evm_uart_config },
 };
 
 static void __init dm355_evm_map_io(void)
@@ -223,9 +219,7 @@ static __init void dm355_evm_init(void)
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));
 	evm_init_i2c();
-	davinci_board_config = davinci_evm_config;
-	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
-	davinci_serial_init();
+	davinci_serial_init(&uart_config);
 
 	gpio_request(2, "usb_id_toggle");
 	gpio_direction_output(2, USB_ID_VALUE);

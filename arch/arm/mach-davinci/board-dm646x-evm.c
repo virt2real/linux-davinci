@@ -46,12 +46,8 @@
 #include <linux/etherdevice.h>
 #include <mach/emac.h>
 
-static struct davinci_uart_config davinci_evm_uart_config __initdata = {
+static struct davinci_uart_config uart_config __initdata = {
 	.enabled_uarts = (1 << 0),
-};
-
-static struct davinci_board_config_kernel davinci_evm_config[] __initdata = {
-	{ DAVINCI_TAG_UART,     &davinci_evm_uart_config },
 };
 
 /* Most of this EEPROM is unused, but U-Boot uses some data:
@@ -126,9 +122,7 @@ static __init void evm_init(void)
 {
 	davinci_psc_init();
 	evm_init_i2c();
-	davinci_board_config = davinci_evm_config;
-	davinci_board_config_size = ARRAY_SIZE(davinci_evm_config);
-	davinci_serial_init();
+	davinci_serial_init(&uart_config);
 }
 
 static __init void davinci_dm646x_evm_irq_init(void)

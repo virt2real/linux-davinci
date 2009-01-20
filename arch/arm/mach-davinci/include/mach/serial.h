@@ -25,6 +25,11 @@
 #define UART_DM646X_SCR	              0x10
 #define UART_DM646X_SCR_TX_WATERMARK  0x08
 
-extern void davinci_serial_init(void);
+struct davinci_uart_config {
+	/* Bit field of UARTs present; bit 0 --> UART1 */
+	unsigned int enabled_uarts;
+};
+
+extern void davinci_serial_init(struct davinci_uart_config *);
 
 #endif /* __ASM_ARCH_SERIAL_H */
