@@ -201,6 +201,8 @@ struct mmc_davinci_host {
 	 */
 	struct edmacc_param	tx_template;
 	struct edmacc_param	rx_template;
+	unsigned		n_link;
+	u8			links[NR_SG - 1];
 
 	/* For PIO we walk scatterlists one segment at a time. */
 	unsigned int		sg_len;
@@ -569,8 +571,13 @@ static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
 static void __init_or_module
 davinci_release_dma_channels(struct mmc_davinci_host *host)
 {
+	unsigned	i;
+
 	if (!host->use_dma)
 		return;
+
+	for (i = 0; i < host->n_link; i++)
+		edma_free_slot(host->links[i]);
 
 	edma_free_channel(host->txdma);
 	edma_free_channel(host->rxdma);
@@ -578,7 +585,7 @@ davinci_release_dma_channels(struct mmc_davinci_host *host)
 
 static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 {
-	int			r;
+	int r, i;
 
 	/* Acquire master DMA write channel */
 	r = edma_alloc_channel(host->txdma, mmc_davinci_dma_cb, host,
@@ -599,6 +606,20 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 		goto free_master_write;
 	}
 	mmc_davinci_dma_setup(host, false, &host->rx_template);
+
+	/* Allocate parameter RAM slots, which will later be bound to a
+	 * channel as needed to handle a scatterlist.
+	 */
+	for (i = 0; i < ARRAY_SIZE(host->links); i++) {
+		r = edma_alloc_slot(EDMA_SLOT_ANY);
+		if (r < 0) {
+			dev_dbg(mmc_dev(host->mmc), "dma PaRAM alloc --> %d\n",
+				r);
+			break;
+		}
+		host->links[i] = r;
+	}
+	host->n_link = i;
 
 	return 0;
 
@@ -801,7 +822,7 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 	if (host->do_dma) {
 		davinci_abort_dma(host);
 
-		dma_unmap_sg(mmc_dev(host->mmc), data->sg, host->sg_len,
+		dma_unmap_sg(mmc_dev(host->mmc), data->sg, data->sg_len,
 			     (data->flags & MMC_DATA_WRITE)
 			     ? DMA_TO_DEVICE
 			     : DMA_FROM_DEVICE);
@@ -1117,8 +1138,11 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 	}
 	mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
 
-	/* with no iommu coalescing pages, each phys_seg is a hw_seg */
-	mmc->max_hw_segs	= NR_SG;
+	/* With no iommu coalescing pages, each phys_seg is a hw_seg.
+	 * Each hw_seg uses one EDMA parameter RAM slot, always one
+	 * channel and then usually some linked slots.
+	 */
+	mmc->max_hw_segs	= 1 + host->n_link;
 	mmc->max_phys_segs	= mmc->max_hw_segs;
 
 	/* EDMA limit per hw segment (one or two MBytes) */
