@@ -1,9 +1,9 @@
 /*
- * davinci_mmc.c - TI DaVinci MMC controller file
+ * davinci_mmc.c - TI DaVinci MMC/SD/SDIO driver
  *
  * Copyright (C) 2006 Texas Instruments.
- *
- * ----------------------------------------------------------------------------
+ *	Original author: Purushotam Kumar
+ * Copyright (C) 2009 David Brownell
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,11 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- * ----------------------------------------------------------------------------
- * Modifications:
- * ver. 1.0: Oct 2005, Purushotam Kumar   Initial version
- * ver 1.1:  Nov  2005, Purushotam Kumar  Solved bugs
- * ver 1.2:  Jan  2006, Purushotam Kumar   Added card remove insert support
  */
 
 #include <linux/module.h>
@@ -145,17 +140,13 @@
  * One scatterlist dma "segment" is at most MAX_CCNT rw_threshold units,
  * and we handle up to NR_SG segments.  MMC_BLOCK_BOUNCE kicks in only
  * for drivers with max_hw_segs == 1, making the segments bigger (64KB)
- * than the page or two that's otherwise typical.
- *
- * FIXME make NR_SG = 16 behave to get the same throughput boost from
- * EDMA transfer linkage (for read *AND* write) but without extra page
- * copies.  The existing code hard-wires a *single* transfer link, so
- * it will behave poorly on typical segments (one or two pages); and
- * looks rather dubious.
+ * than the page or two that's otherwise typical.  NR_SG == 16 gives at
+ * least the same throughput boost, using EDMA transfer linkage instead
+ * of spending CPU time copying pages.
  */
 #define MAX_CCNT	((1 << 16) - 1)
 
-#define NR_SG		1
+#define NR_SG		16
 
 static unsigned rw_threshold = 32;
 module_param(rw_threshold, uint, S_IRUGO);
@@ -410,6 +401,10 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 	writel(im_val, host->base + DAVINCI_MMCIM);
 }
 
+/*----------------------------------------------------------------------*/
+
+/* DMA infrastructure */
+
 static void davinci_abort_dma(struct mmc_davinci_host *host)
 {
 	int sync_dev = 0;
@@ -507,37 +502,54 @@ static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
 	template->opt |= sync_dev << 12;
 }
 
-static int mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
+static void mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		struct mmc_data *data)
 {
-	struct edmacc_param	regs;
-	struct scatterlist	*sg = &data->sg[0];
-	unsigned		count = sg_dma_len(sg);
-	int			lch;
+	struct edmacc_param	*template;
+	int			channel, slot;
+	unsigned		link;
+	struct scatterlist	*sg;
+	unsigned		sg_len;
+	unsigned		bytes_left = host->bytes_left;
+	const unsigned		shift = (rw_threshold == 32) ? 5 : 4;
 
-	/* If this scatterlist segment (e.g. one page) is bigger than
-	 * the transfer (e.g. a block) don't use the whole segment.
-	 */
-	if (count > host->bytes_left)
-		count = host->bytes_left;
-
-	/* Update the fields in "regs" that change, and write
-	 * them to EDMA parameter RAM
-	 */
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
-		lch = host->txdma;
-		regs = host->tx_template;
-		regs.src = sg_dma_address(sg);
+		template = &host->tx_template;
+		channel = host->txdma;
 	} else {
-		lch = host->rxdma;
-		regs = host->rx_template;
-		regs.dst = sg_dma_address(sg);
+		template = &host->rx_template;
+		channel = host->rxdma;
 	}
-	regs.ccnt = count >> ((rw_threshold == 32) ? 5 : 4);
-	edma_write_slot(lch, &regs);
 
-	edma_start(lch);
-	return 0;
+	/* We know sg_len and ccnt will never be out of range because
+	 * we told the block layer to ensure that it only hands us one
+	 * scatterlist segment per EDMA PARAM entry.  Update the PARAM
+	 * entries needed for each segment of this scatterlist.
+	 */
+	for (slot = channel, link = 0, sg = data->sg, sg_len = host->sg_len;
+			sg_len-- != 0 && bytes_left;
+			sg++, slot = host->links[link++]) {
+		u32		buf = sg_dma_address(sg);
+		unsigned	count = sg_dma_len(sg);
+
+		template->link_bcntrld = sg_len
+				? (host->links[link] << 5)
+				: 0xffff;
+
+		if (count > bytes_left)
+			count = bytes_left;
+		bytes_left -= count;
+
+		if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE)
+			template->src = buf;
+		else
+			template->dst = buf;
+		template->ccnt = count >> shift;
+
+		edma_write_slot(slot, template);
+	}
+
+	edma_start(channel);
 }
 
 static int mmc_davinci_start_dma_transfer(struct mmc_davinci_host *host,
@@ -629,6 +641,8 @@ free_master_write:
 
 	return r;
 }
+
+/*----------------------------------------------------------------------*/
 
 static void
 mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
@@ -1043,6 +1057,8 @@ static struct mmc_host_ops mmc_davinci_ops = {
 	.get_cd		= mmc_davinci_get_cd,
 	.get_ro		= mmc_davinci_get_ro,
 };
+
+/*----------------------------------------------------------------------*/
 
 static void __init init_mmcsd_host(struct mmc_davinci_host *host)
 {
