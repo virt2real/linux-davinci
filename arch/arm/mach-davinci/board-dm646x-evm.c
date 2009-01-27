@@ -33,8 +33,8 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
+#include <mach/dm646x.h>
 #include <mach/common.h>
-#include <mach/hardware.h>
 #include <mach/psc.h>
 #include <mach/serial.h>
 #include <mach/i2c.h>
@@ -116,18 +116,17 @@ static void __init evm_init_i2c(void)
 static void __init davinci_map_io(void)
 {
 	davinci_map_common_io();
+	dm646x_init();
 }
 
 static __init void evm_init(void)
 {
-	davinci_psc_init();
 	evm_init_i2c();
 	davinci_serial_init(&uart_config);
 }
 
 static __init void davinci_dm646x_evm_irq_init(void)
 {
-	davinci_init_common_hw();
 	davinci_irq_init();
 }
 

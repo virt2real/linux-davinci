@@ -124,6 +124,9 @@ void davinci_psc_config(unsigned int domain, unsigned int id, char enable)
 {
 	u32 epcpr, ptcmd, ptstat, pdstat, pdctl1, mdstat, mdctl, mdstat_mask;
 
+	if (id == DAVINCI_LPSC_NONE)
+		return;
+
 	mdctl = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE + MDCTL + 4 * id);
 	if (enable)
 		mdctl |= 0x00000003;	/* Enable Module */
@@ -199,12 +202,5 @@ void __init davinci_psc_init(void)
 					DAVINCI_LPSC_TPTC0, 1);
 		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
 					DAVINCI_LPSC_TPTC1, 1);
-
-		/* Turn on WatchDog timer LPSC.	 Needed for RESET to work */
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_TIMER2, 1);
-	} else if (cpu_is_davinci_dm646x()) {
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DM646X_LPSC_AEMIF, 1);
 	}
 }

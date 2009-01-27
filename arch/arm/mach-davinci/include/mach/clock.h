@@ -17,6 +17,6 @@ struct clk;
 
 extern int clk_register(struct clk *clk);
 extern void clk_unregister(struct clk *clk);
-extern int davinci_clk_init(void);
+extern int davinci_clk_init(struct clk *clocks[]);
 
 #endif

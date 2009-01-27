@@ -1,7 +1,8 @@
 /*
- * TI DaVinci clock config file
+ * Clock and PLL control for DaVinci devices
  *
- * Copyright (C) 2006 Texas Instruments.
+ * Copyright (C) 2006-2007 Texas Instruments.
+ * Copyright (C) 2008-2009 Deep Root Systems, LLC
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,21 +26,9 @@
 #include <mach/cpu.h>
 #include "clock.h"
 
-#define DAVINCI_PLL_CNTRL0_BASE 0x01C40800
-
-/* PLL/Reset register offsets */
-#define PLLM		0x110
-
 static LIST_HEAD(clocks);
 static DEFINE_MUTEX(clocks_mutex);
 static DEFINE_SPINLOCK(clockfw_lock);
-
-static unsigned int commonrate;
-static unsigned int div_by_four;
-static unsigned int div_by_six;
-static unsigned int div_by_eight;
-static unsigned int armrate;
-static unsigned int fixedrate = 27000000;	/* 27 MHZ */
 
 extern void davinci_psc_config(unsigned int domain, unsigned int id, char enable);
 
@@ -107,13 +96,10 @@ done:
 struct clk *clk_get(struct device *dev, const char *id)
 {
 	struct clk *p, *clk = ERR_PTR(-ENOENT);
-	int idno;
 	struct clk_mapping *mapping;
 
-	if (dev == NULL || dev->bus != &platform_bus_type)
-		idno = -1;
-	else
-		idno = to_platform_device(dev)->id;
+	if (!id)
+		return ERR_PTR(-EINVAL);
 
 	mutex_lock(&clocks_mutex);
 
@@ -130,14 +116,6 @@ struct clk *clk_get(struct device *dev, const char *id)
 	}
 
 	list_for_each_entry(p, &clocks, node) {
-		if (p->id == idno &&
-		    strcmp(id, p->name) == 0 && try_module_get(p->owner)) {
-			clk = p;
-			goto found;
-		}
-	}
-
-	list_for_each_entry(p, &clocks, node) {
 		if (strcmp(id, p->name) == 0 && try_module_get(p->owner)) {
 			clk = p;
 			break;
@@ -147,6 +125,8 @@ struct clk *clk_get(struct device *dev, const char *id)
 found:
 	mutex_unlock(&clocks_mutex);
 
+	WARN(IS_ERR(clk), "CLK: can't find %s/%s\n",
+			dev ? dev_name(dev) : "nodev", id);
 	return clk;
 }
 EXPORT_SYMBOL(clk_get);
@@ -158,38 +138,36 @@ void clk_put(struct clk *clk)
 }
 EXPORT_SYMBOL(clk_put);
 
-static int __clk_enable(struct clk *clk)
+static void __clk_enable(struct clk *clk)
 {
-	if (clk->flags & ALWAYS_ENABLED)
-		return 0;
-
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, clk->lpsc, 1);
-	return 0;
+	if (clk->parent)
+		__clk_enable(clk->parent);
+	if (clk->usecount++ == 0 && !(clk->flags & CLK_PLL))
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, clk->lpsc, 1);
 }
 
 static void __clk_disable(struct clk *clk)
 {
-	if (clk->usecount)
+	if (WARN_ON(clk->usecount == 0))
 		return;
-
-	davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, clk->lpsc, 0);
+	if (--clk->usecount == 0 && !(clk->flags & CLK_PLL))
+		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, clk->lpsc, 0);
+	if (clk->parent)
+		__clk_disable(clk->parent);
 }
 
 int clk_enable(struct clk *clk)
 {
 	unsigned long flags;
-	int ret = 0;
-	
+
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
-	if (clk->usecount++ == 0) {
-		spin_lock_irqsave(&clockfw_lock, flags);
-		ret = __clk_enable(clk);
-		spin_unlock_irqrestore(&clockfw_lock, flags);
-	}
+	spin_lock_irqsave(&clockfw_lock, flags);
+	__clk_enable(clk);
+	spin_unlock_irqrestore(&clockfw_lock, flags);
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(clk_enable);
 
@@ -200,11 +178,9 @@ void clk_disable(struct clk *clk)
 	if (clk == NULL || IS_ERR(clk))
 		return;
 
-	if (clk->usecount > 0 && !(--clk->usecount)) {
-		spin_lock_irqsave(&clockfw_lock, flags);
-		__clk_disable(clk);
-		spin_unlock_irqrestore(&clockfw_lock, flags);
-	}
+	spin_lock_irqsave(&clockfw_lock, flags);
+	__clk_disable(clk);
+	spin_unlock_irqrestore(&clockfw_lock, flags);
 }
 EXPORT_SYMBOL(clk_disable);
 
@@ -213,7 +189,7 @@ unsigned long clk_get_rate(struct clk *clk)
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
-	return *(clk->rate);
+	return clk->rate;
 }
 EXPORT_SYMBOL(clk_get_rate);
 
@@ -222,7 +198,7 @@ long clk_round_rate(struct clk *clk, unsigned long rate)
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
-	return *(clk->rate);
+	return clk->rate;
 }
 EXPORT_SYMBOL(clk_round_rate);
 
@@ -241,9 +217,22 @@ int clk_register(struct clk *clk)
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
+	if (WARN(clk->parent && !clk->parent->rate,
+			"CLK: %s parent %s has no rate!\n",
+			clk->name, clk->parent->name))
+		return -EINVAL;
+
 	mutex_lock(&clocks_mutex);
-	list_add(&clk->node, &clocks);
+	list_add_tail(&clk->node, &clocks);
 	mutex_unlock(&clocks_mutex);
+
+	/* If rate is already set, use it */
+	if (clk->rate)
+		return 0;
+
+	/* Otherwise, use parent rate and any divider */
+	if (clk->parent)
+		clk->rate = clk->parent->rate;
 
 	return 0;
 }
@@ -260,227 +249,6 @@ void clk_unregister(struct clk *clk)
 }
 EXPORT_SYMBOL(clk_unregister);
 
-static struct clk davinci_clks[] = {
-	{
-		.name = "ARMCLK",
-		.rate = &armrate,
-		.lpsc = -1,
-		.flags = ALWAYS_ENABLED,
-	},
-	{
-		.name = "UART0",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_UART0,
-	},
-	{
-		.name = "UART1",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_UART1,
-	},
-	{
-		.name = "UART2",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_UART2,
-	},
-	{
-		.name = "EMACCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_EMAC_WRAPPER,
-	},
-	{
-		.name = "I2CCLK",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_I2C,
-	},
-	{
-		.name = "IDECLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_ATA,
-	},
-	{
-		.name = "McBSPCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_McBSP,
-	},
-	{
-		.name = "MMCSDCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_MMC_SD,
-	},
-	{
-		.name = "SPICLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_SPI,
-	},
-	{
-		.name = "gpio",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_GPIO,
-	},
-	{
-		.name = "USBCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_USB,
-	},
-	{
-		.name = "VLYNQCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_VLYNQ,
-	},
-	{
-		.name = "AEMIFCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_AEMIF,
-		.usecount = 1,
-	}
-};
-static struct clk davinci_dm646x_clks[] = {
-	{
-		.name = "ARMCLK",
-		.rate = &armrate,
-		.lpsc = -1,
-		.flags = ALWAYS_ENABLED,
-	},
-	{
-		.name = "UART0",
-		.rate = &fixedrate,
-		.lpsc = DM646X_LPSC_UART0,
-	},
-	{
-		.name = "UART1",
-		.rate = &fixedrate,
-		.lpsc = DM646X_LPSC_UART1,
-	},
-	{
-		.name = "UART2",
-		.rate = &fixedrate,
-		.lpsc = DM646X_LPSC_UART2,
-	},
-	{
-		.name = "I2CCLK",
-		.rate = &div_by_four,
-		.lpsc = DM646X_LPSC_I2C,
-	},
-	{
-		.name = "gpio",
-		.rate = &commonrate,
-		.lpsc = DM646X_LPSC_GPIO,
-	},
-	{
-		.name = "AEMIFCLK",
-		.rate = &div_by_four,
-		.lpsc = DM646X_LPSC_AEMIF,
-		.usecount = 1,
-	},
-	{
-		.name = "EMACCLK",
-		.rate = &div_by_four,
-		.lpsc = DM646X_LPSC_EMAC,
-	},
-};
-static struct clk davinci_dm355_clks[] = {
-	{
-		.name = "ARMCLK",
-		.rate = &armrate,
-		.lpsc = -1,
-		.flags = ALWAYS_ENABLED,
-	},
-	{
-		.name = "UART0",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_UART0,
-		.usecount = 1,
-	},
-	{
-		.name = "UART1",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_UART1,
-		.usecount = 1,
-	},
-	{
-		.name = "UART2",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_UART2,
-		.usecount = 1,
-	},
-	{
-		.name = "I2CCLK",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_I2C,
-	},
-	{
-		.name = "McBSPCLK0",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_McBSP,
-	},
-	{
-		.name = "McBSPCLK1",
-		.rate = &commonrate,
-		.lpsc = DM355_LPSC_McBSP1,
-	},
-	{
-		.name = "MMCSDCLK0",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_MMC_SD,
-	},
-	{
-		.name = "MMCSDCLK1",
-		.rate = &commonrate,
-		.lpsc = DM355_LPSC_MMC_SD1,
-	},
-	{
-		.name = "SPICLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_SPI,
-	},
-	{
-		.name = "SPICLK1",
-		.rate = &commonrate,
-		.lpsc = DM355_LPSC_SPI1,
-	},
-	{
-		.name = "SPICLK2",
-		.rate = &commonrate,
-		.lpsc = DM355_LPSC_SPI2,
-	},
-	{
-		.name = "gpio",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_GPIO,
-	},
-	{
-		.name = "AEMIFCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_AEMIF,
-		.usecount = 1,
-	},
-	{
-		.name = "PWM0_CLK",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_PWM0,
-	},
-	{
-		.name = "PWM1_CLK",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_PWM1,
-	},
-	{
-		.name = "PWM2_CLK",
-		.rate = &fixedrate,
-		.lpsc = DAVINCI_LPSC_PWM2,
-	},
-	{
-		.name = "PWM3_CLK",
-		.rate = &fixedrate,
-		.lpsc = DM355_LPSC_PWM3,
-	},
-	{
-		.name = "USBCLK",
-		.rate = &commonrate,
-		.lpsc = DAVINCI_LPSC_USB,
-	},
-};
-
 #ifdef CONFIG_DAVINCI_RESET_CLOCKS
 /*
  * Disable any unused clocks left on by the bootloader
@@ -491,7 +259,7 @@ static int __init clk_disable_unused(void)
 	unsigned long flags;
 
 	list_for_each_entry(ck, &clocks, node) {
-		if (ck->usecount > 0 || (ck->flags & ALWAYS_ENABLED))
+		if (ck->usecount > 0)
 			continue;
 
 		printk(KERN_INFO "Clocks: disable unused %s\n", ck->name);
@@ -505,52 +273,107 @@ static int __init clk_disable_unused(void)
 late_initcall(clk_disable_unused);
 #endif
 
-int __init davinci_clk_init(void)
+static void clk_sysclk_recalc(struct clk *clk)
 {
-	struct clk *clkp;
-	static struct clk *board_clks;
-	int count = 0, num_clks;
-	u32 pll_mult;
+	u32 v, plldiv;
+	struct pll_data *pll;
 
-	pll_mult = davinci_readl(DAVINCI_PLL_CNTRL0_BASE + PLLM);
-	commonrate = ((pll_mult + 1) * DM646X_OSC_FREQ) / 6;
-	armrate = ((pll_mult + 1) * DM646X_OSC_FREQ) / 2;
+	/* Immediate parent must be PLL */
+	if (WARN_ON(!clk->parent || !clk->parent->pll_data))
+		return;
 
-	if (cpu_is_davinci_dm646x()) {
-		fixedrate = 24000000;
-		div_by_four = ((pll_mult + 1) * DM646X_OSC_FREQ) / 4;
-		div_by_six = ((pll_mult + 1) * DM646X_OSC_FREQ) / 6;
-		div_by_eight = ((pll_mult + 1) * DM646X_OSC_FREQ) / 8;
-		armrate = ((pll_mult + 1) * DM646X_OSC_FREQ) / 2;
+	pll = clk->parent->pll_data;
+	clk->rate = clk->parent->rate;
 
-		board_clks = davinci_dm646x_clks;
-		num_clks = ARRAY_SIZE(davinci_dm646x_clks);
-	} else if (cpu_is_davinci_dm355()) {
-		unsigned long postdiv;
+	/* If bypass divider (BPDIV) use input reference clock */
+	if (clk->div_reg == BPDIV)
+		clk->rate = pll->input_rate;
 
-		postdiv = (davinci_readl(DAVINCI_PLL_CNTRL0_BASE + 0x128)
-			   & 0x1f) + 1;
+	v = __raw_readl(pll->base + clk->div_reg);
+	if (v & PLLDIV_EN) {
+		plldiv = (v & PLLDIV_RATIO_MASK) + 1;
+		if (plldiv)
+			clk->rate /= plldiv;
+	}
+}
 
-		fixedrate = 24000000;
-		armrate = (pll_mult + 1) * (fixedrate / (16 * postdiv));
-		commonrate = armrate / 2;
-		board_clks = davinci_dm355_clks;
-		num_clks = ARRAY_SIZE(davinci_dm355_clks);
-	} else {
-		fixedrate = DM646X_OSC_FREQ;
-		armrate = (pll_mult + 1) * (fixedrate / 2);
-		commonrate = armrate / 3;
+static void __init clk_pll_init(struct clk *clk)
+{
+	u32 ctrl, mult = 1, prediv = 1, postdiv = 1;
+	u8 bypass;
+	struct pll_data *pll = clk->pll_data;
 
-		board_clks = davinci_clks;
-		num_clks = ARRAY_SIZE(davinci_clks);
+	pll->base = IO_ADDRESS(pll->phys_base);
+	ctrl = __raw_readl(pll->base + PLLCTL);
+	clk->rate = pll->input_rate = clk->parent->rate;
+
+	if (ctrl & PLLCTL_PLLEN) {
+		bypass = 0;
+		mult = __raw_readl(pll->base + PLLM);
+		mult = (mult & PLLM_PLLM_MASK) + 1;
+	} else
+		bypass = 1;
+
+	if (pll->flags & PLL_HAS_PREDIV) {
+		prediv = __raw_readl(pll->base + PREDIV);
+		if (prediv & PLLDIV_EN)
+			prediv = (prediv & PLLDIV_RATIO_MASK) + 1;
+		else
+			prediv = 1;
 	}
 
-	for (clkp = board_clks; count < num_clks; count++, clkp++) {
+	/* pre-divider is fixed, but (some?) chips won't report that */
+	if (cpu_is_davinci_dm355() && pll->num == 1)
+		prediv = 8;
+
+	if (pll->flags & PLL_HAS_POSTDIV) {
+		postdiv = __raw_readl(pll->base + POSTDIV);
+		if (postdiv & PLLDIV_EN)
+			postdiv = (postdiv & PLLDIV_RATIO_MASK) + 1;
+		else
+			postdiv = 1;
+	}
+
+	if (!bypass) {
+		clk->rate /= prediv;
+		clk->rate *= mult;
+		clk->rate /= postdiv;
+	}
+
+	pr_debug("PLL%d: input = %lu MHz [ ",
+		 pll->num, clk->parent->rate / 1000000);
+	if (bypass)
+		pr_debug("bypass ");
+	if (prediv > 1)
+		pr_debug("/ %d ", prediv);
+	if (mult > 1)
+		pr_debug("* %d ", mult);
+	if (postdiv > 1)
+		pr_debug("/ %d ", postdiv);
+	pr_debug("] --> %lu MHz output.\n", clk->rate / 1000000);
+}
+
+int __init davinci_clk_init(struct clk *clocks[])
+{
+	struct clk *clkp;
+	int i = 0;
+
+	davinci_psc_init();
+	while ((clkp = clocks[i++])) {
+		if (clkp->pll_data)
+			clk_pll_init(clkp);
 		clk_register(clkp);
 
-		/* Turn on clocks that have been enabled in the
-		 * table above */
-		if (clkp->usecount)
+		/* Calculate rates for PLL-derived clocks */
+		if (clkp->div_reg)
+			clk_sysclk_recalc(clkp);
+
+		/* FIXME: remove equivalent special-cased code from
+		 * davinci_psc_init() once cpus list *all* clocks.
+		 */
+
+		/* Turn on clocks that Linux doesn't otherwise manage */
+		if (clkp->flags & ALWAYS_ENABLED)
 			clk_enable(clkp);
 	}
 
@@ -576,12 +399,47 @@ static void davinci_ck_stop(struct seq_file *m, void *v)
 {
 }
 
+#define CLKNAME_MAX	10		/* longest clock name */
+#define NEST_DELTA	2
+#define NEST_MAX	4
+
+static void
+dump_clock(struct seq_file *s, unsigned nest, struct clk *parent)
+{
+	char		*state;
+	char		buf[CLKNAME_MAX + NEST_DELTA * NEST_MAX];
+	struct clk	*clk;
+	unsigned	i;
+
+	state = (parent->flags & CLK_PLL) ? "pll" : "psc";
+
+	/* <nest spaces> name <pad to end> */
+	memset(buf, ' ', sizeof(buf) - 1);
+	buf[sizeof(buf) - 1] = 0;
+	i = strlen(parent->name);
+	memcpy(buf + nest, parent->name,
+			min(i, (unsigned)(sizeof(buf) - 1 - nest)));
+
+	seq_printf(s, "%s users=%2d %-3s %9ld Hz\n",
+		buf, parent->usecount, state, clk_get_rate(parent));
+	/* REVISIT show device associations too */
+
+	/* cost is now small, but not linear... */
+	list_for_each_entry(clk, &clocks, node) {
+		if (clk->parent == parent)
+			dump_clock(s, nest + NEST_DELTA, clk);
+	}
+}
+
 static int davinci_ck_show(struct seq_file *m, void *v)
 {
-	struct clk *cp;
-
-	list_for_each_entry(cp, &clocks, node)
-		seq_printf(m,"%s %d %d\n", cp->name, *(cp->rate), cp->usecount);
+	/* Show clock tree; we know the main oscillator is first.
+	 * We trust nonzero usecounts equate to PSC enables...
+	 */
+	mutex_lock(&clocks_mutex);
+	if (!list_empty(&clocks))
+		dump_clock(m, 0, list_first_entry(&clocks, struct clk, node));
+	mutex_unlock(&clocks_mutex);
 
 	return 0;
 }

@@ -590,6 +590,7 @@ static void __init
 davinci_evm_map_io(void)
 {
 	davinci_map_common_io();
+	dm644x_init();
 }
 
 static int davinci_phy_fixup(struct phy_device *phydev)
@@ -607,8 +608,6 @@ static int davinci_phy_fixup(struct phy_device *phydev)
 
 static __init void davinci_evm_init(void)
 {
-	davinci_psc_init();
-
 #if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
     defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
 #if defined(CONFIG_MTD_PHYSMAP) || \
@@ -634,7 +633,6 @@ static __init void davinci_evm_init(void)
 
 static __init void davinci_evm_irq_init(void)
 {
-	davinci_init_common_hw();
 	davinci_irq_init();
 }
 

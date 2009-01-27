@@ -51,9 +51,3 @@ void __init davinci_map_common_io(void)
 	 */
 	davinci_check_revision();
 }
-
-void __init davinci_init_common_hw(void)
-{
-	davinci_mux_init();
-	davinci_clk_init();
-}

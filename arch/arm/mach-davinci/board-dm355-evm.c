@@ -28,6 +28,7 @@
 #include <asm/mach/flash.h>
 
 #include <mach/hardware.h>
+#include <mach/dm355.h>
 #include <mach/psc.h>
 #include <mach/common.h>
 #include <mach/emac.h>
@@ -173,6 +174,7 @@ static struct davinci_uart_config uart_config __initdata = {
 static void __init dm355_evm_map_io(void)
 {
 	davinci_map_common_io();
+	dm355_init();
 }
 
 static int dm355evm_mmc_get_cd(int module)
@@ -210,8 +212,6 @@ static struct davinci_mmc_config dm355evm_mmc_config = {
 
 static __init void dm355_evm_init(void)
 {
-	davinci_psc_init();
-
 	gpio_request(1, "dm9000");
 	gpio_direction_input(1);
 	dm355evm_dm9000_rsrc[2].start = gpio_to_irq(1);
@@ -232,7 +232,6 @@ static __init void dm355_evm_init(void)
 
 static __init void dm355_evm_irq_init(void)
 {
-	davinci_init_common_hw();
 	davinci_irq_init();
 }
 

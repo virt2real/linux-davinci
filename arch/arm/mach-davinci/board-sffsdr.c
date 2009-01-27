@@ -147,6 +147,7 @@ static struct davinci_uart_config uart_config __initdata = {
 static void __init davinci_sffsdr_map_io(void)
 {
 	davinci_map_common_io();
+	dm644x_init();
 }
 
 static __init void davinci_sffsdr_init(void)
@@ -180,7 +181,6 @@ __setup("eth=", davinci_cpmac_eth_setup);
 
 static __init void davinci_sffsdr_irq_init(void)
 {
-	davinci_init_common_hw();
 	davinci_irq_init();
 }
 

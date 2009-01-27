@@ -31,6 +31,8 @@
 #define DAVINCI_GPSC_ARMDOMAIN      0
 #define DAVINCI_GPSC_DSPDOMAIN      1
 
+#define DAVINCI_LPSC_NONE           0xff
+
 #define DAVINCI_LPSC_VPSSMSTR       0
 #define DAVINCI_LPSC_VPSSSLV        1
 #define DAVINCI_LPSC_TPCC           2

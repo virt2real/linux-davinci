@@ -24,4 +24,6 @@
 
 #include <mach/hardware.h>
 
+void __init dm644x_init(void);
+
 #endif /* __ASM_ARCH_DM644X_H */

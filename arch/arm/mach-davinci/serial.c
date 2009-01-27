@@ -57,7 +57,6 @@ static struct plat_serial8250_port serial_platform_data[] = {
 		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
-		.uartclk	= 27000000,
 	},
 	{
 		.membase	= (char *)IO_ADDRESS(DAVINCI_UART1_BASE),
@@ -66,7 +65,6 @@ static struct plat_serial8250_port serial_platform_data[] = {
 		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
-		.uartclk	= 27000000,
 	},
 	{
 		.membase	= (char *)IO_ADDRESS(DAVINCI_UART2_BASE),
@@ -75,7 +73,6 @@ static struct plat_serial8250_port serial_platform_data[] = {
 		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
-		.uartclk	= 27000000,
 	},
 	{
 		.flags		= 0
@@ -125,12 +122,10 @@ void __init davinci_serial_init(struct davinci_uart_config *info)
 		struct plat_serial8250_port *p = serial_platform_data + i;
 
 		if (cpu_is_davinci_dm646x()) {
-			p->uartclk = DM646X_AUX_OSC_FREQ;
 			p->iotype = UPIO_MEM32;
 		}
 
 		if (cpu_is_davinci_dm355()) {
-			p->uartclk = 24000000;
 			if (i == 2) {
 				p->membase = (char *)
 					IO_ADDRESS(DM355_UART2_BASE);
@@ -144,8 +139,9 @@ void __init davinci_serial_init(struct davinci_uart_config *info)
 			continue;
 		}
 
-		sprintf(name, "UART%d", i);
+		sprintf(name, "uart%d", i);
 		uart_clk = clk_get(dev, name);
+		p->uartclk = clk_get_rate(uart_clk);
 		if (IS_ERR(uart_clk))
 			printk(KERN_ERR "%s:%d: failed to get UART%d clock\n",
 					__func__, __LINE__, i);
