@@ -48,7 +48,6 @@
 
 #include <mach/dm644x.h>
 #include <mach/common.h>
-#include <mach/board.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>

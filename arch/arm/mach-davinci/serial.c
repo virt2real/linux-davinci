@@ -32,7 +32,6 @@
 #include <mach/hardware.h>
 #include <mach/serial.h>
 #include <mach/irqs.h>
-#include <mach/board.h>
 #include <mach/cpu.h>
 #include "clock.h"
 

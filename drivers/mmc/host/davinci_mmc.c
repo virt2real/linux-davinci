@@ -31,7 +31,7 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 
-#include <mach/board.h>
+#include <mach/mmc.h>
 #include <mach/cpu.h>
 #include <mach/edma.h>
 #include <mach/hardware.h>

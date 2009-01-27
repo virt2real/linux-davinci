@@ -30,10 +30,10 @@
 #include <mach/hardware.h>
 #include <mach/psc.h>
 #include <mach/common.h>
-#include <mach/board.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>
+#include <mach/mmc.h>
 
 #define DAVINCI_ASYNC_EMIF_CONTROL_BASE		0x01e10000
 #define DAVINCI_ASYNC_EMIF_DATA_CE0_BASE	0x02000000

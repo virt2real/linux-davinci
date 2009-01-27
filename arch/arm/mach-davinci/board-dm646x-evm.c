@@ -33,12 +33,12 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/flash.h>
-#include <mach/board.h>
 #include <mach/common.h>
 #include <mach/hardware.h>
 #include <mach/psc.h>
 #include <mach/serial.h>
 #include <mach/i2c.h>
+#include <mach/mmc.h>
 
 #include <linux/platform_device.h>
 #include <linux/i2c.h>

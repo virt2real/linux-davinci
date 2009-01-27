@@ -22,13 +22,13 @@
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
 
-#include <mach/board.h>
 #include <mach/hardware.h>
 #include <mach/edma.h>
 #include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/cpu.h>
 #include <mach/mux.h>
+#include <mach/mmc.h>
 
 #include "clock.h"
 

@@ -1,13 +1,9 @@
 /*
- *  Information structures for board-specific data
- *
- *  Derived from OMAP board.h:
- *  	Copyright (C) 2004	Nokia Corporation
- *  	Written by Juha Yrjölä <juha.yrjola@nokia.com>
+ *  Board-specific MMC configuration
  */
 
-#ifndef _DAVINCI_BOARD_H
-#define _DAVINCI_BOARD_H
+#ifndef _DAVINCI_MMC_H
+#define _DAVINCI_MMC_H
 
 #include <linux/types.h>
 
