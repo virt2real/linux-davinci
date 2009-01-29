@@ -39,38 +39,38 @@ static inline unsigned int serial_read_reg(struct plat_serial8250_port *up,
 					   int offset)
 {
 	offset <<= up->regshift;
-	return (unsigned int)__raw_readl(up->membase + offset);
+	return (unsigned int)__raw_readl(IO_ADDRESS(up->mapbase) + offset);
 }
 
 static inline void serial_write_reg(struct plat_serial8250_port *p, int offset,
 				    int value)
 {
 	offset <<= p->regshift;
-	__raw_writel(value, p->membase + offset);
+	__raw_writel(value, IO_ADDRESS(p->mapbase) + offset);
 }
 
 static struct plat_serial8250_port serial_platform_data[] = {
 	{
-		.membase	= (char *)IO_ADDRESS(DAVINCI_UART0_BASE),
-		.mapbase	= (unsigned long)DAVINCI_UART0_BASE,
+		.mapbase	= DAVINCI_UART0_BASE,
 		.irq		= IRQ_UARTINT0,
-		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST |
+				  UPF_IOREMAP,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
 	},
 	{
-		.membase	= (char *)IO_ADDRESS(DAVINCI_UART1_BASE),
-		.mapbase	= (unsigned long)DAVINCI_UART1_BASE,
+		.mapbase	= DAVINCI_UART1_BASE,
 		.irq		= IRQ_UARTINT1,
-		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST |
+				  UPF_IOREMAP,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
 	},
 	{
-		.membase	= (char *)IO_ADDRESS(DAVINCI_UART2_BASE),
-		.mapbase	= (unsigned long)DAVINCI_UART2_BASE,
+		.mapbase	= DAVINCI_UART2_BASE,
 		.irq		= IRQ_UARTINT2,
-		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST |
+				  UPF_IOREMAP,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
 	},
@@ -121,22 +121,20 @@ void __init davinci_serial_init(struct davinci_uart_config *info)
 	for (i = 0; i < DAVINCI_MAX_NR_UARTS; i++) {
 		struct plat_serial8250_port *p = serial_platform_data + i;
 
+		if (!(info->enabled_uarts & (1 << i))) {
+			p->flags = 0;
+			continue;
+		}
+
 		if (cpu_is_davinci_dm646x()) {
 			p->iotype = UPIO_MEM32;
 		}
 
 		if (cpu_is_davinci_dm355()) {
 			if (i == 2) {
-				p->membase = (char *)
-					IO_ADDRESS(DM355_UART2_BASE);
 				p->mapbase = (unsigned long)DM355_UART2_BASE;
 				p->irq = IRQ_DM355_UARTINT2;
 			}
-		}
-
-		if (!(info->enabled_uarts & (1 << i))) {
-			p->flags = 0;
-			continue;
 		}
 
 		sprintf(name, "uart%d", i);

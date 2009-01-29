@@ -40,7 +40,7 @@ int __init davinci_mux_register(const struct mux_config *pins,
 int __init_or_module davinci_cfg_reg(const unsigned long index)
 {
 	static DEFINE_SPINLOCK(mux_spin_lock);
-
+	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
 	unsigned long flags;
 	const struct mux_config *cfg;
 	unsigned int reg_orig = 0, reg = 0;
@@ -68,7 +68,7 @@ int __init_or_module davinci_cfg_reg(const unsigned long index)
 		unsigned	tmp1, tmp2;
 
 		spin_lock_irqsave(&mux_spin_lock, flags);
-		reg_orig = davinci_readl(cfg->mux_reg);
+		reg_orig = __raw_readl(base + cfg->mux_reg);
 
 		mask = (cfg->mask << cfg->mask_offset);
 		tmp1 = reg_orig & mask;
@@ -80,7 +80,7 @@ int __init_or_module davinci_cfg_reg(const unsigned long index)
 		if (tmp1 != tmp2)
 			warn = 1;
 
-		davinci_writel(reg, cfg->mux_reg);
+		__raw_writel(reg, base + cfg->mux_reg);
 		spin_unlock_irqrestore(&mux_spin_lock, flags);
 	}
 

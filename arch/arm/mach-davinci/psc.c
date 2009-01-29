@@ -46,13 +46,15 @@ static void (*davinci_psc_mux)(unsigned int id);
 
 static void dm6446_psc_mux(unsigned int id)
 {
+	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
+
 	switch (id) {
 	case DAVINCI_LPSC_MMC_SD:
 		/* VDD power manupulations are done in U-Boot for CPMAC
 		 * so applies to MMC as well
 		 */
 		/*Set up the pull regiter for MMC */
-		davinci_writel(0, DAVINCI_SYSTEM_MODULE_BASE + VDD3P3V_PWDN);
+		__raw_writel(0, base + VDD3P3V_PWDN);
 		davinci_cfg_reg(DM644X_MSTK);
 		break;
 	case DAVINCI_LPSC_I2C:
@@ -70,14 +72,15 @@ static void dm6446_psc_mux(unsigned int id)
 	}
 }
 
-#define DM355_ARM_PINMUX3	(DAVINCI_SYSTEM_MODULE_BASE + 0x0c)
-#define DM355_ARM_PINMUX4	(DAVINCI_SYSTEM_MODULE_BASE + 0x10)
-#define DM355_ARM_INTMUX	(DAVINCI_SYSTEM_MODULE_BASE + 0x18)
-#define DM355_EDMA_EVTMUX	(DAVINCI_SYSTEM_MODULE_BASE + 0x1c)
+#define DM355_ARM_PINMUX3	0x0c
+#define DM355_ARM_PINMUX4	0x10
+#define DM355_ARM_INTMUX	0x18
+#define DM355_EDMA_EVTMUX	0x1c
 
 static void dm355_psc_mux(unsigned int id)
 {
 	u32	tmp;
+	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
 
 	/* REVISIT mixing pinmux with PSC setup seems pretty dubious,
 	 * especially in cases like ASP0 where there are valid partial
@@ -90,15 +93,15 @@ static void dm355_psc_mux(unsigned int id)
 		/* our ASoC code currently doesn't use these IRQs */
 #if 0
 		/* deliver ASP1_XINT and ASP1_RINT */
-		tmp = davinci_readl(DM355_ARM_INTMUX);
+		tmp = __raw_readl(base + DM355_ARM_INTMUX);
 		tmp |= BIT(6) | BIT(5);
-		davinci_writel(tmp, DM355_ARM_INTMUX);
+		__raw_writel(tmp, base + DM355_ARM_INTMUX);
 #endif
 
 		/* support EDMA for ASP1_RX and ASP1_TX */
-		tmp = davinci_readl(DM355_EDMA_EVTMUX);
+		tmp = __raw_readl(base + DM355_EDMA_EVTMUX);
 		tmp &= ~(BIT(1) | BIT(0));
-		davinci_writel(tmp, DM355_EDMA_EVTMUX);
+		__raw_writel(tmp, base + DM355_EDMA_EVTMUX);
 		break;
 	case DAVINCI_LPSC_SPI:			/* SPI0 */
 		/* expose SPI0_SDI
@@ -119,46 +122,45 @@ static void nop_psc_mux(unsigned int id)
 void davinci_psc_config(unsigned int domain, unsigned int id, char enable)
 {
 	u32 epcpr, ptcmd, ptstat, pdstat, pdctl1, mdstat, mdctl, mdstat_mask;
+	void __iomem *psc_base = IO_ADDRESS(DAVINCI_PWR_SLEEP_CNTRL_BASE);
 
 	if (id == DAVINCI_LPSC_NONE)
 		return;
 
-	mdctl = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE + MDCTL + 4 * id);
+	mdctl = __raw_readl(psc_base + MDCTL + 4 * id);
 	if (enable)
 		mdctl |= 0x00000003;	/* Enable Module */
 	else
 		mdctl &= 0xFFFFFFF2;	/* Disable Module */
-	davinci_writel(mdctl, DAVINCI_PWR_SLEEP_CNTRL_BASE + MDCTL + 4 * id);
+	__raw_writel(mdctl, psc_base + MDCTL + 4 * id);
 
-	pdstat = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE + PDSTAT);
+	pdstat = __raw_readl(psc_base + PDSTAT);
 	if ((pdstat & 0x00000001) == 0) {
-		pdctl1 = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE + PDCTL1);
+		pdctl1 = __raw_readl(psc_base + PDCTL1);
 		pdctl1 |= 0x1;
-		davinci_writel(pdctl1, DAVINCI_PWR_SLEEP_CNTRL_BASE + PDCTL1);
+		__raw_writel(pdctl1, psc_base + PDCTL1);
 
 		ptcmd = 1 << domain;
-		davinci_writel(ptcmd, DAVINCI_PWR_SLEEP_CNTRL_BASE + PTCMD);
+		__raw_writel(ptcmd, psc_base + PTCMD);
 
 		do {
-			epcpr = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE +
-					      EPCPR);
+			epcpr = __raw_readl(psc_base + EPCPR);
 		} while ((((epcpr >> domain) & 1) == 0));
 
-		pdctl1 = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE + PDCTL1);
+		pdctl1 = __raw_readl(psc_base + PDCTL1);
 		pdctl1 |= 0x100;
-		davinci_writel(pdctl1, DAVINCI_PWR_SLEEP_CNTRL_BASE + PDCTL1);
+		__raw_writel(pdctl1, psc_base + PDCTL1);
 
 		do {
-			ptstat = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE +
+			ptstat = __raw_readl(psc_base +
 					       PTSTAT);
 		} while (!(((ptstat >> domain) & 1) == 0));
 	} else {
 		ptcmd = 1 << domain;
-		davinci_writel(ptcmd, DAVINCI_PWR_SLEEP_CNTRL_BASE + PTCMD);
+		__raw_writel(ptcmd, psc_base + PTCMD);
 
 		do {
-			ptstat = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE +
-					       PTSTAT);
+			ptstat = __raw_readl(psc_base + PTSTAT);
 		} while (!(((ptstat >> domain) & 1) == 0));
 	}
 
@@ -168,8 +170,7 @@ void davinci_psc_config(unsigned int domain, unsigned int id, char enable)
 		mdstat_mask = 0x2;
 
 	do {
-		mdstat = davinci_readl(DAVINCI_PWR_SLEEP_CNTRL_BASE +
-				       MDSTAT + 4 * id);
+		mdstat = __raw_readl(psc_base + MDSTAT + 4 * id);
 	} while (!((mdstat & 0x0000001F) == mdstat_mask));
 
 	if (enable)

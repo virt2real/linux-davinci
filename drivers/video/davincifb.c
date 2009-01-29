@@ -53,18 +53,18 @@
  */
 static __inline__ u32 dispc_reg_in(u32 reg)
 {
-	return davinci_readl(reg);
+	return ioread32(IO_ADDRESS(reg));
 }
 static __inline__ u32 dispc_reg_out(u32 reg, u32 val)
 {
-	davinci_writel(val, reg);
+	iowrite32(val, IO_ADDRESS(reg));
 	return (val);
 }
 static __inline__ u32 dispc_reg_merge(u32 reg, u32 val, u32 mask)
 {
-	u32 new_val = (davinci_readl(reg) & ~mask) | (val & mask);
+	u32 new_val = (ioread32(IO_ADDRESS(reg)) & ~mask) | (val & mask);
 
-	davinci_writel(new_val, reg);
+	iowrite32(new_val, IO_ADDRESS(reg));
 	return (new_val);
 }
 

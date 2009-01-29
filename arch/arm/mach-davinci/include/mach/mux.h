@@ -22,19 +22,19 @@
 #include <mach/dm644x.h>
 
 /* System module registers */
-#define PINMUX0			(DAVINCI_SYSTEM_MODULE_BASE + 0x00)
-#define PINMUX1			(DAVINCI_SYSTEM_MODULE_BASE + 0x04)
+#define PINMUX0			0x00
+#define PINMUX1			0x04
 /* dm355 only */
-#define PINMUX2			(DAVINCI_SYSTEM_MODULE_BASE + 0x08)
-#define PINMUX3			(DAVINCI_SYSTEM_MODULE_BASE + 0x0c)
-#define PINMUX4			(DAVINCI_SYSTEM_MODULE_BASE + 0x10)
-#define INTMUX			(DAVINCI_SYSTEM_MODULE_BASE + 0x18)
-#define EVTMUX			(DAVINCI_SYSTEM_MODULE_BASE + 0x1c)
+#define PINMUX2			0x08
+#define PINMUX3			0x0c
+#define PINMUX4			0x10
+#define INTMUX			0x18
+#define EVTMUX			0x1c
 
 struct mux_config {
 	char *name;
 	const char *mux_reg_name;
-	const unsigned int mux_reg;
+	const unsigned char mux_reg;
 	const unsigned char mask_offset;
 	const unsigned char mask;
 	const unsigned char mode;
