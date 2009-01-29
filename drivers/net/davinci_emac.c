@@ -29,9 +29,7 @@
  */
 
 /** Pending Items in this driver:
- * 1. use ioremap(), remove davinci_readl()/etc, minimize __force
- * 2. Use Linux cache infrastcture for DMA'ed memory (dma_xxx functions)
- * 3. Add DM646x support (gigabit included)
+ * 1. Use Linux cache infrastcture for DMA'ed memory (dma_xxx functions)
 */
 
 #include <linux/module.h>
@@ -485,8 +483,10 @@ struct emac_priv {
 	char mac_addr[6];
 	spinlock_t tx_lock;
 	spinlock_t rx_lock;
-	u32 emac_base_regs;
-	u32 emac_ctrl_regs;
+	u32 emac_base_phys;
+	void __iomem *emac_base;
+	u32 emac_ctrl_phys;
+	void __iomem *ctrl_base;
 	void __iomem *emac_ctrl_ram;
 	u32 ctrl_ram_size;
 	struct emac_txch *txch[EMAC_DEF_MAX_TX_CH];
@@ -557,16 +557,15 @@ static char *emac_rxhost_errcodes[16] = {
 #define EMAC_DEV (&(priv)->ndev->dev)
 
 /* Helper macros */
-#define emac_read(reg)		davinci_readl((priv->emac_base_regs + (reg)))
-#define emac_write(reg, val) \
-	davinci_writel(val, (priv->emac_base_regs + (reg)))
+#define emac_read(reg)		  ioread32(priv->emac_base + (reg))
+#define emac_write(reg, val)      iowrite32(val, priv->emac_base + (reg))
 
-#define emac_ctrl_read(reg)	davinci_readl((priv->emac_ctrl_regs + (reg)))
-#define emac_ctrl_write(reg, val) \
-	davinci_writel(val, (priv->emac_ctrl_regs + (reg)))
+#define emac_ctrl_read(reg)	  ioread32((priv->ctrl_base + (reg)))
+#define emac_ctrl_write(reg, val) iowrite32(val, (priv->ctrl_base + (reg)))
 
-#define emac_mdio_read(reg)	davinci_readl((bus->priv + (reg)))
-#define emac_mdio_write(reg, val)	davinci_writel(val, (bus->priv + (reg)))
+#define emac_mdio_read(reg)	  ioread32(bus->priv + (reg))
+#define emac_mdio_write(reg, val) iowrite32(val, (bus->priv + (reg)))
+
 /**
  * emac_dump_regs: Dump important EMAC registers to debug terminal
  * @priv: The DaVinci EMAC private adapter structure
@@ -2603,6 +2602,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct net_device *ndev;
 	struct emac_priv *priv;
+	unsigned long size;
 
 	/* obtain emac clock from kernel */
 	emac_clk = clk_get(&pdev->dev, "EMACCLK");
@@ -2644,16 +2644,22 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 		rc = -ENOENT;
 		goto probe_quit;
 	}
-	priv->emac_base_regs = res->start;
-	ndev->base_addr = (unsigned long)IO_ADDRESS(res->start);
-	if (!request_mem_region((u32)priv->emac_base_regs,
-				(res->end - res->start + 1),
-				ndev->name)) {
+	priv->emac_base_phys = res->start;
+	size = res->end - res->start + 1;
+	if (!request_mem_region(priv->emac_base_phys, size, ndev->name)) {
 		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
 					 for ctrl regs\n");
 		rc = -ENXIO;
 		goto probe_quit;
 	}
+	priv->emac_base = ioremap(res->start, size);
+	if (!priv->emac_base) {
+		dev_err(EMAC_DEV, "Unable to map IO\n");
+		rc = -ENOMEM;
+		release_mem_region(priv->emac_base_phys, size);
+		goto probe_quit;
+	}
+	ndev->base_addr = (unsigned long)priv->emac_base;
 
 	res = platform_get_resource_byname(pdev,
 					IORESOURCE_MEM, "ctrl_module_regs");
@@ -2663,10 +2669,15 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 		rc = -ENOENT;
 		goto no_ctrl_mod_res;
 	}
-	priv->emac_ctrl_regs = res->start;
-	if (!request_mem_region((u32)priv->emac_ctrl_regs,
-				(res->end - res->start + 1),
-				ndev->name)) {
+	priv->emac_ctrl_phys = res->start;
+	size = res->end - res->start + 1;
+	priv->ctrl_base = ioremap(res->start, size);
+	if (!priv->ctrl_base) {
+		dev_err(EMAC_DEV, "Unable to map ctrl regs\n");
+		rc = -ENOMEM;
+		goto no_ctrl_mod_res;
+	}
+	if (!request_mem_region(priv->emac_ctrl_phys, size, ndev->name)) {
 		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
 					for ctrl module regs\n");
 		rc = -ENXIO;
@@ -2679,11 +2690,14 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 		rc = -ENOENT;
 		goto no_ctrl_ram_res;
 	}
-	priv->emac_ctrl_ram = IO_ADDRESS(res->start);
 	priv->ctrl_ram_size = res->end - res->start + 1;
-	if (!request_mem_region(res->start,
-				(res->end - res->start + 1),
-				ndev->name)) {
+	priv->emac_ctrl_ram = ioremap(res->start, priv->ctrl_ram_size);
+	if (!priv->emac_ctrl_ram) {
+		dev_err(EMAC_DEV, "Unable to map ctrl RAM\n");
+		rc = -ENOMEM;
+		goto no_ctrl_ram_res;
+	}
+	if (!request_mem_region(res->start, priv->ctrl_ram_size, ndev->name)) {
 		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
 					for ctrl ram regs\n");
 		rc = -ENXIO;
@@ -2751,9 +2765,14 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	}
 
 	emac_mii->priv = (void *)(res->start);
-	if (!request_mem_region(res->start,
-				(res->end - res->start + 1),
-				ndev->name)) {
+	size = res->end - res->start + 1;
+	emac_mii->priv = ioremap(res->start, size);
+	if (!emac_mii->priv) {
+		dev_err(EMAC_DEV, "Unable to map MDIO regs\n");
+		rc = -ENOMEM;
+		goto no_mdio_res;
+	}
+	if (!request_mem_region(res->start, size, ndev->name)) {
 		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
 					for mdio regs\n");
 		rc = -ENXIO;
@@ -2771,7 +2790,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	if (netif_msg_probe(priv)) {
 		dev_notice(EMAC_DEV, "DaVinci EMAC Probe found device "\
 			   "(regs: %p, irq: %d)\n",
-			   (void *)priv->emac_base_regs, ndev->irq);
+			   (void *)priv->emac_base_phys, ndev->irq);
 	}
 	return 0;
 
@@ -2786,15 +2805,18 @@ mdio_alloc_err:
 no_irq_res:
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_ram");
 	release_mem_region(res->start, res->end - res->start + 1);
+	iounmap(priv->emac_ctrl_ram);
 
 no_ctrl_ram_res:
 	res = platform_get_resource_byname(pdev,
 					IORESOURCE_MEM, "ctrl_module_regs");
 	release_mem_region(res->start, res->end - res->start + 1);
+	iounmap(priv->ctrl_base);
 
 no_ctrl_mod_res:
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_regs");
 	release_mem_region(res->start, res->end - res->start + 1);
+	iounmap(priv->emac_base);
 
 probe_quit:
 	clk_put(emac_clk);
@@ -2831,6 +2853,10 @@ static int __devexit davinci_emac_remove(struct platform_device *pdev)
 
 	unregister_netdev(ndev);
 	free_netdev(ndev);
+	iounmap(priv->emac_base);
+	iounmap(priv->ctrl_base);
+	iounmap(priv->emac_ctrl_ram);
+	iounmap(emac_mii->priv);
 	clk_disable(emac_clk);
 	clk_put(emac_clk);
 
