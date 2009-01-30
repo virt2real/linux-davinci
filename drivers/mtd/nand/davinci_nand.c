@@ -78,14 +78,8 @@ static inline int mtd_has_cmdlinepart(void) { return 0; }
 static inline int is_hw_ecc_1bit(void) { return 1; }
 #else
 static inline int is_hw_ecc_1bit(void) { return 0; }
-#define NAND_ECC_HW3_256	100
-#define NAND_ECC_HW3_512	101
-#define NAND_ECC_HW6_512	102
-#define NAND_ECC_HW8_512	103
-#define NAND_ECC_HW12_2048	104
 #endif
 
-#define DRIVER_NAME "davinci_nand"
 
 struct davinci_nand_info {
 	struct mtd_info		mtd;
@@ -179,7 +173,7 @@ static void nand_davinci_enable_hwecc_1bit(struct mtd_info *mtd, int mode)
 
 	/* Restart ECC hardware */
 	retval = davinci_nand_readl(info, NANDFCR_OFFSET);
-	retval |= (1 << 8);
+	retval |= BIT(8);
 	davinci_nand_writel(info, NANDFCR_OFFSET, retval);
 }
 
@@ -226,7 +220,7 @@ static int nand_davinci_correct_data_1bit(struct mtd_info *mtd, u_char *dat,
 		if ((((diff >> 12) ^ diff) & 0xfff) == 0xfff) {
 			/* Correctable error */
 			if ((diff >> (12 + 3)) < chip->ecc.size) {
-				dat[diff >> (12 + 3)] ^= (1 << ((diff >> 12) & 7));
+				dat[diff >> (12 + 3)] ^= BIT((diff >> 12) & 7);
 				return 1;
 			} else {
 				return -1;
@@ -423,53 +417,6 @@ static int nand_davinci_dev_ready(struct mtd_info *mtd)
 	struct davinci_nand_info *info = to_davinci_nand(mtd);
 
 	return davinci_nand_readl(info, NANDFSR_OFFSET) & NAND_BUSY_FLAG;
-}
-
-static void __init nand_davinci_set_eccsize(struct nand_chip *chip)
-{
-	chip->ecc.size = 256;
-
-	if (!is_hw_ecc_1bit())
-		return;
-
-	switch (chip->ecc.mode) {
-	case NAND_ECC_HW12_2048:
-		chip->ecc.size = 2048;
-		break;
-
-	case NAND_ECC_HW3_512:
-	case NAND_ECC_HW6_512:
-	case NAND_ECC_HW8_512:
-		chip->ecc.size = 512;
-		break;
-
-	case NAND_ECC_HW3_256:
-	default:
-		/* do nothing */
-		break;
-	}
-}
-
-static void __init nand_davinci_set_eccbytes(struct nand_chip *chip)
-{
-	chip->ecc.bytes = 3;
-
-	if (!is_hw_ecc_1bit())
-		return;
-
-	switch (chip->ecc.mode) {
-	case NAND_ECC_HW12_2048:
-		chip->ecc.bytes += 4;
-	case NAND_ECC_HW8_512:
-		chip->ecc.bytes += 2;
-	case NAND_ECC_HW6_512:
-		chip->ecc.bytes += 3;
-	case NAND_ECC_HW3_512:
-	case NAND_ECC_HW3_256:
-	default:
-		/* do nothing */
-		break;
-	}
 }
 
 static void __init nand_dm355evm_flash_init(struct davinci_nand_info *info)
@@ -672,12 +619,14 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	 * fixed?):  Linux seemed to limit ECC data to 32 bytes.
 	 */
 	if (is_hw_ecc_1bit()) {
-		info->chip.ecc.mode	 = NAND_ECC_HW3_512;
+		info->chip.ecc.mode = NAND_ECC_HW;
 		info->chip.ecc.calculate = nand_davinci_calculate_ecc_1bit;
-		info->chip.ecc.correct   = nand_davinci_correct_data_1bit;
-		info->chip.ecc.hwctl     = nand_davinci_enable_hwecc_1bit;
+		info->chip.ecc.correct = nand_davinci_correct_data_1bit;
+		info->chip.ecc.hwctl = nand_davinci_enable_hwecc_1bit;
+		info->chip.ecc.size = 512;
+		info->chip.ecc.bytes = 3;
 	} else {
-		info->chip.ecc.mode	 = NAND_ECC_SOFT;
+		info->chip.ecc.mode = NAND_ECC_SOFT;
 	}
 
 	info->clk = clk_get(&pdev->dev, "AEMIFCLK");
@@ -692,10 +641,6 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "unable to enable AEMIFCLK, err %d\n", ret);
 		goto err_clk_enable;
 	}
-
-	/* Set ECC size and bytes */
-	nand_davinci_set_eccsize(&info->chip);
-	nand_davinci_set_eccbytes(&info->chip);
 
 	/* FIXME these don't belong here ... */
 	if (machine_is_davinci_dm355_evm())
@@ -817,9 +762,10 @@ static int __exit nand_davinci_remove(struct platform_device *pdev)
 static struct platform_driver nand_davinci_driver = {
 	.remove		= __exit_p(nand_davinci_remove),
 	.driver		= {
-		.name	= DRIVER_NAME,
+		.name	= "davinci_nand",
 	},
 };
+MODULE_ALIAS("platform:davinci_nand");
 
 static int __init nand_davinci_init(void)
 {
@@ -833,7 +779,6 @@ static void __exit nand_davinci_exit(void)
 }
 module_exit(nand_davinci_exit);
 
-MODULE_ALIAS(DRIVER_NAME);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Texas Instruments");
 MODULE_DESCRIPTION("Davinci NAND flash driver");

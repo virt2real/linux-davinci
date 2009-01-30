@@ -453,9 +453,11 @@ config MTD_NAND_DAVINCI
           Support for NAND flash on Texas Instruments DaVinci SoC.
 
 config NAND_FLASH_HW_ECC
-        bool "Hardware ECC Support on NAND Device for DaVinci"
+        bool "1-Bit Hardware ECC on NAND Device for DaVinci"
         depends on MTD_NAND_DAVINCI
         help
-          Support for Hardware ECC on NAND device for DaVinci.
+	  Support the single bit Hardware ECC on NAND devices
+	  for DaVinci.  This uses three bytes of OOB data for
+	  each 512 bytes of data.
 
 endif # MTD_NAND
