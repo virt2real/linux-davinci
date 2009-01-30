@@ -39,6 +39,7 @@
 #include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>
+#include <mach/mux.h>
 #include <mach/psc.h>
 #include <mach/mmc.h>
 
@@ -575,11 +576,8 @@ static void __init evm_init_i2c(void)
 }
 
 static struct platform_device *davinci_evm_devices[] __initdata = {
-	&davinci_evm_norflash_device,
-	&davinci_evm_nandflash_device,
 	&davinci_fb_device,
 	&rtc_dev,
-	&ide_dev,
 };
 
 static struct davinci_uart_config uart_config __initdata = {
@@ -606,16 +604,50 @@ static int davinci_phy_fixup(struct phy_device *phydev)
 	return 0;
 }
 
-static __init void davinci_evm_init(void)
-{
 #if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
     defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
+#define HAS_ATA 1
+#else
+#define HAS_ATA 0
+#endif
+
 #if defined(CONFIG_MTD_PHYSMAP) || \
     defined(CONFIG_MTD_PHYSMAP_MODULE)
-	printk(KERN_WARNING "WARNING: both IDE and NOR flash are enabled, "
-	       "but share pins.\n\t Disable IDE for NOR support.\n");
+#define HAS_NOR 1
+#else
+#define HAS_NOR 0
 #endif
+
+#if defined(CONFIG_MTD_NAND_DAVINCI) || \
+    defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
+#define HAS_NAND 1
+#else
+#define HAS_NAND 0
 #endif
+
+static __init void davinci_evm_init(void)
+{
+	if (HAS_ATA) {
+		if (HAS_NAND || HAS_NOR)
+			pr_warning("WARNING: both IDE and Flash are "
+				"enabled, but they share AEMIF pins.\n"
+				"\tDisable IDE for NAND/NOR support.\n");
+		davinci_cfg_reg(DM644X_HPIEN_DISABLE);
+		davinci_cfg_reg(DM644X_ATAEN);
+		davinci_cfg_reg(DM644X_HDIREN);
+		platform_device_register(&ide_dev);
+	} else if (HAS_NAND || HAS_NOR) {
+		davinci_cfg_reg(DM644X_HPIEN_DISABLE);
+		davinci_cfg_reg(DM644X_ATAEN_DISABLE);
+
+		/* only one device will be jumpered and detected */
+		if (HAS_NAND) {
+			platform_device_register(&davinci_evm_nandflash_device);
+			evm_leds[7].default_trigger = "nand-disk";
+		}
+		if (HAS_NOR)
+			platform_device_register(&davinci_evm_norflash_device);
+	}
 
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));

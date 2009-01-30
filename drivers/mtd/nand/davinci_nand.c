@@ -469,35 +469,6 @@ static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 {
 	u32 regval, tmp;
 
-	/* The following mux setting are for dm6446 only,
-	 * that's why we keep them inside the above conditional
-	 * so we don't mess up other arch's mux settings.
-	 *
-	 * FIXME ideally, this should be done by board support,
-	 * move it there at some point.
-	 */
-	if (machine_is_davinci_evm()) {
-		/* Check for correct pin mux, reconfigure if necessary */
-		tmp = davinci_readl(PINMUX0);
-
-		if ((tmp & 0x20020C1F) != 0x00000C1F) {
-			/* Disable HPI and ATA mux */
-			davinci_cfg_reg(DM644X_HPIEN_DISABLE);
-			davinci_cfg_reg(DM644X_ATAEN_DISABLE);
-
-			/* Enable VLYNQ and AEAW */
-			davinci_cfg_reg(DM644X_AEAW);
-			davinci_cfg_reg(DM644X_VLSCREN);
-			davinci_cfg_reg(DM644X_VLYNQEN);
-
-			regval = davinci_readl(PINMUX0);
-
-			dev_warn(info->dev, "Warning: MUX config for NAND: Set " \
-					"PINMUX0 reg to 0x%08x, was 0x%08x, should be done " \
-					"by bootloader.\n", regval, tmp);
-		}
-	}
-
 	regval = davinci_nand_readl(info, AWCCR_OFFSET);
 	regval |= 0x10000000;
 	davinci_nand_writel(info, AWCCR_OFFSET, regval);

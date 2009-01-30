@@ -47,10 +47,6 @@ static void (*davinci_psc_mux)(unsigned int id);
 static void dm6446_psc_mux(unsigned int id)
 {
 	switch (id) {
-	case DAVINCI_LPSC_ATA:
-		davinci_cfg_reg(DM644X_HDIREN);
-		davinci_cfg_reg(DM644X_ATAEN);
-		break;
 	case DAVINCI_LPSC_MMC_SD:
 		/* VDD power manupulations are done in U-Boot for CPMAC
 		 * so applies to MMC as well
