@@ -234,6 +234,11 @@ static __init void dm355_evm_init(void)
 	evm_init_i2c();
 	davinci_serial_init(&uart_config);
 
+	/* NOTE:  NAND flash timings set by the UBL are slower than
+	 * needed by MT29F16G08FAA chips ... EMIF.A1CR is 0x40400204
+	 * but could be 0x0400008c.
+	 */
+
 	gpio_request(2, "usb_id_toggle");
 	gpio_direction_output(2, USB_ID_VALUE);
 	/* irlml6401 switches over 1A in under 8 msec */

@@ -283,70 +283,18 @@ static int nand_davinci_dev_ready(struct mtd_info *mtd)
 	return davinci_nand_readl(info, NANDFSR_OFFSET) & BIT(0);
 }
 
-static void __init nand_dm355evm_flash_init(struct davinci_nand_info *info)
-{
-	u32 val, tmp;
-
-	/*
-	 * For AEMIFCLK at 108.0 MHz (9.26 nsec/tick) these timings:
-	 *  - have small (a few nsec) margins for pcb+socket delays
-	 *  - assume standard mode operations (not cache mode)
-	 *  - are WAY OFF for turnaround not gated by ARM instructions
-	 *
-	 * Write setup (tCS, tDS) min 15 nsec
-	 * Write strobes (tWP) could be subsumed in setup
-	 *
-	 * Read setup (tCEA - tREA) min 5 nsec
-	 * Read strobes (tRP) min 12 nsec
-	 *
-	 * Hold times (tALH, tCLH, tCH, tDH) min 5 nsec
-	 * Read and write cycle times (tRC, tWC) min 25 nsec
-	 * Turnaround (tWHR, tRHW) min 100 nsec
-	 */
-	val = 0
-		| (0 << 31)	/* selectStrobe		normal mode */
-		| (0 << 30)	/* extWait		mbz for NAND */
-
-		/* WRITE: */
-		| (1 << 26)	/* Setup		2 ticks (18 ns) */
-		| (0 << 20)	/* Strobe		1 tick (9 ns) */
-		| (0 << 17)	/* Hold			1 tick (9 ns) */
-
-		/* READ: */
-		| (0 << 13)	/* Setup		1 tick (9 ns) */
-		| (1 << 7)	/* Strobe		2 ticks (18 ns) */
-		| (0 << 4)	/* Hold			1 tick (9 ns) */
-
-		| (3 << 2)	/* turnAround		3 ticks (TOO LOW) */
-		| (0 << 0)	/* asyncSize		eight-bit bus */
-		;
-
-	tmp = davinci_nand_readl(info, A1CR_OFFSET);
-	if (tmp != val) {
-		dev_dbg(info->dev, "NAND config: Set A1CR "
-		       "to 0x%08x, was 0x%08x\n", val, tmp);
-		davinci_nand_writel(info, A1CR_OFFSET, val);
-	}
-}
-
 static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 {
 	u32 regval, tmp;
 
-	regval = davinci_nand_readl(info, AWCCR_OFFSET);
-	regval |= 0x10000000;
-	davinci_nand_writel(info, AWCCR_OFFSET, regval);
-
-	/*------------------------------------------------------------------*
-	 *  NAND FLASH CHIP TIMEOUT @ 459 MHz                               *
-	 *                                                                  *
-	 *  AEMIF.CLK freq   = PLL1/6 = 459/6 = 76.5 MHz                    *
-	 *  AEMIF.CLK period = 1/76.5 MHz = 13.1 ns                         *
-	 *                                                                  *
-	 *------------------------------------------------------------------*/
+	/*
+	 * NAND FLASH timings @ PLL1 == 459 MHz
+	 *  - AEMIF.CLK freq   = PLL1/6 = 459/6 = 76.5 MHz
+	 *  - AEMIF.CLK period = 1/76.5 MHz = 13.1 ns
+	 */
 	regval = 0
 		| (0 << 31)           /* selectStrobe */
-		| (0 << 30)           /* extWait */
+		| (0 << 30)           /* extWait (never with NAND) */
 		| (1 << 26)           /* writeSetup      10 ns */
 		| (3 << 20)           /* writeStrobe     40 ns */
 		| (1 << 17)           /* writeHold       10 ns */
@@ -503,9 +451,13 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 		goto err_clk_enable;
 	}
 
-	/* FIXME these don't belong here ... */
-	if (machine_is_davinci_dm355_evm())
-		nand_dm355evm_flash_init(info);
+	/* EMIF timings should normally be set by the boot loader,
+	 * especially after boot-from-NAND.  The *only* reason to
+	 * have this special casing for the DM6446 EVM is to work
+	 * with boot-from-NOR ... with CS0 manually re-jumpered
+	 * (after startup) so it addresses the NAND flash, not NOR.
+	 * Even for dev boards, that's unusually rude...
+	 */
 	if (machine_is_davinci_evm())
 		nand_dm6446evm_flash_init(info);
 

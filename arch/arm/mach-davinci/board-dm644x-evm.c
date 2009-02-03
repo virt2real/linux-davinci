@@ -646,8 +646,10 @@ static __init void davinci_evm_init(void)
 		if (HAS_NAND) {
 			platform_device_register(&davinci_evm_nandflash_device);
 			evm_leds[7].default_trigger = "nand-disk";
-		}
-		if (HAS_NOR)
+			if (HAS_NOR)
+				pr_warning("WARNING: both NAND and NOR flash "
+					"are enabled; disable one of them.\n");
+		} else if (HAS_NOR)
 			platform_device_register(&davinci_evm_norflash_device);
 	}
 
