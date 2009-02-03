@@ -16,7 +16,6 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand.h>
-#include <linux/mtd/onenand_regs.h>
 #include <linux/i2c.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
@@ -34,21 +33,31 @@
 #include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>
+#include <mach/nand.h>
 #include <mach/mmc.h>
 
 #define DAVINCI_ASYNC_EMIF_CONTROL_BASE		0x01e10000
 #define DAVINCI_ASYNC_EMIF_DATA_CE0_BASE	0x02000000
 
+/* NOTE:  this is geared for the standard config, with a socketed
+ * 2 GByte Micron NAND (MT29F16G08FAA) using 128KB sectors.  If you
+ * swap chips, maybe with a different block size, partitioning may
+ * need to be changed.
+ */
+#define NAND_BLOCK_SIZE		SZ_128K
+
 struct mtd_partition davinci_nand_partitions[] = {
 	{
+		/* UBL (a few copies) plus U-Boot */
 		.name		= "bootloader",
 		.offset		= 0,
-		.size		= 0x3c0000,
+		.size		= 15 * NAND_BLOCK_SIZE,
 		.mask_flags	= MTD_WRITEABLE, /* force read-only */
 	}, {
+		/* U-Boot environment */
 		.name		= "params",
 		.offset		= MTDPART_OFS_APPEND,
-		.size		= SZ_256K,
+		.size		= 1 * NAND_BLOCK_SIZE,
 		.mask_flags	= 0,
 	}, {
 		.name		= "kernel",
@@ -66,11 +75,14 @@ struct mtd_partition davinci_nand_partitions[] = {
 		.size		= MTDPART_SIZ_FULL,
 		.mask_flags	= 0,
 	}
+	/* two blocks with bad block table (and mirror) at the end */
 };
 
-static struct flash_platform_data davinci_nand_data = {
+static struct davinci_nand_pdata davinci_nand_data = {
 	.parts			= davinci_nand_partitions,
 	.nr_parts		= ARRAY_SIZE(davinci_nand_partitions),
+	.ecc_mode		= NAND_ECC_HW_SYNDROME,
+	.options		= NAND_USE_FLASH_BBT,
 };
 
 static struct resource davinci_nand_resources[] = {
@@ -87,7 +99,7 @@ static struct resource davinci_nand_resources[] = {
 
 static struct platform_device davinci_nand_device = {
 	.name			= "davinci_nand",
-	.id			= -1,
+	.id			= 0,
 
 	.num_resources		= ARRAY_SIZE(davinci_nand_resources),
 	.resource		= davinci_nand_resources,

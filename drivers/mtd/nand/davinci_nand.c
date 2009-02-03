@@ -1,7 +1,5 @@
 /*
- * linux/drivers/mtd/nand/davinci_nand.c
- *
- * NAND Flash Driver
+ * davinci_nand.c - NAND Flash Driver for DaVinci family chips
  *
  * Copyright (C) 2006 Texas Instruments.
  *
@@ -36,7 +34,6 @@
  *   Currently makes assumptions about how the NAND device(s) are wired:
  *      - connected on the first chipselect, controlled by A1CR
  *      - single NAND chip
- *      - ALE and CLE wired to support boot-from-NAND
  *      - EM_WAIT is connected to the NAND device, not another device
  *
  *  Modifications:
@@ -54,6 +51,7 @@
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 
+#include <mach/cpu.h>
 #include <mach/hardware.h>
 #include <mach/nand.h>
 #include <mach/mux.h>
@@ -74,12 +72,6 @@ static inline int mtd_has_cmdlinepart(void) { return 1; }
 static inline int mtd_has_cmdlinepart(void) { return 0; }
 #endif
 
-#ifdef CONFIG_NAND_FLASH_HW_ECC
-static inline int is_hw_ecc_1bit(void) { return 1; }
-#else
-static inline int is_hw_ecc_1bit(void) { return 0; }
-#endif
-
 
 struct davinci_nand_info {
 	struct mtd_info		mtd;
@@ -96,6 +88,8 @@ struct davinci_nand_info {
 	u32			mask_ale;
 	u32			mask_cle;
 };
+
+#define NAND_CHIPSEL		0
 
 #define to_davinci_nand(m) container_of(m, struct davinci_nand_info, mtd)
 
@@ -262,7 +256,7 @@ static int nand_davinci_dev_ready(struct mtd_info *mtd)
 {
 	struct davinci_nand_info *info = to_davinci_nand(mtd);
 
-	return davinci_nand_readl(info, NANDFSR_OFFSET) & NAND_BUSY_FLAG;
+	return davinci_nand_readl(info, NANDFSR_OFFSET) & BIT(0);
 }
 
 static void __init nand_dm355evm_flash_init(struct davinci_nand_info *info)
@@ -349,7 +343,7 @@ static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 
 static int __init nand_davinci_probe(struct platform_device *pdev)
 {
-	struct flash_platform_data	*pdata = pdev->dev.platform_data;
+	struct davinci_nand_pdata	*pdata = pdev->dev.platform_data;
 	struct davinci_nand_info	*info;
 	struct resource			*res1;
 	struct resource			*res2;
@@ -357,12 +351,11 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	void __iomem			*base;
 	int				ret;
 	u32				val;
+	nand_ecc_modes_t		ecc_mode;
 
-	if (!pdata) {
-		dev_err(&pdev->dev, "platform_data missing\n");
-		ret = -ENODEV;
-		goto err_pdata;
-	}
+	/* only one chipselect is supported for now */
+	if (pdev->id != NAND_CHIPSEL)
+		return -ENODEV;
 
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info) {
@@ -402,13 +395,21 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	info->chip.IO_ADDR_W	= vaddr;
 	info->chip.chip_delay	= 0;
 	info->chip.select_chip	= nand_davinci_select_chip;
-	info->chip.options	= 0;
+
+	/* options such as NAND_USE_FLASH_BBT or 16-bit widths */
+	info->chip.options	= pdata ? pdata->options : 0;
 
 	info->ioaddr		= (u32 __force) vaddr;
 
-	/* FIXME these masks should come from platform_data */
-	info->mask_ale		= MASK_ALE;
-	info->mask_cle		= MASK_CLE;
+	/* use nandboot-capable ALE/CLE masks by default */
+	if (pdata && pdata->mask_ale)
+		info->mask_ale	= pdata->mask_cle;
+	else
+		info->mask_ale	= MASK_ALE;
+	if (pdata && pdata->mask_cle)
+		info->mask_cle	= pdata->mask_cle;
+	else
+		info->mask_cle	= MASK_CLE;
 
 	/* Set address of hardware control function */
 	info->chip.cmd_ctrl	= nand_davinci_hwcontrol;
@@ -418,12 +419,15 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	info->chip.read_buf     = nand_davinci_read_buf;
 	info->chip.write_buf    = nand_davinci_write_buf;
 
+	/* use board-specific ECC config; else, the best available */
+	if (pdata)
+		ecc_mode = pdata->ecc_mode;
+	else if (cpu_is_davinci_dm355())
+		ecc_mode = NAND_ECC_HW_SYNDROME;
+	else
+		ecc_mode = NAND_ECC_HW;
+
 	/*
-	 * REVISIT should probably be using runtime check using board's
-	 * platform_data, since three ECC modes (soft, 1bit, 4bit) are
-	 * incompatible at the binary level.  If the board formatted its
-	 * flash for a mode that's not supported by this kernel, bail!
-	 *
 	 * REVISIT dm355 adds an ECC mode that corrects up to 4 error
 	 * bits, using 10 ECC bytes every 512 bytes of data.  And that
 	 * is what TI's original LSP uses... along with quite a hacked
@@ -432,16 +436,29 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	 * (in bad blocks).  There was evidently a technical issue (now
 	 * fixed?):  Linux seemed to limit ECC data to 32 bytes.
 	 */
-	if (is_hw_ecc_1bit()) {
-		info->chip.ecc.mode = NAND_ECC_HW;
+	switch (ecc_mode) {
+	case NAND_ECC_NONE:
+	case NAND_ECC_SOFT:
+		break;
+	case NAND_ECC_HW:
 		info->chip.ecc.calculate = nand_davinci_calculate_ecc_1bit;
 		info->chip.ecc.correct = nand_davinci_correct_data_1bit;
 		info->chip.ecc.hwctl = nand_davinci_enable_hwecc_1bit;
 		info->chip.ecc.size = 512;
 		info->chip.ecc.bytes = 3;
-	} else {
-		info->chip.ecc.mode = NAND_ECC_SOFT;
+		break;
+	case NAND_ECC_HW_SYNDROME:
+		/* FIXME implement */
+		info->chip.ecc.size = 512;
+		info->chip.ecc.bytes = 10;
+
+		dev_warn(&pdev->dev, "4-bit ECC nyet supported\n");
+		/* FALL THROUGH */
+	default:
+		ret = -EINVAL;
+		goto err_ecc;
 	}
+	info->chip.ecc.mode = ecc_mode;
 
 	info->clk = clk_get(&pdev->dev, "AEMIFCLK");
 	if (IS_ERR(info->clk)) {
@@ -497,7 +514,7 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 			info->mtd.name = master_name;
 		}
 
-		if (mtd_parts_nb <= 0) {
+		if (mtd_parts_nb <= 0 && pdata) {
 			mtd_parts = pdata->parts;
 			mtd_parts_nb = pdata->nr_parts;
 		}
@@ -510,7 +527,7 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 				info->partitioned = true;
 		}
 
-	} else if (pdata->nr_parts) {
+	} else if (pdata && pdata->nr_parts) {
 		dev_warn(&pdev->dev, "ignoring %d default partitions on %s\n",
 				pdata->nr_parts, info->mtd.name);
 	}
@@ -540,13 +557,18 @@ err_scan:
 err_clk_enable:
 	clk_put(info->clk);
 
+err_ecc:
 err_clk:
+	if (base)
+		iounmap(base);
+	if (vaddr)
+		iounmap(vaddr);
+
 err_ioremap:
 	kfree(info);
 
 err_nomem:
 err_res:
-err_pdata:
 	return ret;
 }
 

@@ -1,5 +1,5 @@
 /*
- * include/asm-arm/arch-davinci/nand.h
+ * mach-davinci/nand.h
  *
  * Copyright (C) 2006 Texas Instruments.
  *
@@ -30,6 +30,8 @@
 #ifndef __ARCH_ARM_DAVINCI_NAND_H
 #define __ARCH_ARM_DAVINCI_NAND_H
 
+#include <linux/mtd/nand.h>
+
 #define NRCSR_OFFSET		0x00
 #define AWCCR_OFFSET		0x04
 #define A1CR_OFFSET		0x10
@@ -50,10 +52,28 @@
 
 /* NOTE:  boards don't need to use these address bits
  * for ALE/CLE unless they support booting from NAND.
+ * They're used unless platform data overrides them.
  */
 #define	MASK_ALE		0x08
 #define	MASK_CLE		0x10
 
-#define NAND_BUSY_FLAG		0x01
+struct davinci_nand_pdata {		/* platform_data */
+	u32			mask_ale;
+	u32			mask_cle;
+
+	/* board's default static partition info */
+	struct mtd_partition	*parts;
+	unsigned		nr_parts;
+
+	/* none  == NAND_ECC_NONE (strongly *not* advised!!)
+	 * soft  == NAND_ECC_SOFT
+	 * 1-bit == NAND_ECC_HW
+	 * 4-bit == NAND_ECC_HW_SYNDROME (not on all chips)
+	 */
+	nand_ecc_modes_t	ecc_mode;
+
+	/* e.g. NAND_BUSWIDTH_16 or NAND_USE_FLASH_BBT */
+	unsigned		options;
+};
 
 #endif	/* __ARCH_ARM_DAVINCI_NAND_H */

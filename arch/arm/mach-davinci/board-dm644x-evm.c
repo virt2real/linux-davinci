@@ -41,6 +41,7 @@
 #include <mach/serial.h>
 #include <mach/mux.h>
 #include <mach/psc.h>
+#include <mach/nand.h>
 #include <mach/mmc.h>
 
 #define DAVINCI_CFC_ATA_BASE		  0x01C66000
@@ -119,9 +120,10 @@ struct mtd_partition davinci_evm_nandflash_partition[] = {
 	}
 };
 
-static struct flash_platform_data davinci_evm_nandflash_data = {
+static struct davinci_nand_pdata davinci_evm_nandflash_data = {
 	.parts		= davinci_evm_nandflash_partition,
 	.nr_parts	= ARRAY_SIZE(davinci_evm_nandflash_partition),
+	.ecc_mode	= NAND_ECC_HW,
 };
 
 static struct resource davinci_evm_nandflash_resource[] = {
