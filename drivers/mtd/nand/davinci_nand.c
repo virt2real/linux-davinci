@@ -100,24 +100,6 @@ struct davinci_nand_info {
 #define to_davinci_nand(m) container_of(m, struct davinci_nand_info, mtd)
 
 
-static uint8_t scan_ff_pattern[] = { 0xff, 0xff };
-
-/* BB marker is byte 5 in OOB of page 0 */
-static struct nand_bbt_descr davinci_memorybased_small = {
-	.options	= NAND_BBT_SCAN2NDPAGE,
-	.offs		= 5,
-	.len		= 1,
-	.pattern	= scan_ff_pattern
-};
-
-/* BB marker is bytes 0-1 in OOB of page 0 */
-static struct nand_bbt_descr davinci_memorybased_large = {
-	.options	= 0,
-	.offs		= 0,
-	.len		= 2,
-	.pattern	= scan_ff_pattern
-};
-
 static inline unsigned int davinci_nand_readl(struct davinci_nand_info *info,
 		int offset)
 {
@@ -236,142 +218,6 @@ static int nand_davinci_correct_data_1bit(struct mtd_info *mtd, u_char *dat,
 
 	}
 	return 0;
-}
-
-/*
- * Read OOB data from flash.
- */
-static int read_oob_and_check(struct mtd_info *mtd, loff_t offs, uint8_t *buf,
-			      struct nand_bbt_descr *bd)
-{
-	int i, ret;
-	int page;
-	struct nand_chip *chip = mtd->priv;
-
-	/* Calculate page address from offset */
-	page = (int)(offs >> chip->page_shift);
-	page &= chip->pagemask;
-
-	/* Read OOB data from flash */
-	ret = chip->ecc.read_oob(mtd, chip, page, 1);
-	if (ret < 0)
-		return ret;
-
-	/* Copy read OOB data to the buffer*/
-	memcpy(buf, chip->oob_poi, mtd->oobsize);
-
-	/* Check pattern against BBM in OOB area */
-	for (i = 0; i < bd->len; i++) {
-		if (buf[bd->offs + i] != bd->pattern[i])
-			return 1;
-	}
-	return 0;
-}
-
-/*
- * Fill in the memory based Bad Block Table (BBT).
- */
-static int nand_davinci_memory_bbt(struct mtd_info *mtd,
-				   struct nand_bbt_descr *bd)
-{
-	int i, numblocks;
-	int startblock = 0;
-	loff_t from = 0;
-	struct nand_chip *chip = mtd->priv;
-	int blocksize = 1 << chip->bbt_erase_shift;
-	uint8_t *buf = chip->buffers->databuf;
-	int len = bd->options & NAND_BBT_SCAN2NDPAGE ? 2 : 1;
-	struct davinci_nand_info *info = to_davinci_nand(mtd);
-
-	/* -numblocks- is 2 times the actual number of eraseblocks */
-	numblocks = mtd->size >> (chip->bbt_erase_shift - 1);
-
-	/* Now loop through all eraseblocks in the flash */
-	for (i = startblock; i < numblocks; i += 2) {
-		int j, ret;
-		int offs = from;
-
-		/* If NAND_BBT_SCAN2NDPAGE flag is set in bd->options,
-		 * also each 2nd page of an eraseblock is checked
-		 * for a Bad Block Marker. In that case, len equals 2.
-		 */
-		for (j = 0; j < len; j++) {
-			/* Read OOB data and check pattern */
-			ret = read_oob_and_check(mtd, from, buf, bd);
-			if (ret < 0)
-				return ret;
-
-			/* Check pattern for bad block markers */
-			if (ret) {
-				/* Mark bad block by writing 0b11 in the
-				   table */
-				chip->bbt[i >> 3] |= 0x03 << (i & 0x6);
-
-				dev_warn(info->dev, "Bad eraseblock %d at " \
-						    "0x%08x\n", i >> 1,
-						     (unsigned int)from);
-
-				mtd->ecc_stats.badblocks++;
-				break;
-			}
-			offs += mtd->writesize;
-		}
-
-		/* Make -from- point to next eraseblock */
-		from += blocksize;
-	}
-
-	dev_notice(info->dev, "Bad block scan: %d out of %d blocks are bad.\n",
-			    mtd->ecc_stats.badblocks, numblocks>>1);
-
-	return 0;
-}
-
-/*
- * This function creates a memory based bad block table (BBT).
- * It is largely based on the standard BBT function, but all
- * unnecessary junk is thrown out to speed up.
- */
-static int nand_davinci_scan_bbt(struct mtd_info *mtd)
-{
-	struct nand_chip *chip = mtd->priv;
-	struct nand_bbt_descr *bd;
-	int len, ret = 0;
-	struct davinci_nand_info *info = to_davinci_nand(mtd);
-
-	chip->bbt_td = NULL;
-	chip->bbt_md = NULL;
-
-	/* pagesize determines location of BBM */
-	if (mtd->writesize > 512)
-		bd = &davinci_memorybased_large;
-	else
-		bd = &davinci_memorybased_small;
-
-	chip->badblock_pattern = bd;
-
-	/* Use 2 bits per page meaning 4 page markers per byte */
-	len = mtd->size >> (chip->bbt_erase_shift + 2);
-
-	/* Allocate memory (2bit per block) and clear the memory bad block
-	   table */
-	chip->bbt = kzalloc(len, GFP_KERNEL);
-	if (!chip->bbt) {
-		dev_err(info->dev, "nand_davinci_scan_bbt: Out of memory\n");
-		return -ENOMEM;
-	}
-
-	/* Now try to fill in the BBT */
-	ret = nand_davinci_memory_bbt(mtd, bd);
-	if (ret) {
-		dev_err(info->dev, "nand_davinci_scan_bbt: "
-		       "Can't scan flash and build the RAM-based BBT\n");
-
-		kfree(chip->bbt);
-		chip->bbt = NULL;
-	}
-
-	return ret;
 }
 
 /*
@@ -571,9 +417,6 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	/* Speed up buffer I/O */
 	info->chip.read_buf     = nand_davinci_read_buf;
 	info->chip.write_buf    = nand_davinci_write_buf;
-
-	/* Speed up the creation of the bad block table */
-	info->chip.scan_bbt      = nand_davinci_scan_bbt;
 
 	/*
 	 * REVISIT should probably be using runtime check using board's
