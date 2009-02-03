@@ -61,6 +61,9 @@ struct davinci_nand_pdata {		/* platform_data */
 	u32			mask_ale;
 	u32			mask_cle;
 
+	/* for packages using two chipselects */
+	u32			mask_chipsel;
+
 	/* board's default static partition info */
 	struct mtd_partition	*parts;
 	unsigned		nr_parts;

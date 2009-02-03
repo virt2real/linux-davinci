@@ -31,13 +31,8 @@
  *   (small page NAND).  It should work for some other DaVinci NAND
  *   configurations, but it ignores the dm355 4-bit ECC hardware.
  *
- *   Currently makes assumptions about how the NAND device(s) are wired:
- *      - connected on the first chipselect, controlled by A1CR
- *      - single NAND chip
- *      - EM_WAIT is connected to the NAND device, not another device
- *
- *  Modifications:
- *  ver. 1.0: Feb 2005, Vinod/Sudhakar
+ *   Currently assumes EM_WAIT connects all of the NAND devices in
+ *   a "wire-OR" configuration.
  */
 
 #include <linux/kernel.h>
@@ -47,6 +42,7 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/spinlock.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
@@ -85,11 +81,16 @@ struct davinci_nand_info {
 	void __iomem		*vaddr;
 
 	u32			ioaddr;
+	u32			current_cs;
+
+	u32			mask_chipsel;
 	u32			mask_ale;
 	u32			mask_cle;
+
+	u32			core_chipsel;
 };
 
-#define NAND_CHIPSEL		0
+static DEFINE_SPINLOCK(davinci_nand_lock);
 
 #define to_davinci_nand(m) container_of(m, struct davinci_nand_info, mtd)
 
@@ -115,7 +116,7 @@ static void nand_davinci_hwcontrol(struct mtd_info *mtd, int cmd,
 				   unsigned int ctrl)
 {
 	struct davinci_nand_info	*info = to_davinci_nand(mtd);
-	u32				addr = info->ioaddr;
+	u32				addr = info->current_cs;
 	struct nand_chip		*nand = mtd->priv;
 
 	/* Did the control lines change? */
@@ -134,23 +135,44 @@ static void nand_davinci_hwcontrol(struct mtd_info *mtd, int cmd,
 
 static void nand_davinci_select_chip(struct mtd_info *mtd, int chip)
 {
-	/* do nothing */
+	struct davinci_nand_info	*info = to_davinci_nand(mtd);
+	u32				addr = info->ioaddr;
+
+	/* maybe kick in a second chipselect */
+	if (chip > 0)
+		addr |= info->mask_chipsel;
+	info->current_cs = addr;
+
+	info->chip.IO_ADDR_W = (void __iomem __force *)addr;
+	info->chip.IO_ADDR_R = info->chip.IO_ADDR_W;
 }
 
-static void nand_davinci_enable_hwecc_1bit(struct mtd_info *mtd, int mode)
+/*----------------------------------------------------------------------*/
+
+/*
+ * 1-bit hardware ECC ... context maintained for each core chipselect
+ */
+
+static void nand_davinci_hwctl_1bit(struct mtd_info *mtd, int mode)
 {
 	struct davinci_nand_info *info;
 	u32 retval;
+	unsigned long flags;
 
 	info = to_davinci_nand(mtd);
 
 	/* Reset ECC hardware */
-	retval = davinci_nand_readl(info, NANDF1ECC_OFFSET);
+	retval = davinci_nand_readl(info, NANDF1ECC_OFFSET
+			+ 4 * info->core_chipsel);
+
+	spin_lock_irqsave(&davinci_nand_lock, flags);
 
 	/* Restart ECC hardware */
 	retval = davinci_nand_readl(info, NANDFCR_OFFSET);
-	retval |= BIT(8);
+	retval |= BIT(8 + info->core_chipsel);
 	davinci_nand_writel(info, NANDFCR_OFFSET, retval);
+
+	spin_unlock_irqrestore(&davinci_nand_lock, flags);
 }
 
 /*
@@ -167,7 +189,7 @@ static inline u32 nand_davinci_readecc_1bit(struct mtd_info *mtd)
 /*
  * Read DaVinci ECC registers and rework into MTD format
  */
-static int nand_davinci_calculate_ecc_1bit(struct mtd_info *mtd,
+static int nand_davinci_calculate_1bit(struct mtd_info *mtd,
 				      const u_char *dat, u_char *ecc_code)
 {
 	unsigned int ecc_val = nand_davinci_readecc_1bit(mtd);
@@ -182,7 +204,7 @@ static int nand_davinci_calculate_ecc_1bit(struct mtd_info *mtd,
 	return 0;
 }
 
-static int nand_davinci_correct_data_1bit(struct mtd_info *mtd, u_char *dat,
+static int nand_davinci_correct_1bit(struct mtd_info *mtd, u_char *dat,
 				     u_char *read_ecc, u_char *calc_ecc)
 {
 	struct nand_chip *chip = mtd->priv;
@@ -213,6 +235,8 @@ static int nand_davinci_correct_data_1bit(struct mtd_info *mtd, u_char *dat,
 	}
 	return 0;
 }
+
+/*----------------------------------------------------------------------*/
 
 /*
  * NOTE:  NAND boot requires ALE == EM_A[1], CLE == EM_A[2], so that's
@@ -341,6 +365,8 @@ static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 	}
 }
 
+/*----------------------------------------------------------------------*/
+
 static int __init nand_davinci_probe(struct platform_device *pdev)
 {
 	struct davinci_nand_pdata	*pdata = pdev->dev.platform_data;
@@ -353,8 +379,8 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	u32				val;
 	nand_ecc_modes_t		ecc_mode;
 
-	/* only one chipselect is supported for now */
-	if (pdev->id != NAND_CHIPSEL)
+	/* which external chipselect will we be managing? */
+	if (pdev->id < 0 || pdev->id > 3)
 		return -ENODEV;
 
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
@@ -401,6 +427,10 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 
 	info->ioaddr		= (u32 __force) vaddr;
 
+	info->current_cs	= info->ioaddr;
+	info->core_chipsel	= pdev->id;
+	info->mask_chipsel	= pdata->mask_chipsel;
+
 	/* use nandboot-capable ALE/CLE masks by default */
 	if (pdata && pdata->mask_ale)
 		info->mask_ale	= pdata->mask_cle;
@@ -441,9 +471,9 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	case NAND_ECC_SOFT:
 		break;
 	case NAND_ECC_HW:
-		info->chip.ecc.calculate = nand_davinci_calculate_ecc_1bit;
-		info->chip.ecc.correct = nand_davinci_correct_data_1bit;
-		info->chip.ecc.hwctl = nand_davinci_enable_hwecc_1bit;
+		info->chip.ecc.calculate = nand_davinci_calculate_1bit;
+		info->chip.ecc.correct = nand_davinci_correct_1bit;
+		info->chip.ecc.hwctl = nand_davinci_hwctl_1bit;
 		info->chip.ecc.size = 512;
 		info->chip.ecc.bytes = 3;
 		break;
@@ -479,15 +509,19 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	if (machine_is_davinci_evm())
 		nand_dm6446evm_flash_init(info);
 
-	/* put "CS2NAND" (CS0) into NAND mode */
+	spin_lock_irq(&davinci_nand_lock);
+
+	/* put CSxNAND into NAND mode */
 	val = davinci_nand_readl(info, NANDFCR_OFFSET);
-	val |= BIT(0);
+	val |= BIT(info->core_chipsel);
 	davinci_nand_writel(info, NANDFCR_OFFSET, val);
 
-	/* Scan to find existence of the device */
-	if (nand_scan(&info->mtd, 1)) {
-		dev_err(&pdev->dev, "chip select is not set for 'NAND'\n");
-		ret = -ENXIO;
+	spin_unlock_irq(&davinci_nand_lock);
+
+	/* Scan to find existence of the device(s) */
+	ret = nand_scan(&info->mtd, pdata->mask_chipsel ? 2 : 1);
+	if (ret < 0) {
+		dev_dbg(&pdev->dev, "no NAND chip(s) found\n");
 		goto err_scan;
 	}
 
