@@ -138,12 +138,19 @@ void clk_put(struct clk *clk)
 }
 EXPORT_SYMBOL(clk_put);
 
+static unsigned psc_domain(struct clk *clk)
+{
+	return (clk->flags & PSC_DSP)
+		? DAVINCI_GPSC_DSPDOMAIN
+		: DAVINCI_GPSC_ARMDOMAIN;
+}
+
 static void __clk_enable(struct clk *clk)
 {
 	if (clk->parent)
 		__clk_enable(clk->parent);
-	if (clk->usecount++ == 0 && !(clk->flags & CLK_PLL))
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, clk->lpsc, 1);
+	if (clk->usecount++ == 0 && (clk->flags & CLK_PSC))
+		davinci_psc_config(psc_domain(clk), clk->lpsc, 1);
 }
 
 static void __clk_disable(struct clk *clk)
@@ -151,7 +158,7 @@ static void __clk_disable(struct clk *clk)
 	if (WARN_ON(clk->usecount == 0))
 		return;
 	if (--clk->usecount == 0 && !(clk->flags & CLK_PLL))
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN, clk->lpsc, 0);
+		davinci_psc_config(psc_domain(clk), clk->lpsc, 0);
 	if (clk->parent)
 		__clk_disable(clk->parent);
 }
@@ -230,7 +237,7 @@ int clk_register(struct clk *clk)
 	if (clk->rate)
 		return 0;
 
-	/* Otherwise, use parent rate and any divider */
+	/* Otherwise, default to parent rate */
 	if (clk->parent)
 		clk->rate = clk->parent->rate;
 
@@ -256,17 +263,18 @@ EXPORT_SYMBOL(clk_unregister);
 static int __init clk_disable_unused(void)
 {
 	struct clk *ck;
-	unsigned long flags;
 
+	spin_lock_irq(&clockfw_lock);
 	list_for_each_entry(ck, &clocks, node) {
 		if (ck->usecount > 0)
 			continue;
+		if (!(ck->flags & CLK_PSC))
+			continue;
 
 		printk(KERN_INFO "Clocks: disable unused %s\n", ck->name);
-		spin_lock_irqsave(&clockfw_lock, flags);
-		__clk_disable(ck);
-		spin_unlock_irqrestore(&clockfw_lock, flags);
+		davinci_psc_config(psc_domain(ck), ck->lpsc, 0);
 	}
+	spin_unlock_irq(&clockfw_lock);
 
 	return 0;
 }
@@ -278,16 +286,27 @@ static void clk_sysclk_recalc(struct clk *clk)
 	u32 v, plldiv;
 	struct pll_data *pll;
 
-	/* Immediate parent must be PLL */
-	if (WARN_ON(!clk->parent || !clk->parent->pll_data))
+	/* If this is the PLL base clock, no more calculations needed */
+	if (clk->pll_data)
+		return;
+
+	if (WARN_ON(!clk->parent))
+		return;
+
+	clk->rate = clk->parent->rate;
+
+	/* Otherwise, the parent must be a PLL */
+	if (WARN_ON(!clk->parent->pll_data))
 		return;
 
 	pll = clk->parent->pll_data;
-	clk->rate = clk->parent->rate;
 
-	/* If bypass divider (BPDIV) use input reference clock */
-	if (clk->div_reg == BPDIV)
+	/* If pre-PLL, source clock is before the multiplier and divider(s) */
+	if (clk->flags & PRE_PLL)
 		clk->rate = pll->input_rate;
+
+	if (!clk->div_reg)
+		return;
 
 	v = __raw_readl(pll->base + clk->div_reg);
 	if (v & PLLDIV_EN) {
@@ -362,11 +381,15 @@ int __init davinci_clk_init(struct clk *clocks[])
 	while ((clkp = clocks[i++])) {
 		if (clkp->pll_data)
 			clk_pll_init(clkp);
-		clk_register(clkp);
 
 		/* Calculate rates for PLL-derived clocks */
-		if (clkp->div_reg)
+		else if (clkp->flags & CLK_PLL)
 			clk_sysclk_recalc(clkp);
+
+		if (clkp->lpsc)
+			clkp->flags |= CLK_PSC;
+
+		clk_register(clkp);
 
 		/* FIXME: remove equivalent special-cased code from
 		 * davinci_psc_init() once cpus list *all* clocks.
@@ -411,7 +434,12 @@ dump_clock(struct seq_file *s, unsigned nest, struct clk *parent)
 	struct clk	*clk;
 	unsigned	i;
 
-	state = (parent->flags & CLK_PLL) ? "pll" : "psc";
+	if (parent->flags & CLK_PLL)
+		state = "pll";
+	else if (parent->flags & CLK_PSC)
+		state = "psc";
+	else
+		state = "";
 
 	/* <nest spaces> name <pad to end> */
 	memset(buf, ' ', sizeof(buf) - 1);
@@ -421,7 +449,7 @@ dump_clock(struct seq_file *s, unsigned nest, struct clk *parent)
 			min(i, (unsigned)(sizeof(buf) - 1 - nest)));
 
 	seq_printf(s, "%s users=%2d %-3s %9ld Hz\n",
-		buf, parent->usecount, state, clk_get_rate(parent));
+		   buf, parent->usecount, state, clk_get_rate(parent));
 	/* REVISIT show device associations too */
 
 	/* cost is now small, but not linear... */

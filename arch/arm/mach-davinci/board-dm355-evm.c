@@ -19,6 +19,7 @@
 #include <linux/i2c.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/clk.h>
 
 #include <asm/setup.h>
 #include <asm/mach-types.h>
@@ -225,9 +226,15 @@ static struct davinci_mmc_config dm355evm_mmc_config = {
 
 static __init void dm355_evm_init(void)
 {
+	struct clk *aemif;
+
 	gpio_request(1, "dm9000");
 	gpio_direction_input(1);
 	dm355evm_dm9000_rsrc[2].start = gpio_to_irq(1);
+
+	aemif = clk_get(&dm355evm_dm9000.dev, "aemif");
+	clk_enable(aemif);
+	clk_put(aemif);
 
 	platform_add_devices(davinci_evm_devices,
 			     ARRAY_SIZE(davinci_evm_devices));

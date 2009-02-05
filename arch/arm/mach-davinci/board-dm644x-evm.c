@@ -26,6 +26,7 @@
 #include <linux/mtd/physmap.h>
 #include <linux/io.h>
 #include <linux/phy.h>
+#include <linux/clk.h>
 
 #include <asm/setup.h>
 #include <asm/mach-types.h>
@@ -629,6 +630,12 @@ static int davinci_phy_fixup(struct phy_device *phydev)
 
 static __init void davinci_evm_init(void)
 {
+	struct clk *aemif_clk;
+
+	aemif_clk = clk_get(NULL, "aemif");
+	clk_enable(aemif_clk);
+	clk_put(aemif_clk);
+
 	if (HAS_ATA) {
 		if (HAS_NAND || HAS_NOR)
 			pr_warning("WARNING: both IDE and Flash are "
@@ -672,7 +679,7 @@ static __init void davinci_evm_irq_init(void)
 	davinci_irq_init();
 }
 
-MACHINE_START(DAVINCI_EVM, "DaVinci EVM")
+MACHINE_START(DAVINCI_EVM, "DaVinci DM644x EVM")
 	/* Maintainer: MontaVista Software <source@mvista.com> */
 	.phys_io      = IO_PHYS,
 	.io_pg_offst  = (__IO_ADDRESS(IO_PHYS) >> 18) & 0xfffc,

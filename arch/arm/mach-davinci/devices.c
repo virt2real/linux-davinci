@@ -176,7 +176,7 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 		davinci_cfg_reg(DM355_SD1_DATA3);
 
 		pdev = &davinci_mmcsd1_device;
-		clockname = "MMCSDCLK1";
+		clockname = "mmcsd1";
 		break;
 	case 0:
 		if (cpu_is_davinci_dm355()) {
@@ -191,7 +191,7 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 			davinci_cfg_reg(DM355_EVT26_MMC0_RX);
 		}
 		pdev = &davinci_mmcsd0_device;
-		clockname = cpu_is_davinci_dm355() ? "MMCSDCLK0" : "MMCSDCLK";
+		clockname = cpu_is_davinci_dm355() ? "mmcsd0" : "mmcsd";
 		break;
 	}
 

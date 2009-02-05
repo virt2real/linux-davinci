@@ -124,9 +124,6 @@ void davinci_psc_config(unsigned int domain, unsigned int id, char enable)
 	u32 epcpr, ptcmd, ptstat, pdstat, pdctl1, mdstat, mdctl, mdstat_mask;
 	void __iomem *psc_base = IO_ADDRESS(DAVINCI_PWR_SLEEP_CNTRL_BASE);
 
-	if (id == DAVINCI_LPSC_NONE)
-		return;
-
 	mdctl = __raw_readl(psc_base + MDCTL + 4 * id);
 	if (enable)
 		mdctl |= 0x00000003;	/* Enable Module */
@@ -186,18 +183,5 @@ void __init davinci_psc_init(void)
 	} else {
 		pr_err("PSC: no PSC mux hooks for this CPU\n");
 		davinci_psc_mux = nop_psc_mux;
-	}
-
-	if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm355()) {
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_VPSSMSTR, 1);
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_VPSSSLV, 1);
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_TPCC, 1);
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_TPTC0, 1);
-		davinci_psc_config(DAVINCI_GPSC_ARMDOMAIN,
-					DAVINCI_LPSC_TPTC1, 1);
 	}
 }

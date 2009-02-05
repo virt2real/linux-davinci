@@ -71,7 +71,10 @@ struct clk {
 
 /* Clock flags */
 #define ALWAYS_ENABLED		BIT(1)
-#define CLK_PLL			BIT(2)
+#define CLK_PSC                 BIT(2)
+#define PSC_DSP                 BIT(3) /* PSC uses DSP domain, not ARM */
+#define CLK_PLL			BIT(4) /* PLL-derived clock */
+#define PRE_PLL                 BIT(5) /* source is before PLL mult/div */
 
 int davinci_clk_associate(struct device *dev, const char *logical_clockname,
 			  const char *physical_clockname);

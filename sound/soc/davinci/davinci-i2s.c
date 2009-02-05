@@ -401,7 +401,7 @@ static int davinci_i2s_probe(struct platform_device *pdev,
 	struct resource *mem, *ioarea;
 	struct evm_snd_platform_data *pdata;
 	int ret;
-	static const char *clocks[] = { "asp0_clk", "asp1_clk", };
+	static const char *clocks[] = { "asp0", "asp1", };
 
 	if (pdev->id < 0 || pdev->id > ARRAY_SIZE(clocks))
 		return -EINVAL;

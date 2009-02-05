@@ -34,7 +34,6 @@ static struct pll_data pll2_data = {
 static struct clk ref_clk = {
 	.name = "ref_clk",
 	.rate = DM644X_REF_FREQ,
-	.flags = CLK_PLL,
 };
 
 static struct clk pll1_clk = {
@@ -44,6 +43,47 @@ static struct clk pll1_clk = {
 	.flags = CLK_PLL,
 };
 
+static struct clk pll1_sysclk1 = {
+	.name = "pll1_sysclk1",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV1,
+};
+
+static struct clk pll1_sysclk2 = {
+	.name = "pll1_sysclk2",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV2,
+};
+
+static struct clk pll1_sysclk3 = {
+	.name = "pll1_sysclk3",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV3,
+};
+
+static struct clk pll1_sysclk5 = {
+	.name = "pll1_sysclk5",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV5,
+};
+
+static struct clk pll1_aux_clk = {
+	.name = "pll1_aux_clk",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL | PRE_PLL,
+};
+
+static struct clk pll1_sysclkbp = {
+	.name = "pll1_sysclkbp",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL | PRE_PLL,
+	.div_reg = BPDIV
+};
+
 static struct clk pll2_clk = {
 	.name = "pll2",
 	.parent = &ref_clk,
@@ -51,147 +91,195 @@ static struct clk pll2_clk = {
 	.flags = CLK_PLL,
 };
 
-static struct clk sysclk1_clk = {
-	.name = "SYSCLK1",
-	.parent = &pll1_clk,
+static struct clk pll2_sysclk1 = {
+	.name = "pll2_sysclk1",
+	.parent = &pll2_clk,
 	.flags = CLK_PLL,
 	.div_reg = PLLDIV1,
 };
 
-static struct clk sysclk2_clk = {
-	.name = "SYSCLK2",
-	.parent = &pll1_clk,
+static struct clk pll2_sysclk2 = {
+	.name = "pll2_sysclk2",
+	.parent = &pll2_clk,
 	.flags = CLK_PLL,
 	.div_reg = PLLDIV2,
 };
 
-static struct clk sysclk3_clk = {
-	.name = "SYSCLK3",
-	.parent = &pll1_clk,
-	.flags = CLK_PLL,
-	.div_reg = PLLDIV3,
+static struct clk pll2_sysclkbp = {
+	.name = "pll2_sysclkbp",
+	.parent = &pll2_clk,
+	.flags = CLK_PLL | PRE_PLL,
+	.div_reg = BPDIV
 };
 
-static struct clk sysclk5_clk = {
-	.name = "SYSCLK5",
-	.parent = &pll1_clk,
-	.flags = CLK_PLL,
-	.div_reg = PLLDIV5,
+static struct clk dsp_clk = {
+	.name = "dsp",
+	.parent = &pll1_sysclk1,
+	.lpsc = DAVINCI_LPSC_GEM,
+	.flags = PSC_DSP,
+	.usecount = 1,			/* REVISIT how to disable? */
 };
 
 static struct clk arm_clk = {
-	.name = "ARMCLK",
-	.parent = &sysclk2_clk,
-	.lpsc = DAVINCI_LPSC_NONE,
+	.name = "arm",
+	.parent = &pll1_sysclk2,
+	.lpsc = DAVINCI_LPSC_ARM,
 	.flags = ALWAYS_ENABLED,
+};
+
+static struct clk vicp_clk = {
+	.name = "vicp",
+	.parent = &pll1_sysclk2,
+	.lpsc = DAVINCI_LPSC_IMCOP,
+	.flags = PSC_DSP,
+	.usecount = 1,			/* REVISIT how to disable? */
+};
+
+static struct clk vpss_master_clk = {
+	.name = "vpss_master",
+	.parent = &pll1_sysclk3,
+	.lpsc = DAVINCI_LPSC_VPSSMSTR,
+	.flags = CLK_PSC,
+};
+
+static struct clk vpss_slave_clk = {
+	.name = "vpss_slave",
+	.parent = &pll1_sysclk3,
+	.lpsc = DAVINCI_LPSC_VPSSSLV,
 };
 
 static struct clk uart0_clk = {
 	.name = "uart0",
-	.parent = &ref_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_UART0,
 };
 
 static struct clk uart1_clk = {
 	.name = "uart1",
-	.parent = &ref_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_UART1,
 };
 
 static struct clk uart2_clk = {
 	.name = "uart2",
-	.parent = &ref_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_UART2,
 };
 
 static struct clk emac_clk = {
 	.name = "EMACCLK",
-	.parent = &sysclk5_clk,
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_EMAC_WRAPPER,
 };
 
 static struct clk i2c_clk = {
 	.name = "I2CCLK",
-	.parent = &ref_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_I2C,
 };
 
 static struct clk ide_clk = {
 	.name = "IDECLK",
-	.parent = &sysclk5_clk,
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_ATA,
 };
 
 static struct clk asp_clk = {
-	.name = "asp0_clk",
-	.parent = &sysclk5_clk,
+	.name = "asp0",
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_McBSP,
 };
 
 static struct clk mmcsd_clk = {
-	.name = "MMCSDCLK",
-	.parent = &sysclk5_clk,
+	.name = "mmcsd",
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_MMC_SD,
 };
 
 static struct clk spi_clk = {
-	.name = "SPICLK",
-	.parent = &sysclk5_clk,
+	.name = "spi",
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_SPI,
 };
 
 static struct clk gpio_clk = {
 	.name = "gpio",
-	.parent = &sysclk5_clk,
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_GPIO,
 };
 
 static struct clk usb_clk = {
-	.name = "USBCLK",
-	.parent = &sysclk5_clk,
+	.name = "usb",
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_USB,
 };
 
 static struct clk vlynq_clk = {
-	.name = "VLYNQCLK",
-	.parent = &sysclk5_clk,
+	.name = "vlynq",
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_VLYNQ,
 };
 
 static struct clk aemif_clk = {
-	.name = "AEMIFCLK",
-	.parent = &sysclk5_clk,
+	.name = "aemif",
+	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_AEMIF,
-	.flags = ALWAYS_ENABLED,
+};
+
+static struct clk pwm0_clk = {
+	.name = "pwm0",
+	.parent = &pll1_aux_clk,
+	.lpsc = DAVINCI_LPSC_PWM0,
+};
+
+static struct clk pwm1_clk = {
+	.name = "pwm1",
+	.parent = &pll1_aux_clk,
+	.lpsc = DAVINCI_LPSC_PWM1,
+};
+
+static struct clk pwm2_clk = {
+	.name = "pwm2",
+	.parent = &pll1_aux_clk,
+	.lpsc = DAVINCI_LPSC_PWM2,
 };
 
 static struct clk timer0_clk = {
 	.name = "timer0",
-	.parent = &ref_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER0,
 };
 
 static struct clk timer1_clk = {
 	.name = "timer1",
-	.parent = &ref_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER1,
 };
 
 static struct clk timer2_clk = {
 	.name = "timer2",
-	.parent = &ref_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER2,
 };
 
 static struct clk *dm644x_clks[] __initdata = {
 	&ref_clk,
 	&pll1_clk,
+	&pll1_sysclk1,
+	&pll1_sysclk2,
+	&pll1_sysclk3,
+	&pll1_sysclk5,
+	&pll1_aux_clk,
+	&pll1_sysclkbp,
 	&pll2_clk,
-	&sysclk1_clk,
-	&sysclk2_clk,
-	&sysclk3_clk,
-	&sysclk5_clk,
+	&pll2_sysclk1,
+	&pll2_sysclk2,
+	&pll2_sysclkbp,
+	&dsp_clk,
 	&arm_clk,
+	&vicp_clk,
+	&vpss_master_clk,
+	&vpss_slave_clk,
 	&uart0_clk,
 	&uart1_clk,
 	&uart2_clk,
@@ -205,6 +293,9 @@ static struct clk *dm644x_clks[] __initdata = {
 	&usb_clk,
 	&vlynq_clk,
 	&aemif_clk,
+	&pwm0_clk,
+	&pwm1_clk,
+	&pwm2_clk,
 	&timer0_clk,
 	&timer1_clk,
 	&timer2_clk,

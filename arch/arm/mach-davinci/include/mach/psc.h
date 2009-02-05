@@ -31,8 +31,6 @@
 #define DAVINCI_GPSC_ARMDOMAIN      0
 #define DAVINCI_GPSC_DSPDOMAIN      1
 
-#define DAVINCI_LPSC_NONE           0xff
-
 #define DAVINCI_LPSC_VPSSMSTR       0
 #define DAVINCI_LPSC_VPSSSLV        1
 #define DAVINCI_LPSC_TPCC           2
@@ -40,8 +38,6 @@
 #define DAVINCI_LPSC_TPTC1          4
 #define DAVINCI_LPSC_EMAC           5
 #define DAVINCI_LPSC_EMAC_WRAPPER   6
-#define DAVINCI_LPSC_MDIO           7
-#define DAVINCI_LPSC_IEEE1394       8
 #define DAVINCI_LPSC_USB            9
 #define DAVINCI_LPSC_ATA            10
 #define DAVINCI_LPSC_VLYNQ          11
@@ -49,7 +45,6 @@
 #define DAVINCI_LPSC_DDR_EMIF       13
 #define DAVINCI_LPSC_AEMIF          14
 #define DAVINCI_LPSC_MMC_SD         15
-#define DAVINCI_LPSC_MEMSTICK       16
 #define DAVINCI_LPSC_McBSP          17
 #define DAVINCI_LPSC_I2C            18
 #define DAVINCI_LPSC_UART0          19
@@ -82,11 +77,12 @@
 #define DM355_LPSC_PWM3			10
 #define DM355_LPSC_SPI2			11
 #define DM355_LPSC_RTO			12
+#define DM355_LPSC_VPSS_DAC		41
 
 /*
  * LPSC Assignments
  */
-#define DM646X_LPSC_RESERVED       0
+#define DM646X_LPSC_ARM            0
 #define DM646X_LPSC_C64X_CPU       1
 #define DM646X_LPSC_HDVICP0        2
 #define DM646X_LPSC_HDVICP1        3

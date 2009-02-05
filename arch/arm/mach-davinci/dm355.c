@@ -37,7 +37,6 @@ static struct clk ref_clk = {
 	.name = "ref_clk",
 	/* FIXME -- crystal rate is board-specific */
 	.rate = DM355_REF_FREQ,
-	.flags = CLK_PLL,
 };
 
 static struct clk pll1_clk = {
@@ -47,6 +46,78 @@ static struct clk pll1_clk = {
 	.pll_data = &pll1_data,
 };
 
+static struct clk pll1_aux_clk = {
+	.name = "pll1_aux_clk",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL | PRE_PLL,
+};
+
+static struct clk pll1_sysclk1 = {
+	.name = "pll1_sysclk1",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV1,
+};
+
+static struct clk pll1_sysclk2 = {
+	.name = "pll1_sysclk2",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV2,
+};
+
+static struct clk pll1_sysclk3 = {
+	.name = "pll1_sysclk3",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV3,
+};
+
+static struct clk pll1_sysclk4 = {
+	.name = "pll1_sysclk4",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL,
+	.div_reg = PLLDIV4,
+};
+
+static struct clk pll1_sysclkbp = {
+	.name = "pll1_sysclkbp",
+	.parent = &pll1_clk,
+	.flags = CLK_PLL | PRE_PLL,
+	.div_reg = BPDIV
+};
+
+static struct clk vpss_dac_clk = {
+	.name = "vpss_dac",
+	.parent = &pll1_sysclk3,
+	.lpsc = DM355_LPSC_VPSS_DAC,
+};
+
+static struct clk vpss_master_clk = {
+	.name = "vpss_master",
+	.parent = &pll1_sysclk4,
+	.lpsc = DAVINCI_LPSC_VPSSMSTR,
+	.flags = CLK_PSC,
+};
+
+static struct clk vpss_slave_clk = {
+	.name = "vpss_slave",
+	.parent = &pll1_sysclk4,
+	.lpsc = DAVINCI_LPSC_VPSSSLV,
+};
+
+
+static struct clk clkout1_clk = {
+	.name = "clkout1",
+	.parent = &pll1_aux_clk,
+	/* NOTE:  clkout1 can be externally gated by muxing GPIO-18 */
+};
+
+static struct clk clkout2_clk = {
+	.name = "clkout2",
+	.parent = &pll1_sysclkbp,
+};
+
 static struct clk pll2_clk = {
 	.name = "pll2",
 	.parent = &ref_clk,
@@ -54,83 +125,41 @@ static struct clk pll2_clk = {
 	.pll_data = &pll2_data,
 };
 
-static struct clk aux_clk = {
-	.name = "aux_clk",
-	.parent = &ref_clk,
-	.flags = CLK_PLL,
-};
-
-static struct clk sysclk1_clk = {
-	.name = "SYSCLK1",
-	.parent = &pll1_clk,
+static struct clk pll2_sysclk1 = {
+	.name = "pll2_sysclk1",
+	.parent = &pll2_clk,
 	.flags = CLK_PLL,
 	.div_reg = PLLDIV1,
 };
 
-static struct clk sysclk2_clk = {
-	.name = "SYSCLK2",
-	.parent = &pll1_clk,
-	.flags = CLK_PLL,
-	.div_reg = PLLDIV2,
-};
-
-static struct clk vpbe_clk = { /* a.k.a. PLL1.SYSCLK3 */
-	.name = "vpbe",
-	.parent = &pll1_clk,
-	.flags = CLK_PLL,
-	.div_reg = PLLDIV3,
-};
-
-static struct clk vpss_clk = {  /* a.k.a. PLL1.SYCLK4 */
-	.name = "vpss",
-	.parent = &pll1_clk,
-	.flags = CLK_PLL,
-	.div_reg = PLLDIV4,
-};
-
-static struct clk clkout1_clk = {
-	.name = "clkout1",
-	.parent = &aux_clk,
-	.flags = CLK_PLL,
-	/* NOTE:  clkout1 can be externally gated by muxing GPIO-18 */
-};
-
-static struct clk clkout2_clk = { /* a.k.a. PLL1.SYSCLKBP */
-	.name = "clkout2",
-	.parent = &pll1_clk,
-	.flags = CLK_PLL,
-	.div_reg = BPDIV,
+static struct clk pll2_sysclkbp = {
+	.name = "pll2_sysclkbp",
+	.parent = &pll2_clk,
+	.flags = CLK_PLL | PRE_PLL,
+	.div_reg = BPDIV
 };
 
 static struct clk clkout3_clk = {
 	.name = "clkout3",
-	.parent = &pll2_clk,
-	.flags = CLK_PLL,
-	.div_reg = BPDIV,
+	.parent = &pll2_sysclkbp,
 	/* NOTE:  clkout3 can be externally gated by muxing GPIO-16 */
 };
 
 static struct clk arm_clk = {
-	.name = "ARMCLK",
-	.parent = &sysclk1_clk,
-	.flags = ALWAYS_ENABLED | CLK_PLL,
+	.name = "arm_clk",
+	.parent = &pll1_sysclk1,
+	.lpsc = DAVINCI_LPSC_ARM,
+	.flags = ALWAYS_ENABLED,
 };
 
 /*
- * NOT LISTED below, but turned on by PSC init:
+ * NOT LISTED below, and not touched by Linux
  *   - in SyncReset state by default
- *	.lpsc = DAVINCI_LPSC_VPSSMSTR, .parent = &vpss_clk,
- *	.lpsc = DAVINCI_LPSC_VPSSSLV, .parent = &vpss_clk,
  *	.lpsc = DAVINCI_LPSC_TPCC,
  *	.lpsc = DAVINCI_LPSC_TPTC0,
  *	.lpsc = DAVINCI_LPSC_TPTC1,
- *
- * NOT LISTED below, and not touched by Linux
- *   - in SyncReset state by default
  *	.lpsc = DAVINCI_LPSC_DDR_EMIF, .parent = &sysclk2_clk,
- *	.lpsc = DM355_LPSC_RT0, .parent = &aux_clk,
  *	.lpsc = DAVINCI_LPSC_MEMSTICK,
- *	.lpsc = 41, .parent = &vpss_clk, // VPSS DAC
  *   - in Enabled state by default
  *	.lpsc = DAVINCI_LPSC_SYSTEM_SUBSYS,
  *	.lpsc = DAVINCI_LPSC_SCR2,	// "bus"
@@ -144,153 +173,165 @@ static struct clk arm_clk = {
 
 static struct clk mjcp_clk = {
 	.name = "mjcp",
-	.parent = &sysclk1_clk,
+	.parent = &pll1_sysclk1,
 	.lpsc = DAVINCI_LPSC_IMCOP,
 };
 
 static struct clk uart0_clk = {
 	.name = "uart0",
-	.parent = &aux_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_UART0,
 };
 
 static struct clk uart1_clk = {
 	.name = "uart1",
-	.parent = &aux_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_UART1,
 };
 
 static struct clk uart2_clk = {
 	.name = "uart2",
-	.parent = &sysclk2_clk,
+	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_UART2,
 };
 
 static struct clk i2c_clk = {
 	.name = "I2CCLK",
-	.parent = &aux_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_I2C,
 };
 
 static struct clk asp0_clk = {
-	.name = "asp0_clk",
-	.parent = &sysclk2_clk,
+	.name = "asp0",
+	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_McBSP,
 };
 
 static struct clk asp1_clk = {
-	.name = "asp1_clk",
-	.parent = &sysclk2_clk,
+	.name = "asp1",
+	.parent = &pll1_sysclk2,
 	.lpsc = DM355_LPSC_McBSP1,
 };
 
 static struct clk mmcsd0_clk = {
-	.name = "MMCSDCLK0",
-	.parent = &sysclk2_clk,
+	.name = "mmcsd0",
+	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_MMC_SD,
 };
 
 static struct clk mmcsd1_clk = {
-	.name = "MMCSDCLK1",
-	.parent = &sysclk2_clk,
+	.name = "mmcsd1",
+	.parent = &pll1_sysclk2,
 	.lpsc = DM355_LPSC_MMC_SD1,
 };
 
 static struct clk spi0_clk = {
-	.name = "SPICLK",
-	.parent = &sysclk2_clk,
+	.name = "spi0",
+	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_SPI,
 };
 
 static struct clk spi1_clk = {
-	.name = "SPICLK1",
-	.parent = &sysclk2_clk,
+	.name = "spi1",
+	.parent = &pll1_sysclk2,
 	.lpsc = DM355_LPSC_SPI1,
 };
 
 static struct clk spi2_clk = {
-	.name = "SPICLK2",
-	.parent = &sysclk2_clk,
+	.name = "spi2",
+	.parent = &pll1_sysclk2,
 	.lpsc = DM355_LPSC_SPI2,
 };
+
 static struct clk gpio_clk = {
 	.name = "gpio",
-	.parent = &sysclk2_clk,
+	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_GPIO,
 };
 
 static struct clk aemif_clk = {
-	.name = "AEMIFCLK",
-	.parent = &sysclk2_clk,
+	.name = "aemif",
+	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_AEMIF,
-	.usecount = 1,
 };
 
 static struct clk pwm0_clk = {
-	.name = "PWM0_CLK",
-	.parent = &aux_clk,
+	.name = "pwm0",
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_PWM0,
 };
 
 static struct clk pwm1_clk = {
-	.name = "PWM1_CLK",
-	.parent = &aux_clk,
+	.name = "pwm1",
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_PWM1,
 };
 
 static struct clk pwm2_clk = {
-	.name = "PWM2_CLK",
-	.parent = &aux_clk,
+	.name = "pwm2",
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_PWM2,
 };
 
 static struct clk pwm3_clk = {
-	.name = "PWM3_CLK",
-	.parent = &aux_clk,
+	.name = "pwm3",
+	.parent = &pll1_aux_clk,
 	.lpsc = DM355_LPSC_PWM3,
 };
 
 static struct clk timer0_clk = {
 	.name = "timer0",
-	.parent = &aux_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER0,
 };
 
 static struct clk timer1_clk = {
 	.name = "timer1",
-	.parent = &aux_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER1,
 };
 
 static struct clk timer2_clk = {
 	.name = "timer2",
-	.parent = &aux_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER2,
 };
 
 static struct clk timer3_clk = {
 	.name = "timer3",
-	.parent = &aux_clk,
+	.parent = &pll1_aux_clk,
 	.lpsc = DM355_LPSC_TIMER3,
 };
 
+static struct clk rto_clk = {
+	.name = "rto",
+	.parent = &pll1_aux_clk,
+	.lpsc = DM355_LPSC_RTO,
+};
+
 static struct clk usb_clk = {
-	.name = "USBCLK",
-	.parent = &sysclk2_clk,
+	.name = "usb",
+	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_USB,
 };
 
 static struct clk *dm355_clks[] __initdata = {
 	&ref_clk,
 	&pll1_clk,
-	&aux_clk,
-	&sysclk1_clk,
-	&sysclk2_clk,
-	&vpbe_clk,
-	&vpss_clk,
+	&pll1_sysclk1,
+	&pll1_sysclk2,
+	&pll1_sysclk3,
+	&pll1_sysclk4,
+	&pll1_aux_clk,
+	&pll1_sysclkbp,
+	&vpss_dac_clk,
+	&vpss_master_clk,
+	&vpss_slave_clk,
 	&clkout1_clk,
 	&clkout2_clk,
 	&pll2_clk,
+	&pll2_sysclk1,
+	&pll2_sysclkbp,
 	&clkout3_clk,
 	&arm_clk,
 	&mjcp_clk,
@@ -315,6 +356,7 @@ static struct clk *dm355_clks[] __initdata = {
 	&timer1_clk,
 	&timer2_clk,
 	&timer3_clk,
+	&rto_clk,
 	&usb_clk,
 	NULL,
 };
