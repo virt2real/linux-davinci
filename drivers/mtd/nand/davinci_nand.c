@@ -3,12 +3,10 @@
  *
  * Copyright (C) 2006 Texas Instruments.
  *
- * ported to 2.6.23 (C) 2008 by
- * Sander Huijsen <Shuijsen@optelecom-nkf.com>
- * Troy Kisky <troy.kisky@boundarydevices.com>
- * Dirk Behme <Dirk.Behme@gmail.com>
- *
- * --------------------------------------------------------------------------
+ * Port to 2.6.23 Copyright (C) 2008 by:
+ *   Sander Huijsen <Shuijsen@optelecom-nkf.com>
+ *   Troy Kisky <troy.kisky@boundarydevices.com>
+ *   Dirk Behme <Dirk.Behme@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,19 +18,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- * --------------------------------------------------------------------------
- *
- *  Overview:
- *   This is a device driver for the NAND flash device found on the
- *   DaVinci DM6446 EVM board which utilizes the Samsung k9k2g08 part.
- *   (small page NAND).  It should work for some other DaVinci NAND
- *   configurations, but it ignores the dm355 4-bit ECC hardware.
- *
- *   Currently assumes EM_WAIT connects all of the NAND devices in
- *   a "wire-OR" configuration.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #include <linux/kernel.h>
@@ -42,18 +30,13 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <linux/spinlock.h>
-#include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 
 #include <mach/cpu.h>
-#include <mach/hardware.h>
 #include <mach/nand.h>
-#include <mach/mux.h>
 
 #include <asm/mach-types.h>
-#include <asm/mach/flash.h>
 
 
 #ifdef CONFIG_MTD_PARTITIONS
@@ -69,6 +52,19 @@ static inline int mtd_has_cmdlinepart(void) { return 0; }
 #endif
 
 
+/*
+ * This is a device driver for the NAND flash controller found on the
+ * various DaVinci family chips.  It handles up to four SoC chipselects,
+ * and some flavors of secondary chipselect (e.g. based on A12) as used
+ * with multichip packages.
+ *
+ * The 1-bit ECC hardware is supported, but not yet the newer 4-bit ECC
+ * available on chips like the DM355 and OMAP-L137 and needed with the
+ * more error-prone MLC NAND chips.
+ *
+ * This driver assumes EM_WAIT connects all the NAND devices' RDY/nBUSY
+ * outputs in a "wire-AND" configuration, with no per-chip signals.
+ */
 struct davinci_nand_info {
 	struct mtd_info		mtd;
 	struct nand_chip	chip;
@@ -107,11 +103,12 @@ static inline void davinci_nand_writel(struct davinci_nand_info *info,
 	__raw_writel(value, info->base + offset);
 }
 
+/*----------------------------------------------------------------------*/
+
 /*
- * Hardware specific access to control-lines
- *
- * REVISIT avoid casting addresses
+ * Access to hardware control lines:  ALE, CLE, secondary chipselect.
  */
+
 static void nand_davinci_hwcontrol(struct mtd_info *mtd, int cmd,
 				   unsigned int ctrl)
 {
@@ -153,6 +150,14 @@ static void nand_davinci_select_chip(struct mtd_info *mtd, int chip)
  * 1-bit hardware ECC ... context maintained for each core chipselect
  */
 
+static inline u32 nand_davinci_readecc_1bit(struct mtd_info *mtd)
+{
+	struct davinci_nand_info *info = to_davinci_nand(mtd);
+
+	return davinci_nand_readl(info, NANDF1ECC_OFFSET
+			+ 4 * info->core_chipsel);
+}
+
 static void nand_davinci_hwctl_1bit(struct mtd_info *mtd, int mode)
 {
 	struct davinci_nand_info *info;
@@ -162,8 +167,7 @@ static void nand_davinci_hwctl_1bit(struct mtd_info *mtd, int mode)
 	info = to_davinci_nand(mtd);
 
 	/* Reset ECC hardware */
-	retval = davinci_nand_readl(info, NANDF1ECC_OFFSET
-			+ 4 * info->core_chipsel);
+	nand_davinci_readecc_1bit(mtd);
 
 	spin_lock_irqsave(&davinci_nand_lock, flags);
 
@@ -176,25 +180,14 @@ static void nand_davinci_hwctl_1bit(struct mtd_info *mtd, int mode)
 }
 
 /*
- * Read DaVinci ECC register
- */
-static inline u32 nand_davinci_readecc_1bit(struct mtd_info *mtd)
-{
-	struct davinci_nand_info *info = to_davinci_nand(mtd);
-
-	/* Read register ECC and clear it */
-	return davinci_nand_readl(info, NANDF1ECC_OFFSET);
-}
-
-/*
- * Read DaVinci ECC registers and rework into MTD format
+ * Read hardware ECC value and pack into three bytes
  */
 static int nand_davinci_calculate_1bit(struct mtd_info *mtd,
 				      const u_char *dat, u_char *ecc_code)
 {
 	unsigned int ecc_val = nand_davinci_readecc_1bit(mtd);
-	/* squeeze 0 middle bits out so that it fits in 3 bytes */
 	unsigned int tmp = (ecc_val & 0x0fff) | ((ecc_val & 0x0fff0000) >> 4);
+
 	/* invert so that erased block ecc is correct */
 	tmp = ~tmp;
 	ecc_code[0] = (u_char)(tmp);
@@ -225,7 +218,7 @@ static int nand_davinci_correct_1bit(struct mtd_info *mtd, u_char *dat,
 			}
 		} else if (!(diff & (diff - 1))) {
 			/* Single bit ECC error in the ECC itself,
-			   nothing to fix */
+			 * nothing to fix */
 			return 1;
 		} else {
 			/* Uncorrectable error */
@@ -405,15 +398,6 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	else
 		ecc_mode = NAND_ECC_HW;
 
-	/*
-	 * REVISIT dm355 adds an ECC mode that corrects up to 4 error
-	 * bits, using 10 ECC bytes every 512 bytes of data.  And that
-	 * is what TI's original LSP uses... along with quite a hacked
-	 * up "inline OOB" scheme storing those ECC bytes, which happens
-	 * to use (in good blocks) bytes used by factory bad-block marks
-	 * (in bad blocks).  There was evidently a technical issue (now
-	 * fixed?):  Linux seemed to limit ECC data to 32 bytes.
-	 */
 	switch (ecc_mode) {
 	case NAND_ECC_NONE:
 	case NAND_ECC_SOFT:
@@ -520,10 +504,6 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 
 	/* If there's no partition info, just package the whole chip
 	 * as a single MTD device.
-	 *
-	 * NOTE:  When using the DM355 with large block NAND chips, don't
-	 * use this driver to change data the ROM Boot Loader (RBL) reads
-	 * from one of the first 24 blocks.  See DM355 errata for details.
 	 */
 	if (!info->partitioned)
 		ret = add_mtd_device(&info->mtd) ? -ENODEV : 0;
