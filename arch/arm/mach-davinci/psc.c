@@ -60,48 +60,11 @@ static void dm6446_psc_mux(unsigned int id)
 	case DAVINCI_LPSC_I2C:
 		davinci_cfg_reg(DM644X_I2C);
 		break;
-	case DAVINCI_LPSC_McBSP:
-		davinci_cfg_reg(DM644X_MCBSP);
-		break;
 	case DAVINCI_LPSC_VLYNQ:
 		davinci_cfg_reg(DM644X_VLYNQEN);
 		davinci_cfg_reg(DM644X_VLYNQWD);
 		break;
 	default:
-		break;
-	}
-}
-
-#define DM355_ARM_PINMUX3	0x0c
-#define DM355_ARM_PINMUX4	0x10
-#define DM355_ARM_INTMUX	0x18
-#define DM355_EDMA_EVTMUX	0x1c
-
-static void dm355_psc_mux(unsigned int id)
-{
-	u32	tmp;
-	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
-
-	/* REVISIT mixing pinmux with PSC setup seems pretty dubious,
-	 * especially in cases like ASP0 where there are valid partial
-	 * functionality use cases ... like half duplex links.  Best
-	 * probably to do all this as part of platform_device setup,
-	 * while declaring what pins/irqs/edmas/... we care about.
-	 */
-	switch (id) {
-	case DM355_LPSC_McBSP1:		/* ASP1 */
-		/* our ASoC code currently doesn't use these IRQs */
-#if 0
-		/* deliver ASP1_XINT and ASP1_RINT */
-		tmp = __raw_readl(base + DM355_ARM_INTMUX);
-		tmp |= BIT(6) | BIT(5);
-		__raw_writel(tmp, base + DM355_ARM_INTMUX);
-#endif
-
-		/* support EDMA for ASP1_RX and ASP1_TX */
-		tmp = __raw_readl(base + DM355_EDMA_EVTMUX);
-		tmp &= ~(BIT(1) | BIT(0));
-		__raw_writel(tmp, base + DM355_EDMA_EVTMUX);
 		break;
 	}
 }
@@ -172,7 +135,7 @@ void __init davinci_psc_init(void)
 	if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm646x()) {
 		davinci_psc_mux = dm6446_psc_mux;
 	} else if (cpu_is_davinci_dm355()) {
-		davinci_psc_mux = dm355_psc_mux;
+		davinci_psc_mux = nop_psc_mux;
 	} else {
 		pr_err("PSC: no PSC mux hooks for this CPU\n");
 		davinci_psc_mux = nop_psc_mux;

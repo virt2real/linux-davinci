@@ -24,6 +24,7 @@
 
 #include <mach/asp.h>
 #include <mach/edma.h>
+#include <mach/mux.h>
 
 #include "../codecs/tlv320aic3x.h"
 #include "davinci-pcm.h"
@@ -202,10 +203,16 @@ static int __init evm_init(void)
 	int ret;
 
 	if (machine_is_davinci_evm()) {
+		davinci_cfg_reg(DM644X_MCBSP);
+
 		resources = evm_snd_resources;
 		data = &evm_snd_data;
 		index = 0;
 	} else if (machine_is_davinci_dm355_evm()) {
+		/* we don't use ASP1 IRQs, or we'd need to mux them ... */
+		davinci_cfg_reg(DM355_EVT8_ASP1_TX);
+		davinci_cfg_reg(DM355_EVT9_ASP1_RX);
+
 		resources = dm335evm_snd_resources;
 		data = &dm335evm_snd_data;
 		index = 1;
