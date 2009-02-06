@@ -18,8 +18,11 @@
 #include <mach/mux.h>
 
 #include "clock.h"
+#include "mux.h"
 
-/* various clock frequencies */
+/*
+ * Device specific clocks
+ */
 #define DM646X_REF_FREQ		27000000
 #define DM646X_AUX_FREQ		24000000
 
@@ -249,8 +252,22 @@ static struct clk *dm646x_clks[] __initdata = {
 	NULL,
 };
 
+/*
+ * Device specific mux setup
+ *
+ *	soc	description	mux  mode   mode  mux	 dbg
+ *				reg  offset mask  mode
+ */
+static const struct mux_config dm646x_pins[] = {
+MUX_CFG(DM646X, ATAEN,		0,   0,     1,	  1,	 true)
+
+MUX_CFG(DM646X, AUDCK1,		0,   29,    1,	  0,	 false)
+
+MUX_CFG(DM646X, AUDCK0,		0,   28,    1,	  0,	 false)
+};
+
 void __init dm646x_init(void)
 {
 	davinci_clk_init(dm646x_clks);
-	davinci_mux_init();
+	davinci_mux_register(dm646x_pins, ARRAY_SIZE(dm646x_pins));
 }

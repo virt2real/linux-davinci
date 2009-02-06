@@ -159,12 +159,10 @@ extern int davinci_mux_register(const struct mux_config *pins,
 extern int davinci_cfg_reg(unsigned long reg_cfg);
 #else
 /* boot loader does it all (no warnings from CONFIG_DAVINCI_MUX_WARNINGS) */
-static inline void davinci_mux_init(void)
-{
-}
+static inline void davinci_mux_init(void) {}
+static inline int davinci_mux_register(const struct mux_config *pins,
+				       unsigned long size) { return 0; }
 static inline int davinci_cfg_reg(unsigned long reg_cfg) { return 0; }
 #endif
-
-extern void (*davinci_pinmux_setup)(unsigned int id);
 
 #endif /* __INC_MACH_MUX_H */

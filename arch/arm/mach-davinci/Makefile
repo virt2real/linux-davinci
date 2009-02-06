@@ -7,7 +7,7 @@
 obj-y 			:= time.o irq.o clock.o serial.o io.o id.o psc.o \
 			   gpio.o devices.o usb.o dma.o iram.o
 
-obj-$(CONFIG_DAVINCI_MUX)		+= mux.o mux_cfg.o
+obj-$(CONFIG_DAVINCI_MUX)		+= mux.o
 
 # Chip specific
 obj-$(CONFIG_ARCH_DAVINCI_DM644x)       += dm644x.o
