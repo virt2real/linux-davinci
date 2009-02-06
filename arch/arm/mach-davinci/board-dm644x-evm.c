@@ -56,11 +56,11 @@
 #define LXT971_PHY_MASK	(0xfffffff0)
 
 static struct mtd_partition davinci_evm_norflash_partitions[] = {
-	/* bootloader (U-Boot, etc) in first 4 sectors */
+	/* bootloader (UBL, U-Boot, etc) in first 5 sectors */
 	{
 		.name		= "bootloader",
 		.offset		= 0,
-		.size		= 4 * SZ_64K,
+		.size		= 5 * SZ_64K,
 		.mask_flags	= MTD_WRITEABLE, /* force read-only */
 	},
 	/* bootloader params in the next 1 sectors */
