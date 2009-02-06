@@ -20,6 +20,8 @@
 #include <linux/io.h>
 #include <linux/gpio.h>
 #include <linux/clk.h>
+#include <linux/spi/spi.h>
+#include <linux/spi/eeprom.h>
 
 #include <asm/setup.h>
 #include <asm/mach-types.h>
@@ -224,6 +226,24 @@ static struct davinci_mmc_config dm355evm_mmc_config = {
 #define USB_ID_VALUE	1	/* ID pulled low */
 #endif
 
+static struct spi_eeprom at25640a = {
+	.byte_len	= SZ_64K / 8,
+	.name		= "at25640a",
+	.page_size	= 32,
+	.flags		= EE_ADDR2,
+};
+
+static struct spi_board_info dm355_evm_spi_info[] __initconst = {
+	{
+		.modalias	= "at25",
+		.platform_data	= &at25640a,
+		.max_speed_hz	= 10 * 1000 * 1000,	/* at 3v3 */
+		.bus_num	= 0,
+		.chip_select	= 0,
+		.mode		= SPI_MODE_0,
+	},
+};
+
 static __init void dm355_evm_init(void)
 {
 	struct clk *aemif;
@@ -243,7 +263,7 @@ static __init void dm355_evm_init(void)
 
 	/* NOTE:  NAND flash timings set by the UBL are slower than
 	 * needed by MT29F16G08FAA chips ... EMIF.A1CR is 0x40400204
-	 * but could be 0x0400008c.
+	 * but could be 0x0400008c for about 25% faster page reads.
 	 */
 
 	gpio_request(2, "usb_id_toggle");
@@ -253,6 +273,9 @@ static __init void dm355_evm_init(void)
 
 	davinci_setup_mmc(0, &dm355evm_mmc_config);
 	davinci_setup_mmc(1, &dm355evm_mmc_config);
+
+	dm355_init_spi0(BIT(0), dm355_evm_spi_info,
+			ARRAY_SIZE(dm355_evm_spi_info));
 }
 
 static __init void dm355_evm_irq_init(void)
