@@ -103,13 +103,6 @@ static void dm355_psc_mux(unsigned int id)
 		tmp &= ~(BIT(1) | BIT(0));
 		__raw_writel(tmp, base + DM355_EDMA_EVTMUX);
 		break;
-	case DAVINCI_LPSC_SPI:			/* SPI0 */
-		/* expose SPI0_SDI
-		 * NOTE: SPIO_SDENA0 and/or SPIO_SDENA1
-		 * will need to be set too.
-		 */
-		davinci_cfg_reg(DM355_SPI0_SDI);
-		break;
 	}
 }
 

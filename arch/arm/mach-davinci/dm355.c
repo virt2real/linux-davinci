@@ -11,6 +11,10 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/clk.h>
+#include <linux/platform_device.h>
+#include <linux/dma-mapping.h>
+
+#include <linux/spi/spi.h>
 
 #include <mach/dm355.h>
 #include <mach/clock.h>
@@ -360,6 +364,60 @@ static struct clk *dm355_clks[] __initdata = {
 	&usb_clk,
 	NULL,
 };
+
+/*----------------------------------------------------------------------*/
+
+static u64 dm355_spi0_dma_mask = DMA_32BIT_MASK;
+
+static struct resource dm355_spi0_resources[] = {
+	{
+		.start = 0x01c66000,
+		.end   = 0x01c667ff,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = IRQ_DM355_SPINT0_1,
+		.flags = IORESOURCE_IRQ,
+	},
+	/* Not yet used, so not included:
+	 * IORESOURCE_IRQ:
+	 *  - IRQ_DM355_SPINT0_0
+	 * IORESOURCE_DMA:
+	 *  - DAVINCI_DMA_SPI_SPIX
+	 *  - DAVINCI_DMA_SPI_SPIR
+	 */
+};
+
+static struct platform_device dm355_spi0_device = {
+	.name = "spi_davinci",
+	.id = 0,
+	.dev = {
+		.dma_mask = &dm355_spi0_dma_mask,
+		.coherent_dma_mask = DMA_32BIT_MASK,
+	},
+	.num_resources = ARRAY_SIZE(dm355_spi0_resources),
+	.resource = dm355_spi0_resources,
+};
+
+void __init dm355_init_spi0(unsigned chipselect_mask,
+		struct spi_board_info *info, unsigned len)
+{
+	/* for now, assume we need MISO */
+	davinci_cfg_reg(DM355_SPI0_SDI);
+
+	/* not all slaves will be wired up */
+	if (chipselect_mask & BIT(0))
+		davinci_cfg_reg(DM355_SPI0_SDENA0);
+	if (chipselect_mask & BIT(1))
+		davinci_cfg_reg(DM355_SPI0_SDENA1);
+
+	spi_register_board_info(info, len);
+
+	davinci_clk_associate(&dm355_spi0_device.dev, "spi", "SPICLK");
+	platform_device_register(&dm355_spi0_device);
+}
+
+/*----------------------------------------------------------------------*/
 
 void __init dm355_init(void)
 {

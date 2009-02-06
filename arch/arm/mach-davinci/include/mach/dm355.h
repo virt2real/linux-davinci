@@ -15,4 +15,9 @@
 
 void __init dm355_init(void);
 
+struct spi_board_info;
+
+void dm355_init_spi0(unsigned chipselect_mask,
+		struct spi_board_info *info, unsigned len);
+
 #endif /* __ASM_ARCH_DM355_H */
