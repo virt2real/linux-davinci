@@ -413,7 +413,7 @@ void __init dm355_init_spi0(unsigned chipselect_mask,
 
 	spi_register_board_info(info, len);
 
-	davinci_clk_associate(&dm355_spi0_device.dev, "spi", "SPICLK");
+	davinci_clk_associate(&dm355_spi0_device.dev, "spi", "spi0");
 	platform_device_register(&dm355_spi0_device);
 }
 
