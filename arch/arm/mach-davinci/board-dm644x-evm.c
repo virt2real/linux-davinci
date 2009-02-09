@@ -573,6 +573,7 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 
 static void __init evm_init_i2c(void)
 {
+	davinci_cfg_reg(DM644X_I2C);
 	davinci_init_i2c(&i2c_pdata);
 	i2c_add_driver(&dm6446evm_msp_driver);
 	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));

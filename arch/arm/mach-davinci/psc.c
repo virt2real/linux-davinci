@@ -39,41 +39,6 @@
 #define MDSTAT		0x800
 #define MDCTL		0xA00
 
-/* System control register offsets */
-#define VDD3P3V_PWDN	0x48
-
-static void (*davinci_psc_mux)(unsigned int id);
-
-static void dm6446_psc_mux(unsigned int id)
-{
-	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
-
-	switch (id) {
-	case DAVINCI_LPSC_MMC_SD:
-		/* VDD power manupulations are done in U-Boot for CPMAC
-		 * so applies to MMC as well
-		 */
-		/*Set up the pull regiter for MMC */
-		__raw_writel(0, base + VDD3P3V_PWDN);
-		davinci_cfg_reg(DM644X_MSTK);
-		break;
-	case DAVINCI_LPSC_I2C:
-		davinci_cfg_reg(DM644X_I2C);
-		break;
-	case DAVINCI_LPSC_VLYNQ:
-		davinci_cfg_reg(DM644X_VLYNQEN);
-		davinci_cfg_reg(DM644X_VLYNQWD);
-		break;
-	default:
-		break;
-	}
-}
-
-static void nop_psc_mux(unsigned int id)
-{
-	/* nothing */
-}
-
 /* Enable or disable a PSC domain */
 void davinci_psc_config(unsigned int domain, unsigned int id, char enable)
 {
@@ -125,19 +90,4 @@ void davinci_psc_config(unsigned int domain, unsigned int id, char enable)
 	do {
 		mdstat = __raw_readl(psc_base + MDSTAT + 4 * id);
 	} while (!((mdstat & 0x0000001F) == mdstat_mask));
-
-	if (enable)
-		davinci_psc_mux(id);
-}
-
-void __init davinci_psc_init(void)
-{
-	if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm646x()) {
-		davinci_psc_mux = dm6446_psc_mux;
-	} else if (cpu_is_davinci_dm355()) {
-		davinci_psc_mux = nop_psc_mux;
-	} else {
-		pr_err("PSC: no PSC mux hooks for this CPU\n");
-		davinci_psc_mux = nop_psc_mux;
-	}
 }

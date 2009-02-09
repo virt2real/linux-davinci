@@ -190,6 +190,18 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 			/* enable RX EDMA */
 			davinci_cfg_reg(DM355_EVT26_MMC0_RX);
 		}
+
+		else if (cpu_is_davinci_dm644x()) {
+			/* REVISIT: should this be in board-init code? */
+			void __iomem *base =
+				IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
+
+			/* Power-on 3.3V IO cells */
+			__raw_writel(0, base + DM64XX_VDD3P3V_PWDN);
+			/*Set up the pull regiter for MMC */
+			davinci_cfg_reg(DM644X_MSTK);
+		}
+
 		pdev = &davinci_mmcsd0_device;
 		clockname = cpu_is_davinci_dm355() ? "mmcsd0" : "mmcsd";
 		break;

@@ -377,7 +377,6 @@ int __init davinci_clk_init(struct clk *clocks[])
 	struct clk *clkp;
 	int i = 0;
 
-	davinci_psc_init();
 	while ((clkp = clocks[i++])) {
 		if (clkp->pll_data)
 			clk_pll_init(clkp);

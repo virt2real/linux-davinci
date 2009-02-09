@@ -52,6 +52,7 @@
 #include <mach/i2c.h>
 #include <mach/serial.h>
 #include <mach/psc.h>
+#include <mach/mux.h>
 
 #define DAVINCI_ASYNC_EMIF_CONTROL_BASE   0x01e00000
 #define DAVINCI_ASYNC_EMIF_DATA_CE0_BASE  0x02000000
@@ -132,6 +133,7 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 
 static void __init sffsdr_init_i2c(void)
 {
+	davinci_cfg_reg(DM644X_I2C);
 	davinci_init_i2c(&i2c_pdata);
 	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
 }
@@ -152,13 +154,16 @@ static void __init davinci_sffsdr_map_io(void)
 
 static __init void davinci_sffsdr_init(void)
 {
-	davinci_psc_init();
 	platform_add_devices(davinci_sffsdr_devices,
 			     ARRAY_SIZE(davinci_sffsdr_devices));
 	sffsdr_init_i2c();
 	davinci_serial_init(&uart_config);
 	davinci_init_emac(davinci_sffsdr_mac_addr);
 	setup_usb(0, 0); /* We support only peripheral mode. */
+
+	/* mux VLYNQ pins */
+	davinci_cfg_reg(DM644X_VLYNQEN);
+	davinci_cfg_reg(DM644X_VLYNQWD);
 }
 
 static int davinci_cpmac_eth_setup(char *str)
