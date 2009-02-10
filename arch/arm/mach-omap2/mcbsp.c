@@ -77,7 +77,6 @@ static struct mcbsp_internal_clk omap_mcbsp_clks[] = {
 		.clk = {
 			.name 		= "mcbsp_clk",
 			.id		= 1,
-			.clkdm		= { .name = "virt_opp_clkdm" },
 			.enable		= omap_mcbsp_clk_enable,
 			.disable	= omap_mcbsp_clk_disable,
 		},
@@ -86,7 +85,6 @@ static struct mcbsp_internal_clk omap_mcbsp_clks[] = {
 		.clk = {
 			.name 		= "mcbsp_clk",
 			.id		= 2,
-			.clkdm		= { .name = "virt_opp_clkdm" },
 			.enable		= omap_mcbsp_clk_enable,
 			.disable	= omap_mcbsp_clk_disable,
 		},
@@ -95,7 +93,6 @@ static struct mcbsp_internal_clk omap_mcbsp_clks[] = {
 		.clk = {
 			.name		= "mcbsp_clk",
 			.id		= 3,
-			.clkdm		= { .name = "virt_opp_clkdm" },
 			.enable		= omap_mcbsp_clk_enable,
 			.disable	= omap_mcbsp_clk_disable,
 		},
@@ -104,7 +101,6 @@ static struct mcbsp_internal_clk omap_mcbsp_clks[] = {
 		.clk = {
 			.name		= "mcbsp_clk",
 			.id		= 4,
-			.clkdm		= { .name = "virt_opp_clkdm" },
 			.enable		= omap_mcbsp_clk_enable,
 			.disable	= omap_mcbsp_clk_disable,
 		},
@@ -113,7 +109,6 @@ static struct mcbsp_internal_clk omap_mcbsp_clks[] = {
 		.clk = {
 			.name		= "mcbsp_clk",
 			.id		= 5,
-			.clkdm		= { .name = "virt_opp_clkdm" },
 			.enable		= omap_mcbsp_clk_enable,
 			.disable	= omap_mcbsp_clk_disable,
 		},

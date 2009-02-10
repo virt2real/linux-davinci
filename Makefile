@@ -19,6 +19,9 @@ MAKEFLAGS += -rR --no-print-directory
 # Add custom flags here to avoid conflict with updates
 EXTRAVERSION := $(EXTRAVERSION)-davinci1
 
+# Add custom flags here to avoid conflict with updates
+EXTRAVERSION := $(EXTRAVERSION)-omap1
+
 # We are using a recursive build, so we need to do a little thinking
 # to get the ordering right.
 #
@@ -173,6 +176,8 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 				  -e s/s390x/s390/ -e s/parisc64/parisc/ \
 				  -e s/ppc.*/powerpc/ -e s/mips.*/mips/ \
 				  -e s/sh.*/sh/ )
+
+SUBARCH := arm
 
 SUBARCH := arm
 

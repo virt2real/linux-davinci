@@ -12,68 +12,90 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/platform_device.h>
-
-#include <linux/i2c/tps65010.h>
-
 #include <mach/mmc.h>
 #include <mach/gpio.h>
 
-#if defined(CONFIG_MMC_OMAP) || defined(CONFIG_MMC_OMAP_MODULE)
+#ifdef CONFIG_MMC_OMAP
+static int slot_cover_open;
+static struct device *mmc_device;
 
-static int mmc_set_power(struct device *dev, int slot, int power_on,
+static int h2_mmc_set_power(struct device *dev, int slot, int power_on,
 				int vdd)
 {
-	if (power_on)
-		gpio_direction_output(H2_TPS_GPIO_MMC_PWR_EN, 1);
-	else
-		gpio_direction_output(H2_TPS_GPIO_MMC_PWR_EN, 0);
+#ifdef CONFIG_MMC_DEBUG
+	dev_dbg(dev, "Set slot %d power: %s (vdd %d)\n", slot + 1,
+		power_on ? "on" : "off", vdd);
+#endif
+	if (slot != 0) {
+		dev_err(dev, "No such slot %d\n", slot + 1);
+		return -ENODEV;
+	}
 
 	return 0;
 }
 
-static int mmc_late_init(struct device *dev)
+static int h2_mmc_set_bus_mode(struct device *dev, int slot, int bus_mode)
 {
-	int ret;
+#ifdef CONFIG_MMC_DEBUG
+	dev_dbg(dev, "Set slot %d bus_mode %s\n", slot + 1,
+		bus_mode == MMC_BUSMODE_OPENDRAIN ? "open-drain" : "push-pull");
+#endif
+	if (slot != 0) {
+		dev_err(dev, "No such slot %d\n", slot + 1);
+		return -ENODEV;
+	}
 
-	ret = gpio_request(H2_TPS_GPIO_MMC_PWR_EN, "MMC power");
-	if (ret < 0)
-		return ret;
+	return 0;
+}
 
-	gpio_direction_output(H2_TPS_GPIO_MMC_PWR_EN, 0);
+static int h2_mmc_get_cover_state(struct device *dev, int slot)
+{
+	BUG_ON(slot != 0);
+
+	return slot_cover_open;
+}
+
+void h2_mmc_slot_cover_handler(void *arg, int state)
+{
+	if (mmc_device == NULL)
+		return;
+
+	slot_cover_open = state;
+	omap_mmc_notify_cover_event(mmc_device, 0, state);
+}
+
+static int h2_mmc_late_init(struct device *dev)
+{
+	int ret = 0;
+
+	mmc_device = dev;
 
 	return ret;
 }
 
-static void mmc_shutdown(struct device *dev)
+static void h2_mmc_cleanup(struct device *dev)
 {
-	gpio_free(H2_TPS_GPIO_MMC_PWR_EN);
 }
 
-/*
- * H2 could use the following functions tested:
- * - mmc_get_cover_state that uses OMAP_MPUIO(1)
- * - mmc_get_wp that uses OMAP_MPUIO(3)
- */
-static struct omap_mmc_platform_data mmc1_data = {
+static struct omap_mmc_platform_data h2_mmc_data = {
 	.nr_slots                       = 1,
-	.init				= mmc_late_init,
-	.shutdown			= mmc_shutdown,
-	.dma_mask			= 0xffffffff,
+	.switch_slot                    = NULL,
+	.init                           = h2_mmc_late_init,
+	.cleanup                        = h2_mmc_cleanup,
 	.slots[0]       = {
-		.set_power              = mmc_set_power,
+		.set_power              = h2_mmc_set_power,
+		.set_bus_mode           = h2_mmc_set_bus_mode,
+		.get_ro                 = NULL,
+		.get_cover_state        = h2_mmc_get_cover_state,
 		.ocr_mask               = MMC_VDD_28_29 | MMC_VDD_30_31 |
 					  MMC_VDD_32_33 | MMC_VDD_33_34,
 		.name                   = "mmcblk",
 	},
 };
 
-static struct omap_mmc_platform_data *mmc_data[OMAP16XX_NR_MMC];
-
 void __init h2_mmc_init(void)
 {
-	mmc_data[0] = &mmc1_data;
-	omap1_init_mmc(mmc_data, OMAP16XX_NR_MMC);
+	omap_set_mmc_info(1, &h2_mmc_data);
 }
 
 #else
@@ -82,4 +104,7 @@ void __init h2_mmc_init(void)
 {
 }
 
+void h2_mmc_slot_cover_handler(void *arg, int state)
+{
+}
 #endif

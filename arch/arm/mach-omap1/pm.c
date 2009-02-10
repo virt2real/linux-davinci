@@ -226,8 +226,7 @@ void omap_pm_suspend(void)
 {
 	unsigned long arg0 = 0, arg1 = 0;
 
-	printk(KERN_INFO "PM: OMAP%x is trying to enter deep sleep...\n",
-		omap_rev());
+	printk("PM: OMAP%x is trying to enter deep sleep...\n", system_rev);
 
 	omap_serial_wake_trigger(1);
 
@@ -422,8 +421,7 @@ void omap_pm_suspend(void)
 
 	omap_serial_wake_trigger(0);
 
-	printk(KERN_INFO "PM: OMAP%x is re-starting from deep sleep...\n",
-		omap_rev());
+	printk("PM: OMAP%x is re-starting from deep sleep...\n", system_rev);
 }
 
 #if defined(DEBUG) && defined(CONFIG_PROC_FS)
