@@ -223,7 +223,8 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 	 * Check if the request spans more than any BAR in the iomem resource
 	 * tree.
 	 */
-	WARN_ON(iomem_map_sanity_check(phys_addr, size));
+	WARN_ONCE(iomem_map_sanity_check(phys_addr, size),
+		  KERN_INFO "Info: mapping multiple BARs. Your kernel is fine.");
 
 	/*
 	 * Don't allow anybody to remap normal RAM that we're using..
@@ -556,34 +557,9 @@ void __init early_ioremap_init(void)
 	}
 }
 
-void __init early_ioremap_clear(void)
-{
-	pmd_t *pmd;
-
-	if (early_ioremap_debug)
-		printk(KERN_INFO "early_ioremap_clear()\n");
-
-	pmd = early_ioremap_pmd(fix_to_virt(FIX_BTMAP_BEGIN));
-	pmd_clear(pmd);
-	paravirt_release_pte(__pa(bm_pte) >> PAGE_SHIFT);
-	__flush_tlb_all();
-}
-
 void __init early_ioremap_reset(void)
 {
-	enum fixed_addresses idx;
-	unsigned long addr, phys;
-	pte_t *pte;
-
 	after_paging_init = 1;
-	for (idx = FIX_BTMAP_BEGIN; idx >= FIX_BTMAP_END; idx--) {
-		addr = fix_to_virt(idx);
-		pte = early_ioremap_pte(addr);
-		if (pte_present(*pte)) {
-			phys = pte_val(*pte) & PAGE_MASK;
-			set_fixmap(idx, phys);
-		}
-	}
 }
 
 static void __init __early_set_fixmap(enum fixed_addresses idx,

@@ -17,12 +17,12 @@
 #include <linux/timer.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/gpio.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 
-#include <asm/gpio.h>
 #include <asm/dma.h>
 #include <asm/mach-types.h>
 #include <asm/plat-sffsdr/sffsdr-fpga.h>
@@ -35,7 +35,8 @@
 #include "davinci-i2s.h"
 
 static int sffsdr_hw_params(struct snd_pcm_substream *substream,
-			    struct snd_pcm_hw_params *params)
+			    struct snd_pcm_hw_params *params,
+			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
@@ -74,8 +75,9 @@ static struct snd_soc_dai_link sffsdr_dai = {
 };
 
 /* davinci-sffsdr audio machine driver */
-static struct snd_soc_machine snd_soc_machine_sffsdr = {
+static struct snd_soc_card snd_soc_sffsdr = {
 	.name = "DaVinci SFFSDR",
+	.platform = &davinci_soc_platform,
 	.dai_link = &sffsdr_dai,
 	.num_links = 1,
 };
@@ -90,8 +92,7 @@ static struct pcm3008_setup_data sffsdr_pcm3008_setup = {
 
 /* sffsdr audio subsystem */
 static struct snd_soc_device sffsdr_snd_devdata = {
-	.machine = &snd_soc_machine_sffsdr,
-	.platform = &davinci_soc_platform,
+	.card = &snd_soc_sffsdr,
 	.codec_dev = &soc_codec_dev_pcm3008,
 	.codec_data = &sffsdr_pcm3008_setup,
 };

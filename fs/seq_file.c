@@ -54,6 +54,64 @@ int seq_open(struct file *file, const struct seq_operations *op)
 }
 EXPORT_SYMBOL(seq_open);
 
+static int traverse(struct seq_file *m, loff_t offset)
+{
+	loff_t pos = 0, index;
+	int error = 0;
+	void *p;
+
+	m->version = 0;
+	index = 0;
+	m->count = m->from = 0;
+	if (!offset) {
+		m->index = index;
+		return 0;
+	}
+	if (!m->buf) {
+		m->buf = kmalloc(m->size = PAGE_SIZE, GFP_KERNEL);
+		if (!m->buf)
+			return -ENOMEM;
+	}
+	p = m->op->start(m, &index);
+	while (p) {
+		error = PTR_ERR(p);
+		if (IS_ERR(p))
+			break;
+		error = m->op->show(m, p);
+		if (error < 0)
+			break;
+		if (unlikely(error)) {
+			error = 0;
+			m->count = 0;
+		}
+		if (m->count == m->size)
+			goto Eoverflow;
+		if (pos + m->count > offset) {
+			m->from = offset - pos;
+			m->count -= m->from;
+			m->index = index;
+			break;
+		}
+		pos += m->count;
+		m->count = 0;
+		if (pos == offset) {
+			index++;
+			m->index = index;
+			break;
+		}
+		p = m->op->next(m, p, &index);
+	}
+	m->op->stop(m, p);
+	m->index = index;
+	return error;
+
+Eoverflow:
+	m->op->stop(m, p);
+	kfree(m->buf);
+	m->buf = kmalloc(m->size <<= 1, GFP_KERNEL);
+	return !m->buf ? -ENOMEM : -EAGAIN;
+}
+
 /**
  *	seq_read -	->read() method for sequential files.
  *	@file: the file to read from
@@ -186,63 +244,6 @@ Efault:
 }
 EXPORT_SYMBOL(seq_read);
 
-static int traverse(struct seq_file *m, loff_t offset)
-{
-	loff_t pos = 0, index;
-	int error = 0;
-	void *p;
-
-	m->version = 0;
-	index = 0;
-	m->count = m->from = 0;
-	if (!offset) {
-		m->index = index;
-		return 0;
-	}
-	if (!m->buf) {
-		m->buf = kmalloc(m->size = PAGE_SIZE, GFP_KERNEL);
-		if (!m->buf)
-			return -ENOMEM;
-	}
-	p = m->op->start(m, &index);
-	while (p) {
-		error = PTR_ERR(p);
-		if (IS_ERR(p))
-			break;
-		error = m->op->show(m, p);
-		if (error < 0)
-			break;
-		if (unlikely(error)) {
-			error = 0;
-			m->count = 0;
-		}
-		if (m->count == m->size)
-			goto Eoverflow;
-		if (pos + m->count > offset) {
-			m->from = offset - pos;
-			m->count -= m->from;
-			m->index = index;
-			break;
-		}
-		pos += m->count;
-		m->count = 0;
-		if (pos == offset) {
-			index++;
-			m->index = index;
-			break;
-		}
-		p = m->op->next(m, p, &index);
-	}
-	m->op->stop(m, p);
-	return error;
-
-Eoverflow:
-	m->op->stop(m, p);
-	kfree(m->buf);
-	m->buf = kmalloc(m->size <<= 1, GFP_KERNEL);
-	return !m->buf ? -ENOMEM : -EAGAIN;
-}
-
 /**
  *	seq_lseek -	->llseek() method for sequential files.
  *	@file: the file in question
@@ -357,7 +358,18 @@ int seq_printf(struct seq_file *m, const char *f, ...)
 }
 EXPORT_SYMBOL(seq_printf);
 
-static char *mangle_path(char *s, char *p, char *esc)
+/**
+ *	mangle_path -	mangle and copy path to buffer beginning
+ *	@s: buffer start
+ *	@p: beginning of path in above buffer
+ *	@esc: set of characters that need escaping
+ *
+ *      Copy the path from @p to @s, replacing each occurrence of character from
+ *      @esc with usual octal escape.
+ *      Returns pointer past last written character in @s, or NULL in case of
+ *      failure.
+ */
+char *mangle_path(char *s, char *p, char *esc)
 {
 	while (s <= p) {
 		char c = *p++;
@@ -376,9 +388,16 @@ static char *mangle_path(char *s, char *p, char *esc)
 	}
 	return NULL;
 }
+EXPORT_SYMBOL(mangle_path);
 
-/*
- * return the absolute path of 'dentry' residing in mount 'mnt'.
+/**
+ * seq_path - seq_file interface to print a pathname
+ * @m: the seq_file handle
+ * @path: the struct path to print
+ * @esc: set of characters to escape in the output
+ *
+ * return the absolute path of 'path', as represented by the
+ * dentry / mnt pair in the path parameter.
  */
 int seq_path(struct seq_file *m, struct path *path, char *esc)
 {
@@ -450,7 +469,8 @@ int seq_dentry(struct seq_file *m, struct dentry *dentry, char *esc)
 	return -1;
 }
 
-int seq_bitmap(struct seq_file *m, unsigned long *bits, unsigned int nr_bits)
+int seq_bitmap(struct seq_file *m, const unsigned long *bits,
+				   unsigned int nr_bits)
 {
 	if (m->count < m->size) {
 		int len = bitmap_scnprintf(m->buf + m->count,

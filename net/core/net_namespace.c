@@ -47,7 +47,6 @@ static __net_init int setup_net(struct net *net)
 		goto out;
 
 	ng->len = INITIAL_NET_GEN_PTRS;
-	INIT_RCU_HEAD(&ng->rcu);
 	rcu_assign_pointer(net->gen, ng);
 
 	error = 0;
@@ -342,8 +341,8 @@ again:
 	rv = register_pernet_operations(first_device, ops);
 	if (rv < 0)
 		ida_remove(&net_generic_ids, *id);
-	mutex_unlock(&net_mutex);
 out:
+	mutex_unlock(&net_mutex);
 	return rv;
 }
 EXPORT_SYMBOL_GPL(register_pernet_gen_subsys);
@@ -478,7 +477,6 @@ int net_assign_generic(struct net *net, int id, void *data)
 	 */
 
 	ng->len = id;
-	INIT_RCU_HEAD(&ng->rcu);
 	memcpy(&ng->ptr, &old_ng->ptr, old_ng->len);
 
 	rcu_assign_pointer(net->gen, ng);

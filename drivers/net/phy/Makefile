@@ -16,4 +16,6 @@ obj-$(CONFIG_REALTEK_PHY)	+= realtek.o
 obj-$(CONFIG_LSI_ET1011C_PHY)	+= et1011c.o
 obj-$(CONFIG_FIXED_PHY)		+= fixed.o
 obj-$(CONFIG_MDIO_BITBANG)	+= mdio-bitbang.o
-obj-$(CONFIG_MDIO_OF_GPIO)	+= mdio-ofgpio.o
+obj-$(CONFIG_MDIO_GPIO)		+= mdio-gpio.o
+obj-$(CONFIG_NATIONAL_PHY)	+= national.o
+obj-$(CONFIG_STE10XP)		+= ste10Xp.o

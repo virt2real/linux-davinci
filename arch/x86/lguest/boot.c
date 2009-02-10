@@ -590,7 +590,8 @@ static void __init lguest_init_IRQ(void)
 		 * a straightforward 1 to 1 mapping, so force that here. */
 		__get_cpu_var(vector_irq)[vector] = i;
 		if (vector != SYSCALL_VECTOR) {
-			set_intr_gate(vector, interrupt[vector]);
+			set_intr_gate(vector,
+				      interrupt[vector-FIRST_EXTERNAL_VECTOR]);
 			set_irq_chip_and_handler_name(i, &lguest_irq_controller,
 						      handle_level_irq,
 						      "level");
@@ -737,7 +738,7 @@ static void lguest_time_init(void)
 
 	/* We can't set cpumask in the initializer: damn C limitations!  Set it
 	 * here and register our timer device. */
-	lguest_clockevent.cpumask = cpumask_of_cpu(0);
+	lguest_clockevent.cpumask = cpumask_of(0);
 	clockevents_register_device(&lguest_clockevent);
 
 	/* Finally, we unblock the timer interrupt. */
@@ -930,7 +931,7 @@ static void lguest_restart(char *reason)
  * that we can fit comfortably.
  *
  * First we need assembly templates of each of the patchable Guest operations,
- * and these are in lguest_asm.S. */
+ * and these are in i386_head.S. */
 
 /*G:060 We construct a table from the assembler templates: */
 static const struct lguest_insns
@@ -1092,7 +1093,7 @@ __init void lguest_init(void)
 	acpi_ht = 0;
 #endif
 
-	/* We set the perferred console to "hvc".  This is the "hypervisor
+	/* We set the preferred console to "hvc".  This is the "hypervisor
 	 * virtual console" driver written by the PowerPC people, which we also
 	 * adapted for lguest's use. */
 	add_preferred_console("hvc", 0, NULL);
