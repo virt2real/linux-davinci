@@ -189,7 +189,7 @@ static struct clk aemif_clk = {
 };
 
 static struct clk emac_clk = {
-	.name = "EMACCLK",
+	.name = "emac",
 	.parent = &pll1_sysclk3,
 	.lpsc = DM646X_LPSC_EMAC,
 };

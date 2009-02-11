@@ -171,7 +171,7 @@ static struct clk uart2_clk = {
 };
 
 static struct clk emac_clk = {
-	.name = "EMACCLK",
+	.name = "emac",
 	.parent = &pll1_sysclk5,
 	.lpsc = DAVINCI_LPSC_EMAC_WRAPPER,
 };
