@@ -2966,6 +2966,7 @@ static int create_fixed_stream_quirk(struct snd_usb_audio *chip,
 		return -EINVAL;
 	}
 	alts = &iface->altsetting[fp->altset_idx];
+	fp->maxpacksize = le16_to_cpu(get_endpoint(alts, 0)->wMaxPacketSize);
 	usb_set_interface(chip->dev, fp->iface, 0);
 	init_usb_pitch(chip->dev, fp->iface, alts, fp);
 	init_usb_sample_rate(chip->dev, fp->iface, alts, fp, fp->rate_max);
@@ -3709,7 +3710,7 @@ static int usb_audio_probe(struct usb_interface *intf,
 	void *chip;
 	chip = snd_usb_audio_probe(interface_to_usbdev(intf), intf, id);
 	if (chip) {
-		dev_set_drvdata(&intf->dev, chip);
+		usb_set_intfdata(intf, chip);
 		return 0;
 	} else
 		return -EIO;
@@ -3718,13 +3719,13 @@ static int usb_audio_probe(struct usb_interface *intf,
 static void usb_audio_disconnect(struct usb_interface *intf)
 {
 	snd_usb_audio_disconnect(interface_to_usbdev(intf),
-				 dev_get_drvdata(&intf->dev));
+				 usb_get_intfdata(intf));
 }
 
 #ifdef CONFIG_PM
 static int usb_audio_suspend(struct usb_interface *intf, pm_message_t message)
 {
-	struct snd_usb_audio *chip = dev_get_drvdata(&intf->dev);
+	struct snd_usb_audio *chip = usb_get_intfdata(intf);
 	struct list_head *p;
 	struct snd_usb_stream *as;
 
@@ -3744,7 +3745,7 @@ static int usb_audio_suspend(struct usb_interface *intf, pm_message_t message)
 
 static int usb_audio_resume(struct usb_interface *intf)
 {
-	struct snd_usb_audio *chip = dev_get_drvdata(&intf->dev);
+	struct snd_usb_audio *chip = usb_get_intfdata(intf);
 
 	if (chip == (void *)-1L)
 		return 0;

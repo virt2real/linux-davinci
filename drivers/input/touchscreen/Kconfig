@@ -58,6 +58,14 @@ config TOUCHSCREEN_CORGI
 	  NOTE: this driver is deprecated, try enable SPI and generic
 	  ADS7846-based touchscreen driver.
 
+config TOUCHSCREEN_DA9034
+	tristate "Touchscreen support for Dialog Semiconductor DA9034"
+	depends on PMIC_DA903X
+	default y
+	help
+	  Say Y here to enable the support for the touchscreen found
+	  on Dialog Semiconductor DA9034 PMIC.
+
 config TOUCHSCREEN_FUJITSU
 	tristate "Fujitsu serial touchscreen"
 	select SERIO
@@ -94,6 +102,19 @@ config TOUCHSCREEN_ELO
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called elo.
+
+config TOUCHSCREEN_WACOM_W8001
+	tristate "Wacom W8001 penabled serial touchscreen"
+	select SERIO
+	help
+	  Say Y here if you have an Wacom W8001 penabled serial touchscreen
+	  connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called wacom_w8001.
+
 
 config TOUCHSCREEN_MTOUCH
 	tristate "MicroTouch serial touchscreens"
@@ -220,32 +241,6 @@ config TOUCHSCREEN_ATMEL_TSADCC
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called atmel_tsadcc.
-
-config TOUCHSCREEN_TSC2005
-	tristate "TSC2005 touchscreen support"
-	depends on SPI_MASTER
-	help
-	  Say Y here for if you are using the touchscreen features of TSC2005.
-
-config TOUCHSCREEN_TSC210X
-	tristate "TI TSC210x based touchscreens"
-	depends on SPI_MASTER
-	select SPI_TSC210X
-	help
-	  Say Y here if you have a touchscreen interface using a
-	  TI TSC210x controller, and your board-specific initialisation
-	  code includes that in its table of SPI devices.
-
-	  If unsure, say N (but it's safe to say "Y").
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called tsc210x_ts.
-
-config TOUCHSCREEN_TSC2301
-	tristate "TSC2301 touchscreen support"
-	depends on SPI_TSC2301
-	help
-	  Say Y here for if you are using the touchscreen features of TSC2301.
 
 config TOUCHSCREEN_UCB1400
 	tristate "Philips UCB1400 touchscreen"
@@ -401,5 +396,16 @@ config TOUCHSCREEN_TOUCHIT213
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called touchit213.
+
+config TOUCHSCREEN_TSC2007
+	tristate "TSC2007 based touchscreens"
+	depends on I2C
+	help
+	  Say Y here if you have a TSC2007 based touchscreen.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called tsc2007.
 
 endif

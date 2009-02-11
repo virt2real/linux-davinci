@@ -136,13 +136,6 @@ struct tag_acorn {
 	__u8 adfsdrives;
 };
 
-/* TI OMAP specific information */
-#define ATAG_BOARD       0x414f4d50
-
-struct tag_omap {
-	u8 data[0];
-};
-
 /* footbridge memory clock, see arch/arm/mach-footbridge/arch.c */
 #define ATAG_MEMCLK	0x41000402
 
@@ -167,11 +160,6 @@ struct tag {
 		 * Acorn specific
 		 */
 		struct tag_acorn	acorn;
-
-		/*
-		 * OMAP specific
-                 */
-                struct tag_omap         omap;
 
 		/*
 		 * DC21285 specific
@@ -221,9 +209,11 @@ struct meminfo {
 	struct membank bank[NR_BANKS];
 };
 
+extern struct meminfo meminfo;
+
 #define for_each_nodebank(iter,mi,no)			\
-	for (iter = 0; iter < mi->nr_banks; iter++)	\
-		if (mi->bank[iter].node == no)
+	for (iter = 0; iter < (mi)->nr_banks; iter++)	\
+		if ((mi)->bank[iter].node == no)
 
 #define bank_pfn_start(bank)	__phys_to_pfn((bank)->start)
 #define bank_pfn_end(bank)	__phys_to_pfn((bank)->start + (bank)->size)

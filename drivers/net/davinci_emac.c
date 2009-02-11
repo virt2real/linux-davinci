@@ -1068,7 +1068,7 @@ static irqreturn_t emac_irq(int irq, void *dev_id)
 	++priv->isr_count;
 	if (likely(netif_running(priv->ndev))) {
 		emac_int_disable(priv);
-		netif_rx_schedule(ndev, &priv->napi);
+		netif_rx_schedule(&priv->napi);
 	} else {
 		/* we are closing down, so dont process anything */
 	}
@@ -1135,7 +1135,7 @@ static int emac_init_txch(struct emac_priv *priv, u32 ch)
 
 	/* alloc TX BD memory */
 	txch->bd_mem = EMAC_TX_BD_MEM(priv);
-	memzero((void __force *)txch->bd_mem, txch->alloc_size);
+	__memzero((void __force *)txch->bd_mem, txch->alloc_size);
 
 	/* initialize the BD linked list */
 	mem = (void __force __iomem *)
@@ -1591,7 +1591,7 @@ static int emac_init_rxch(struct emac_priv *priv, u32 ch, char *param)
 	rxch->num_bd = (priv->ctrl_ram_size >> 1) / bd_size;
 	rxch->alloc_size = (((bd_size * rxch->num_bd) + 0xF) & ~0xF);
 	rxch->bd_mem = EMAC_RX_BD_MEM(priv);
-	memzero((void __force *)rxch->bd_mem, rxch->alloc_size);
+	__memzero((void __force *)rxch->bd_mem, rxch->alloc_size);
 	rxch->pkt_queue.buf_list = &rxch->buf_queue;
 
 	/* allocate RX buffer and initialize the BD linked list */
@@ -2177,12 +2177,12 @@ static int emac_poll(struct napi_struct *napi, int budget)
 	} /* RX processing */
 
 	if (txpending || rxpending) {
-		if (likely(netif_rx_schedule_prep(ndev, &priv->napi))) {
+		if (likely(netif_rx_schedule_prep(&priv->napi))) {
 			emac_int_disable(priv);
-			__netif_rx_schedule(ndev, &priv->napi);
+			__netif_rx_schedule(&priv->napi);
 		}
 	} else {
-		netif_rx_complete(ndev, napi);
+		netif_rx_complete(napi);
 		emac_int_enable(priv);
 	}
 

@@ -42,16 +42,14 @@
  * We don't actually have real ISA nor PCI buses, but there is so many
  * drivers out there that might just work if we fake them...
  */
-#define __io(a)			((void __iomem *)(PCIO_BASE + (a)))
-#define __mem_pci(a)		(a)
+#define __io(a)		__typesafe_io(a)
+#define __mem_pci(a)	(a)
 
 /*
  * ----------------------------------------------------------------------------
  * I/O mapping
  * ----------------------------------------------------------------------------
  */
-
-#define PCIO_BASE	0
 
 #if defined(CONFIG_ARCH_OMAP1)
 
@@ -187,13 +185,11 @@
 #define omap_writew(v,a)	__raw_writew(v, IO_ADDRESS(a))
 #define omap_writel(v,a)	__raw_writel(v, IO_ADDRESS(a))
 
-struct omap_sdrc_params;
-
 extern void omap1_map_common_io(void);
 extern void omap1_init_common_hw(void);
 
 extern void omap2_map_common_io(void);
-extern void omap2_init_common_hw(struct omap_sdrc_params *sp);
+extern void omap2_init_common_hw(void);
 
 #define __arch_ioremap(p,s,t)	omap_ioremap(p,s,t)
 #define __arch_iounmap(v)	omap_iounmap(v)

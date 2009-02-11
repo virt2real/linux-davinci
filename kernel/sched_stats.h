@@ -31,7 +31,7 @@ static int show_schedstat(struct seq_file *seq, void *v)
 		    rq->yld_act_empty, rq->yld_exp_empty, rq->yld_count,
 		    rq->sched_switch, rq->sched_count, rq->sched_goidle,
 		    rq->ttwu_count, rq->ttwu_local,
-		    rq->rq_sched_info.cpu_time,
+		    rq->rq_cpu_time,
 		    rq->rq_sched_info.run_delay, rq->rq_sched_info.pcount);
 
 		seq_printf(seq, "\n");
@@ -42,7 +42,8 @@ static int show_schedstat(struct seq_file *seq, void *v)
 		for_each_domain(cpu, sd) {
 			enum cpu_idle_type itype;
 
-			cpumask_scnprintf(mask_str, mask_len, sd->span);
+			cpumask_scnprintf(mask_str, mask_len,
+					  sched_domain_span(sd));
 			seq_printf(seq, "domain%d %s", dcount++, mask_str);
 			for (itype = CPU_IDLE; itype < CPU_MAX_IDLE_TYPES;
 					itype++) {
@@ -123,7 +124,7 @@ static inline void
 rq_sched_info_depart(struct rq *rq, unsigned long long delta)
 {
 	if (rq)
-		rq->rq_sched_info.cpu_time += delta;
+		rq->rq_cpu_time += delta;
 }
 
 static inline void
@@ -236,7 +237,6 @@ static inline void sched_info_depart(struct task_struct *t)
 	unsigned long long delta = task_rq(t)->clock -
 					t->sched_info.last_arrival;
 
-	t->sched_info.cpu_time += delta;
 	rq_sched_info_depart(task_rq(t), delta);
 
 	if (t->state == TASK_RUNNING)
@@ -296,6 +296,7 @@ sched_info_switch(struct task_struct *prev, struct task_struct *next)
 static inline void account_group_user_time(struct task_struct *tsk,
 					   cputime_t cputime)
 {
+	struct task_cputime *times;
 	struct signal_struct *sig;
 
 	/* tsk == current, ensure it is safe to use ->signal */
@@ -303,13 +304,11 @@ static inline void account_group_user_time(struct task_struct *tsk,
 		return;
 
 	sig = tsk->signal;
-	if (sig->cputime.totals) {
-		struct task_cputime *times;
+	times = &sig->cputime.totals;
 
-		times = per_cpu_ptr(sig->cputime.totals, get_cpu());
-		times->utime = cputime_add(times->utime, cputime);
-		put_cpu_no_resched();
-	}
+	spin_lock(&times->lock);
+	times->utime = cputime_add(times->utime, cputime);
+	spin_unlock(&times->lock);
 }
 
 /**
@@ -325,6 +324,7 @@ static inline void account_group_user_time(struct task_struct *tsk,
 static inline void account_group_system_time(struct task_struct *tsk,
 					     cputime_t cputime)
 {
+	struct task_cputime *times;
 	struct signal_struct *sig;
 
 	/* tsk == current, ensure it is safe to use ->signal */
@@ -332,13 +332,11 @@ static inline void account_group_system_time(struct task_struct *tsk,
 		return;
 
 	sig = tsk->signal;
-	if (sig->cputime.totals) {
-		struct task_cputime *times;
+	times = &sig->cputime.totals;
 
-		times = per_cpu_ptr(sig->cputime.totals, get_cpu());
-		times->stime = cputime_add(times->stime, cputime);
-		put_cpu_no_resched();
-	}
+	spin_lock(&times->lock);
+	times->stime = cputime_add(times->stime, cputime);
+	spin_unlock(&times->lock);
 }
 
 /**
@@ -354,6 +352,7 @@ static inline void account_group_system_time(struct task_struct *tsk,
 static inline void account_group_exec_runtime(struct task_struct *tsk,
 					      unsigned long long ns)
 {
+	struct task_cputime *times;
 	struct signal_struct *sig;
 
 	sig = tsk->signal;
@@ -362,11 +361,9 @@ static inline void account_group_exec_runtime(struct task_struct *tsk,
 	if (unlikely(!sig))
 		return;
 
-	if (sig->cputime.totals) {
-		struct task_cputime *times;
+	times = &sig->cputime.totals;
 
-		times = per_cpu_ptr(sig->cputime.totals, get_cpu());
-		times->sum_exec_runtime += ns;
-		put_cpu_no_resched();
-	}
+	spin_lock(&times->lock);
+	times->sum_exec_runtime += ns;
+	spin_unlock(&times->lock);
 }

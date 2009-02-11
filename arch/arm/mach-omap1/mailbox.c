@@ -1,7 +1,7 @@
 /*
  * Mailbox reservation modules for DSP
  *
- * Copyright (C) 2006-2008 Nokia Corporation
+ * Copyright (C) 2006 Nokia Corporation
  * Written by: Hiroshi DOYU <Hiroshi.DOYU@nokia.com>
  *
  * This file is subject to the terms and conditions of the GNU General Public
@@ -17,8 +17,6 @@
 #include <mach/mailbox.h>
 #include <mach/irqs.h>
 
-#define DRV_NAME "omap1-mailbox"
-
 #define MAILBOX_ARM2DSP1		0x00
 #define MAILBOX_ARM2DSP1b		0x04
 #define MAILBOX_DSP2ARM1		0x08
@@ -29,7 +27,7 @@
 #define MAILBOX_DSP2ARM1_Flag		0x1c
 #define MAILBOX_DSP2ARM2_Flag		0x20
 
-static void __iomem *mbox_base;
+unsigned long mbox_base;
 
 struct omap_mbox1_fifo {
 	unsigned long cmd;
@@ -42,14 +40,14 @@ struct omap_mbox1_priv {
 	struct omap_mbox1_fifo rx_fifo;
 };
 
-static inline int mbox_read_reg(size_t ofs)
+static inline int mbox_read_reg(unsigned int reg)
 {
-	return __raw_readw(mbox_base + ofs);
+	return __raw_readw(mbox_base + reg);
 }
 
-static inline void mbox_write_reg(u32 val, size_t ofs)
+static inline void mbox_write_reg(unsigned int val, unsigned int reg)
 {
-	__raw_writew(val, mbox_base + ofs);
+	__raw_writew(val, mbox_base + reg);
 }
 
 /* msg */
@@ -145,7 +143,7 @@ struct omap_mbox mbox_dsp_info = {
 };
 EXPORT_SYMBOL(mbox_dsp_info);
 
-static int __devinit omap1_mbox_probe(struct platform_device *pdev)
+static int __init omap1_mbox_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	int ret = 0;
@@ -172,10 +170,12 @@ static int __devinit omap1_mbox_probe(struct platform_device *pdev)
 	}
 	mbox_dsp_info.irq = res->start;
 
-	return omap_mbox_register(&pdev->dev, &mbox_dsp_info);
+	ret = omap_mbox_register(&mbox_dsp_info);
+
+	return ret;
 }
 
-static int __devexit omap1_mbox_remove(struct platform_device *pdev)
+static int omap1_mbox_remove(struct platform_device *pdev)
 {
 	omap_mbox_unregister(&mbox_dsp_info);
 
@@ -184,9 +184,9 @@ static int __devexit omap1_mbox_remove(struct platform_device *pdev)
 
 static struct platform_driver omap1_mbox_driver = {
 	.probe	= omap1_mbox_probe,
-	.remove	= __devexit_p(omap1_mbox_remove),
+	.remove	= omap1_mbox_remove,
 	.driver	= {
-		.name	= DRV_NAME,
+		.name	= "mailbox",
 	},
 };
 
@@ -203,7 +203,4 @@ static void __exit omap1_mbox_exit(void)
 module_init(omap1_mbox_init);
 module_exit(omap1_mbox_exit);
 
-MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("omap mailbox: omap1 architecture specific functions");
-MODULE_AUTHOR("Hiroshi DOYU" <Hiroshi.DOYU@nokia.com>);
-MODULE_ALIAS("platform:"DRV_NAME);
+MODULE_LICENSE("GPL");

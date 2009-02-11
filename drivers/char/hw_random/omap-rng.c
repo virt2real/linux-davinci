@@ -102,7 +102,7 @@ static int __init omap_rng_probe(struct platform_device *pdev)
 		return -EBUSY;
 
 	if (cpu_is_omap24xx()) {
-		rng_ick = clk_get(NULL, "rng_ick");
+		rng_ick = clk_get(&pdev->dev, "rng_ick");
 		if (IS_ERR(rng_ick)) {
 			dev_err(&pdev->dev, "Could not get rng_ick\n");
 			ret = PTR_ERR(rng_ick);
@@ -205,6 +205,7 @@ static struct platform_driver omap_rng_driver = {
 		.name		= "omap_rng",
 		.owner		= THIS_MODULE,
 	},
+	.probe		= omap_rng_probe,
 	.remove		= __exit_p(omap_rng_remove),
 	.suspend	= omap_rng_suspend,
 	.resume		= omap_rng_resume
@@ -215,7 +216,7 @@ static int __init omap_rng_init(void)
 	if (!cpu_is_omap16xx() && !cpu_is_omap24xx())
 		return -ENODEV;
 
-	return platform_driver_probe(&omap_rng_driver, omap_rng_probe);
+	return platform_driver_register(&omap_rng_driver);
 }
 
 static void __exit omap_rng_exit(void)

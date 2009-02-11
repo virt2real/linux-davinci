@@ -67,9 +67,8 @@ config MMC_RICOH_MMC
 
 config MMC_OMAP
 	tristate "TI OMAP Multimedia Card Interface support"
-	depends on ARCH_OMAP1 || (ARCH_OMAP2 && ARCH_OMAP2420)
+	depends on ARCH_OMAP
 	select TPS65010 if MACH_OMAP_H2
-	select OMAP_GPIO_SWITCH if MACH_NOKIA_N800
 	help
 	  This selects the TI OMAP Multimedia card Interface.
 	  If you have an OMAP board with a Multimedia Card slot,
@@ -141,6 +140,16 @@ config MMC_IMX
 	depends on ARCH_IMX
 	help
 	  This selects the Motorola i.MX Multimedia card Interface.
+	  If you have a i.MX platform with a Multimedia Card slot,
+	  say Y or M here.
+
+	  If unsure, say N.
+
+config MMC_MXC
+	tristate "Freescale i.MX2/3 Multimedia Card Interface support"
+	depends on ARCH_MXC
+	help
+	  This selects the Freescale i.MX2/3 Multimedia card Interface.
 	  If you have a i.MX platform with a Multimedia Card slot,
 	  say Y or M here.
 

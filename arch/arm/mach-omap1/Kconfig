@@ -4,16 +4,19 @@ comment "OMAP Core Type"
 config ARCH_OMAP730
 	depends on ARCH_OMAP1
 	bool "OMAP730 Based System"
+	select CPU_ARM926T
 	select ARCH_OMAP_OTG
 
 config ARCH_OMAP15XX
 	depends on ARCH_OMAP1
 	default y
 	bool "OMAP15xx Based System"
+	select CPU_ARM925T
 
 config ARCH_OMAP16XX
 	depends on ARCH_OMAP1
 	bool "OMAP16xx Based System"
+	select CPU_ARM926T
 	select ARCH_OMAP_OTG
 
 comment "OMAP Board Type"
@@ -38,6 +41,7 @@ config MACH_OMAP_H2
 config MACH_OMAP_H3
 	bool "TI H3 Support"
 	depends on ARCH_OMAP1 && ARCH_OMAP16XX
+#	select GPIOEXPANDER_OMAP
     	help
 	  TI OMAP 1710 H3 board support. Say Y here if you have such
 	  a board.

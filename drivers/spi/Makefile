@@ -16,6 +16,7 @@ obj-$(CONFIG_SPI_BFIN)			+= spi_bfin5xx.o
 obj-$(CONFIG_SPI_BITBANG)		+= spi_bitbang.o
 obj-$(CONFIG_SPI_AU1550)		+= au1550_spi.o
 obj-$(CONFIG_SPI_BUTTERFLY)		+= spi_butterfly.o
+obj-$(CONFIG_SPI_GPIO)			+= spi_gpio.o
 obj-$(CONFIG_SPI_IMX)			+= spi_imx.o
 obj-$(CONFIG_SPI_LM70_LLP)		+= spi_lm70llp.o
 obj-$(CONFIG_SPI_PXA2XX)		+= pxa2xx_spi.o
@@ -32,12 +33,8 @@ obj-$(CONFIG_SPI_SH_SCI)		+= spi_sh_sci.o
 # 	... add above this line ...
 
 # SPI protocol drivers (device/link on bus)
-obj-$(CONFIG_SPI_AT25)		+= at25.o
 obj-$(CONFIG_SPI_SPIDEV)	+= spidev.o
 obj-$(CONFIG_SPI_TLE62X0)	+= tle62x0.o
-obj-$(CONFIG_SPI_TSC210X)	+= tsc210x.o
-obj-$(CONFIG_SPI_TSC2301)	+= tsc2301.o
-tsc2301-objs			:= tsc2301-core.o
 # 	... add above this line ...
 
 # SPI slave controller drivers (upstream link)

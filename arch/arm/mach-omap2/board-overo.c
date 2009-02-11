@@ -44,11 +44,7 @@
 #include <mach/gpmc.h>
 #include <mach/hardware.h>
 #include <mach/nand.h>
-#include <mach/usb-ehci.h>
-#include <mach/usb-musb.h>
 
-#include "sdram-micron-mt46h32m32lf-6.h"
-#include "twl4030-generic-scripts.h"
 #include "mmc-twl4030.h"
 
 #define NAND_BLOCK_SIZE SZ_128K
@@ -152,21 +148,15 @@ static struct twl4030_gpio_platform_data overo_gpio_data = {
 	.irq_end	= TWL4030_GPIO_IRQ_END,
 };
 
-static struct twl4030_usb_data overo_usb_data = {
-	.usb_mode	= T2_USB_MODE_ULPI,
-};
-
 static struct twl4030_platform_data overo_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
 	.irq_end	= TWL4030_IRQ_END,
 	.gpio		= &overo_gpio_data,
-	.usb		= &overo_usb_data,
-	.power		= GENERIC3430_T2SCRIPTS_DATA,
 };
 
 static struct i2c_board_info __initdata overo_i2c_boardinfo[] = {
 	{
-		I2C_BOARD_INFO("tps65950", 0x48),
+		I2C_BOARD_INFO("twl4030", 0x48),
 		.flags = I2C_CLIENT_WAKE,
 		.irq = INT_34XX_SYS_NIRQ,
 		.platform_data = &overo_twldata,
@@ -184,7 +174,7 @@ static int __init overo_i2c_init(void)
 
 static void __init overo_init_irq(void)
 {
-	omap2_init_common_hw(mt46h32m32lf6_sdrc_params);
+	omap2_init_common_hw();
 	omap_init_irq();
 	omap_gpio_init();
 }
@@ -231,8 +221,6 @@ static void __init overo_init(void)
 	omap_board_config_size = ARRAY_SIZE(overo_config);
 	omap_serial_init();
 	twl4030_mmc_init(mmc);
-	usb_musb_init();
-	usb_ehci_init();
 	overo_flash_init();
 
 	if ((gpio_request(OVERO_GPIO_W2W_NRESET,

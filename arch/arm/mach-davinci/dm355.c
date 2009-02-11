@@ -20,6 +20,7 @@
 #include <mach/clock.h>
 #include <mach/psc.h>
 #include <mach/mux.h>
+#include <mach/irqs.h>
 
 #include "clock.h"
 #include "mux.h"

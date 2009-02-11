@@ -38,6 +38,9 @@
 #include <linux/i2c.h>
 #include <linux/i2c/twl4030.h>
 
+#ifdef CONFIG_ARM
+#include <mach/cpu.h>
+#endif
 
 /*
  * The TWL4030 "Triton 2" is one of a family of a multi-function "Power
@@ -84,12 +87,6 @@
 #define twl_has_madc()	true
 #else
 #define twl_has_madc()	false
-#endif
-
-#ifdef CONFIG_TWL4030_POWER
-#define twl_has_power()        true
-#else
-#define twl_has_power()        false
 #endif
 
 #if defined(CONFIG_RTC_DRV_TWL4030) || defined(CONFIG_RTC_DRV_TWL4030_MODULE)
@@ -227,8 +224,6 @@ static struct twl4030mapping twl4030_map[TWL4030_MODULE_LAST + 1] = {
 	{ 3, TWL4030_BASEADD_RTC },
 	{ 3, TWL4030_BASEADD_SECURED_REG },
 };
-
-extern void twl4030_power_init(struct twl4030_power_data *triton2_scripts);
 
 /*----------------------------------------------------------------------*/
 
@@ -654,7 +649,7 @@ static inline int __init unprotect_pm_master(void)
 	return e;
 }
 
-static void __init clocks_init(void)
+static void __init clocks_init(struct device *dev)
 {
 	int e = 0;
 	struct clk *osc;
@@ -663,15 +658,10 @@ static void __init clocks_init(void)
 
 #if defined(CONFIG_ARCH_OMAP2) || defined(CONFIG_ARCH_OMAP3)
 	if (cpu_is_omap2430())
-		osc = clk_get(NULL, "osc_ck");
+		osc = clk_get(dev, "osc_ck");
 	else
-		osc = clk_get(NULL, "osc_sys_ck");
-#else
-	/* REVISIT for non-OMAP systems, pass the clock rate from
-	 * board init code, using platform_data.
-	 */
-	osc = ERR_PTR(-EIO);
-#endif
+		osc = clk_get(dev, "osc_sys_ck");
+
 	if (IS_ERR(osc)) {
 		printk(KERN_WARNING "Skipping twl4030 internal clock init and "
 				"using bootloader value (unknown osc rate)\n");
@@ -680,6 +670,18 @@ static void __init clocks_init(void)
 
 	rate = clk_get_rate(osc);
 	clk_put(osc);
+
+#else
+	/* REVISIT for non-OMAP systems, pass the clock rate from
+	 * board init code, using platform_data.
+	 */
+	osc = ERR_PTR(-EIO);
+
+	printk(KERN_WARNING "Skipping twl4030 internal clock init and "
+	       "using bootloader value (unknown osc rate)\n");
+
+	return;
+#endif
 
 	switch (rate) {
 	case 19200000:
@@ -774,11 +776,7 @@ twl4030_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	inuse = true;
 
 	/* setup clock framework */
-	clocks_init();
-
-	/* load power event scripts */
-	if (twl_has_power() && pdata->power)
-		twl4030_power_init(pdata->power);
+	clocks_init(&client->dev);
 
 	/* Maybe init the T2 Interrupt subsystem */
 	if (client->irq

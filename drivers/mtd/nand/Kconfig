@@ -74,31 +74,6 @@ config MTD_NAND_AMS_DELTA
 	help
 	  Support for NAND flash on Amstrad E3 (Delta).
 
-config MTD_NAND_OMAP2
-	tristate "NAND Flash device on OMAP2 and OMAP3"
-	depends on ARM && MTD_NAND && (ARCH_OMAP2 || ARCH_OMAP3)
-	help
-          Support for NAND flash on Texas Instruments OMAP2 and OMAP3 platforms.
-
-config MTD_NAND_OMAP
-	tristate "NAND Flash device on OMAP H3/H2/P2 boards"
-	depends on ARM && ARCH_OMAP1 && MTD_NAND && (MACH_OMAP_H2 || MACH_OMAP_H3 || MACH_OMAP_PERSEUS2)
-	help
-	  Support for NAND flash on Texas Instruments H3/H2/P2 platforms.
-
-config MTD_NAND_OMAP_HW
-	bool "OMAP HW NAND Flash controller support"
-        depends on ARM && ARCH_OMAP16XX && MTD_NAND
-
-	help
-	  Driver for TI OMAP16xx hardware NAND flash controller.
-
-config MTD_NAND_TOTO
-	tristate "NAND Flash device on TOTO board"
-	depends on ARCH_OMAP && BROKEN
-	help
-	  Support for NAND flash on Texas Instruments Toto platform.
-
 config MTD_NAND_TS7250
 	tristate "NAND Flash device on TS-7250 board"
 	depends on MACH_TS72XX
@@ -187,6 +162,13 @@ config MTD_NAND_S3C2410_HWECC
 	  using NAND. Early versions of the chip have had problems with
 	  incorrect ECC generation, and if using these, the default of
 	  software ECC is preferable.
+
+config MTD_NAND_NDFC
+	tristate "NDFC NanD Flash Controller"
+	depends on 4xx
+	select MTD_NAND_ECC_SMC
+	help
+	 NDFC Nand Flash Controllers are integrated in IBM/AMCC's 4xx SoCs
 
 config MTD_NAND_S3C2410_CLKSTOP
 	bool "S3C2410 NAND IDLE clock stop"
@@ -433,7 +415,7 @@ config MTD_NAND_FSL_UPM
 
 config MTD_NAND_MXC
 	tristate "MXC NAND support"
-	depends on ARCH_MX2
+	depends on ARCH_MX2 || ARCH_MX3
 	help
 	  This enables the driver for the NAND flash controller on the
 	  MXC processors.

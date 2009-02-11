@@ -101,7 +101,7 @@ static int __init omapflash_probe(struct platform_device *pdev)
 		err = -ENOMEM;
 		goto out_release_mem_region;
 	}
-	info->map.name		= pdev->dev.bus_id;
+	info->map.name		= dev_name(&pdev->dev);
 	info->map.phys		= res->start;
 	info->map.size		= size;
 	info->map.bankwidth	= pdata->width;
@@ -142,12 +142,11 @@ out_free_info:
 static int __exit omapflash_remove(struct platform_device *pdev)
 {
 	struct omapflash_info *info = platform_get_drvdata(pdev);
-	struct flash_platform_data *pdata = pdev->dev.platform_data;
 
 	platform_set_drvdata(pdev, NULL);
 
 	if (info) {
-		if (info->parts || (pdata && pdata->parts)) {
+		if (info->parts) {
 			del_mtd_partitions(info->mtd);
 			kfree(info->parts);
 		} else

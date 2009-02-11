@@ -28,7 +28,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand.h>
 
-#include <linux/regulator/machine.h>
+#include <linux/i2c/twl4030.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -37,16 +37,12 @@
 #include <asm/mach/flash.h>
 
 #include <mach/board.h>
-#include <mach/usb-musb.h>
-#include <mach/usb-ehci.h>
 #include <mach/common.h>
 #include <mach/gpmc.h>
 #include <mach/nand.h>
 #include <mach/mux.h>
 
-#include "twl4030-generic-scripts.h"
 #include "mmc-twl4030.h"
-
 
 #define GPMC_CS0_BASE  0x60
 #define GPMC_CS_SIZE   0x30
@@ -107,14 +103,8 @@ static struct platform_device omap3beagle_nand_device = {
 	.resource	= &omap3beagle_nand_resource,
 };
 
-#include "sdram-micron-mt46h32m32lf-6.h"
-
 static struct omap_uart_config omap3_beagle_uart_config __initdata = {
 	.enabled_uarts	= ((1 << 0) | (1 << 1) | (1 << 2)),
-};
-
-static struct twl4030_usb_data beagle_usb_data = {
-	.usb_mode	= T2_USB_MODE_ULPI,
 };
 
 static struct twl4030_hsmmc_info mmc[] = {
@@ -164,51 +154,12 @@ static struct twl4030_gpio_platform_data beagle_gpio_data = {
 	.setup		= beagle_twl_gpio_setup,
 };
 
-/* VMMC1 for MMC1 pins CMD, CLK, DAT0..DAT3 (20 mA, plus card == max 220 mA) */
-static struct regulator_init_data beagle_vmmc1 = {
-	.constraints = {
-		.valid_modes_mask = REGULATOR_MODE_NORMAL
-				| REGULATOR_MODE_STANDBY,
-		.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE
-				| REGULATOR_CHANGE_MODE
-				| REGULATOR_CHANGE_STATUS,
-	},
-};
-
-/* VSIM for MMC1 pins DAT4..DAT7 (2 mA, plus card == max 50 mA) */
-static struct regulator_init_data beagle_vsim = {
-	.constraints = {
-		.valid_modes_mask = REGULATOR_MODE_NORMAL
-				| REGULATOR_MODE_STANDBY,
-		.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE
-				| REGULATOR_CHANGE_MODE
-				| REGULATOR_CHANGE_STATUS,
-	},
-};
-
-/* VDAC for DSS driving S-Video (8 mA unloaded, max 65 mA) */
-static struct regulator_init_data beagle_vdac = {
-	.constraints = {
-		.min_uV			= 1800000,
-		.max_uV			= 1800000,
-		.valid_modes_mask	= REGULATOR_MODE_NORMAL
-					| REGULATOR_MODE_STANDBY,
-		.valid_ops_mask		= REGULATOR_CHANGE_MODE
-					| REGULATOR_CHANGE_STATUS,
-	},
-};
-
 static struct twl4030_platform_data beagle_twldata = {
 	.irq_base	= TWL4030_IRQ_BASE,
 	.irq_end	= TWL4030_IRQ_END,
 
 	/* platform_data for children goes here */
-	.usb		= &beagle_usb_data,
 	.gpio		= &beagle_gpio_data,
-	.power		= GENERIC3430_T2SCRIPTS_DATA,
-	.vmmc1		= &beagle_vmmc1,
-	.vsim		= &beagle_vsim,
-	.vdac		= &beagle_vdac,
 };
 
 static struct i2c_board_info __initdata beagle_i2c_boardinfo[] = {
@@ -233,7 +184,7 @@ static int __init omap3_beagle_i2c_init(void)
 
 static void __init omap3_beagle_init_irq(void)
 {
-	omap2_init_common_hw(mt46h32m32lf6_sdrc_params);
+	omap2_init_common_hw();
 	omap_init_irq();
 	omap_gpio_init();
 }
@@ -363,8 +314,6 @@ static void __init omap3_beagle_init(void)
 	/* REVISIT leave DVI powered down until it's needed ... */
 	gpio_direction_output(170, true);
 
-	usb_musb_init();
-	usb_ehci_init();
 	omap3beagle_flash_init();
 }
 

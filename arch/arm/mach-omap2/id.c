@@ -45,28 +45,6 @@ int omap_chip_is(struct omap_chip_id oci)
 }
 EXPORT_SYMBOL(omap_chip_is);
 
-int omap_type(void)
-{
-	u32 val = 0;
-
-	if (cpu_is_omap24xx()) {
-		val = omap_ctrl_readl(OMAP24XX_CONTROL_STATUS);
-	} else if (cpu_is_omap34xx()) {
-		val = omap_ctrl_readl(OMAP343X_CONTROL_STATUS);
-	} else {
-		pr_err("Cannot detect omap type!\n");
-		goto out;
-	}
-
-	val &= OMAP2_DEVICETYPE_MASK;
-	val >>= 8;
-
-out:
-	return val;
-}
-EXPORT_SYMBOL(omap_type);
-
-
 /*----------------------------------------------------------------------------*/
 
 #define OMAP_TAP_IDCODE		0x0204
@@ -194,9 +172,13 @@ void __init omap34xx_check_revision(void)
 			omap_revision = OMAP3430_REV_ES3_0;
 			rev_name = "ES3.0";
 			break;
+		case 4:
+			omap_revision = OMAP3430_REV_ES3_1;
+			rev_name = "ES3.1";
+			break;
 		default:
 			/* Use the latest known revision as default */
-			omap_revision = OMAP3430_REV_ES3_0;
+			omap_revision = OMAP3430_REV_ES3_1;
 			rev_name = "Unknown revision\n";
 		}
 	}

@@ -28,12 +28,11 @@
 #include <linux/cpufreq.h>
 #include <linux/bitops.h>
 
-#include <mach/common.h>
 #include <mach/clock.h>
 #include <mach/sram.h>
 #include <asm/div64.h>
 
-#include <mach/sdrc.h>
+#include "memory.h"
 #include "clock.h"
 #include "clock24xx.h"
 #include "prm.h"
@@ -60,73 +59,54 @@ static struct clk *sclk;
  * Omap24xx specific clock functions
  *-------------------------------------------------------------------------*/
 
-/**
- * omap2xxx_clk_get_core_rate - return the CORE_CLK rate
- * @clk: pointer to the combined dpll_ck + core_ck (currently "dpll_ck")
- * @parent_rate: rate of the parent of the dpll_ck
- *
- * Returns the CORE_CLK rate.  CORE_CLK can have one of three rate
- * sources on OMAP2xxx: the DPLL CLKOUT rate, DPLL CLKOUTX2, or 32KHz
- * (the latter is unusual).  This currently should be called with
- * struct clk *dpll_ck, which is a composite clock of dpll_ck and
- * core_ck.
- */
-static u32 omap2xxx_clk_get_core_rate(struct clk *clk,
-				      unsigned long parent_rate)
+/* This actually returns the rate of core_ck, not dpll_ck. */
+static u32 omap2_get_dpll_rate_24xx(struct clk *tclk)
 {
-	long long core_clk;
-	u32 v;
+	long long dpll_clk;
+	u8 amult;
 
-	core_clk = omap2_get_dpll_rate(clk, parent_rate);
+	dpll_clk = omap2_get_dpll_rate(tclk);
 
-	v = cm_read_mod_reg(PLL_MOD, CM_CLKSEL2);
-	v &= OMAP24XX_CORE_CLK_SRC_MASK;
+	amult = cm_read_mod_reg(PLL_MOD, CM_CLKSEL2);
+	amult &= OMAP24XX_CORE_CLK_SRC_MASK;
+	dpll_clk *= amult;
 
-	if (v == CORE_CLK_SRC_32K)
-		core_clk = 32768;
-	else
-		core_clk *= v;
-
-	return core_clk;
-}
-
-static unsigned long omap2xxx_clk_find_oppset_by_mpurate(unsigned long mpu_speed,
-							 struct prcm_config **prcm)
-{
-	unsigned long found_speed = 0;
-	struct prcm_config *p;
-
-	p = *prcm;
-
-	for (p = rate_table; p->mpu_speed; p++) {
-		if (!(p->flags & cpu_mask))
-			continue;
-
-		if (p->xtal_speed != sys_ck.rate)
-			continue;
-
-		if (p->mpu_speed <= mpu_speed) {
-			found_speed = p->mpu_speed;
-			break;
-		}
-	}
-
-	return found_speed;
+	return dpll_clk;
 }
 
 static int omap2_enable_osc_ck(struct clk *clk)
 {
-	prm_rmw_mod_reg_bits(OMAP_AUTOEXTCLKMODE_MASK, 0,
-			OMAP24XX_GR_MOD, OMAP24XX_PRCM_CLKSRC_CTRL_OFFSET);
+	u32 pcc;
+
+	pcc = __raw_readl(OMAP24XX_PRCM_CLKSRC_CTRL);
+
+	__raw_writel(pcc & ~OMAP_AUTOEXTCLKMODE_MASK,
+		      OMAP24XX_PRCM_CLKSRC_CTRL);
 
 	return 0;
 }
 
 static void omap2_disable_osc_ck(struct clk *clk)
 {
-	prm_rmw_mod_reg_bits(OMAP_AUTOEXTCLKMODE_MASK, OMAP_AUTOEXTCLKMODE_MASK,
-			OMAP24XX_GR_MOD, OMAP24XX_PRCM_CLKSRC_CTRL_OFFSET);
+	u32 pcc;
+
+	pcc = __raw_readl(OMAP24XX_PRCM_CLKSRC_CTRL);
+
+	__raw_writel(pcc | OMAP_AUTOEXTCLKMODE_MASK,
+		      OMAP24XX_PRCM_CLKSRC_CTRL);
 }
+
+#ifdef OLD_CK
+/* Recalculate SYST_CLK */
+static void omap2_sys_clk_recalc(struct clk * clk)
+{
+	u32 div = PRCM_CLKSRC_CTRL;
+	div &= (1 << 7) | (1 << 6);	/* Test if ext clk divided by 1 or 2 */
+	div >>= clk->rate_offset;
+	clk->rate = (clk->parent->rate / div);
+	propagate_rate(clk);
+}
+#endif	/* OLD_CK */
 
 /* Enable an APLL if off */
 static int omap2_clk_fixed_enable(struct clk *clk)
@@ -149,7 +129,8 @@ static int omap2_clk_fixed_enable(struct clk *clk)
 	else if (clk == &apll54_ck)
 		cval = OMAP24XX_ST_54M_APLL;
 
-	omap2_wait_clock_ready(PLL_MOD, CM_IDLEST, cval, clk->name);
+	omap2_wait_clock_ready(OMAP_CM_REGADDR(PLL_MOD, CM_IDLEST), cval,
+			    clk->name);
 
 	/*
 	 * REVISIT: Should we return an error code if omap2_wait_clock_ready()
@@ -172,7 +153,7 @@ static void omap2_clk_fixed_disable(struct clk *clk)
  * Uses the current prcm set to tell if a rate is valid.
  * You can go slower, but not faster within a given rate set.
  */
-static long omap2_dpllcore_round_rate(unsigned long target_rate)
+long omap2_dpllcore_round_rate(unsigned long target_rate)
 {
 	u32 high, low, core_clk_src;
 
@@ -201,17 +182,11 @@ static long omap2_dpllcore_round_rate(unsigned long target_rate)
 
 }
 
-static void omap2_dpllcore_recalc(struct clk *clk, unsigned long parent_rate,
-				  u8 rate_storage)
+static void omap2_dpllcore_recalc(struct clk *clk)
 {
-	unsigned long rate;
+	clk->rate = omap2_get_dpll_rate_24xx(clk);
 
-	rate = omap2xxx_clk_get_core_rate(clk, parent_rate);
-
-	if (rate_storage == CURRENT_RATE)
-		clk->rate = rate;
-	else if (rate_storage == TEMP_RATE)
-		clk->temp_rate = rate;
+	propagate_rate(clk);
 }
 
 static int omap2_reprogram_dpllcore(struct clk *clk, unsigned long rate)
@@ -220,19 +195,22 @@ static int omap2_reprogram_dpllcore(struct clk *clk, unsigned long rate)
 	u32 bypass = 0;
 	struct prcm_config tmpset;
 	const struct dpll_data *dd;
+	unsigned long flags;
+	int ret = -EINVAL;
 
-	cur_rate = omap2xxx_clk_get_core_rate(&dpll_ck, dpll_ck.parent->rate);
+	local_irq_save(flags);
+	cur_rate = omap2_get_dpll_rate_24xx(&dpll_ck);
 	mult = cm_read_mod_reg(PLL_MOD, CM_CLKSEL2);
 	mult &= OMAP24XX_CORE_CLK_SRC_MASK;
 
 	if ((rate == (cur_rate / 2)) && (mult == 2)) {
-		omap2xxx_sdrc_reprogram(CORE_CLK_SRC_DPLL, 1);
+		omap2_reprogram_sdrc(CORE_CLK_SRC_DPLL, 1);
 	} else if ((rate == (cur_rate * 2)) && (mult == 1)) {
-		omap2xxx_sdrc_reprogram(CORE_CLK_SRC_DPLL_X2, 1);
+		omap2_reprogram_sdrc(CORE_CLK_SRC_DPLL_X2, 1);
 	} else if (rate != cur_rate) {
 		valid_rate = omap2_dpllcore_round_rate(rate);
 		if (valid_rate != rate)
-			return -EINVAL;
+			goto dpll_exit;
 
 		if (mult == 1)
 			low = curr_prcm_set->dpll_speed;
@@ -241,10 +219,9 @@ static int omap2_reprogram_dpllcore(struct clk *clk, unsigned long rate)
 
 		dd = clk->dpll_data;
 		if (!dd)
-			return -EINVAL;
+			goto dpll_exit;
 
-		tmpset.cm_clksel1_pll = cm_read_mod_reg(clk->prcm_mod,
-							dd->mult_div1_reg);
+		tmpset.cm_clksel1_pll = __raw_readl(dd->mult_div1_reg);
 		tmpset.cm_clksel1_pll &= ~(dd->mult_mask |
 					   dd->div1_mask);
 		div = ((curr_prcm_set->xtal_speed / 1000000) - 1);
@@ -268,19 +245,22 @@ static int omap2_reprogram_dpllcore(struct clk *clk, unsigned long rate)
 		if (rate == curr_prcm_set->xtal_speed)	/* If asking for 1-1 */
 			bypass = 1;
 
-		/* For omap2xxx_sdrc_init_params() */
-		omap2xxx_sdrc_reprogram(CORE_CLK_SRC_DPLL_X2, 1);
+		omap2_reprogram_sdrc(CORE_CLK_SRC_DPLL_X2, 1); /* For init_mem */
 
 		/* Force dll lock mode */
 		omap2_set_prcm(tmpset.cm_clksel1_pll, tmpset.base_sdrc_rfr,
 			       bypass);
 
 		/* Errata: ret dll entry state */
-		omap2xxx_sdrc_init_params(omap2xxx_sdrc_dll_is_unlocked());
-		omap2xxx_sdrc_reprogram(done_rate, 0);
+		omap2_init_memory_params(omap2_dll_force_needed());
+		omap2_reprogram_sdrc(done_rate, 0);
 	}
+	omap2_dpllcore_recalc(&dpll_ck);
+	ret = 0;
 
-	return 0;
+dpll_exit:
+	local_irq_restore(flags);
+	return(ret);
 }
 
 /**
@@ -289,18 +269,9 @@ static int omap2_reprogram_dpllcore(struct clk *clk, unsigned long rate)
  *
  * Set virt_prcm_set's rate to the mpu_speed field of the current PRCM set.
  */
-static void omap2_table_mpu_recalc(struct clk *clk, unsigned long parent_rate,
-				   u8 rate_storage)
+static void omap2_table_mpu_recalc(struct clk *clk)
 {
-	struct prcm_config *prcm;
-	unsigned long mpurate;
-
-	mpurate = omap2xxx_clk_find_oppset_by_mpurate(parent_rate, &prcm);
-
-	if (rate_storage == CURRENT_RATE)
-		clk->rate = mpurate;
-	else if (rate_storage == TEMP_RATE)
-		clk->temp_rate = mpurate;
+	clk->rate = curr_prcm_set->mpu_speed;
 }
 
 /*
@@ -340,12 +311,25 @@ static int omap2_select_table_rate(struct clk *clk, unsigned long rate)
 {
 	u32 cur_rate, done_rate, bypass = 0, tmp;
 	struct prcm_config *prcm;
-	unsigned long flags, found_speed;
+	unsigned long found_speed = 0;
+	unsigned long flags;
 
 	if (clk != &virt_prcm_set)
 		return -EINVAL;
 
-	found_speed = omap2xxx_clk_find_oppset_by_mpurate(rate, &prcm);
+	for (prcm = rate_table; prcm->mpu_speed; prcm++) {
+		if (!(prcm->flags & cpu_mask))
+			continue;
+
+		if (prcm->xtal_speed != sys_ck.rate)
+			continue;
+
+		if (prcm->mpu_speed <= rate) {
+			found_speed = prcm->mpu_speed;
+			break;
+		}
+	}
+
 	if (!found_speed) {
 		printk(KERN_INFO "Could not set MPU rate to %luMHz\n",
 		       rate / 1000000);
@@ -353,12 +337,12 @@ static int omap2_select_table_rate(struct clk *clk, unsigned long rate)
 	}
 
 	curr_prcm_set = prcm;
-	cur_rate = omap2xxx_clk_get_core_rate(&dpll_ck, dpll_ck.parent->rate);
+	cur_rate = omap2_get_dpll_rate_24xx(&dpll_ck);
 
 	if (prcm->dpll_speed == cur_rate / 2) {
-		omap2xxx_sdrc_reprogram(CORE_CLK_SRC_DPLL, 1);
+		omap2_reprogram_sdrc(CORE_CLK_SRC_DPLL, 1);
 	} else if (prcm->dpll_speed == cur_rate * 2) {
-		omap2xxx_sdrc_reprogram(CORE_CLK_SRC_DPLL_X2, 1);
+		omap2_reprogram_sdrc(CORE_CLK_SRC_DPLL_X2, 1);
 	} else if (prcm->dpll_speed != cur_rate) {
 		local_irq_save(flags);
 
@@ -382,136 +366,75 @@ static int omap2_select_table_rate(struct clk *clk, unsigned long rate)
 
 		/* Major subsystem dividers */
 		tmp = cm_read_mod_reg(CORE_MOD, CM_CLKSEL1) & OMAP24XX_CLKSEL_DSS2_MASK;
-		cm_write_mod_reg(prcm->cm_clksel1_core | tmp, CORE_MOD,
-				 CM_CLKSEL1);
-
+		cm_write_mod_reg(prcm->cm_clksel1_core | tmp, CORE_MOD, CM_CLKSEL1);
 		if (cpu_is_omap2430())
 			cm_write_mod_reg(prcm->cm_clksel_mdm,
 					 OMAP2430_MDM_MOD, CM_CLKSEL);
 
-		/* x2 to enter omap2xxx_sdrc_init_params() */
-		omap2xxx_sdrc_reprogram(CORE_CLK_SRC_DPLL_X2, 1);
+		/* x2 to enter init_mem */
+		omap2_reprogram_sdrc(CORE_CLK_SRC_DPLL_X2, 1);
 
 		omap2_set_prcm(prcm->cm_clksel1_pll, prcm->base_sdrc_rfr,
 			       bypass);
 
-		omap2xxx_sdrc_init_params(omap2xxx_sdrc_dll_is_unlocked());
-		omap2xxx_sdrc_reprogram(done_rate, 0);
+		omap2_init_memory_params(omap2_dll_force_needed());
+		omap2_reprogram_sdrc(done_rate, 0);
 
 		local_irq_restore(flags);
 	}
+	omap2_dpllcore_recalc(&dpll_ck);
 
 	return 0;
 }
 
-#ifdef CONFIG_CPU_FREQ
-/*
- * Walk PRCM rate table and fillout cpufreq freq_table
- */
-static struct cpufreq_frequency_table freq_table[ARRAY_SIZE(rate_table)];
-
-void omap2_clk_init_cpufreq_table(struct cpufreq_frequency_table **table)
-{
-	struct prcm_config *prcm;
-	int i = 0;
-
-	for (prcm = rate_table; prcm->mpu_speed; prcm++) {
-		if (!(prcm->flags & cpu_mask))
-			continue;
-		if (prcm->xtal_speed != sys_ck.rate)
-			continue;
-
-		/* don't put bypass rates in table */
-		if (prcm->dpll_speed == prcm->xtal_speed)
-			continue;
-
-		freq_table[i].index = i;
-		freq_table[i].frequency = prcm->mpu_speed / 1000;
-		i++;
-	}
-
-	if (i == 0) {
-		printk(KERN_WARNING "%s: failed to initialize frequency "
-		       "table\n", __func__);
-		return;
-	}
-
-	freq_table[i].index = i;
-	freq_table[i].frequency = CPUFREQ_TABLE_END;
-
-	*table = &freq_table[0];
-}
-#endif
-
 static struct clk_functions omap2_clk_functions = {
-	.clk_register		= omap2_clk_register,
 	.clk_enable		= omap2_clk_enable,
 	.clk_disable		= omap2_clk_disable,
 	.clk_round_rate		= omap2_clk_round_rate,
 	.clk_set_rate		= omap2_clk_set_rate,
 	.clk_set_parent		= omap2_clk_set_parent,
-	.clk_get_parent		= omap2_clk_get_parent,
 	.clk_disable_unused	= omap2_clk_disable_unused,
-#ifdef	CONFIG_CPU_FREQ
-	.clk_init_cpufreq_table	= omap2_clk_init_cpufreq_table,
-#endif
 };
 
 static u32 omap2_get_apll_clkin(void)
 {
-	u32 aplls, srate = 0;
+	u32 aplls, sclk = 0;
 
 	aplls = cm_read_mod_reg(PLL_MOD, CM_CLKSEL1);
 	aplls &= OMAP24XX_APLLS_CLKIN_MASK;
 	aplls >>= OMAP24XX_APLLS_CLKIN_SHIFT;
 
 	if (aplls == APLLS_CLKIN_19_2MHZ)
-		srate = 19200000;
+		sclk = 19200000;
 	else if (aplls == APLLS_CLKIN_13MHZ)
-		srate = 13000000;
+		sclk = 13000000;
 	else if (aplls == APLLS_CLKIN_12MHZ)
-		srate = 12000000;
+		sclk = 12000000;
 
-	return srate;
+	return sclk;
 }
 
 static u32 omap2_get_sysclkdiv(void)
 {
 	u32 div;
 
-	div = prm_read_mod_reg(OMAP24XX_GR_MOD,
-				OMAP24XX_PRCM_CLKSRC_CTRL_OFFSET);
+	div = __raw_readl(OMAP24XX_PRCM_CLKSRC_CTRL);
 	div &= OMAP_SYSCLKDIV_MASK;
 	div >>= OMAP_SYSCLKDIV_SHIFT;
 
 	return div;
 }
 
-static void omap2_osc_clk_recalc(struct clk *clk, unsigned long parent_rate,
-				 u8 rate_storage)
+static void omap2_osc_clk_recalc(struct clk *clk)
 {
-	unsigned long rate;
-
-	/* XXX osc_ck on 2xxx currently is parentless */
-	rate = omap2_get_apll_clkin() * omap2_get_sysclkdiv();
-
-	if (rate_storage == CURRENT_RATE)
-		clk->rate = rate;
-	else if (rate_storage == TEMP_RATE)
-		clk->temp_rate = rate;
+	clk->rate = omap2_get_apll_clkin() * omap2_get_sysclkdiv();
+	propagate_rate(clk);
 }
 
-static void omap2_sys_clk_recalc(struct clk *clk, unsigned long parent_rate,
-				 u8 rate_storage)
+static void omap2_sys_clk_recalc(struct clk *clk)
 {
-	unsigned long rate;
-
-	rate = parent_rate / omap2_get_sysclkdiv();
-
-	if (rate_storage == CURRENT_RATE)
-		clk->rate = rate;
-	else if (rate_storage == TEMP_RATE)
-		clk->temp_rate = rate;
+	clk->rate = clk->parent->rate / omap2_get_sysclkdiv();
+	propagate_rate(clk);
 }
 
 /*
@@ -537,7 +460,7 @@ static int __init omap2_clk_arch_init(void)
 	if (!mpurate)
 		return -EINVAL;
 
-	if (clk_set_rate(&virt_prcm_set, mpurate))
+	if (omap2_select_table_rate(&virt_prcm_set, mpurate))
 		printk(KERN_ERR "Could not find matching MPU rate\n");
 
 	recalculate_root_clocks();
@@ -564,8 +487,8 @@ int __init omap2_clk_init(void)
 
 	clk_init(&omap2_clk_functions);
 
-	omap2_osc_clk_recalc(&osc_ck, 0, CURRENT_RATE);
-	omap2_sys_clk_recalc(&sys_ck, sys_ck.parent->rate, CURRENT_RATE);
+	omap2_osc_clk_recalc(&osc_ck);
+	omap2_sys_clk_recalc(&sys_ck);
 
 	for (clkp = onchip_24xx_clks;
 	     clkp < onchip_24xx_clks + ARRAY_SIZE(onchip_24xx_clks);
@@ -583,7 +506,7 @@ int __init omap2_clk_init(void)
 	}
 
 	/* Check the MPU rate set by bootloader */
-	clkrate = omap2xxx_clk_get_core_rate(&dpll_ck, dpll_ck.parent->rate);
+	clkrate = omap2_get_dpll_rate_24xx(&dpll_ck);
 	for (prcm = rate_table; prcm->mpu_speed; prcm++) {
 		if (!(prcm->flags & cpu_mask))
 			continue;
