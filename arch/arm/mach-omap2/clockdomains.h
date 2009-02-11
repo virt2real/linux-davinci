@@ -225,7 +225,7 @@ static struct clockdomain usbhost_clkdm = {
 
 static struct clockdomain per_clkdm = {
 	.name		= "per_clkdm",
-	.pwrdm		= { .name = "per_pwrdm" },
+	.pwrdm_name	= "per_pwrdm",
 	.flags		= CLKDM_CAN_HWSUP_SWSUP,
 	.clktrctrl_mask = OMAP3430_CLKTRCTRL_PER_MASK,
 	.omap_chip	= OMAP_CHIP_INIT(CHIP_IS_OMAP3430),
@@ -233,40 +233,10 @@ static struct clockdomain per_clkdm = {
 
 static struct clockdomain emu_clkdm = {
 	.name		= "emu_clkdm",
-	.pwrdm		= { .name = "emu_pwrdm" },
+	.pwrdm_name	= "emu_pwrdm",
 	.flags		= CLKDM_CAN_ENABLE_AUTO | CLKDM_CAN_SWSUP,
 	.clktrctrl_mask = OMAP3430_CLKTRCTRL_EMU_MASK,
 	.omap_chip	= OMAP_CHIP_INIT(CHIP_IS_OMAP3430),
-};
-
-static struct clockdomain dpll1_clkdm = {
-	.name		= "dpll1_clkdm",
-	.pwrdm		= { .name = "dpll1_pwrdm" },
-	.omap_chip	= OMAP_CHIP_INIT(CHIP_IS_OMAP3430),
-};
-
-static struct clockdomain dpll2_clkdm = {
-	.name		= "dpll2_clkdm",
-	.pwrdm		= { .name = "dpll2_pwrdm" },
-	.omap_chip	= OMAP_CHIP_INIT(CHIP_IS_OMAP3430),
-};
-
-static struct clockdomain dpll3_clkdm = {
-	.name		= "dpll3_clkdm",
-	.pwrdm		= { .name = "dpll3_pwrdm" },
-	.omap_chip	= OMAP_CHIP_INIT(CHIP_IS_OMAP3430),
-};
-
-static struct clockdomain dpll4_clkdm = {
-	.name		= "dpll4_clkdm",
-	.pwrdm		= { .name = "dpll4_pwrdm" },
-	.omap_chip	= OMAP_CHIP_INIT(CHIP_IS_OMAP3430),
-};
-
-static struct clockdomain dpll5_clkdm = {
-	.name		= "dpll5_clkdm",
-	.pwrdm		= { .name = "dpll5_pwrdm" },
-	.omap_chip	= OMAP_CHIP_INIT(CHIP_IS_OMAP3430ES2),
 };
 
 #endif   /* CONFIG_ARCH_OMAP34XX */
