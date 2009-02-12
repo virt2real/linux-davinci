@@ -18,6 +18,7 @@
 #include <linux/io.h>
 #include <linux/clk.h>
 #include <linux/err.h>
+#include <linux/device.h>
 
 #include <mach/hardware.h>
 #include <asm/system.h>
@@ -309,7 +310,7 @@ static struct clock_event_device clockevent_davinci = {
 
 static void __init davinci_timer_init(void)
 {
-	struct clk *timer_clk, *wd_clk;
+	struct clk *timer_clk;
 
 	static char err[] __initdata = KERN_ERR
 		"%s: can't register clocksource!\n";
@@ -320,12 +321,6 @@ static void __init davinci_timer_init(void)
 	timer_clk = clk_get(NULL, "timer0");
 	BUG_ON(IS_ERR(timer_clk));
 	clk_enable(timer_clk);
-
-	if (cpu_is_davinci_dm644x() || cpu_is_davinci_dm355()) {
-		wd_clk = clk_get(NULL, "timer2");
-		BUG_ON(IS_ERR(wd_clk));
-		clk_enable(wd_clk);
-	}
 
 	davinci_clock_tick_rate = clk_get_rate(timer_clk);
 	clk_put(timer_clk);
@@ -358,6 +353,14 @@ struct sys_timer davinci_timer = {
 void davinci_watchdog_reset(void) {
 	u32 tgcr, wdtcr;
 	void __iomem *base = IO_ADDRESS(DAVINCI_WDOG_BASE);
+	struct device dev;
+	struct clk *wd_clk;
+
+	dev_set_name(&dev, "watchdog");
+	wd_clk = clk_get(&dev, NULL);
+	if (WARN_ON(IS_ERR(wd_clk)))
+		return;
+	clk_enable(wd_clk);
 
 	/* disable, internal clock source */
 	__raw_writel(0, base + TCR);

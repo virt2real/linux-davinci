@@ -30,114 +30,6 @@ static LIST_HEAD(clocks);
 static DEFINE_MUTEX(clocks_mutex);
 static DEFINE_SPINLOCK(clockfw_lock);
 
-extern void davinci_psc_config(unsigned int domain, unsigned int id, char enable);
-
-/*
- * Register a mapping { dev, logical_clockname } --> clock
- *
- * Device drivers should always use logical clocknames, so they
- * don't need to change the physical name when new silicon grows
- * another instance of that module or changes the clock tree.
- */
-
-struct clk_mapping {
-	struct device		*dev;
-	const char		*name;
-	struct clk		*clock;
-	struct clk_mapping	*next;
-};
-
-static struct clk_mapping *maplist;
-
-int __init davinci_clk_associate(struct device *dev,
-		const char *logical_clockname,
-		const char *physical_clockname)
-{
-	int			status = -EINVAL;
-	struct clk		*clock;
-	struct clk_mapping	*mapping;
-
-	if (!dev)
-		goto done;
-
-	clock = clk_get(dev, physical_clockname);
-	if (IS_ERR(clock) || !try_module_get(clock->owner))
-		goto done;
-
-	mutex_lock(&clocks_mutex);
-	for (mapping = maplist; mapping; mapping = mapping->next) {
-		if (dev != mapping->dev)
-			continue;
-		if (strcmp(logical_clockname, mapping->name) != 0)
-			continue;
-		goto fail;
-	}
-
-	mapping = kzalloc(sizeof *mapping, GFP_KERNEL);
-	mapping->dev = dev;
-	mapping->name = logical_clockname;
-	mapping->clock = clock;
-
-	mapping->next = maplist;
-	maplist = mapping;
-
-	status = 0;
-fail:
-	mutex_unlock(&clocks_mutex);
-done:
-	WARN_ON(status < 0);
-	return status;
-}
-
-/*
- * Returns a clock. Note that we first try to use device id on the bus
- * and clock name. If this fails, we try to use clock name only.
- */
-struct clk *clk_get(struct device *dev, const char *id)
-{
-	struct clk *p, *clk = ERR_PTR(-ENOENT);
-	struct clk_mapping *mapping;
-
-	if (!id)
-		return ERR_PTR(-EINVAL);
-
-	mutex_lock(&clocks_mutex);
-
-	/* always prefer logical clock names */
-	if (dev) {
-		for (mapping = maplist; mapping; mapping = mapping->next) {
-			if (dev != mapping->dev)
-				continue;
-			if (strcmp(id, mapping->name) != 0)
-				continue;
-			clk = mapping->clock;
-			goto found;
-		}
-	}
-
-	list_for_each_entry(p, &clocks, node) {
-		if (strcmp(id, p->name) == 0 && try_module_get(p->owner)) {
-			clk = p;
-			break;
-		}
-	}
-
-found:
-	mutex_unlock(&clocks_mutex);
-
-	WARN(IS_ERR(clk), "CLK: can't find %s/%s\n",
-			dev ? dev_name(dev) : "nodev", id);
-	return clk;
-}
-EXPORT_SYMBOL(clk_get);
-
-void clk_put(struct clk *clk)
-{
-	if (clk && !IS_ERR(clk))
-		module_put(clk->owner);
-}
-EXPORT_SYMBOL(clk_put);
-
 static unsigned psc_domain(struct clk *clk)
 {
 	return (clk->flags & PSC_DSP)
@@ -372,31 +264,30 @@ static void __init clk_pll_init(struct clk *clk)
 	pr_debug("] --> %lu MHz output.\n", clk->rate / 1000000);
 }
 
-int __init davinci_clk_init(struct clk *clocks[])
-{
-	struct clk *clkp;
-	int i = 0;
+int __init davinci_clk_init(struct davinci_clk *clocks)
+  {
+	struct davinci_clk *c;
+	struct clk *clk;
 
-	while ((clkp = clocks[i++])) {
-		if (clkp->pll_data)
-			clk_pll_init(clkp);
+	for (c = clocks; c->lk.clk; c++) {
+		clk = c->lk.clk;
+
+		if (clk->pll_data)
+			clk_pll_init(clk);
 
 		/* Calculate rates for PLL-derived clocks */
-		else if (clkp->flags & CLK_PLL)
-			clk_sysclk_recalc(clkp);
+		else if (clk->flags & CLK_PLL)
+			clk_sysclk_recalc(clk);
 
-		if (clkp->lpsc)
-			clkp->flags |= CLK_PSC;
+		if (clk->lpsc)
+			clk->flags |= CLK_PSC;
 
-		clk_register(clkp);
-
-		/* FIXME: remove equivalent special-cased code from
-		 * davinci_psc_init() once cpus list *all* clocks.
-		 */
+		clkdev_add(&c->lk);
+		clk_register(clk);
 
 		/* Turn on clocks that Linux doesn't otherwise manage */
-		if (clkp->flags & ALWAYS_ENABLED)
-			clk_enable(clkp);
+		if (clk->flags & ALWAYS_ENABLED)
+			clk_enable(clk);
 	}
 
 	return 0;

@@ -152,7 +152,6 @@ static struct platform_device davinci_mmcsd1_device = {
 void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 {
 	struct platform_device	*pdev = NULL;
-	const char		*clockname;
 
 	if (WARN_ON(cpu_is_davinci_dm646x()))
 		return;
@@ -179,7 +178,6 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 		davinci_cfg_reg(DM355_SD1_DATA3);
 
 		pdev = &davinci_mmcsd1_device;
-		clockname = "mmcsd1";
 		break;
 	case 0:
 		if (cpu_is_davinci_dm355()) {
@@ -206,7 +204,6 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 		}
 
 		pdev = &davinci_mmcsd0_device;
-		clockname = cpu_is_davinci_dm355() ? "mmcsd0" : "mmcsd";
 		break;
 	}
 
@@ -214,7 +211,6 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 		return;
 
 	pdev->dev.platform_data = config;
-	davinci_clk_associate(&pdev->dev, "mmc", clockname);
 	platform_device_register(pdev);
 }
 

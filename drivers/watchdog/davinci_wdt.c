@@ -205,7 +205,7 @@ static int davinci_wdt_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct device *dev = &pdev->dev;
 
-	wdt_clk = clk_get(dev, "timer2");
+	wdt_clk = clk_get(dev, NULL);
 	if (WARN_ON(!wdt_clk))
 		return -ENODEV;
 	clk_enable(wdt_clk);

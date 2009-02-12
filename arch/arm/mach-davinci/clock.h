@@ -12,6 +12,7 @@
 #define __ARCH_ARM_DAVINCI_CLOCK_H
 
 #include <linux/list.h>
+#include <asm/clkdev.h>
 
 #define DAVINCI_PLL1_BASE 0x01c40800
 #define DAVINCI_PLL2_BASE 0x01c40c00
@@ -76,7 +77,21 @@ struct clk {
 #define CLK_PLL			BIT(4) /* PLL-derived clock */
 #define PRE_PLL                 BIT(5) /* source is before PLL mult/div */
 
+struct davinci_clk {
+	struct clk_lookup lk;
+};
+
+#define CLK(dev, con, ck) 		\
+	{				\
+		.lk = {			\
+			.dev_id = dev,	\
+			.con_id = con,	\
+			.clk = ck,	\
+		},			\
+	}
+
 int davinci_clk_associate(struct device *dev, const char *logical_clockname,
 			  const char *physical_clockname);
 
+int davinci_clk_init(struct davinci_clk *clocks);
 #endif

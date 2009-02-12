@@ -446,10 +446,6 @@ static int davinci_i2s_probe(struct platform_device *pdev,
 	struct resource *mem, *ioarea;
 	struct evm_snd_platform_data *pdata;
 	int ret;
-	static const char *clocks[] = { "asp0", "asp1", };
-
-	if (pdev->id < 0 || pdev->id > ARRAY_SIZE(clocks))
-		return -EINVAL;
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
@@ -472,7 +468,7 @@ static int davinci_i2s_probe(struct platform_device *pdev,
 
 	cpu_dai->private_data = dev;
 
-	dev->clk = clk_get(&pdev->dev, clocks[pdev->id]);
+	dev->clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(dev->clk)) {
 		ret = -ENODEV;
 		goto err_free_mem;

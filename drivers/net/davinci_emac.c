@@ -2605,7 +2605,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	unsigned long size;
 
 	/* obtain emac clock from kernel */
-	emac_clk = clk_get(&pdev->dev, "emac");
+	emac_clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(emac_clk)) {
 		printk(KERN_ERR "DaVinci EMAC: Failed to get EMAC clock\n");
 		return -EBUSY;

@@ -351,7 +351,7 @@ static int __init palm_bk3710_probe(struct platform_device *pdev)
 	int i, rc;
 	hw_regs_t hw, *hws[] = { &hw, NULL, NULL, NULL };
 
-	clk = clk_get(&pdev->dev, "IDECLK");
+	clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(clk))
 		return -ENODEV;
 
