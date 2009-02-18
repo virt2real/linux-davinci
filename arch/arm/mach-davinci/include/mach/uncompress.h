@@ -13,11 +13,27 @@
 #include <linux/serial_reg.h>
 #include <mach/serial.h>
 
+#include <asm/mach-types.h>
+
+extern u32 davinci_machine_no;
+
+static u8 first_time = 1;
+static u32 *uart;
+
+static u32 *get_uart_base(void)
+{
+	/* Add logic here for new platforms */
+	return (u32 *)DAVINCI_UART0_BASE;
+}
+
 /* PORT_16C550A, in polled non-fifo mode */
 
 static void putc(char c)
 {
-	volatile u32 *uart = (volatile void *) DAVINCI_UART0_BASE;
+	if (first_time) {
+		uart = get_uart_base();
+		first_time = 0;
+	}
 
 	while (!(uart[UART_LSR] & UART_LSR_THRE))
 		barrier();
@@ -26,7 +42,11 @@ static void putc(char c)
 
 static inline void flush(void)
 {
-	volatile u32 *uart = (volatile void *) DAVINCI_UART0_BASE;
+	if (first_time) {
+		uart = get_uart_base();
+		first_time = 0;
+	}
+
 	while (!(uart[UART_LSR] & UART_LSR_THRE))
 		barrier();
 }
