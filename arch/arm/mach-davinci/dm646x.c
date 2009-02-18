@@ -12,7 +12,7 @@
 #include <linux/init.h>
 #include <linux/clk.h>
 
-#include <mach/dm644x.h>
+#include <mach/dm646x.h>
 #include <mach/clock.h>
 #include <mach/psc.h>
 #include <mach/mux.h>
