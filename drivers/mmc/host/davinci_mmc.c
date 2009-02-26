@@ -1158,10 +1158,10 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 	mmc->ops = &mmc_davinci_ops;
 	mmc->f_min = 312500;
 	mmc->f_max = 25000000;
-	if (cpu_is_davinci_dm355()) {
-		mmc->f_max = 50000000;
-		mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
-	}
+	if (pdata->max_freq)
+		mmc->f_max = pdata->max_freq;
+	if (pdata->caps)
+		mmc->caps |= pdata->caps;
 	mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
 
 	/* With no iommu coalescing pages, each phys_seg is a hw_seg.
