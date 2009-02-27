@@ -161,7 +161,7 @@ static inline u32 nand_davinci_readecc_1bit(struct mtd_info *mtd)
 static void nand_davinci_hwctl_1bit(struct mtd_info *mtd, int mode)
 {
 	struct davinci_nand_info *info;
-	u32 retval;
+	u32 nandcfr;
 	unsigned long flags;
 
 	info = to_davinci_nand(mtd);
@@ -172,9 +172,9 @@ static void nand_davinci_hwctl_1bit(struct mtd_info *mtd, int mode)
 	spin_lock_irqsave(&davinci_nand_lock, flags);
 
 	/* Restart ECC hardware */
-	retval = davinci_nand_readl(info, NANDFCR_OFFSET);
-	retval |= BIT(8 + info->core_chipsel);
-	davinci_nand_writel(info, NANDFCR_OFFSET, retval);
+	nandcfr = davinci_nand_readl(info, NANDFCR_OFFSET);
+	nandcfr |= BIT(8 + info->core_chipsel);
+	davinci_nand_writel(info, NANDFCR_OFFSET, nandcfr);
 
 	spin_unlock_irqrestore(&davinci_nand_lock, flags);
 }
@@ -186,13 +186,13 @@ static int nand_davinci_calculate_1bit(struct mtd_info *mtd,
 				      const u_char *dat, u_char *ecc_code)
 {
 	unsigned int ecc_val = nand_davinci_readecc_1bit(mtd);
-	unsigned int tmp = (ecc_val & 0x0fff) | ((ecc_val & 0x0fff0000) >> 4);
+	unsigned int ecc24 = (ecc_val & 0x0fff) | ((ecc_val & 0x0fff0000) >> 4);
 
 	/* invert so that erased block ecc is correct */
-	tmp = ~tmp;
-	ecc_code[0] = (u_char)(tmp);
-	ecc_code[1] = (u_char)(tmp >> 8);
-	ecc_code[2] = (u_char)(tmp >> 16);
+	ecc24 = ~ecc24;
+	ecc_code[0] = (u_char)(ecc24);
+	ecc_code[1] = (u_char)(ecc24 >> 8);
+	ecc_code[2] = (u_char)(ecc24 >> 16);
 
 	return 0;
 }
@@ -278,7 +278,7 @@ static int nand_davinci_dev_ready(struct mtd_info *mtd)
 
 static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 {
-	u32 regval, tmp;
+	u32 regval, a1cr;
 
 	/*
 	 * NAND FLASH timings @ PLL1 == 459 MHz
@@ -297,11 +297,11 @@ static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 		| (3 << 2)            /* turnAround      ?? ns */
 		| (0 << 0)            /* asyncSize       8-bit bus */
 		;
-	tmp = davinci_nand_readl(info, A1CR_OFFSET);
-	if (tmp != regval) {
+	a1cr = davinci_nand_readl(info, A1CR_OFFSET);
+	if (a1cr != regval) {
 		dev_dbg(info->dev, "Warning: NAND config: Set A1CR " \
 		       "reg to 0x%08x, was 0x%08x, should be done by " \
-		       "bootloader.\n", regval, tmp);
+		       "bootloader.\n", regval, a1cr);
 		davinci_nand_writel(info, A1CR_OFFSET, regval);
 	}
 }
@@ -338,7 +338,7 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	if (!res1 || !res2) {
 		dev_err(&pdev->dev, "resource missing\n");
 		ret = -EINVAL;
-		goto err_res;
+		goto err_nomem;
 	}
 
 	vaddr = ioremap(res1->start, res1->end - res1->start);
@@ -347,7 +347,6 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "ioremap failed\n");
 		ret = -EINVAL;
 		goto err_ioremap;
-
 	}
 
 	info->dev		= &pdev->dev;
@@ -526,16 +525,14 @@ err_clk_enable:
 
 err_ecc:
 err_clk:
+err_ioremap:
 	if (base)
 		iounmap(base);
 	if (vaddr)
 		iounmap(vaddr);
 
-err_ioremap:
-	kfree(info);
-
 err_nomem:
-err_res:
+	kfree(info);
 	return ret;
 }
 
