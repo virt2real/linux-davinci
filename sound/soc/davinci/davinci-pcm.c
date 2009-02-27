@@ -109,7 +109,7 @@ static void davinci_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 		prtd->period = 0;
 }
 
-static void davinci_pcm_dma_irq(int lch, u16 ch_status, void *data)
+static void davinci_pcm_dma_irq(unsigned lch, u16 ch_status, void *data)
 {
 	struct snd_pcm_substream *substream = data;
 	struct davinci_runtime_data *prtd = substream->runtime->private_data;
