@@ -42,6 +42,7 @@
 #define PLLDIV4         0x160
 #define PLLDIV5         0x164
 #define PLLDIV6         0x168
+#define PLLDIV7         0x16c
 #define PLLDIV8         0x170
 #define PLLDIV9         0x174
 #define PLLDIV_EN       BIT(15)
