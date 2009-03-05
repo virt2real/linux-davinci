@@ -816,11 +816,23 @@ static void mmc_davinci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	host->bus_mode = ios->bus_mode;
 	if (ios->power_mode == MMC_POWER_UP) {
+		unsigned long timeout = jiffies + msecs_to_jiffies(50);
+		bool lose = true;
+
 		/* Send clock cycles, poll completion */
 		writel(0, host->base + DAVINCI_MMCARGHL);
 		writel(MMCCMD_INITCK, host->base + DAVINCI_MMCCMD);
-		while (!(readl(host->base + DAVINCI_MMCST0) & MMCST0_RSPDNE))
+		while (time_before(jiffies, timeout)) {
+			u32 tmp = readl(host->base + DAVINCI_MMCST0);
+
+			if (tmp & MMCST0_RSPDNE) {
+				lose = false;
+				break;
+			}
 			cpu_relax();
+		}
+		if (lose)
+			dev_warn(mmc_dev(host->mmc), "powerup timeout\n");
 	}
 
 	/* FIXME on power OFF, reset things ... */
@@ -900,15 +912,33 @@ davinci_abort_data(struct mmc_davinci_host *host, struct mmc_data *data)
 	writel(temp, host->base + DAVINCI_MMCCTL);
 }
 
-static inline int handle_core_command(
-		struct mmc_davinci_host *host, unsigned int status)
+static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 {
+	struct mmc_davinci_host *host = (struct mmc_davinci_host *)dev_id;
+	unsigned int status, qstatus;
 	int end_command = 0;
 	int end_transfer = 0;
-	unsigned int qstatus = status;
 	struct mmc_data *data = host->data;
 
-	/* handle FIFO first when using PIO for data */
+	if (host->cmd == NULL && host->data == NULL) {
+		status = readl(host->base + DAVINCI_MMCST0);
+		dev_dbg(mmc_dev(host->mmc),
+			"Spurious interrupt 0x%04x\n", status);
+		/* Disable the interrupt from mmcsd */
+		writel(0, host->base + DAVINCI_MMCIM);
+		return IRQ_NONE;
+	}
+
+	status = readl(host->base + DAVINCI_MMCST0);
+	qstatus = status;
+
+	/* handle FIFO first when using PIO for data.
+	 * bytes_left will decrease to zero as I/O progress and status will
+	 * read zero over iteration because this controller status
+	 * register(MMCST0) reports any status only once and it is cleared
+	 * by read. So, it is not unbouned loop even in the case of
+	 * non-dma.
+	 */
 	while (host->bytes_left && (status & (MMCST0_DXRDY | MMCST0_DRRDY))) {
 		davinci_fifo_data_trans(host, rw_threshold);
 		status = readl(host->base + DAVINCI_MMCST0);
@@ -1004,30 +1034,6 @@ static inline int handle_core_command(
 		mmc_davinci_cmd_done(host, host->cmd);
 	if (end_transfer)
 		mmc_davinci_xfer_done(host, data);
-	return 0;
-}
-
-static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
-{
-	struct mmc_davinci_host *host = (struct mmc_davinci_host *)dev_id;
-	unsigned int status;
-
-	if (host->cmd == NULL && host->data == NULL) {
-		status = readl(host->base + DAVINCI_MMCST0);
-		dev_dbg(mmc_dev(host->mmc),
-			"Spurious interrupt 0x%04x\n", status);
-		/* Disable the interrupt from mmcsd */
-		writel(0, host->base + DAVINCI_MMCIM);
-		return IRQ_HANDLED;
-	}
-
-	do {
-		status = readl(host->base + DAVINCI_MMCST0);
-		if (status == 0)
-			break;
-		if (handle_core_command(host, status))
-			break;
-	} while (1);
 	return IRQ_HANDLED;
 }
 
