@@ -62,17 +62,17 @@ static struct davinci_uart_config uart_config __initdata = {
  *  - 0x7f00, 6 bytes Ethernet Address
  *  - ... newer boards may have more
  */
-static struct at24_iface *at24_if;
+static struct memory_accessor *at24_mem_acc;
 
-static int at24_setup(struct at24_iface *iface, void *context)
+static int at24_setup(struct memory_accessor *mem_acc, void *context)
 {
 	DECLARE_MAC_BUF(mac_str);
 	char mac_addr[6];
 
-	at24_if = iface;
+	at24_mem_acc = mem_acc;
 
 	/* Read MAC addr from EEPROM */
-	if (at24_if->read(at24_if, mac_addr, 0x7f00, 6) == 6) {
+	if (at24_mem_acc->read(at24_mem_acc, mac_addr, 0x7f00, 6) == 6) {
 		printk(KERN_INFO "Read MAC addr from EEPROM: %s\n",
 		print_mac(mac_str, mac_addr));
 
@@ -89,16 +89,16 @@ static struct at24_platform_data eeprom_info = {
 
 int dm646xevm_eeprom_read(void *buf, off_t off, size_t count)
 {
-	if (at24_if)
-		return at24_if->read(at24_if, buf, off, count);
+	if (at24_mem_acc)
+		return at24_mem_acc->read(at24_mem_acc, buf, off, count);
 	return -ENODEV;
 }
 EXPORT_SYMBOL(dm646xevm_eeprom_read);
 
 int dm646xevm_eeprom_write(void *buf, off_t off, size_t count)
 {
-	if (at24_if)
-		return at24_if->write(at24_if, buf, off, count);
+	if (at24_mem_acc)
+		return at24_mem_acc->write(at24_mem_acc, buf, off, count);
 	return -ENODEV;
 }
 EXPORT_SYMBOL(dm646xevm_eeprom_write);
