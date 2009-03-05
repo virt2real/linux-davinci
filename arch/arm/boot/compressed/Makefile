@@ -48,7 +48,7 @@ else
 endif
 endif
 
-ifeq ($(CONFIG_MACH_DAVINCI_EVM),y)
+ifeq ($(CONFIG_ARCH_DAVINCI),y)
 OBJS		+= head-davinci.o
 endif
 
