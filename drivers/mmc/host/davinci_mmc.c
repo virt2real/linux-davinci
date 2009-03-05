@@ -34,8 +34,6 @@
 #include <mach/mmc.h>
 #include <mach/cpu.h>
 #include <mach/edma.h>
-#include <mach/hardware.h>
-#include <mach/irqs.h>
 
 /*
  * Register Definitions
@@ -134,7 +132,6 @@
 
 /* MMCSD Init clock in Hz in opendain mode */
 #define MMCSD_INIT_CLOCK		200000
-#define DRIVER_NAME			"davinci_mmc"
 
 /*
  * One scatterlist dma "segment" is at most MAX_CCNT rw_threshold units,
@@ -370,7 +367,7 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 
 static void davinci_abort_dma(struct mmc_davinci_host *host)
 {
-	int sync_dev = 0;
+	int sync_dev;
 
 	if (host->data_dir == DAVINCI_MMC_DATADIR_READ)
 		sync_dev = host->rxdma;
@@ -640,20 +637,19 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	writel(timeout, host->base + DAVINCI_MMCTOD);
 	writel(data->blocks, host->base + DAVINCI_MMCNBLK);
 	writel(data->blksz, host->base + DAVINCI_MMCBLEN);
-	host->data_dir = (data->flags & MMC_DATA_WRITE)
-			? DAVINCI_MMC_DATADIR_WRITE
-			: DAVINCI_MMC_DATADIR_READ;
 
 	/* Configure the FIFO */
-	switch (host->data_dir) {
-	case DAVINCI_MMC_DATADIR_WRITE:
+	switch (data->flags & MMC_DATA_WRITE) {
+	case MMC_DATA_WRITE:
+		host->data_dir = DAVINCI_MMC_DATADIR_WRITE;
 		writel(fifo_lev | MMCFIFOCTL_FIFODIR_WR | MMCFIFOCTL_FIFORST,
 			host->base + DAVINCI_MMCFIFOCTL);
 		writel(fifo_lev | MMCFIFOCTL_FIFODIR_WR,
 			host->base + DAVINCI_MMCFIFOCTL);
 		break;
 
-	case DAVINCI_MMC_DATADIR_READ:
+	default:
+		host->data_dir = DAVINCI_MMC_DATADIR_READ;
 		writel(fifo_lev | MMCFIFOCTL_FIFODIR_RD | MMCFIFOCTL_FIFORST,
 			host->base + DAVINCI_MMCFIFOCTL);
 		writel(fifo_lev | MMCFIFOCTL_FIFODIR_RD,
@@ -1074,7 +1070,7 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 
 	ret = -EBUSY;
 	mem_size = r->end - r->start + 1;
-	mem = request_mem_region(r->start, mem_size, DRIVER_NAME);
+	mem = request_mem_region(r->start, mem_size, pdev->name);
 	if (!mem)
 		goto out;
 
@@ -1241,7 +1237,7 @@ static int davinci_mmcsd_resume(struct platform_device *pdev)
 
 static struct platform_driver davinci_mmcsd_driver = {
 	.driver		= {
-		.name	= DRIVER_NAME,
+		.name	= "davinci_mmc",
 		.owner	= THIS_MODULE,
 	},
 	.remove		= __exit_p(davinci_mmcsd_remove),
