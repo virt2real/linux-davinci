@@ -619,13 +619,12 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 		return;
 	}
 
-	dev_dbg(mmc_dev(host->mmc),
-		"MMCSD : Data xfer (%s %s), "
-		"DTO %d cycles + %d ns, %d blocks of %d bytes\n",
+	dev_dbg(mmc_dev(host->mmc), "%s %s, %d blocks of %d bytes\n",
 		(data->flags & MMC_DATA_STREAM) ? "stream" : "block",
 		(data->flags & MMC_DATA_WRITE) ? "write" : "read",
-		data->timeout_clks, data->timeout_ns,
 		data->blocks, data->blksz);
+	dev_dbg(mmc_dev(host->mmc), "  DTO %d cycles + %d ns\n",
+		data->timeout_clks, data->timeout_ns);
 
 	/* Convert ns to clock cycles by assuming 20MHz frequency
 	 * 1 cycle at 20MHz = 500 ns
@@ -825,12 +824,6 @@ static void mmc_davinci_cmd_done(struct mmc_davinci_host *host,
 {
 	host->cmd = NULL;
 
-	if (!cmd) {
-		dev_warn(mmc_dev(host->mmc),
-			"%s(): No cmd ptr\n", __func__);
-		return;
-	}
-
 	if (cmd->flags & MMC_RSP_PRESENT) {
 		if (cmd->flags & MMC_RSP_136) {
 			/* response type 2 */
@@ -918,7 +911,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 			end_transfer = 1;
 			data->bytes_xfered += data->blocks * data->blksz;
 		} else {
-			dev_warn(mmc_dev(host->mmc), "TC:host->data is NULL\n");
+			dev_err(mmc_dev(host->mmc),
+					"DATDNE with no host->data\n");
 		}
 	}
 
@@ -961,8 +955,8 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 	if (qstatus & MMCST0_TOUTRS) {
 		/* Command timeout */
 		if (host->cmd) {
-			dev_dbg(mmc_dev(host->mmc), "MMCSD: CMD%d "
-				"timeout, status %x\n",
+			dev_dbg(mmc_dev(host->mmc),
+				"CMD%d timeout, status %x\n",
 				host->cmd->opcode, qstatus);
 			host->cmd->error = -ETIMEDOUT;
 			if (data) {
@@ -986,7 +980,7 @@ static irqreturn_t mmc_davinci_irq(int irq, void *dev_id)
 
 	if (qstatus & MMCST0_RSPDNE) {
 		/* End of command phase */
-		end_command = 1;
+		end_command = (int) host->cmd;
 	}
 
 	if (end_command)
