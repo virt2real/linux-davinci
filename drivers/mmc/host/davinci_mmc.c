@@ -201,60 +201,6 @@ struct mmc_davinci_host {
 };
 
 
-#define DAVINCI_MMCSD_READ_FIFO(pDst, pRegs, cnt) asm( \
-	"	cmp	%3,#16\n" \
-	"1:	ldrhs	r0,[%1,%2]\n" \
-	"	ldrhs	r1,[%1,%2]\n" \
-	"	ldrhs	r2,[%1,%2]\n" \
-	"	ldrhs	r3,[%1,%2]\n" \
-	"	stmhsia	%0!,{r0,r1,r2,r3}\n" \
-	"	beq	3f\n" \
-	"	subhs	%3,%3,#16\n" \
-	"	cmp	%3,#16\n" \
-	"	bhs	1b\n" \
-	"	tst	%3,#0x0c\n" \
-	"2:	ldrne	r0,[%1,%2]\n" \
-	"	strne	r0,[%0],#4\n" \
-	"	subne	%3,%3,#4\n" \
-	"	tst	%3,#0x0c\n" \
-	"	bne	2b\n" \
-	"	tst	%3,#2\n" \
-	"	ldrneh	r0,[%1,%2]\n" \
-	"	strneh	r0,[%0],#2\n" \
-	"	tst	%3,#1\n" \
-	"	ldrneb	r0,[%1,%2]\n" \
-	"	strneb	r0,[%0],#1\n" \
-	"3:\n" \
-	 : "+r"(pDst) : "r"(pRegs), "i"(DAVINCI_MMCDRR), \
-	 "r"(cnt) : "r0", "r1", "r2", "r3");
-
-#define DAVINCI_MMCSD_WRITE_FIFO(pDst, pRegs, cnt) asm( \
-	"	cmp	%3,#16\n" \
-	"1:	ldmhsia	%0!,{r0,r1,r2,r3}\n" \
-	"	strhs	r0,[%1,%2]\n" \
-	"	strhs	r1,[%1,%2]\n" \
-	"	strhs	r2,[%1,%2]\n" \
-	"	strhs	r3,[%1,%2]\n" \
-	"	beq	3f\n" \
-	"	subhs	%3,%3,#16\n" \
-	"	cmp	%3,#16\n" \
-	"	bhs	1b\n" \
-	"	tst	%3,#0x0c\n" \
-	"2:	ldrne	r0,[%0],#4\n" \
-	"	strne	r0,[%1,%2]\n" \
-	"	subne	%3,%3,#4\n" \
-	"	tst	%3,#0x0c\n" \
-	"	bne	2b\n" \
-	"	tst	%3,#2\n" \
-	"	ldrneh	r0,[%0],#2\n" \
-	"	strneh	r0,[%1,%2]\n" \
-	"	tst	%3,#1\n" \
-	"	ldrneb	r0,[%0],#1\n" \
-	"	strneb	r0,[%1,%2]\n" \
-	"3:\n" \
-	 : "+r"(pDst) : "r"(pRegs), "i"(DAVINCI_MMCDXR), \
-	 "r"(cnt) : "r0", "r1", "r2", "r3");
-
 /* PIO only */
 static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
 {
@@ -267,9 +213,11 @@ static void mmc_davinci_sg_to_buf(struct mmc_davinci_host *host)
 		host->buffer_bytes_left = host->bytes_left;
 }
 
-static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n)
+static void davinci_fifo_data_trans(struct mmc_davinci_host *host,
+					unsigned int n)
 {
 	u8 *p;
+	unsigned int i;
 
 	if (host->buffer_bytes_left == 0) {
 		host->sg_idx++;
@@ -285,11 +233,26 @@ static void davinci_fifo_data_trans(struct mmc_davinci_host *host, int n)
 
 	/* NOTE:  we never transfer more than rw_threshold bytes
 	 * to/from the fifo here; there's no I/O overlap.
+	 * This also assumes that access width( i.e. ACCWD) is 4 bytes
 	 */
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
-		DAVINCI_MMCSD_WRITE_FIFO(p, host->base, n);
+		for (i = 0; i < (n >> 2); i++) {
+			writel(*((u32 *)p), host->base + DAVINCI_MMCDXR);
+			p = p + 4;
+		}
+		if (n & 3) {
+			iowrite8_rep(host->base + DAVINCI_MMCDXR, p, (n & 3));
+			p = p + (n & 3);
+		}
 	} else {
-		DAVINCI_MMCSD_READ_FIFO(p, host->base, n);
+		for (i = 0; i < (n >> 2); i++) {
+			*((u32 *)p) = readl(host->base + DAVINCI_MMCDRR);
+			p  = p + 4;
+		}
+		if (n & 3) {
+			ioread8_rep(host->base + DAVINCI_MMCDRR, p, (n & 3));
+			p = p + (n & 3);
+		}
 	}
 	host->buffer = p;
 }
