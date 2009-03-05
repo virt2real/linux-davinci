@@ -11,9 +11,13 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/clk.h>
+#include <linux/platform_device.h>
 
 #include <mach/dm646x.h>
 #include <mach/clock.h>
+#include <mach/cpu.h>
+#include <mach/edma.h>
+#include <mach/irqs.h>
 #include <mach/psc.h>
 #include <mach/mux.h>
 
@@ -273,8 +277,88 @@ MUX_CFG(DM646X, AUDCK1,		0,   29,    1,	  0,	 false)
 MUX_CFG(DM646X, AUDCK0,		0,   28,    1,	  0,	 false)
 };
 
+/*----------------------------------------------------------------------*/
+
+static const s8 dma_chan_dm646x_no_event[] = {
+	 0,  1,  2,  3, 13,
+	14, 15, 24, 25, 26,
+	27, 30, 31, 54, 55,
+	56,
+	-1
+};
+
+static struct edma_soc_info dm646x_edma_info = {
+	.n_channel	= 64,
+	.n_region	= 6,	/* 0-1, 4-7 */
+	.n_slot		= 512,
+	.n_tc		= 4,
+	.noevent	= dma_chan_dm646x_no_event,
+};
+
+static struct resource edma_resources[] = {
+	{
+		.start	= 0x01c00000,
+		.end	= 0x01c00000 + SZ_64K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc0",
+		.start	= 0x01c10000,
+		.end	= 0x01c10000 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc1",
+		.start	= 0x01c10400,
+		.end	= 0x01c10400 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc2",
+		.start	= 0x01c10800,
+		.end	= 0x01c10800 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc3",
+		.start	= 0x01c10c00,
+		.end	= 0x01c10c00 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= IRQ_CCINT0,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_CCERRINT,
+		.flags	= IORESOURCE_IRQ,
+	},
+	/* not using TC*_ERR */
+};
+
+static struct platform_device dm646x_edma_device = {
+	.name			= "edma",
+	.id			= -1,
+	.dev.platform_data	= &dm646x_edma_info,
+	.num_resources		= ARRAY_SIZE(edma_resources),
+	.resource		= edma_resources,
+};
+
+/*----------------------------------------------------------------------*/
+
+
 void __init dm646x_init(void)
 {
 	davinci_clk_init(dm646x_clks);
 	davinci_mux_register(dm646x_pins, ARRAY_SIZE(dm646x_pins));
 }
+
+static int __init dm646x_init_devices(void)
+{
+	if (!cpu_is_davinci_dm646x())
+		return 0;
+
+	platform_device_register(&dm646x_edma_device);
+	return 0;
+}
+postcore_initcall(dm646x_init_devices);

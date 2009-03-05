@@ -18,6 +18,8 @@
 
 #include <mach/dm355.h>
 #include <mach/clock.h>
+#include <mach/cpu.h>
+#include <mach/edma.h>
 #include <mach/psc.h>
 #include <mach/mux.h>
 #include <mach/irqs.h>
@@ -463,8 +465,75 @@ EVT_CFG(DM355,  EVT9_ASP1_RX,	      1,    1,    0,     false)
 EVT_CFG(DM355,  EVT26_MMC0_RX,	      2,    1,    0,     false)
 };
 
+/*----------------------------------------------------------------------*/
+
+static const s8 dma_chan_dm355_no_event[] = {
+	12, 13, 24, 56, 57,
+	58, 59, 60, 61, 62,
+	63,
+	-1
+};
+
+static struct edma_soc_info dm355_edma_info = {
+	.n_channel	= 64,
+	.n_region	= 4,
+	.n_slot		= 128,
+	.n_tc		= 2,
+	.noevent	= dma_chan_dm355_no_event,
+};
+
+static struct resource edma_resources[] = {
+	{
+		.start	= 0x01c00000,
+		.end	= 0x01c00000 + SZ_64K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc0",
+		.start	= 0x01c10000,
+		.end	= 0x01c10000 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc1",
+		.start	= 0x01c10400,
+		.end	= 0x01c10400 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= IRQ_CCINT0,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_CCERRINT,
+		.flags	= IORESOURCE_IRQ,
+	},
+	/* not using (or muxing) TC*_ERR */
+};
+
+static struct platform_device dm355_edma_device = {
+	.name			= "edma",
+	.id			= -1,
+	.dev.platform_data	= &dm355_edma_info,
+	.num_resources		= ARRAY_SIZE(edma_resources),
+	.resource		= edma_resources,
+};
+
+/*----------------------------------------------------------------------*/
+
 void __init dm355_init(void)
 {
 	davinci_clk_init(dm355_clks);
 	davinci_mux_register(dm355_pins, ARRAY_SIZE(dm355_pins));;
 }
+
+static int __init dm355_init_devices(void)
+{
+	if (!cpu_is_davinci_dm355())
+		return 0;
+
+	davinci_cfg_reg(DM355_INT_EDMA_CC);
+	platform_device_register(&dm355_edma_device);
+	return 0;
+}
+postcore_initcall(dm355_init_devices);

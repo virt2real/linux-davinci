@@ -11,9 +11,13 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/clk.h>
+#include <linux/platform_device.h>
 
 #include <mach/dm644x.h>
 #include <mach/clock.h>
+#include <mach/cpu.h>
+#include <mach/edma.h>
+#include <mach/irqs.h>
 #include <mach/psc.h>
 #include <mach/mux.h>
 
@@ -358,8 +362,76 @@ MUX_CFG(DM644X, LFLDEN,		0,   25,    1,	  1,	 false)
 };
 
 
+/*----------------------------------------------------------------------*/
+
+static const s8 dma_chan_dm644x_no_event[] = {
+	 0,  1, 12, 13, 14,
+	15, 25, 30, 31, 45,
+	46, 47, 55, 56, 57,
+	58, 59, 60, 61, 62,
+	63,
+	-1
+};
+
+static struct edma_soc_info dm644x_edma_info = {
+	.n_channel	= 64,
+	.n_region	= 4,
+	.n_slot		= 128,
+	.n_tc		= 2,
+	.noevent	= dma_chan_dm644x_no_event,
+};
+
+static struct resource edma_resources[] = {
+	{
+		.start	= 0x01c00000,
+		.end	= 0x01c00000 + SZ_64K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc0",
+		.start	= 0x01c10000,
+		.end	= 0x01c10000 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "edma_tc1",
+		.start	= 0x01c10400,
+		.end	= 0x01c10400 + SZ_1K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= IRQ_CCINT0,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_CCERRINT,
+		.flags	= IORESOURCE_IRQ,
+	},
+	/* not using TC*_ERR */
+};
+
+static struct platform_device dm644x_edma_device = {
+	.name			= "edma",
+	.id			= -1,
+	.dev.platform_data	= &dm644x_edma_info,
+	.num_resources		= ARRAY_SIZE(edma_resources),
+	.resource		= edma_resources,
+};
+
+/*----------------------------------------------------------------------*/
+
 void __init dm644x_init(void)
 {
 	davinci_clk_init(dm644x_clks);
 	davinci_mux_register(dm644x_pins, ARRAY_SIZE(dm644x_pins));
 }
+
+static int __init dm644x_init_devices(void)
+{
+	if (!cpu_is_davinci_dm644x())
+		return 0;
+
+	platform_device_register(&dm644x_edma_device);
+	return 0;
+}
+postcore_initcall(dm644x_init_devices);

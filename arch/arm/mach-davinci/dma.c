@@ -104,6 +104,12 @@
 
 #define edmacc_regs_base	IO_ADDRESS(DAVINCI_DMA_3PCC_BASE)
 
+
+#define EDMA_MAX_DMACH           64
+#define EDMA_MAX_PARAMENTRY     512
+#define EDMA_MAX_EVQUE            2	/* FIXME too small */
+
+
 /*****************************************************************************/
 
 static inline unsigned int edma_read(int offset)
@@ -199,55 +205,25 @@ static inline void edma_parm_or(int offset, int param_no, unsigned or)
 
 /*****************************************************************************/
 
-static struct platform_driver edma_driver = {
-	.driver.name	= "edma",
-};
-
-static struct resource edma_resources[] = {
-	{
-		.start	= DAVINCI_DMA_3PCC_BASE,
-		.end	= DAVINCI_DMA_3PCC_BASE + SZ_64K - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.name	= "edma_tc0",
-		.start	= 0x01c10000,
-		.end	= 0x01c10000 + SZ_1K - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.name	= "edma_tc1",
-		.start	= 0x01c10400,
-		.end	= 0x01c10400 + SZ_1K - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-};
-
-static struct platform_device edma_dev = {
-	.name		= "edma",
-	.id		= -1,
-	.dev.driver	= &edma_driver.driver,
-	.num_resources	= ARRAY_SIZE(edma_resources),
-	.resource	= edma_resources,
-};
-
-/*****************************************************************************/
+/* actual number of DMA channels and slots on this silicon */
+static unsigned num_channels;
+static unsigned num_slots;
 
 static struct dma_interrupt_data {
 	void (*callback)(unsigned channel, unsigned short ch_status, void *data);
 	void *data;
-} intr_data[DAVINCI_EDMA_NUM_DMACH];
+} intr_data[EDMA_MAX_DMACH];
 
 /* The edma_inuse bit for each PaRAM slot is clear unless the
  * channel is in use ... by ARM or DSP, for QDMA, or whatever.
  */
-static DECLARE_BITMAP(edma_inuse, DAVINCI_EDMA_NUM_PARAMENTRY);
+static DECLARE_BITMAP(edma_inuse, EDMA_MAX_PARAMENTRY);
 
 /* The edma_noevent bit for each channel is clear unless
  * it doesn't trigger DMA events on this platform.  It uses a
  * bit of SOC-specific initialization code.
  */
-static DECLARE_BITMAP(edma_noevent, DAVINCI_EDMA_NUM_DMACH);
+static DECLARE_BITMAP(edma_noevent, EDMA_MAX_DMACH);
 
 /* dummy param set used to (re)initialize parameter RAM slots */
 static const struct edmacc_param dummy_paramset = {
@@ -255,16 +231,8 @@ static const struct edmacc_param dummy_paramset = {
 	.ccnt = 1,
 };
 
-static const s8 __initconst dma_chan_dm644x_no_event[] = {
-	0, 1, 12, 13, 14, 15, 25, 30, 31, 45, 46, 47, 55, 56, 57, 58, 59, 60,
-	61, 62, 63, -1
-};
-static const s8 __initconst dma_chan_dm355_no_event[] = {
-	12, 13, 24, 56, 57, 58, 59, 60, 61, 62, 63, -1
-};
-
 static const int __initconst
-queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
+queue_tc_mapping[EDMA_MAX_EVQUE + 1][2] = {
 /* {event queue no, TC no} */
 	{0, 0},
 	{1, 1},
@@ -272,7 +240,7 @@ queue_tc_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
 };
 
 static const int __initconst
-queue_priority_mapping[DAVINCI_EDMA_NUM_EVQUE + 1][2] = {
+queue_priority_mapping[EDMA_MAX_EVQUE + 1][2] = {
 	/* {event queue no, Priority} */
 	{0, 3},
 	{1, 7},
@@ -337,7 +305,7 @@ static irqreturn_t dma_irq_handler(int irq, void *data)
 	int i;
 	unsigned int cnt = 0;
 
-	dev_dbg(&edma_dev.dev, "dma_irq_handler\n");
+	dev_dbg(data, "dma_irq_handler\n");
 
 	if ((edma_shadow0_read_array(SH_IPR, 0) == 0)
 	    && (edma_shadow0_read_array(SH_IPR, 1) == 0))
@@ -351,7 +319,7 @@ static irqreturn_t dma_irq_handler(int irq, void *data)
 			j = 1;
 		else
 			break;
-		dev_dbg(&edma_dev.dev, "IPR%d %08x\n", j,
+		dev_dbg(data, "IPR%d %08x\n", j,
 				edma_shadow0_read_array(SH_IPR, j));
 		for (i = 0; i < 32; i++) {
 			int k = (j << 5) + i;
@@ -382,7 +350,7 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 	int i;
 	unsigned int cnt = 0;
 
-	dev_dbg(&edma_dev.dev, "dma_ccerr_handler\n");
+	dev_dbg(data, "dma_ccerr_handler\n");
 
 	if ((edma_read_array(EDMA_EMR, 0) == 0) &&
 	    (edma_read_array(EDMA_EMR, 1) == 0) &&
@@ -396,7 +364,7 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 		else if (edma_read_array(EDMA_EMR, 1))
 			j = 1;
 		if (j >= 0) {
-			dev_dbg(&edma_dev.dev, "EMR%d %08x\n", j,
+			dev_dbg(data, "EMR%d %08x\n", j,
 					edma_read_array(EDMA_EMR, j));
 			for (i = 0; i < 32; i++) {
 				int k = (j << 5) + i;
@@ -415,7 +383,7 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 				}
 			}
 		} else if (edma_read(EDMA_QEMR)) {
-			dev_dbg(&edma_dev.dev, "QEMR %02x\n",
+			dev_dbg(data, "QEMR %02x\n",
 				edma_read(EDMA_QEMR));
 			for (i = 0; i < 8; i++) {
 				if (edma_read(EDMA_QEMR) & (1 << i)) {
@@ -427,7 +395,7 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 				}
 			}
 		} else if (edma_read(EDMA_CCERR)) {
-			dev_dbg(&edma_dev.dev, "CCERR %08x\n",
+			dev_dbg(data, "CCERR %08x\n",
 				edma_read(EDMA_CCERR));
 			/* FIXME:  CCERR.BIT(16) ignored!  much better
 			 * to just write CCERRCLR with CCERR value...
@@ -465,115 +433,15 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 
 static irqreturn_t dma_tc0err_handler(int irq, void *data)
 {
-	dev_dbg(&edma_dev.dev, "dma_tc0err_handler\n");
+	dev_dbg(data, "dma_tc0err_handler\n");
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t dma_tc1err_handler(int irq, void *data)
 {
-	dev_dbg(&edma_dev.dev, "dma_tc1err_handler\n");
+	dev_dbg(data, "dma_tc1err_handler\n");
 	return IRQ_HANDLED;
 }
-
-/******************************************************************************
- *
- * DMA initialisation on davinci
- *
- *****************************************************************************/
-static int __init davinci_dma_init(void)
-{
-	int i;
-	int status;
-	const s8 *noevent;
-
-	platform_driver_register(&edma_driver);
-	platform_device_register(&edma_dev);
-
-	dev_dbg(&edma_dev.dev, "DMA REG BASE ADDR=%p\n", edmacc_regs_base);
-
-	for (i = 0; i < DAVINCI_EDMA_NUM_PARAMENTRY; i++)
-		memcpy_toio(edmacc_regs_base + PARM_OFFSET(i),
-				&dummy_paramset, PARM_SIZE);
-
-	if (cpu_is_davinci_dm355()) {
-		/* NOTE conflicts with SPI1_INT{0,1} and SPI2_INT0 */
-		davinci_cfg_reg(DM355_INT_EDMA_CC);
-		if (tc_errs_handled) {
-			davinci_cfg_reg(DM355_INT_EDMA_TC0_ERR);
-			davinci_cfg_reg(DM355_INT_EDMA_TC1_ERR);
-		}
-		noevent = dma_chan_dm355_no_event;
-	} else if (cpu_is_davinci_dm644x()) {
-		noevent = dma_chan_dm644x_no_event;
-	} else {
-		/* alloc_channel(EDMA_CHANNEL_ANY) fails */
-		noevent = NULL;
-	}
-
-	if (noevent) {
-		while (*noevent != -1)
-			set_bit(*noevent++, edma_noevent);
-	}
-
-	status = request_irq(IRQ_CCINT0, dma_irq_handler, 0, "edma", NULL);
-	if (status < 0) {
-		dev_dbg(&edma_dev.dev, "request_irq %d failed --> %d\n",
-			IRQ_CCINT0, status);
-		return status;
-	}
-	status = request_irq(IRQ_CCERRINT, dma_ccerr_handler, 0,
-				"edma_error", NULL);
-	if (status < 0) {
-		dev_dbg(&edma_dev.dev, "request_irq %d failed --> %d\n",
-			IRQ_CCERRINT, status);
-		return status;
-	}
-
-	if (tc_errs_handled) {
-		status = request_irq(IRQ_TCERRINT0, dma_tc0err_handler, 0,
-					"edma_tc0", NULL);
-		if (status < 0) {
-			dev_dbg(&edma_dev.dev, "request_irq %d failed --> %d\n",
-				IRQ_TCERRINT0, status);
-			return status;
-		}
-		status = request_irq(IRQ_TCERRINT, dma_tc1err_handler, 0,
-					"edma_tc1", NULL);
-		if (status < 0) {
-			dev_dbg(&edma_dev.dev, "request_irq %d --> %d\n",
-				IRQ_TCERRINT, status);
-			return status;
-		}
-	}
-
-	/* Everything lives on transfer controller 1 until otherwise specified.
-	 * This way, long transfers on the low priority queue
-	 * started by the codec engine will not cause audio defects.
-	 */
-	for (i = 0; i < DAVINCI_EDMA_NUM_DMACH; i++)
-		map_dmach_queue(i, EVENTQ_1);
-
-	i = 0;
-	/* Event queue to TC mapping */
-	while (queue_tc_mapping[i][0] != -1) {
-		map_queue_tc(queue_tc_mapping[i][0], queue_tc_mapping[i][1]);
-		i++;
-	}
-	i = 0;
-	/* Event queue priority mapping */
-	while (queue_priority_mapping[i][0] != -1) {
-		assign_priority_to_queue(queue_priority_mapping[i][0],
-					 queue_priority_mapping[i][1]);
-		i++;
-	}
-	for (i = 0; i < DAVINCI_EDMA_NUM_REGIONS; i++) {
-		edma_write_array2(EDMA_DRAE, i, 0, 0x0);
-		edma_write_array2(EDMA_DRAE, i, 1, 0x0);
-		edma_write_array(EDMA_QRAE, i, 0x0);
-	}
-	return 0;
-}
-arch_initcall(davinci_dma_init);
 
 /*-----------------------------------------------------------------------*/
 
@@ -618,13 +486,13 @@ int edma_alloc_channel(int channel,
 		channel = 0;
 		for (;;) {
 			channel = find_next_zero_bit(edma_inuse,
-					DAVINCI_EDMA_NUM_DMACH, channel);
-			if (channel == DAVINCI_EDMA_NUM_DMACH)
+					num_channels, channel);
+			if (channel == num_channels)
 				return -ENOMEM;
 			if (!test_and_set_bit(channel, edma_inuse))
 				break;
 		}
-	} else if (channel >= DAVINCI_EDMA_NUM_DMACH) {
+	} else if (channel >= num_channels) {
 		return -EINVAL;
 	} else if (test_and_set_bit(channel, edma_inuse)) {
 		return -EBUSY;
@@ -661,7 +529,7 @@ EXPORT_SYMBOL(edma_alloc_channel);
  */
 void edma_free_channel(unsigned channel)
 {
-	if (channel >= DAVINCI_EDMA_NUM_DMACH)
+	if (channel >= num_channels)
 		return;
 
 	setup_dma_interrupt(channel, NULL, NULL);
@@ -690,17 +558,16 @@ EXPORT_SYMBOL(edma_free_channel);
 int edma_alloc_slot(int slot)
 {
 	if (slot < 0) {
-		slot = DAVINCI_EDMA_NUM_DMACH;
+		slot = num_channels;
 		for (;;) {
 			slot = find_next_zero_bit(edma_inuse,
-					DAVINCI_EDMA_NUM_PARAMENTRY, slot);
-			if (slot == DAVINCI_EDMA_NUM_PARAMENTRY)
+					num_slots, slot);
+			if (slot == num_slots)
 				return -ENOMEM;
 			if (!test_and_set_bit(slot, edma_inuse))
 				break;
 		}
-	} else if (slot < DAVINCI_EDMA_NUM_DMACH
-			|| slot >= DAVINCI_EDMA_NUM_PARAMENTRY) {
+	} else if (slot < num_channels || slot >= num_slots) {
 		return -EINVAL;
 	} else if (test_and_set_bit(slot, edma_inuse)) {
 		return -EBUSY;
@@ -723,8 +590,7 @@ EXPORT_SYMBOL(edma_alloc_slot);
  */
 void edma_free_slot(unsigned slot)
 {
-	if (slot < DAVINCI_EDMA_NUM_DMACH
-			|| slot >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (slot < num_channels || slot >= num_slots)
 		return;
 
 	memcpy_toio(edmacc_regs_base + PARM_OFFSET(slot),
@@ -751,7 +617,7 @@ EXPORT_SYMBOL(edma_free_slot);
 void edma_set_src(unsigned slot, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width width)
 {
-	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+	if (slot < num_slots) {
 		unsigned int i = edma_parm_read(PARM_OPT, slot);
 
 		if (mode) {
@@ -784,7 +650,7 @@ EXPORT_SYMBOL(edma_set_src);
 void edma_set_dest(unsigned slot, dma_addr_t dest_port,
 				 enum address_mode mode, enum fifo_width width)
 {
-	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+	if (slot < num_slots) {
 		unsigned int i = edma_parm_read(PARM_OPT, slot);
 
 		if (mode) {
@@ -835,7 +701,7 @@ EXPORT_SYMBOL(edma_get_position);
  */
 void edma_set_src_index(unsigned slot, s16 src_bidx, s16 src_cidx)
 {
-	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+	if (slot < num_slots) {
 		edma_parm_modify(PARM_SRC_DST_BIDX, slot,
 				0xffff0000, src_bidx);
 		edma_parm_modify(PARM_SRC_DST_CIDX, slot,
@@ -856,7 +722,7 @@ EXPORT_SYMBOL(edma_set_src_index);
  */
 void edma_set_dest_index(unsigned slot, s16 dest_bidx, s16 dest_cidx)
 {
-	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+	if (slot < num_slots) {
 		edma_parm_modify(PARM_SRC_DST_BIDX, slot,
 				0x0000ffff, dest_bidx << 16);
 		edma_parm_modify(PARM_SRC_DST_CIDX, slot,
@@ -898,7 +764,7 @@ void edma_set_transfer_params(unsigned slot,
 		u16 acnt, u16 bcnt, u16 ccnt,
 		u16 bcnt_rld, enum sync_dimension sync_mode)
 {
-	if (slot < DAVINCI_EDMA_NUM_PARAMENTRY) {
+	if (slot < num_slots) {
 		edma_parm_modify(PARM_LINK_BCNTRLD, slot,
 				0x0000ffff, bcnt_rld << 16);
 		if (sync_mode == ASYNC)
@@ -921,9 +787,9 @@ EXPORT_SYMBOL(edma_set_transfer_params);
  */
 void edma_link(unsigned from, unsigned to)
 {
-	if (from >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (from >= num_slots)
 		return;
-	if (to >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (to >= num_slots)
 		return;
 	edma_parm_modify(PARM_LINK_BCNTRLD, from, 0xffff0000, PARM_OFFSET(to));
 }
@@ -938,7 +804,7 @@ EXPORT_SYMBOL(edma_link);
  */
 void edma_unlink(unsigned from)
 {
-	if (from >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (from >= num_slots)
 		return;
 	edma_parm_or(PARM_LINK_BCNTRLD, from, 0xffff);
 }
@@ -960,7 +826,7 @@ EXPORT_SYMBOL(edma_unlink);
  */
 void edma_write_slot(unsigned slot, const struct edmacc_param *param)
 {
-	if (slot >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (slot >= num_slots)
 		return;
 	memcpy_toio(edmacc_regs_base + PARM_OFFSET(slot), param, PARM_SIZE);
 }
@@ -976,7 +842,7 @@ EXPORT_SYMBOL(edma_write_slot);
  */
 void edma_read_slot(unsigned slot, struct edmacc_param *param)
 {
-	if (slot >= DAVINCI_EDMA_NUM_PARAMENTRY)
+	if (slot >= num_slots)
 		return;
 	memcpy_fromio(param, edmacc_regs_base + PARM_OFFSET(slot), PARM_SIZE);
 }
@@ -995,7 +861,7 @@ EXPORT_SYMBOL(edma_read_slot);
  */
 void edma_pause(unsigned channel)
 {
-	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+	if (channel < num_channels) {
 		unsigned int mask = (1 << (channel & 0x1f));
 
 		edma_shadow0_write_array(SH_EECR, channel >> 5, mask);
@@ -1011,7 +877,7 @@ EXPORT_SYMBOL(edma_pause);
  */
 void edma_resume(unsigned channel)
 {
-	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+	if (channel < num_channels) {
 		unsigned int mask = (1 << (channel & 0x1f));
 
 		edma_shadow0_write_array(SH_EESR, channel >> 5, mask);
@@ -1032,27 +898,27 @@ EXPORT_SYMBOL(edma_resume);
  */
 int edma_start(unsigned channel)
 {
-	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+	if (channel < num_channels) {
 		int j = channel >> 5;
 		unsigned int mask = (1 << (channel & 0x1f));
 
 		/* EDMA channels without event association */
 		if (test_bit(channel, edma_noevent)) {
-			dev_dbg(&edma_dev.dev, "ESR%d %08x\n", j,
+			pr_debug("EDMA: ESR%d %08x\n", j,
 				edma_shadow0_read_array(SH_ESR, j));
 			edma_shadow0_write_array(SH_ESR, j, mask);
 			return 0;
 		}
 
 		/* EDMA channel with event association */
-		dev_dbg(&edma_dev.dev, "ER%d %08x\n", j,
+		pr_debug("EDMA: ER%d %08x\n", j,
 			edma_shadow0_read_array(SH_ER, j));
 		/* Clear any pending error */
 		edma_write_array(EDMA_EMCR, j, mask);
 		/* Clear any SER */
 		edma_shadow0_write_array(SH_SECR, j, mask);
 		edma_shadow0_write_array(SH_EESR, j, mask);
-		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
+		pr_debug("EDMA: EER%d %08x\n", j,
 			edma_shadow0_read_array(SH_EER, j));
 		return 0;
 	}
@@ -1072,7 +938,7 @@ EXPORT_SYMBOL(edma_start);
  */
 void edma_stop(unsigned channel)
 {
-	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+	if (channel < num_channels) {
 		int j = channel >> 5;
 		unsigned int mask = (1 << (channel & 0x1f));
 
@@ -1081,7 +947,7 @@ void edma_stop(unsigned channel)
 		edma_shadow0_write_array(SH_SECR, j, mask);
 		edma_write_array(EDMA_EMCR, j, mask);
 
-		dev_dbg(&edma_dev.dev, "EER%d %08x\n", j,
+		pr_debug("EDMA: EER%d %08x\n", j,
 				edma_shadow0_read_array(SH_EER, j));
 
 		/* REVISIT:  consider guarding against inappropriate event
@@ -1106,11 +972,11 @@ EXPORT_SYMBOL(edma_stop);
 
 void edma_clean_channel(unsigned channel)
 {
-	if (channel < DAVINCI_EDMA_NUM_DMACH) {
+	if (channel < num_channels) {
 		int j = (channel >> 5);
 		unsigned int mask = 1 << (channel & 0x1f);
 
-		dev_dbg(&edma_dev.dev, "EMR%d %08x\n", j,
+		pr_debug("EDMA: EMR%d %08x\n", j,
 				edma_read_array(EDMA_EMR, j));
 		edma_shadow0_write_array(SH_ECR, j, mask);
 		/* Clear the corresponding EMR bits */
@@ -1121,3 +987,109 @@ void edma_clean_channel(unsigned channel)
 	}
 }
 EXPORT_SYMBOL(edma_clean_channel);
+
+/*-----------------------------------------------------------------------*/
+
+static int __init edma_probe(struct platform_device *pdev)
+{
+	struct edma_soc_info	*info = pdev->dev.platform_data;
+	int			i;
+	int			status;
+	const s8		*noevent;
+	int			irq = 0, err_irq = 0;
+
+	if (!info)
+		return -ENODEV;
+
+	num_channels = min_t(unsigned, info->n_channel, EDMA_MAX_DMACH);
+	num_slots = min_t(unsigned, info->n_slot, EDMA_MAX_PARAMENTRY);
+
+	dev_dbg(&pdev->dev, "DMA REG BASE ADDR=%p\n", edmacc_regs_base);
+
+	for (i = 0; i < num_slots; i++)
+		memcpy_toio(edmacc_regs_base + PARM_OFFSET(i),
+				&dummy_paramset, PARM_SIZE);
+
+	noevent = info->noevent;
+	if (noevent) {
+		while (*noevent != -1)
+			set_bit(*noevent++, edma_noevent);
+	}
+
+	irq = platform_get_irq(pdev, 0);
+	status = request_irq(irq, dma_irq_handler, 0, "edma", &pdev->dev);
+	if (status < 0) {
+		dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
+			irq, status);
+		goto fail;
+	}
+
+	err_irq = platform_get_irq(pdev, 1);
+	status = request_irq(err_irq, dma_ccerr_handler, 0,
+				"edma_error", &pdev->dev);
+	if (status < 0) {
+		dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
+			err_irq, status);
+		goto fail;
+	}
+
+	if (tc_errs_handled) {
+		status = request_irq(IRQ_TCERRINT0, dma_tc0err_handler, 0,
+					"edma_tc0", &pdev->dev);
+		if (status < 0) {
+			dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
+				IRQ_TCERRINT0, status);
+			return status;
+		}
+		status = request_irq(IRQ_TCERRINT, dma_tc1err_handler, 0,
+					"edma_tc1", &pdev->dev);
+		if (status < 0) {
+			dev_dbg(&pdev->dev, "request_irq %d --> %d\n",
+				IRQ_TCERRINT, status);
+			return status;
+		}
+	}
+
+	/* Everything lives on transfer controller 1 until otherwise specified.
+	 * This way, long transfers on the low priority queue
+	 * started by the codec engine will not cause audio defects.
+	 */
+	for (i = 0; i < num_channels; i++)
+		map_dmach_queue(i, EVENTQ_1);
+
+	/* Event queue to TC mapping */
+	for (i = 0; queue_tc_mapping[i][0] != -1; i++)
+		map_queue_tc(queue_tc_mapping[i][0], queue_tc_mapping[i][1]);
+
+	/* Event queue priority mapping */
+	for (i = 0; queue_priority_mapping[i][0] != -1; i++)
+		assign_priority_to_queue(queue_priority_mapping[i][0],
+					 queue_priority_mapping[i][1]);
+
+	for (i = 0; i < info->n_region; i++) {
+		edma_write_array2(EDMA_DRAE, i, 0, 0x0);
+		edma_write_array2(EDMA_DRAE, i, 1, 0x0);
+		edma_write_array(EDMA_QRAE, i, 0x0);
+	}
+
+	return 0;
+
+fail:
+	if (err_irq)
+		free_irq(err_irq, NULL);
+	if (irq)
+		free_irq(irq, NULL);
+	return status;
+}
+
+
+static struct platform_driver edma_driver = {
+	.driver.name	= "edma",
+};
+
+static int __init edma_init(void)
+{
+	return platform_driver_probe(&edma_driver, edma_probe);
+}
+arch_initcall(edma_init);
+

@@ -91,16 +91,6 @@ struct edmacc_param {
 #define TRWORD (0x7<<2)
 #define PAENTRY (0x1ff<<5)
 
-
-#define DAVINCI_EDMA_NUM_DMACH           64
-
-#define DAVINCI_EDMA_NUM_PARAMENTRY     128
-#define DAVINCI_EDMA_NUM_EVQUE            2
-#define DAVINCI_EDMA_CHMAPEXIST           0
-#define DAVINCI_EDMA_NUM_REGIONS          4
-#define DAVINCI_EDMA_MEMPROTECT           0
-
-
 /* Drivers should avoid using these symbolic names for dm644x
  * channels, and use platform_device IORESOURCE_DMA resources
  * instead.  (Other DaVinci chips have different peripherals
@@ -221,4 +211,18 @@ void edma_resume(unsigned channel);
 /* UNRELATED TO DMA */
 int davinci_alloc_iram(unsigned size);
 void davinci_free_iram(unsigned addr, unsigned size);
+
+/* platform_data for EDMA driver */
+struct edma_soc_info {
+
+	/* how many dma resources of each type */
+	unsigned	n_channel;
+	unsigned	n_region;
+	unsigned	n_slot;
+	unsigned	n_tc;
+
+	/* list of channels with no even trigger; terminated by "-1" */
+	const s8	*noevent;
+};
+
 #endif
