@@ -102,15 +102,14 @@
 
 #define PARM_OFFSET(param_no)	(EDMA_PARM + ((param_no) << 5))
 
-#define edmacc_regs_base	IO_ADDRESS(DAVINCI_DMA_3PCC_BASE)
-
-
 #define EDMA_MAX_DMACH           64
 #define EDMA_MAX_PARAMENTRY     512
 #define EDMA_MAX_EVQUE            2	/* FIXME too small */
 
 
 /*****************************************************************************/
+
+static __iomem void *edmacc_regs_base;
 
 static inline unsigned int edma_read(int offset)
 {
@@ -997,9 +996,27 @@ static int __init edma_probe(struct platform_device *pdev)
 	int			status;
 	const s8		*noevent;
 	int			irq = 0, err_irq = 0;
+	struct resource		*r;
+	resource_size_t		len;
 
 	if (!info)
 		return -ENODEV;
+
+	r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "edma_cc");
+	if (!r)
+		return -ENODEV;
+
+	len = r->end - r->start + 1;
+
+	r = request_mem_region(r->start, len, r->name);
+	if (!r)
+		return -EBUSY;
+
+	edmacc_regs_base = ioremap(r->start, len);
+	if (!edmacc_regs_base) {
+		status = -EBUSY;
+		goto fail1;
+	}
 
 	num_channels = min_t(unsigned, info->n_channel, EDMA_MAX_DMACH);
 	num_slots = min_t(unsigned, info->n_slot, EDMA_MAX_PARAMENTRY);
@@ -1079,6 +1096,9 @@ fail:
 		free_irq(err_irq, NULL);
 	if (irq)
 		free_irq(irq, NULL);
+	iounmap(edmacc_regs_base);
+fail1:
+	release_mem_region(r->start, len);
 	return status;
 }
 

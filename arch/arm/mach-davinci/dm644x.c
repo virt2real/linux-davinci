@@ -383,6 +383,7 @@ static struct edma_soc_info dm644x_edma_info = {
 
 static struct resource edma_resources[] = {
 	{
+		.name	= "edma_cc",
 		.start	= 0x01c00000,
 		.end	= 0x01c00000 + SZ_64K - 1,
 		.flags	= IORESOURCE_MEM,
