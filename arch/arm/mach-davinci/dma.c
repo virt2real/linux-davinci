@@ -485,7 +485,7 @@ int edma_alloc_channel(int channel,
 	if (channel < 0) {
 		channel = 0;
 		for (;;) {
-			channel = find_next_zero_bit(edma_inuse,
+			channel = find_next_bit(edma_noevent,
 					num_channels, channel);
 			if (channel == num_channels)
 				return -ENOMEM;
