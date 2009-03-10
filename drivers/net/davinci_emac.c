@@ -148,12 +148,6 @@ static const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_MIN_FREQUENCY_FOR_100MBPS	(55000000)
 #define EMAC_MIN_FREQUENCY_FOR_1000MBPS (125000000)
 
-/* TODO: This should come from platform data */
-#define EMAC_EVM_PHY_MASK		(0x2)
-#define EMAC_EVM_MLINK_MASK		(0)
-#define EMAC_EVM_BUS_FREQUENCY		(76500000) /* PLL/6 i.e 76.5 MHz */
-#define EMAC_EVM_MDIO_FREQUENCY		(2200000) /* PHY bus frequency */
-
 /* EMAC register related defines */
 #define EMAC_ALL_MULTI_REG_VALUE	(0xFFFFFFFF)
 #define EMAC_NUM_MULTICAST_BITS		(64)
@@ -483,9 +477,9 @@ struct emac_priv {
 	char mac_addr[6];
 	spinlock_t tx_lock;
 	spinlock_t rx_lock;
+	void __iomem *remap_addr;
 	u32 emac_base_phys;
 	void __iomem *emac_base;
-	u32 emac_ctrl_phys;
 	void __iomem *ctrl_base;
 	void __iomem *emac_ctrl_ram;
 	u32 ctrl_ram_size;
@@ -505,6 +499,7 @@ struct emac_priv {
 	struct timer_list periodic_timer;
 	u32 periodic_ticks;
 	u32 timer_active;
+	u32 phy_mask;
 	/* mii_bus,phy members */
 	struct mii_bus *mii_bus;
 	struct phy_device *phydev;
@@ -514,6 +509,7 @@ struct emac_priv {
 /* clock frequency for EMAC */
 static struct clk *emac_clk;
 static unsigned long emac_bus_frequency;
+static unsigned long mdio_max_freq;
 
 /* EMAC internal utility function */
 static inline u32 emac_virt_to_phys(void __iomem *addr)
@@ -699,7 +695,11 @@ static int emac_get_settings(struct net_device *ndev,
 			     struct ethtool_cmd *ecmd)
 {
 	struct emac_priv *priv = netdev_priv(ndev);
-	return phy_ethtool_gset(priv->phydev, ecmd);
+	if (priv->phy_mask)
+		return phy_ethtool_gset(priv->phydev, ecmd);
+	else
+		return -EOPNOTSUPP;
+
 }
 
 /**
@@ -713,7 +713,11 @@ static int emac_get_settings(struct net_device *ndev,
 static int emac_set_settings(struct net_device *ndev, struct ethtool_cmd *ecmd)
 {
 	struct emac_priv *priv = netdev_priv(ndev);
-	return phy_ethtool_sset(priv->phydev, ecmd);
+	if (priv->phy_mask)
+		return phy_ethtool_sset(priv->phydev, ecmd);
+	else
+		return -EOPNOTSUPP;
+
 }
 
 
@@ -746,7 +750,10 @@ static void emac_update_phystatus(struct emac_priv *priv)
 
 	mac_control = emac_read(EMAC_MACCONTROL);
 
-	new_duplex = priv->phydev->duplex;
+	if (priv->phy_mask)
+		new_duplex = priv->phydev->duplex;
+	else
+		new_duplex = DUPLEX_FULL;
 
 	/* We get called only if link has changed (speed/duplex/status) */
 	if ((priv->link) && (new_duplex != priv->duplex)) {
@@ -2288,10 +2295,9 @@ static int emac_mii_reset(struct mii_bus *bus)
 {
 	unsigned int clk_div;
 	int mdio_bus_freq = emac_bus_frequency;
-	int mdio_clock_freq = EMAC_EVM_MDIO_FREQUENCY;
 
-	if (mdio_clock_freq & mdio_bus_freq)
-		clk_div = ((mdio_bus_freq / mdio_clock_freq) - 1);
+	if (mdio_max_freq & mdio_bus_freq)
+		clk_div = ((mdio_bus_freq / mdio_max_freq) - 1);
 	else
 		clk_div = 0xFF;
 
@@ -2443,34 +2449,43 @@ static int emac_dev_open(struct net_device *ndev)
 
 	/* find the first phy */
 	priv->phydev = NULL;
-	for (phy_addr = 0; phy_addr < PHY_MAX_ADDR; phy_addr++) {
-		if (priv->mii_bus->phy_map[phy_addr]) {
-			priv->phydev = priv->mii_bus->phy_map[phy_addr];
-			break;
+	if (priv->phy_mask) {
+		for (phy_addr = 0; phy_addr < PHY_MAX_ADDR; phy_addr++) {
+			if (priv->mii_bus->phy_map[phy_addr]) {
+				priv->phydev = priv->mii_bus->phy_map[phy_addr];
+				break;
+			}
 		}
-	}
 
-	if (!priv->phydev) {
-		printk(KERN_ERR "%s: no PHY found\n", ndev->name);
-		return -1;
-	}
+		if (!priv->phydev) {
+			printk(KERN_ERR "%s: no PHY found\n", ndev->name);
+			return -1;
+		}
 
-	priv->phydev = phy_connect(ndev, priv->phydev->dev.bus_id,
+		priv->phydev = phy_connect(ndev, priv->phydev->dev.bus_id,
 				&emac_adjust_link, 0, PHY_INTERFACE_MODE_MII);
 
-	if (IS_ERR(priv->phydev)) {
-		printk(KERN_ERR "%s: Could not attach to PHY\n", ndev->name);
-		return PTR_ERR(priv->phydev);
+		if (IS_ERR(priv->phydev)) {
+			printk(KERN_ERR "%s: Could not attach to PHY\n",
+								ndev->name);
+			return PTR_ERR(priv->phydev);
+		}
+
+		priv->link = 0;
+		priv->speed = 0;
+		priv->duplex = -1;
+
+		printk(KERN_INFO "%s: attached PHY driver [%s] "
+			"(mii_bus:phy_addr=%s, id=%x)\n", ndev->name,
+			priv->phydev->drv->name, priv->phydev->dev.bus_id,
+			priv->phydev->phy_id);
+	} else{
+		/* No PHY , fix the link, speed and duplex settings */
+		priv->link = 1;
+		priv->speed = SPEED_100;
+		priv->duplex = DUPLEX_FULL;
+		emac_update_phystatus(priv);
 	}
-
-	priv->link = 0;
-	priv->speed = 0;
-	priv->duplex = -1;
-
-	printk(KERN_INFO "%s: attached PHY driver [%s] "
-		"(mii_bus:phy_addr=%s, id=%x)\n", ndev->name,
-		priv->phydev->drv->name, priv->phydev->dev.bus_id,
-		priv->phydev->phy_id);
 
 	if (!netif_running(ndev)) /* debug only - to avoid compiler warning */
 		emac_dump_regs(priv);
@@ -2478,7 +2493,8 @@ static int emac_dev_open(struct net_device *ndev)
 	if (netif_msg_drv(priv))
 		dev_notice(EMAC_DEV, "DaVinci EMAC: Opened %s\n", ndev->name);
 
-	phy_start(priv->phydev);
+	if (priv->phy_mask)
+		phy_start(priv->phydev);
 
 	return 0;
 
@@ -2603,6 +2619,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	struct net_device *ndev;
 	struct emac_priv *priv;
 	unsigned long size;
+	struct emac_platform_data *pdata;
 
 	/* obtain emac clock from kernel */
 	emac_clk = clk_get(&pdev->dev, NULL);
@@ -2630,79 +2647,46 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	spin_lock_init(&priv->rx_lock);
 	spin_lock_init(&priv->lock);
 
-	/* MAC addr: from platform_data */
-	if (pdev->dev.platform_data) {
-		struct emac_platform_data *pdata = pdev->dev.platform_data;
-
-		memcpy(priv->mac_addr, pdata->mac_addr, 6);
+	pdata = pdev->dev.platform_data;
+	if (!pdata) {
+		printk(KERN_ERR "DaVinci EMAC: No platfrom data\n");
+		return -ENODEV;
 	}
+
+	/* MAC addr and PHY mask from platform_data */
+	memcpy(priv->mac_addr, pdata->mac_addr, 6);
+	priv->phy_mask = pdata->phy_mask;
 
 	/* Get EMAC platform data */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_regs");
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting ctrl res\n");
+		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting res\n");
 		rc = -ENOENT;
 		goto probe_quit;
 	}
-	priv->emac_base_phys = res->start;
+
+	priv->emac_base_phys = res->start + pdata->ctrl_reg_offset;
 	size = res->end - res->start + 1;
-	if (!request_mem_region(priv->emac_base_phys, size, ndev->name)) {
+	if (!request_mem_region(res->start, size, ndev->name)) {
 		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
-					 for ctrl regs\n");
+					 for regs\n");
 		rc = -ENXIO;
 		goto probe_quit;
 	}
-	priv->emac_base = ioremap(res->start, size);
-	if (!priv->emac_base) {
+
+	priv->remap_addr = ioremap(res->start, size);
+	if (!priv->remap_addr) {
 		dev_err(EMAC_DEV, "Unable to map IO\n");
 		rc = -ENOMEM;
-		release_mem_region(priv->emac_base_phys, size);
+		release_mem_region(res->start, size);
 		goto probe_quit;
 	}
-	ndev->base_addr = (unsigned long)priv->emac_base;
+	priv->emac_base = priv->remap_addr + pdata->ctrl_reg_offset;
+	ndev->base_addr = (unsigned long)priv->remap_addr;
 
-	res = platform_get_resource_byname(pdev,
-					IORESOURCE_MEM, "ctrl_module_regs");
-	if (!res) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting ctrl module \
-					res\n");
-		rc = -ENOENT;
-		goto no_ctrl_mod_res;
-	}
-	priv->emac_ctrl_phys = res->start;
-	size = res->end - res->start + 1;
-	priv->ctrl_base = ioremap(res->start, size);
-	if (!priv->ctrl_base) {
-		dev_err(EMAC_DEV, "Unable to map ctrl regs\n");
-		rc = -ENOMEM;
-		goto no_ctrl_mod_res;
-	}
-	if (!request_mem_region(priv->emac_ctrl_phys, size, ndev->name)) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
-					for ctrl module regs\n");
-		rc = -ENXIO;
-		goto no_ctrl_mod_res;
-	}
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_ram");
-	if (!res) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting ctrl ram res\n");
-		rc = -ENOENT;
-		goto no_ctrl_ram_res;
-	}
-	priv->ctrl_ram_size = res->end - res->start + 1;
-	priv->emac_ctrl_ram = ioremap(res->start, priv->ctrl_ram_size);
-	if (!priv->emac_ctrl_ram) {
-		dev_err(EMAC_DEV, "Unable to map ctrl RAM\n");
-		rc = -ENOMEM;
-		goto no_ctrl_ram_res;
-	}
-	if (!request_mem_region(res->start, priv->ctrl_ram_size, ndev->name)) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
-					for ctrl ram regs\n");
-		rc = -ENXIO;
-		goto no_ctrl_ram_res;
-	}
+	priv->ctrl_base = priv->remap_addr + pdata->ctrl_mod_reg_offset;
+	priv->ctrl_ram_size = pdata->ctrl_ram_size;
+	priv->emac_ctrl_ram = priv->remap_addr + pdata->ctrl_ram_offset;
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
@@ -2753,33 +2737,11 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	emac_mii->write = emac_mii_write,
 	emac_mii->reset = emac_mii_reset,
 	emac_mii->irq   = mii_irqs,
-	emac_mii->phy_mask = ~(EMAC_EVM_PHY_MASK);
+	emac_mii->phy_mask = ~(priv->phy_mask);
 	emac_mii->parent = &pdev->dev;
-
-	/* Base address initialisation for MDIO */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mdio_regs");
-	if (!res) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: Error getting mdio res\n");
-		rc = -ENOENT;
-		goto no_mdio_res;
-	}
-
-	emac_mii->priv = (void *)(res->start);
-	size = res->end - res->start + 1;
-	emac_mii->priv = ioremap(res->start, size);
-	if (!emac_mii->priv) {
-		dev_err(EMAC_DEV, "Unable to map MDIO regs\n");
-		rc = -ENOMEM;
-		goto no_mdio_res;
-	}
-	if (!request_mem_region(res->start, size, ndev->name)) {
-		dev_err(EMAC_DEV, "DaVinci EMAC: failed request_mem_region() \
-					for mdio regs\n");
-		rc = -ENXIO;
-		goto no_mdio_res;
-	}
-
+	emac_mii->priv = priv->remap_addr + pdata->mdio_reg_offset;
 	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%x", priv->pdev->id);
+	mdio_max_freq = pdata->mdio_max_freq;
 	emac_mii->reset(emac_mii);
 
 	/* Register the MII bus */
@@ -2795,28 +2757,14 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	return 0;
 
 mdiobus_quit:
-	release_mem_region(res->start, res->end - res->start + 1);
-
-no_mdio_res:
 	mdiobus_free(emac_mii);
 
 netdev_reg_err:
 mdio_alloc_err:
 no_irq_res:
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_ram");
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	release_mem_region(res->start, res->end - res->start + 1);
-	iounmap(priv->emac_ctrl_ram);
-
-no_ctrl_ram_res:
-	res = platform_get_resource_byname(pdev,
-					IORESOURCE_MEM, "ctrl_module_regs");
-	release_mem_region(res->start, res->end - res->start + 1);
-	iounmap(priv->ctrl_base);
-
-no_ctrl_mod_res:
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl_regs");
-	release_mem_region(res->start, res->end - res->start + 1);
-	iounmap(priv->emac_base);
+	iounmap(priv->remap_addr);
 
 probe_quit:
 	clk_put(emac_clk);
@@ -2834,7 +2782,6 @@ probe_quit:
 static int __devexit davinci_emac_remove(struct platform_device *pdev)
 {
 	struct resource *res;
-	int i = 0;
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct emac_priv *priv = netdev_priv(ndev);
 
@@ -2846,17 +2793,12 @@ static int __devexit davinci_emac_remove(struct platform_device *pdev)
 	mdiobus_unregister(priv->mii_bus);
 	mdiobus_free(priv->mii_bus);
 
-	while ((res = platform_get_resource(priv->pdev, IORESOURCE_MEM, i))) {
-		release_mem_region(res->start, res->end - res->start + 1);
-		i++;
-	}
+	release_mem_region(res->start, res->end - res->start + 1);
 
 	unregister_netdev(ndev);
 	free_netdev(ndev);
-	iounmap(priv->emac_base);
-	iounmap(priv->ctrl_base);
-	iounmap(priv->emac_ctrl_ram);
-	iounmap(emac_mii->priv);
+	iounmap(priv->remap_addr);
+
 	clk_disable(emac_clk);
 	clk_put(emac_clk);
 
