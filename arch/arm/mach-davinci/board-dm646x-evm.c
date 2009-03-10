@@ -46,6 +46,14 @@
 #include <linux/etherdevice.h>
 #include <mach/emac.h>
 
+#define DM646X_EVM_PHY_MASK		(0x2)
+#define DM646X_EVM_MDIO_FREQUENCY	(2200000) /* PHY bus frequency */
+
+static struct emac_platform_data dm646x_evm_emac_pdata = {
+	.phy_mask	= DM646X_EVM_PHY_MASK,
+	.mdio_max_freq	= DM646X_EVM_MDIO_FREQUENCY,
+};
+
 static struct davinci_uart_config uart_config __initdata = {
 	.enabled_uarts = (1 << 0),
 };
@@ -68,7 +76,7 @@ static int at24_setup(struct at24_iface *iface, void *context)
 		printk(KERN_INFO "Read MAC addr from EEPROM: %s\n",
 		print_mac(mac_str, mac_addr));
 
-		davinci_init_emac(mac_addr);
+		memcpy(dm646x_evm_emac_pdata.mac_addr, mac_addr, 6);
 	}
 	return 0;
 }
@@ -123,6 +131,7 @@ static __init void evm_init(void)
 {
 	evm_init_i2c();
 	davinci_serial_init(&uart_config);
+	davinci_init_emac(&dm646x_evm_emac_pdata);
 }
 
 static __init void davinci_dm646x_evm_irq_init(void)

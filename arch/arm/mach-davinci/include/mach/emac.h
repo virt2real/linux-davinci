@@ -13,9 +13,16 @@
 
 struct emac_platform_data {
 	char mac_addr[6];
+	u32 ctrl_reg_offset;
+	u32 ctrl_mod_reg_offset;
+	u32 ctrl_ram_offset;
+	u32 mdio_reg_offset;
+	u32 ctrl_ram_size;
+	u32 phy_mask;
+	u32 mdio_max_freq;
 };
 
-void davinci_init_emac(char *mac_addr);
+void davinci_init_emac(struct emac_platform_data *pdata);
 #endif
 
 

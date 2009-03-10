@@ -29,15 +29,12 @@
 #include <mach/cpu.h>
 #include <mach/mux.h>
 #include <mach/mmc.h>
+#include <mach/dm646x.h>
 
 #include "clock.h"
 
 
 #define DAVINCI_I2C_BASE	     0x01C21000
-#define DAVINCI_EMAC_CNTRL_REGS_BASE 0x01C80000
-#define DAVINCI_EMAC_CNTRL_MOD_REGS_BASE	0x01C81000
-#define DAVINCI_EMAC_CNTRL_RAM_BASE		0x01C82000
-#define DAVINCI_EMAC_MDIO_REGS_BASE		0x01C84000
 #define DAVINCI_MMCSD0_BASE	     0x01E10000
 #define DM355_MMCSD0_BASE	     0x01E11000
 #define DM355_MMCSD1_BASE	     0x01E00000
@@ -248,136 +245,30 @@ static void davinci_init_wdt(void)
 
 #if defined(CONFIG_TI_DAVINCI_EMAC) || defined(CONFIG_TI_DAVINCI_EMAC_MODULE)
 
-static struct resource emac_resources[] = {
-	{
-		.start	= DAVINCI_EMAC_CNTRL_REGS_BASE,
-		.end	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "ctrl_regs"
-	},
-	{
-		.start	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE,
-		.end	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "ctrl_module_regs"
-	},
-	{
-		.start	= DAVINCI_EMAC_CNTRL_RAM_BASE,
-		.end	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "ctrl_ram"
-	},
-	{
-		.start	= DAVINCI_EMAC_MDIO_REGS_BASE,
-		.end	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "mdio_regs"
-	},
-	{
-		.start = IRQ_EMACINT,
-		.end   = IRQ_EMACINT,
-		.flags = IORESOURCE_IRQ,
-	},
-};
-
-static struct emac_platform_data emac_pdata;
-
-static struct platform_device davinci_emac_device = {
-       .name		= "davinci_emac",
-       .id		= 1,
-       .num_resources	= ARRAY_SIZE(emac_resources),
-       .resource	= emac_resources,
-       .dev = {
-		.platform_data = &emac_pdata,
-	}
-};
-
-static struct resource dm646x_emac_resources[] = {
-	{
-		.start	= DAVINCI_EMAC_CNTRL_REGS_BASE,
-		.end	= DAVINCI_EMAC_CNTRL_REGS_BASE + 0x0fff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "ctrl_regs"
-	},
-	{
-		.start	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE,
-		.end	= DAVINCI_EMAC_CNTRL_MOD_REGS_BASE + 0x0fff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "ctrl_module_regs"
-	},
-	{
-		.start	= DAVINCI_EMAC_CNTRL_RAM_BASE,
-		.end	= DAVINCI_EMAC_CNTRL_RAM_BASE + 0x1fff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "ctrl_ram"
-	},
-	{
-		.start	= DAVINCI_EMAC_MDIO_REGS_BASE,
-		.end	= DAVINCI_EMAC_MDIO_REGS_BASE + 0x07ff,
-		.flags	= IORESOURCE_MEM,
-		.name	= "mdio_regs"
-	},
-	{
-		.start	= IRQ_DM646X_EMACRXTHINT,
-		.end	= IRQ_DM646X_EMACRXTHINT,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= IRQ_DM646X_EMACRXINT,
-		.end	= IRQ_DM646X_EMACRXINT,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= IRQ_DM646X_EMACTXINT,
-		.end	= IRQ_DM646X_EMACTXINT,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= IRQ_DM646X_EMACMISCINT,
-		.end	= IRQ_DM646X_EMACMISCINT,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device dm646x_emac_device = {
-	.name		= "davinci_emac",
-	.id		= 1,
-	.num_resources	= ARRAY_SIZE(dm646x_emac_resources),
-	.resource	= dm646x_emac_resources,
-	.dev = {
-		.platform_data = &emac_pdata,
-	}
-};
-
-void davinci_init_emac(char *mac_addr)
+void davinci_init_emac(struct emac_platform_data *pdata)
 {
 	DECLARE_MAC_BUF(buf);
 
-	if (!(cpu_is_davinci_dm644x() || cpu_is_davinci_dm646x()))
-		return;
+	if (cpu_is_davinci_dm644x())
+		dm644x_init_emac(pdata);
+	else if (cpu_is_davinci_dm646x())
+		dm646x_init_emac(pdata);
 
 	/* if valid MAC exists, don't re-register */
-	if (is_valid_ether_addr(emac_pdata.mac_addr))
+	if (is_valid_ether_addr(pdata->mac_addr))
 		return;
-
-	if (mac_addr && is_valid_ether_addr(mac_addr))
-		memcpy(emac_pdata.mac_addr, mac_addr, 6);
 	else {
 		/* Use random MAC if none passed */
-		random_ether_addr(emac_pdata.mac_addr);
+		random_ether_addr(pdata->mac_addr);
 
 		printk(KERN_WARNING "%s: using random MAC addr: %s\n",
-		       __func__, print_mac(buf, emac_pdata.mac_addr));
+		       __func__, print_mac(buf, pdata->mac_addr));
 	}
-	if ((cpu_is_davinci_dm644x()))
-		(void) platform_device_register(&davinci_emac_device);
-	else
-		(void) platform_device_register(&dm646x_emac_device);
 }
 
 #else
 
-void davinci_init_emac(char *unused) {}
+void davinci_init_emac(struct emac_platform_data *unused) {}
 
 #endif
 
@@ -394,11 +285,3 @@ static int __init davinci_init_devices(void)
 }
 arch_initcall(davinci_init_devices);
 
-static int __init davinci_init_devices_late(void)
-{
-	/* This is a backup call in case board code did not call init func */
-	davinci_init_emac(NULL);
-
-	return 0;
-}
-late_initcall(davinci_init_devices_late);

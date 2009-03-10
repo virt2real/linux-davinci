@@ -45,6 +45,9 @@
 #include <mach/nand.h>
 #include <mach/mmc.h>
 
+#define DM644X_EVM_PHY_MASK		(0x2)
+#define DM644X_EVM_MDIO_FREQUENCY	(2200000) /* PHY bus frequency */
+
 #define DAVINCI_CFC_ATA_BASE		  0x01C66000
 
 #define DAVINCI_ASYNC_EMIF_CONTROL_BASE   0x01e00000
@@ -55,6 +58,11 @@
 
 #define LXT971_PHY_ID	(0x001378e2)
 #define LXT971_PHY_MASK	(0xfffffff0)
+
+static struct emac_platform_data dm644x_evm_emac_pdata = {
+	.phy_mask	= DM644X_EVM_PHY_MASK,
+	.mdio_max_freq	= DM644X_EVM_MDIO_FREQUENCY,
+};
 
 static struct mtd_partition davinci_evm_norflash_partitions[] = {
 	/* bootloader (UBL, U-Boot, etc) in first 5 sectors */
@@ -418,7 +426,7 @@ static int at24_setup(struct at24_iface *iface, void *context)
 		printk(KERN_INFO "Read MAC addr from EEPROM: %s\n",
 		       print_mac(mac_str, mac_addr));
 
-		davinci_init_emac(mac_addr);
+		memcpy(dm644x_evm_emac_pdata.mac_addr, mac_addr, 6);
 	}
 
 	return 0;
@@ -667,6 +675,7 @@ static __init void davinci_evm_init(void)
 	davinci_setup_mmc(0, &dm6446evm_mmc_config);
 
 	davinci_serial_init(&uart_config);
+	davinci_init_emac(&dm644x_evm_emac_pdata);
 
 	/* Register the fixup for PHY on DaVinci */
 	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,
