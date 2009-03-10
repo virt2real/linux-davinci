@@ -63,8 +63,8 @@ int __init_or_module davinci_cfg_reg(const unsigned long index)
 		return -ENODEV;
 	}
 
-	/* Check the mux register in question */
-	if (cfg->mux_reg) {
+	/* Update the mux register in question */
+	if (cfg->mask) {
 		unsigned	tmp1, tmp2;
 
 		spin_lock_irqsave(&mux_spin_lock, flags);
