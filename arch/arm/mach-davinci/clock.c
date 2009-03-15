@@ -163,7 +163,11 @@ static int __init clk_disable_unused(void)
 		if (!(ck->flags & CLK_PSC))
 			continue;
 
-		printk(KERN_INFO "Clocks: disable unused %s\n", ck->name);
+		/* ignore if in Disabled or SwRstDisable states */
+		if (!davinci_psc_is_clk_active(ck->lpsc))
+			continue;
+
+		pr_info("Clocks: disable unused %s\n", ck->name);
 		davinci_psc_config(psc_domain(ck), ck->lpsc, 0);
 	}
 	spin_unlock_irq(&clockfw_lock);

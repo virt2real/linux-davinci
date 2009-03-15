@@ -116,6 +116,7 @@
 #define DM646X_LPSC_TIMER1         35
 #define DM646X_LPSC_ARM_INTC       45
 
+extern int davinci_psc_is_clk_active(unsigned int id);
 extern void davinci_psc_config(unsigned int domain, unsigned int id,
 			       char enable);
 
