@@ -191,6 +191,7 @@ static const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_MACCONTROL_GIGABITEN	(0x80)
 #define EMAC_MACCONTROL_GIGABITEN_SHIFT (7)
 #define EMAC_MACCONTROL_FULLDUPLEXEN	(0x1)
+#define EMAC_MACCONTROL_RMIISPEED_MASK	BIT(15)
 
 /* GIGABIT MODE related bits */
 #define EMAC_DM646X_MACCONTORL_GMIIEN	(0x01 << 5)
@@ -490,6 +491,7 @@ struct emac_priv {
 	u32 duplex; /* Link duplex: 1=Unknown, 2=Half, 3=Full */
 	u32 rx_buf_size;
 	u32 isr_count;
+	u8 rmii_en;
 	struct net_device_stats net_dev_stats;
 	u32 mac_hash1;
 	u32 mac_hash2;
@@ -773,6 +775,11 @@ static void emac_update_phystatus(struct emac_priv *priv)
 		/* Clear the GIG bit and GIGFORCE bit */
 		mac_control &= ~(EMAC_DM646X_MACCONTORL_GIGFORCE |
 					EMAC_DM646X_MACCONTORL_GIG);
+
+		if (priv->rmii_en && (priv->speed == SPEED_100))
+			mac_control |= EMAC_MACCONTROL_RMIISPEED_MASK;
+		else
+			mac_control &= ~EMAC_MACCONTROL_RMIISPEED_MASK;
 	}
 
 	/* Update mac_control if changed */
@@ -2653,9 +2660,10 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	/* MAC addr and PHY mask from platform_data */
+	/* MAC addr and PHY mask , RMII enable info from platform_data */
 	memcpy(priv->mac_addr, pdata->mac_addr, 6);
 	priv->phy_mask = pdata->phy_mask;
+	priv->rmii_en = pdata->rmii_en;
 
 	/* Get EMAC platform data */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);

@@ -20,6 +20,7 @@ struct emac_platform_data {
 	u32 ctrl_ram_size;
 	u32 phy_mask;
 	u32 mdio_max_freq;
+	u8 rmii_en;
 };
 
 void davinci_init_emac(struct emac_platform_data *pdata);
