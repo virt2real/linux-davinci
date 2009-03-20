@@ -21,8 +21,13 @@ struct emac_platform_data {
 	u32 phy_mask;
 	u32 mdio_max_freq;
 	u8 rmii_en;
+	u8 version;
 };
 
+enum {
+	EMAC_VERSION_1,	/* DM644x */
+	EMAC_VERSION_2,	/* DM646x */
+};
 void davinci_init_emac(struct emac_platform_data *pdata);
 #endif
 

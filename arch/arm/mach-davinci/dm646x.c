@@ -394,6 +394,7 @@ void dm646x_init_emac(struct emac_platform_data *pdata)
 	pdata->ctrl_ram_offset		= DM646X_EMAC_CNTRL_RAM_OFFSET;
 	pdata->mdio_reg_offset		= DM646X_EMAC_MDIO_OFFSET;
 	pdata->ctrl_ram_size		= DM646X_EMAC_CNTRL_RAM_SIZE;
+	pdata->version			= EMAC_VERSION_2;
 	dm646x_emac_device.dev.platform_data = pdata;
 	platform_device_register(&dm646x_emac_device);
 }

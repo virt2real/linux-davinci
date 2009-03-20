@@ -65,9 +65,6 @@
 #include <asm/irq.h>
 #include <asm/page.h>
 
-#include <mach/memory.h>
-#include <mach/cpu.h>
-#include <mach/hardware.h>
 #include <mach/emac.h>
 
 
@@ -492,6 +489,7 @@ struct emac_priv {
 	u32 rx_buf_size;
 	u32 isr_count;
 	u8 rmii_en;
+	u8 version;
 	struct net_device_stats net_dev_stats;
 	u32 mac_hash1;
 	u32 mac_hash2;
@@ -766,7 +764,7 @@ static void emac_update_phystatus(struct emac_priv *priv)
 			mac_control &= ~(EMAC_MACCONTROL_FULLDUPLEXEN);
 	}
 
-	if (priv->speed == SPEED_1000 && cpu_is_davinci_dm646x()) {
+	if (priv->speed == SPEED_1000 && (priv->version == EMAC_VERSION_2)) {
 		mac_control = emac_read(EMAC_MACCONTROL);
 		mac_control |= (EMAC_DM646X_MACCONTORL_GMIIEN |
 				EMAC_DM646X_MACCONTORL_GIG |
@@ -1012,7 +1010,7 @@ static void emac_dev_mcast_set(struct net_device *ndev)
  */
 static void emac_int_disable(struct emac_priv *priv)
 {
-	if (cpu_is_davinci_dm646x()) {
+	if (priv->version == EMAC_VERSION_2) {
 		unsigned long flags;
 
 		local_irq_save(flags);
@@ -1040,7 +1038,7 @@ static void emac_int_disable(struct emac_priv *priv)
  */
 static void emac_int_enable(struct emac_priv *priv)
 {
-	if (cpu_is_davinci_dm646x()) {
+	if (priv->version == EMAC_VERSION_2) {
 		emac_ctrl_write(EMAC_DM646X_CMRXINTEN, 0xff);
 		emac_ctrl_write(EMAC_DM646X_CMTXINTEN, 0xff);
 
@@ -2169,7 +2167,7 @@ static int emac_poll(struct napi_struct *napi, int budget)
 
 	mask = EMAC_DM644X_MAC_IN_VECTOR_TX_INT_VEC;
 
-	if (cpu_is_davinci_dm646x())
+	if (priv->version == EMAC_VERSION_2)
 		mask = EMAC_DM646X_MAC_IN_VECTOR_TX_INT_VEC;
 
 	if (status & mask) {
@@ -2180,7 +2178,7 @@ static int emac_poll(struct napi_struct *napi, int budget)
 
 	mask = EMAC_DM644X_MAC_IN_VECTOR_RX_INT_VEC;
 
-	if (cpu_is_davinci_dm646x())
+	if (priv->version == EMAC_VERSION_2)
 		mask = EMAC_DM646X_MAC_IN_VECTOR_RX_INT_VEC;
 
 	if (status & mask) {
@@ -2662,6 +2660,7 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	memcpy(priv->mac_addr, pdata->mac_addr, 6);
 	priv->phy_mask = pdata->phy_mask;
 	priv->rmii_en = pdata->rmii_en;
+	priv->version = pdata->version;
 
 	/* Get EMAC platform data */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
