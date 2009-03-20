@@ -215,8 +215,8 @@ static const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 /* MAC_IN_VECTOR (0x180) register bit fields */
 #define EMAC_DM644X_MAC_IN_VECTOR_HOST_INT	      (0x20000)
 #define EMAC_DM644X_MAC_IN_VECTOR_STATPEND_INT	      (0x10000)
-#define EMAC_DM644X_MAC_IN_VECTOR_RX_INT_VEC	      (0xFF00)
-#define EMAC_DM644X_MAC_IN_VECTOR_TX_INT_VEC	      (0xFF)
+#define EMAC_DM644X_MAC_IN_VECTOR_RX_INT_VEC	      (0x0100)
+#define EMAC_DM644X_MAC_IN_VECTOR_TX_INT_VEC	      (0x01)
 
 /** NOTE:: For DM646x the IN_VECTOR has changed */
 #define EMAC_DM646X_MAC_IN_VECTOR_RX_INT_VEC	(1 << EMAC_DEF_RX_CH)
@@ -2167,7 +2167,6 @@ static int emac_poll(struct napi_struct *napi, int budget)
 	/* Check interrupt vectors and call packet processing */
 	status = emac_read(EMAC_MACINVECTOR);
 
-	/* Since we support only 1 TX ch, for now check all TX int mask */
 	mask = EMAC_DM644X_MAC_IN_VECTOR_TX_INT_VEC;
 
 	if (cpu_is_davinci_dm646x())
@@ -2179,7 +2178,6 @@ static int emac_poll(struct napi_struct *napi, int budget)
 					  &txpending);
 	} /* TX processing */
 
-	/* Since we support only 1 RX ch, for now check all RX int mask */
 	mask = EMAC_DM644X_MAC_IN_VECTOR_RX_INT_VEC;
 
 	if (cpu_is_davinci_dm646x())
