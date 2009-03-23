@@ -230,6 +230,20 @@ static struct clk timer2_clk = {
 	.flags = ALWAYS_ENABLED, /* no LPSC, always enabled; c.f. spruep9a */
 };
 
+static struct clk vpif0_clk = {
+	.name = "vpif0",
+	.parent = &ref_clk,
+	.lpsc = DM646X_LPSC_VPSSMSTR,
+	.flags = ALWAYS_ENABLED,
+};
+
+static struct clk vpif1_clk = {
+	.name = "vpif1",
+	.parent = &ref_clk,
+	.lpsc = DM646X_LPSC_VPSSSLV,
+	.flags = ALWAYS_ENABLED,
+};
+
 struct davinci_clk dm646x_clks[] = {
 	CLK(NULL, "ref", &ref_clk),
 	CLK(NULL, "aux", &aux_clkin),
@@ -260,6 +274,8 @@ struct davinci_clk dm646x_clks[] = {
 	CLK(NULL, "timer0", &timer0_clk),
 	CLK(NULL, "timer1", &timer1_clk),
 	CLK("watchdog", NULL, &timer2_clk),
+	CLK(NULL, "vpif0", &vpif0_clk),
+	CLK(NULL, "vpif1", &vpif1_clk),
 	CLK(NULL, NULL, NULL),
 };
 
@@ -313,6 +329,28 @@ MUX_CFG(DM646X, ATAEN,		0,   0,     1,	  1,	 true)
 MUX_CFG(DM646X, AUDCK1,		0,   29,    1,	  0,	 false)
 
 MUX_CFG(DM646X, AUDCK0,		0,   28,    1,	  0,	 false)
+
+MUX_CFG(DM646X, CRGMUX,			0,   24,    7,    5,	 true)
+
+MUX_CFG(DM646X, STSOMUX_DISABLE,	0,   22,    3,    0,	 true)
+
+MUX_CFG(DM646X, STSIMUX_DISABLE,	0,   20,    3,    0,	 true)
+
+MUX_CFG(DM646X, PTSOMUX_DISABLE,	0,   18,    3,    0,	 true)
+
+MUX_CFG(DM646X, PTSIMUX_DISABLE,	0,   16,    3,    0,	 true)
+
+MUX_CFG(DM646X, STSOMUX,		0,   22,    3,    2,	 true)
+
+MUX_CFG(DM646X, STSIMUX,		0,   20,    3,    2,	 true)
+
+MUX_CFG(DM646X, PTSOMUX_PARALLEL,	0,   18,    3,    2,	 true)
+
+MUX_CFG(DM646X, PTSIMUX_PARALLEL,	0,   16,    3,    2,	 true)
+
+MUX_CFG(DM646X, PTSOMUX_SERIAL,		0,   18,    3,    3,	 true)
+
+MUX_CFG(DM646X, PTSIMUX_SERIAL,		0,   16,    3,    3,	 true)
 };
 
 /*----------------------------------------------------------------------*/
