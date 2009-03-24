@@ -19,7 +19,15 @@ struct davinci_mmc_config {
 
 	/* any additional host capabilities: OR'd in to mmc->f_caps */
 	u32     caps;
+
+	/* Version of the MMC/SD controller */
+	u8	version;
 };
 void davinci_setup_mmc(int module, struct davinci_mmc_config *config);
+
+enum {
+	MMC_CTLR_VERSION_1 = 0,	/* DM644x and DM355 */
+	MMC_CTLR_VERSION_2,	/* DA830 */
+};
 
 #endif

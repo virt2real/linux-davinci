@@ -148,7 +148,7 @@
 static unsigned rw_threshold = 32;
 module_param(rw_threshold, uint, S_IRUGO);
 MODULE_PARM_DESC(rw_threshold,
-		"Read/Write threshold, can be 16/32. Default = 32");
+		"Read/Write threshold. Default = 32");
 
 static unsigned __initdata use_dma = 1;
 module_param(use_dma, uint, 0);
@@ -195,6 +195,9 @@ struct mmc_davinci_host {
 	/* For PIO we walk scatterlists one segment at a time. */
 	unsigned int		sg_len;
 	int			sg_idx;
+
+	/* Version of the MMC/SD controller */
+	u8 version;
 };
 
 
@@ -315,6 +318,10 @@ static void mmc_davinci_start_command(struct mmc_davinci_host *host,
 
 	/* Enable EDMA transfer triggers */
 	if (host->do_dma)
+		cmd_reg |= MMCCMD_DMATRIG;
+
+	if (host->version == MMC_CTLR_VERSION_2 && host->data != NULL &&
+			host->data_dir == DAVINCI_MMC_DATADIR_READ)
 		cmd_reg |= MMCCMD_DMATRIG;
 
 	/* Setting whether command involves data transfer or not */
@@ -471,7 +478,7 @@ static void mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 	struct scatterlist	*sg;
 	unsigned		sg_len;
 	unsigned		bytes_left = host->bytes_left;
-	const unsigned		shift = (rw_threshold == 32) ? 5 : 4;
+	const unsigned		shift = ffs(rw_threshold) - 1;
 
 	if (host->data_dir == DAVINCI_MMC_DATADIR_WRITE) {
 		template = &host->tx_template;
@@ -508,6 +515,9 @@ static void mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 
 		edma_write_slot(slot, template);
 	}
+
+	if (host->version == MMC_CTLR_VERSION_2)
+		edma_clear_event(channel);
 
 	edma_start(channel);
 }
@@ -610,6 +620,9 @@ mmc_davinci_prepare_data(struct mmc_davinci_host *host, struct mmc_request *req)
 	int fifo_lev = (rw_threshold == 32) ? MMCFIFOCTL_FIFOLEV : 0;
 	int timeout;
 	struct mmc_data *data = req->data;
+
+	if (host->version == MMC_CTLR_VERSION_2)
+		fifo_lev = (rw_threshold == 64) ? MMCFIFOCTL_FIFOLEV : 0;
 
 	host->data = data;
 	if (data == NULL) {
@@ -1113,6 +1126,8 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 
 	if (!pdata || pdata->wires == 4 || pdata->wires == 0)
 		mmc->caps |= MMC_CAP_4_BIT_DATA;
+
+	host->version = pdata->version;
 
 	mmc->ops = &mmc_davinci_ops;
 	mmc->f_min = 312500;
