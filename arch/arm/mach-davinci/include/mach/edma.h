@@ -205,6 +205,7 @@ void edma_read_slot(unsigned slot, struct edmacc_param *params);
 int edma_start(unsigned channel);
 void edma_stop(unsigned channel);
 void edma_clean_channel(unsigned channel);
+void edma_clear_event(unsigned channel);
 void edma_pause(unsigned channel);
 void edma_resume(unsigned channel);
 

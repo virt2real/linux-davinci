@@ -95,6 +95,8 @@
 #define EDMA_CCSTAT	0x0640
 
 #define EDMA_M		0x1000	/* global channel registers */
+#define EDMA_ECR	0x1008
+#define EDMA_ECRH	0x100C
 #define EDMA_SHADOW0	0x2000	/* 4 regions shadowing global channels */
 #define EDMA_PARM	0x4000	/* 128 param entries */
 
@@ -986,6 +988,22 @@ void edma_clean_channel(unsigned channel)
 	}
 }
 EXPORT_SYMBOL(edma_clean_channel);
+
+/*
+ * edma_clear_event - clear an outstanding event on the DMA channel
+ * Arguments:
+ *	channel - channel number
+ */
+void edma_clear_event(unsigned channel)
+{
+	if (channel >= num_channels)
+		return;
+	if (channel < 32)
+		edma_write(EDMA_ECR, 1 << channel);
+	else
+		edma_write(EDMA_ECRH, 1 << (channel - 32));
+}
+EXPORT_SYMBOL(edma_clear_event);
 
 /*-----------------------------------------------------------------------*/
 
