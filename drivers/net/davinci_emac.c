@@ -485,7 +485,7 @@ struct emac_priv {
 	struct emac_rxch *rxch[EMAC_DEF_MAX_RX_CH];
 	u32 link; /* 1=link on, 0=link off */
 	u32 speed; /* 0=Auto Neg, 1=No PHY, 10,100, 1000 - mbps */
-	u32 duplex; /* Link duplex: 1=Unknown, 2=Half, 3=Full */
+	u32 duplex; /* Link duplex: -1=Unknown, 0=Half, 1=Full */
 	u32 rx_buf_size;
 	u32 isr_count;
 	u8 rmii_en;
@@ -746,17 +746,19 @@ static void emac_update_phystatus(struct emac_priv *priv)
 {
 	u32 mac_control;
 	u32 new_duplex;
+	u32 cur_duplex;
 	struct net_device *ndev = priv->ndev;
 
 	mac_control = emac_read(EMAC_MACCONTROL);
-
+	cur_duplex = (mac_control & EMAC_MACCONTROL_FULLDUPLEXEN) ?
+			DUPLEX_FULL : DUPLEX_HALF;
 	if (priv->phy_mask)
 		new_duplex = priv->phydev->duplex;
 	else
 		new_duplex = DUPLEX_FULL;
 
 	/* We get called only if link has changed (speed/duplex/status) */
-	if ((priv->link) && (new_duplex != priv->duplex)) {
+	if ((priv->link) && (new_duplex != cur_duplex)) {
 		priv->duplex = new_duplex;
 		if (DUPLEX_FULL == priv->duplex)
 			mac_control |= (EMAC_MACCONTROL_FULLDUPLEXEN);
