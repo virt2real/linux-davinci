@@ -225,7 +225,7 @@ static int __init evm_init(void)
 
 	platform_set_drvdata(evm_snd_device, &evm_snd_devdata);
 	evm_snd_devdata.dev = &evm_snd_device->dev;
-	platform_device_add_data(evm_snd_device, data, sizeof(data));
+	platform_device_add_data(evm_snd_device, data, sizeof(*data));
 
 	ret = platform_device_add_resources(evm_snd_device, resources, 1);
 	if (ret) {
