@@ -485,7 +485,7 @@ struct emac_priv {
 	struct emac_rxch *rxch[EMAC_DEF_MAX_RX_CH];
 	u32 link; /* 1=link on, 0=link off */
 	u32 speed; /* 0=Auto Neg, 1=No PHY, 10,100, 1000 - mbps */
-	u32 duplex; /* Link duplex: -1=Unknown, 0=Half, 1=Full */
+	u32 duplex; /* Link duplex: 0=Half, 1=Full */
 	u32 rx_buf_size;
 	u32 isr_count;
 	u8 rmii_en;
@@ -2349,7 +2349,7 @@ static void emac_adjust_link(struct net_device *ndev)
 		new_state = 1;
 		priv->link = 0;
 		priv->speed = 0;
-		priv->duplex = -1;
+		priv->duplex = ~0;
 	}
 	if (new_state) {
 		emac_update_phystatus(priv);
@@ -2478,7 +2478,7 @@ static int emac_dev_open(struct net_device *ndev)
 
 		priv->link = 0;
 		priv->speed = 0;
-		priv->duplex = -1;
+		priv->duplex = ~0;
 
 		printk(KERN_INFO "%s: attached PHY driver [%s] "
 			"(mii_bus:phy_addr=%s, id=%x)\n", ndev->name,
