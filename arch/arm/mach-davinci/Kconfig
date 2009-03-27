@@ -9,15 +9,12 @@ comment "DaVinci Core Type"
 
 config ARCH_DAVINCI_DM644x
 	bool "DaVinci 644x based system"
-	select CPU_V5
 
 config ARCH_DAVINCI_DM646x
         bool "DaVinci 646x based system"
-	select CPU_V5
 
 config ARCH_DAVINCI_DM355
         bool "DaVinci 355 based system"
-	select CPU_V5
 
 comment "DaVinci Board Type"
 
