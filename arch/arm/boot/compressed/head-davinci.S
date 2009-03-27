@@ -13,7 +13,6 @@ __davinci_start:
 		adr	r0, davinci_machine_no
 		str	r7, [r0]
 
-		.text
 		.globl	davinci_machine_no
 davinci_machine_no:
 		.word	0x00000000
