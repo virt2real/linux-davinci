@@ -64,7 +64,7 @@ static struct davinci_uart_config uart_config __initdata = {
  */
 static struct memory_accessor *at24_mem_acc;
 
-static int at24_setup(struct memory_accessor *mem_acc, void *context)
+static void at24_setup(struct memory_accessor *mem_acc, void *context)
 {
 	DECLARE_MAC_BUF(mac_str);
 	char mac_addr[6];
@@ -78,7 +78,6 @@ static int at24_setup(struct memory_accessor *mem_acc, void *context)
 
 		memcpy(dm646x_evm_emac_pdata.mac_addr, mac_addr, 6);
 	}
-	return 0;
 }
 static struct at24_platform_data eeprom_info = {
 	.byte_len       = (256*1024) / 8,
