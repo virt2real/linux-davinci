@@ -1737,11 +1737,11 @@ static void emac_cleanup_rxch(struct emac_priv *priv, u32 ch)
 static void emac_set_type0addr(struct emac_priv *priv, u32 ch, char *mac_addr)
 {
 	u32 val;
-	val = ((mac_addr[0] << 8) | (mac_addr[1]));
+	val = ((mac_addr[5] << 8) | (mac_addr[4]));
 	emac_write(EMAC_MACSRCADDRLO, val);
 
-	val = ((mac_addr[2] << 24) | (mac_addr[3] << 16) | \
-	       (mac_addr[4] << 8) | (mac_addr[5]));
+	val = ((mac_addr[3] << 24) | (mac_addr[2] << 16) | \
+	       (mac_addr[1] << 8) | (mac_addr[0]));
 	emac_write(EMAC_MACSRCADDRHI, val);
 	val = emac_read(EMAC_RXUNICASTSET);
 	val |= (1 << ch);
