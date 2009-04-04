@@ -704,7 +704,7 @@ static __init void davinci_evm_init(void)
 	davinci_setup_mmc(0, &dm6446evm_mmc_config);
 
 	davinci_serial_init(&uart_config);
-	davinci_init_emac(&dm644x_evm_emac_pdata);
+	dm644x_init_emac(&dm644x_evm_emac_pdata);
 
 	/* Register the fixup for PHY on DaVinci */
 	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,

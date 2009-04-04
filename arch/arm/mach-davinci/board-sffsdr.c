@@ -166,7 +166,7 @@ static __init void davinci_sffsdr_init(void)
 	sffsdr_init_i2c();
 	davinci_serial_init(&uart_config);
 	memcpy(sffsdr_emac_pdata.mac_addr, davinci_sffsdr_mac_addr, 6);
-	davinci_init_emac(&sffsdr_emac_pdata);
+	dm644x_init_emac(&sffsdr_emac_pdata);
 	setup_usb(0, 0); /* We support only peripheral mode. */
 
 	/* mux VLYNQ pins */

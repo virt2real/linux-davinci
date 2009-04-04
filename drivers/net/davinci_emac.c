@@ -2700,6 +2700,13 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 	}
 	ndev->irq = res->start;
 
+	if (!is_valid_ether_addr(priv->mac_addr)) {
+		DECLARE_MAC_BUF(buf);
+		/* Use random MAC if none passed */
+		random_ether_addr(priv->mac_addr);
+		printk(KERN_WARNING "%s: using random MAC addr: %s\n",
+			__func__, print_mac(buf, priv->mac_addr));
+	}
 	/* populate the device structure */
 	ndev->validate_addr = NULL;
 	ndev->open = emac_dev_open;   /*  i.e. start device  */

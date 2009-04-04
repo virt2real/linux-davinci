@@ -275,7 +275,7 @@ static __init void evm_init(void)
 {
 	evm_init_i2c();
 	davinci_serial_init(&uart_config);
-	davinci_init_emac(&dm646x_evm_emac_pdata);
+	dm646x_init_emac(&dm646x_evm_emac_pdata);
 }
 
 static __init void davinci_dm646x_evm_irq_init(void)
