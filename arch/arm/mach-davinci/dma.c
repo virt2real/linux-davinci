@@ -492,6 +492,7 @@ int edma_alloc_channel(int channel,
 				return -ENOMEM;
 			if (!test_and_set_bit(channel, edma_inuse))
 				break;
+			channel++;
 		}
 	} else if (channel >= num_channels) {
 		return -EINVAL;
