@@ -26,7 +26,6 @@
 
 #include <mach/hardware.h>
 #include <mach/cpu.h>
-#include <asm/io.h>
 #include <asm/mach/irq.h>
 
 #define IRQ_BIT(irq)		((irq) & 0x1f)

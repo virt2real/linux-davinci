@@ -18,7 +18,6 @@
 
 #include <asm/mach/map.h>
 #include <mach/clock.h>
-#include <mach/mux.h>
 
 extern void davinci_check_revision(void);
 
