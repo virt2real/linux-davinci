@@ -125,10 +125,8 @@ static const char emac_version_string[] = "TI DaVinci EMAC Linux v6.0";
 #define EMAC_DEF_TXPACING_EN		(0) /* TX pacing NOT supported*/
 
 #define EMAC_DEF_BUFFER_OFFSET		(0) /* Buffer offset to DMA (future) */
-#define EMAC_DEF_EXTRA_RXBUF_SIZE	(32)/* Extra bytes in each RX packet */
 #define EMAC_DEF_MIN_ETHPKTSIZE		(60) /* Minimum ethernet pkt size */
-#define EMAC_DEF_MAX_FRAME_SIZE		(1500 + 14 + 4 + 4 + \
-					 (EMAC_DEF_EXTRA_RXBUF_SIZE))
+#define EMAC_DEF_MAX_FRAME_SIZE		(1500 + 14 + 4 + 4)
 #define EMAC_DEF_TX_CH			(0) /* Default 0th channel */
 #define EMAC_DEF_RX_CH			(0) /* Default 0th channel */
 #define EMAC_DEF_MDIO_TICK_MS		(10) /* typically 1 tick=1 ms) */
@@ -1560,7 +1558,6 @@ static void *emac_net_alloc_rx_buf(struct emac_priv *priv, int buf_size,
 
 	/* set device pointer in skb and reserve space for extra bytes */
 	p_skb->dev = ndev;
-	skb_reserve(p_skb, EMAC_DEF_EXTRA_RXBUF_SIZE);
 	*data_token = (void *) p_skb;
 	EMAC_CACHE_WRITEBACK_INVALIDATE((unsigned long)p_skb->data, buf_size);
 	return p_skb->data;
@@ -2411,7 +2408,7 @@ static int emac_dev_open(struct net_device *ndev)
 		ndev->dev_addr[cnt] = priv->mac_addr[cnt];
 
 	/* Configuration items */
-	priv->rx_buf_size = EMAC_DEF_MAX_FRAME_SIZE + EMAC_DEF_EXTRA_RXBUF_SIZE;
+	priv->rx_buf_size = EMAC_DEF_MAX_FRAME_SIZE;
 
 	/* Clear basic hardware */
 	for (ch = 0; ch < EMAC_MAX_TXRX_CHANNELS; ch++) {
