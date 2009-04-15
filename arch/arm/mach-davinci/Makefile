@@ -4,7 +4,7 @@
 #
 
 # Common objects
-obj-y 			:= time.o irq.o clock.o serial.o io.o psc.o \
+obj-y 			:= time.o clock.o serial.o io.o psc.o \
 			   gpio.o devices.o usb.o dma.o iram.o common.o
 
 obj-$(CONFIG_DAVINCI_MUX)		+= mux.o
@@ -13,6 +13,8 @@ obj-$(CONFIG_DAVINCI_MUX)		+= mux.o
 obj-$(CONFIG_ARCH_DAVINCI_DM644x)       += dm644x.o
 obj-$(CONFIG_ARCH_DAVINCI_DM646x)       += dm646x.o
 obj-$(CONFIG_ARCH_DAVINCI_DM355)        += dm355.o
+
+obj-$(CONFIG_AINTC)			+= irq.o
 obj-$(CONFIG_CP_INTC)			+= cp_intc.o
 
 # Board specific

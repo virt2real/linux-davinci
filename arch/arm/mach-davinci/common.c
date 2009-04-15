@@ -23,6 +23,7 @@
 
 static struct davinci_soc_info davinci_soc_info;
 void __iomem *davinci_intc_base;
+int davinci_intc_type;
 
 void davinci_get_mac_addr(struct memory_accessor *mem_acc, void *context)
 {
@@ -107,6 +108,7 @@ void __init davinci_common_init(struct davinci_soc_info *soc_info)
 	}
 
 	davinci_intc_base = davinci_soc_info.intc_base;
+	davinci_intc_type = davinci_soc_info.intc_type;
 	return;
 
 err:
