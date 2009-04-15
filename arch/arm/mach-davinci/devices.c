@@ -224,8 +224,6 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 
 static struct resource wdt_resources[] = {
 	{
-		.start	= 0x01c21c00,
-		.end	= 0x01c21fff,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -239,6 +237,11 @@ static struct platform_device davinci_wdt_device = {
 
 static void davinci_init_wdt(void)
 {
+	struct davinci_soc_info *soc_info = davinci_get_soc_info();
+
+	wdt_resources[0].start = (resource_size_t)soc_info->wdt_base;
+	wdt_resources[0].end = (resource_size_t)soc_info->wdt_base + SZ_1K - 1;
+
 	platform_device_register(&davinci_wdt_device);
 }
 
