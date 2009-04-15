@@ -23,6 +23,7 @@
 #include <mach/psc.h>
 #include <mach/mux.h>
 #include <mach/time.h>
+#include <mach/gpio.h>
 #include <mach/common.h>
 
 #include "clock.h"
@@ -590,6 +591,9 @@ static struct davinci_soc_info davinci_soc_info_dm644x = {
 	.intc_irq_num		= DAVINCI_N_AINTC_IRQ,
 	.timer_info		= &dm644x_timer_info,
 	.wdt_base		= IO_ADDRESS(DAVINCI_WDOG_BASE),
+	.gpio_base		= IO_ADDRESS(DAVINCI_GPIO_BASE),
+	.gpio_num		= 71,
+	.gpio_irq		= IRQ_GPIOBNK0,
 };
 
 void __init dm644x_init(void)
