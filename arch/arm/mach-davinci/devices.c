@@ -29,6 +29,7 @@
 #include <mach/cpu.h>
 #include <mach/mux.h>
 #include <mach/mmc.h>
+#include <mach/time.h>
 #include <mach/dm646x.h>
 
 #include "clock.h"
@@ -240,6 +241,52 @@ static void davinci_init_wdt(void)
 {
 	platform_device_register(&davinci_wdt_device);
 }
+
+/*-------------------------------------------------------------------------*/
+
+struct davinci_timer_instance davinci_timer_instance[2] = {
+	{
+		.base		= IO_ADDRESS(DAVINCI_TIMER0_BASE),
+		.bottom_irq	= IRQ_TINT0_TINT12,
+		.top_irq	= IRQ_TINT0_TINT34,
+	},
+	{
+		.base		= IO_ADDRESS(DAVINCI_TIMER1_BASE),
+		.bottom_irq	= IRQ_TINT1_TINT12,
+		.top_irq	= IRQ_TINT1_TINT34,
+	},
+};
+
+/*-------------------------------------------------------------------------*/
+
+#if defined(CONFIG_TI_DAVINCI_EMAC) || defined(CONFIG_TI_DAVINCI_EMAC_MODULE)
+
+void davinci_init_emac(struct emac_platform_data *pdata)
+{
+	DECLARE_MAC_BUF(buf);
+
+	if (cpu_is_davinci_dm644x())
+		dm644x_init_emac(pdata);
+	else if (cpu_is_davinci_dm646x())
+		dm646x_init_emac(pdata);
+
+	/* if valid MAC exists, don't re-register */
+	if (is_valid_ether_addr(pdata->mac_addr))
+		return;
+	else {
+		/* Use random MAC if none passed */
+		random_ether_addr(pdata->mac_addr);
+
+		printk(KERN_WARNING "%s: using random MAC addr: %s\n",
+		       __func__, print_mac(buf, pdata->mac_addr));
+	}
+}
+
+#else
+
+void davinci_init_emac(struct emac_platform_data *unused) {}
+
+#endif
 
 /*-------------------------------------------------------------------------*/
 
