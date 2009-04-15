@@ -41,6 +41,7 @@
 #include <mach/serial.h>
 #include <mach/i2c.h>
 #include <mach/mmc.h>
+#include <mach/common.h>
 
 #include <linux/platform_device.h>
 #include <linux/i2c.h>
@@ -267,7 +268,6 @@ static void __init evm_init_i2c(void)
 
 static void __init davinci_map_io(void)
 {
-	davinci_map_common_io();
 	dm646x_init();
 }
 
