@@ -48,7 +48,6 @@
 
 #include <mach/dm644x.h>
 #include <mach/common.h>
-#include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>
 #include <mach/psc.h>
@@ -112,11 +111,6 @@ static struct platform_device davinci_sffsdr_nandflash_device = {
 /* Get Ethernet address from kernel boot params */
 static u8 davinci_sffsdr_mac_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-static struct emac_platform_data sffsdr_emac_pdata = {
-	.phy_mask	= SFFSDR_PHY_MASK,
-	.mdio_max_freq	= SFFSDR_MDIO_FREQUENCY,
-};
-
 static struct at24_platform_data eeprom_info = {
 	.byte_len	= (64*1024) / 8,
 	.page_size	= 32,
@@ -161,12 +155,18 @@ static void __init davinci_sffsdr_map_io(void)
 
 static __init void davinci_sffsdr_init(void)
 {
+	struct davinci_soc_info *soc_info = davinci_get_soc_info();
+
 	platform_add_devices(davinci_sffsdr_devices,
 			     ARRAY_SIZE(davinci_sffsdr_devices));
 	sffsdr_init_i2c();
 	davinci_serial_init(&uart_config);
-	memcpy(sffsdr_emac_pdata.mac_addr, davinci_sffsdr_mac_addr, 6);
-	dm644x_init_emac(&sffsdr_emac_pdata);
+
+	memcpy(soc_info->emac_pdata->mac_addr, davinci_sffsdr_mac_addr, 6);
+	soc_info->emac_pdata->phy_mask = SFFSDR_PHY_MASK;
+	soc_info->emac_pdata->mdio_max_freq = SFFSDR_MDIO_FREQUENCY;
+	dm644x_init_emac(soc_info->emac_pdata);
+
 	setup_usb(0, 0); /* We support only peripheral mode. */
 
 	/* mux VLYNQ pins */

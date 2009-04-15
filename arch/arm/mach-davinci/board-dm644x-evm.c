@@ -38,7 +38,6 @@
 
 #include <mach/dm644x.h>
 #include <mach/common.h>
-#include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>
 #include <mach/mux.h>
@@ -60,11 +59,6 @@
 
 #define LXT971_PHY_ID	(0x001378e2)
 #define LXT971_PHY_MASK	(0xfffffff0)
-
-static struct emac_platform_data dm644x_evm_emac_pdata = {
-	.phy_mask	= DM644X_EVM_PHY_MASK,
-	.mdio_max_freq	= DM644X_EVM_MDIO_FREQUENCY,
-};
 
 static struct mtd_partition davinci_evm_norflash_partitions[] = {
 	/* bootloader (UBL, U-Boot, etc) in first 5 sectors */
@@ -447,8 +441,10 @@ static struct memory_accessor *at24_mem_acc;
 
 static void at24_setup(struct memory_accessor *mem_acc, void *context)
 {
+#if defined(CONFIG_TI_DAVINCI_EMAC) || defined(CONFIG_TI_DAVINCI_EMAC_MODULE)
 	DECLARE_MAC_BUF(mac_str);
 	char mac_addr[6];
+	struct davinci_soc_info *soc_info = davinci_get_soc_info();
 
 	at24_mem_acc = mem_acc;
 
@@ -457,8 +453,9 @@ static void at24_setup(struct memory_accessor *mem_acc, void *context)
 		printk(KERN_INFO "Read MAC addr from EEPROM: %s\n",
 		       print_mac(mac_str, mac_addr));
 
-		memcpy(dm644x_evm_emac_pdata.mac_addr, mac_addr, 6);
+		memcpy(soc_info->emac_pdata->mac_addr, mac_addr, 6);
 	}
+#endif
 }
 
 static struct at24_platform_data eeprom_info = {
@@ -668,6 +665,7 @@ static int davinci_phy_fixup(struct phy_device *phydev)
 static __init void davinci_evm_init(void)
 {
 	struct clk *aemif_clk;
+	struct davinci_soc_info *soc_info = davinci_get_soc_info();
 
 	aemif_clk = clk_get(NULL, "aemif");
 	clk_enable(aemif_clk);
@@ -704,7 +702,10 @@ static __init void davinci_evm_init(void)
 	davinci_setup_mmc(0, &dm6446evm_mmc_config);
 
 	davinci_serial_init(&uart_config);
-	dm644x_init_emac(&dm644x_evm_emac_pdata);
+
+	soc_info->emac_pdata->phy_mask = DM644X_EVM_PHY_MASK;
+	soc_info->emac_pdata->mdio_max_freq = DM644X_EVM_MDIO_FREQUENCY;
+	dm644x_init_emac(soc_info->emac_pdata);
 
 	/* Register the fixup for PHY on DaVinci */
 	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,

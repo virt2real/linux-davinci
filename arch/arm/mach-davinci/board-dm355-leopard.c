@@ -32,7 +32,6 @@
 #include <mach/dm355.h>
 #include <mach/psc.h>
 #include <mach/common.h>
-#include <mach/emac.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>
 #include <mach/nand.h>
