@@ -15,6 +15,7 @@
 #include <asm/mach/map.h>
 
 #include <mach/common.h>
+#include <mach/cpu.h>
 
 static struct davinci_soc_info davinci_soc_info;
 
@@ -24,9 +25,26 @@ struct davinci_soc_info *davinci_get_soc_info(void)
 }
 EXPORT_SYMBOL(davinci_get_soc_info);
 
+static struct davinci_id * __init davinci_get_id(u32 jtag_id)
+{
+	int i;
+	struct davinci_id *dip;
+	u8 variant = (jtag_id & 0xf0000000) >> 28;
+	u16 part_no = (jtag_id & 0x0ffff000) >> 12;
+
+	for (i = 0, dip = davinci_soc_info.ids; i < davinci_soc_info.ids_num;
+			i++, dip++)
+		/* Don't care about the manufacturer right now */
+		if ((dip->part_no == part_no) && (dip->variant == variant))
+			return dip;
+
+	return NULL;
+}
+
 void __init davinci_common_init(struct davinci_soc_info *soc_info)
 {
 	int ret;
+	struct davinci_id *dip;
 
 	if (!soc_info) {
 		ret = -EINVAL;
@@ -51,7 +69,16 @@ void __init davinci_common_init(struct davinci_soc_info *soc_info)
 	 * We want to check CPU revision early for cpu_is_xxxx() macros.
 	 * IO space mapping must be initialized before we can do that.
 	 */
-	davinci_check_revision();
+	davinci_soc_info.jtag_id = __raw_readl(davinci_soc_info.jtag_id_base);
+
+	dip = davinci_get_id(davinci_soc_info.jtag_id);
+	if (!dip) {
+		ret = -EINVAL;
+		goto err;
+	}
+
+	davinci_soc_info.cpu_id = dip->cpu_id;
+	pr_info("DaVinci %s variant 0x%x\n", dip->name, dip->variant);
 
 	return;
 
