@@ -465,22 +465,6 @@ static struct at24_platform_data eeprom_info = {
 	.setup          = at24_setup,
 };
 
-int dm6446evm_eeprom_read(void *buf, off_t off, size_t count)
-{
-	if (at24_mem_acc)
-		return at24_mem_acc->read(at24_mem_acc, buf, off, count);
-	return -ENODEV;
-}
-EXPORT_SYMBOL(dm6446evm_eeprom_read);
-
-int dm6446evm_eeprom_write(void *buf, off_t off, size_t count)
-{
-	if (at24_mem_acc)
-		return at24_mem_acc->write(at24_mem_acc, buf, off, count);
-	return -ENODEV;
-}
-EXPORT_SYMBOL(dm6446evm_eeprom_write);
-
 /*
  * MSP430 supports RTC, card detection, input from IR remote, and
  * a bit more.  It triggers interrupts on GPIO(7) from pressing
