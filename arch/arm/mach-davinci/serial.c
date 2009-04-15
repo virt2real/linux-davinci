@@ -33,6 +33,8 @@
 #include <mach/serial.h>
 #include <mach/irqs.h>
 #include <mach/cpu.h>
+#include <mach/common.h>
+
 #include "clock.h"
 
 static inline unsigned int serial_read_reg(struct plat_serial8250_port *up,
@@ -48,32 +50,6 @@ static inline void serial_write_reg(struct plat_serial8250_port *p, int offset,
 	offset <<= p->regshift;
 	__raw_writel(value, IO_ADDRESS(p->mapbase) + offset);
 }
-
-static const resource_size_t serial_mapbase[] = {
-	DAVINCI_UART0_BASE,
-	DAVINCI_UART1_BASE,
-	DAVINCI_UART2_BASE,
-};
-
-static const unsigned int serial_irq[] = {
-	IRQ_UARTINT0,
-	IRQ_UARTINT1,
-	IRQ_UARTINT2,
-};
-
-/*
- * The additional entry is present because the list must be terminated with a
- * zero flags entry.
- */
-static struct plat_serial8250_port serial_platform_data[DAVINCI_MAX_NR_UARTS + 1];
-
-static struct platform_device serial_device = {
-	.name			= "serial8250",
-	.id			= PLAT8250_DEV_PLATFORM,
-	.dev			= {
-		.platform_data	= serial_platform_data,
-	},
-};
 
 static void __init davinci_serial_reset(struct plat_serial8250_port *p)
 {
@@ -94,38 +70,22 @@ static void __init davinci_serial_reset(struct plat_serial8250_port *p)
 				 UART_DM646X_SCR_TX_WATERMARK);
 }
 
-void __init davinci_serial_init(struct davinci_uart_config *info)
+int __init davinci_serial_init(struct davinci_uart_config *info)
 {
 	int i;
 	char name[16];
 	struct clk *uart_clk;
-	struct device *dev = &serial_device.dev;
-	struct plat_serial8250_port *p = serial_platform_data;
+	struct davinci_soc_info *soc_info = davinci_get_soc_info();
+	struct device *dev = &soc_info->serial_dev->dev;
+	struct plat_serial8250_port *p = dev->platform_data;
 
 	/*
 	 * Make sure the serial ports are muxed on at this point.
 	 * You have to mux them off in device drivers later on if not needed.
 	 */
-	for (i = 0; i < DAVINCI_MAX_NR_UARTS; i++) {
+	for (i = 0; i < DAVINCI_MAX_NR_UARTS; i++, p++) {
 		if (!(info->enabled_uarts & (1 << i)))
 			continue;
-
-		/* fill-in common members */
-		p->flags = UPF_BOOT_AUTOCONF | UPF_SKIP_TEST | UPF_IOREMAP;
-		p->regshift = 2;
-
-		if (cpu_is_davinci_dm646x())
-			p->iotype = UPIO_MEM32;
-		else
-			p->iotype = UPIO_MEM;
-
-		if (cpu_is_davinci_dm355() && (i == 2)) {
-			p->mapbase = DM355_UART2_BASE;
-			p->irq = IRQ_DM355_UARTINT2;
-		} else {
-			p->mapbase = serial_mapbase[i];
-			p->irq = serial_irq[i];
-		}
 
 		sprintf(name, "uart%d", i);
 		uart_clk = clk_get(dev, name);
@@ -137,17 +97,7 @@ void __init davinci_serial_init(struct davinci_uart_config *info)
 			clk_enable(uart_clk);
 			davinci_serial_reset(p);
 		}
-
-		p++; /* Point to next entry */
 	}
 
-	/* Terminate the list with a zero flags entry */
-	p->flags = 0;
+	return platform_device_register(soc_info->serial_dev);
 }
-
-static int __init davinci_init(void)
-{
-	return platform_device_register(&serial_device);
-}
-
-arch_initcall(davinci_init);
