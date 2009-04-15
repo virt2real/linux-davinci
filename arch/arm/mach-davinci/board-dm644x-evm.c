@@ -44,6 +44,7 @@
 #include <mach/psc.h>
 #include <mach/nand.h>
 #include <mach/mmc.h>
+#include <mach/emac.h>
 #include <mach/common.h>
 
 #define DM644X_EVM_PHY_MASK		(0x2)
@@ -437,32 +438,12 @@ static struct pcf857x_platform_data pcf_data_u35 = {
  *  - 0x0039, 1 byte NTSC vs PAL (bit 0x80 == PAL)
  *  - ... newer boards may have more
  */
-static struct memory_accessor *at24_mem_acc;
-
-static void at24_setup(struct memory_accessor *mem_acc, void *context)
-{
-#if defined(CONFIG_TI_DAVINCI_EMAC) || defined(CONFIG_TI_DAVINCI_EMAC_MODULE)
-	DECLARE_MAC_BUF(mac_str);
-	char mac_addr[6];
-	struct davinci_soc_info *soc_info = davinci_get_soc_info();
-
-	at24_mem_acc = mem_acc;
-
-	/* Read MAC addr from EEPROM */
-	if (at24_mem_acc->read(at24_mem_acc, mac_addr, 0x7f00, 6) == 6) {
-		printk(KERN_INFO "Read MAC addr from EEPROM: %s\n",
-		       print_mac(mac_str, mac_addr));
-
-		memcpy(soc_info->emac_pdata->mac_addr, mac_addr, 6);
-	}
-#endif
-}
-
 static struct at24_platform_data eeprom_info = {
 	.byte_len	= (256*1024) / 8,
 	.page_size	= 64,
 	.flags		= AT24_FLAG_ADDR16,
-	.setup          = at24_setup,
+	.setup          = davinci_get_mac_addr,
+	.context	= (void *)0x7f00,
 };
 
 /*
@@ -689,7 +670,6 @@ static __init void davinci_evm_init(void)
 
 	soc_info->emac_pdata->phy_mask = DM644X_EVM_PHY_MASK;
 	soc_info->emac_pdata->mdio_max_freq = DM644X_EVM_MDIO_FREQUENCY;
-	dm644x_init_emac(soc_info->emac_pdata);
 
 	/* Register the fixup for PHY on DaVinci */
 	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,

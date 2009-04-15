@@ -165,7 +165,6 @@ static __init void davinci_sffsdr_init(void)
 	memcpy(soc_info->emac_pdata->mac_addr, davinci_sffsdr_mac_addr, 6);
 	soc_info->emac_pdata->phy_mask = SFFSDR_PHY_MASK;
 	soc_info->emac_pdata->mdio_max_freq = SFFSDR_MDIO_FREQUENCY;
-	dm644x_init_emac(soc_info->emac_pdata);
 
 	setup_usb(0, 0); /* We support only peripheral mode. */
 

@@ -10,17 +10,33 @@
  */
 #include <linux/module.h>
 #include <linux/io.h>
+#include <linux/etherdevice.h>
 
 #include <asm/tlb.h>
 #include <asm/mach/map.h>
 
 #include <mach/common.h>
 #include <mach/cpu.h>
+#include <mach/emac.h>
 
 #include "clock.h"
 
 static struct davinci_soc_info davinci_soc_info;
 void __iomem *davinci_intc_base;
+
+void davinci_get_mac_addr(struct memory_accessor *mem_acc, void *context)
+{
+	DECLARE_MAC_BUF(mac_str);
+	struct davinci_soc_info *soc_info = davinci_get_soc_info();
+	char *mac_addr = soc_info->emac_pdata->mac_addr;
+	off_t offset = (off_t)context;
+
+	/* Read MAC addr from EEPROM */
+	if (mem_acc->read(mem_acc, mac_addr, offset, 6) == 6) {
+		pr_info("Read MAC addr from EEPROM: %s\n",
+				print_mac(mac_str, mac_addr));
+	}
+}
 
 struct davinci_soc_info *davinci_get_soc_info(void)
 {

@@ -11,6 +11,8 @@
 #ifndef _MACH_DAVINCI_EMAC_H
 #define _MACH_DAVINCI_EMAC_H
 
+#include <linux/memory.h>
+
 struct emac_platform_data {
 	char mac_addr[6];
 	u32 ctrl_reg_offset;
@@ -28,7 +30,6 @@ enum {
 	EMAC_VERSION_1,	/* DM644x */
 	EMAC_VERSION_2,	/* DM646x */
 };
-void davinci_init_emac(struct emac_platform_data *pdata);
+
+void davinci_get_mac_addr(struct memory_accessor *mem_acc, void *context);
 #endif
-
-
