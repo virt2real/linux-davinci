@@ -17,6 +17,8 @@
 #include <mach/common.h>
 #include <mach/cpu.h>
 
+#include "clock.h"
+
 static struct davinci_soc_info davinci_soc_info;
 
 struct davinci_soc_info *davinci_get_soc_info(void)
@@ -79,6 +81,13 @@ void __init davinci_common_init(struct davinci_soc_info *soc_info)
 
 	davinci_soc_info.cpu_id = dip->cpu_id;
 	pr_info("DaVinci %s variant 0x%x\n", dip->name, dip->variant);
+
+	if (davinci_soc_info.cpu_clks) {
+		ret = davinci_clk_init(davinci_soc_info.cpu_clks);
+
+		if (ret != 0)
+			goto err;
+	}
 
 	return;
 
