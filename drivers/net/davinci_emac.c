@@ -1080,7 +1080,7 @@ static irqreturn_t emac_irq(int irq, void *dev_id)
 	++priv->isr_count;
 	if (likely(netif_running(priv->ndev))) {
 		emac_int_disable(priv);
-		netif_rx_schedule(&priv->napi);
+		napi_schedule(&priv->napi);
 	} else {
 		/* we are closing down, so dont process anything */
 	}
@@ -2186,12 +2186,12 @@ static int emac_poll(struct napi_struct *napi, int budget)
 	} /* RX processing */
 
 	if (txpending || rxpending) {
-		if (likely(netif_rx_schedule_prep(&priv->napi))) {
+		if (likely(napi_schedule_prep(&priv->napi))) {
 			emac_int_disable(priv);
-			__netif_rx_schedule(&priv->napi);
+			__napi_schedule(&priv->napi);
 		}
 	} else {
-		netif_rx_complete(napi);
+		napi_complete(napi);
 		emac_int_enable(priv);
 	}
 
@@ -2464,7 +2464,7 @@ static int emac_dev_open(struct net_device *ndev)
 			return -1;
 		}
 
-		priv->phydev = phy_connect(ndev, priv->phydev->dev.bus_id,
+		priv->phydev = phy_connect(ndev, dev_name(&priv->phydev->dev),
 				&emac_adjust_link, 0, PHY_INTERFACE_MODE_MII);
 
 		if (IS_ERR(priv->phydev)) {
@@ -2479,7 +2479,7 @@ static int emac_dev_open(struct net_device *ndev)
 
 		printk(KERN_INFO "%s: attached PHY driver [%s] "
 			"(mii_bus:phy_addr=%s, id=%x)\n", ndev->name,
-			priv->phydev->drv->name, priv->phydev->dev.bus_id,
+			priv->phydev->drv->name, dev_name(&priv->phydev->dev),
 			priv->phydev->phy_id);
 	} else{
 		/* No PHY , fix the link, speed and duplex settings */
