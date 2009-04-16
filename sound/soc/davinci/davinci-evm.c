@@ -227,7 +227,8 @@ static int __init evm_init(void)
 	evm_snd_devdata.dev = &evm_snd_device->dev;
 	platform_device_add_data(evm_snd_device, data, sizeof(*data));
 
-	ret = platform_device_add_resources(evm_snd_device, resources, 1);
+	ret = platform_device_add_resources(evm_snd_device, evm_snd_resources,
+					    ARRAY_SIZE(evm_snd_resources));
 	if (ret) {
 		platform_device_put(evm_snd_device);
 		return ret;

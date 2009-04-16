@@ -1,12 +1,12 @@
 /*
  * mach-davinci/nand.h
  *
- * Copyright (C) 2006 Texas Instruments.
+ * Copyright © 2006 Texas Instruments.
  *
- * ported to 2.6.23 (C) 2008 by
- * Sander Huijsen <Shuijsen@optelecom-nkf.com>
- * Troy Kisky <troy.kisky@boundarydevices.com>
- * Dirk Behme <Dirk.Behme@gmail.com>
+ * Ported to 2.6.23 Copyright © 2008 by
+ *   Sander Huijsen <Shuijsen@optelecom-nkf.com>
+ *   Troy Kisky <troy.kisky@boundarydevices.com>
+ *   Dirk Behme <Dirk.Behme@gmail.com>
  *
  * --------------------------------------------------------------------------
  *
@@ -20,11 +20,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- * --------------------------------------------------------------------------
- *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #ifndef __ARCH_ARM_DAVINCI_NAND_H
@@ -58,11 +56,11 @@
 #define	MASK_CLE		0x10
 
 struct davinci_nand_pdata {		/* platform_data */
-	u32			mask_ale;
-	u32			mask_cle;
+	uint32_t		mask_ale;
+	uint32_t		mask_cle;
 
 	/* for packages using two chipselects */
-	u32			mask_chipsel;
+	uint32_t		mask_chipsel;
 
 	/* board's default static partition info */
 	struct mtd_partition	*parts;

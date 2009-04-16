@@ -1,9 +1,9 @@
 /*
  * davinci_nand.c - NAND Flash Driver for DaVinci family chips
  *
- * Copyright (C) 2006 Texas Instruments.
+ * Copyright © 2006 Texas Instruments.
  *
- * Port to 2.6.23 Copyright (C) 2008 by:
+ * Port to 2.6.23 Copyright © 2008 by:
  *   Sander Huijsen <Shuijsen@optelecom-nkf.com>
  *   Troy Kisky <troy.kisky@boundarydevices.com>
  *   Dirk Behme <Dirk.Behme@gmail.com>
@@ -38,19 +38,6 @@
 #include <asm/mach-types.h>
 
 
-#ifdef CONFIG_MTD_PARTITIONS
-static inline int mtd_has_partitions(void) { return 1; }
-#else
-static inline int mtd_has_partitions(void) { return 0; }
-#endif
-
-#ifdef CONFIG_MTD_CMDLINE_PARTS
-static inline int mtd_has_cmdlinepart(void) { return 1; }
-#else
-static inline int mtd_has_cmdlinepart(void) { return 0; }
-#endif
-
-
 /*
  * This is a device driver for the NAND flash controller found on the
  * various DaVinci family chips.  It handles up to four SoC chipselects,
@@ -75,14 +62,14 @@ struct davinci_nand_info {
 	void __iomem		*base;
 	void __iomem		*vaddr;
 
-	u32			ioaddr;
-	u32			current_cs;
+	uint32_t		ioaddr;
+	uint32_t		current_cs;
 
-	u32			mask_chipsel;
-	u32			mask_ale;
-	u32			mask_cle;
+	uint32_t		mask_chipsel;
+	uint32_t		mask_ale;
+	uint32_t		mask_cle;
 
-	u32			core_chipsel;
+	uint32_t		core_chipsel;
 };
 
 static DEFINE_SPINLOCK(davinci_nand_lock);
@@ -112,7 +99,7 @@ static void nand_davinci_hwcontrol(struct mtd_info *mtd, int cmd,
 				   unsigned int ctrl)
 {
 	struct davinci_nand_info	*info = to_davinci_nand(mtd);
-	u32				addr = info->current_cs;
+	uint32_t			addr = info->current_cs;
 	struct nand_chip		*nand = mtd->priv;
 
 	/* Did the control lines change? */
@@ -132,7 +119,7 @@ static void nand_davinci_hwcontrol(struct mtd_info *mtd, int cmd,
 static void nand_davinci_select_chip(struct mtd_info *mtd, int chip)
 {
 	struct davinci_nand_info	*info = to_davinci_nand(mtd);
-	u32				addr = info->ioaddr;
+	uint32_t			addr = info->ioaddr;
 
 	/* maybe kick in a second chipselect */
 	if (chip > 0)
@@ -149,7 +136,7 @@ static void nand_davinci_select_chip(struct mtd_info *mtd, int chip)
  * 1-bit hardware ECC ... context maintained for each core chipselect
  */
 
-static inline u32 nand_davinci_readecc_1bit(struct mtd_info *mtd)
+static inline uint32_t nand_davinci_readecc_1bit(struct mtd_info *mtd)
 {
 	struct davinci_nand_info *info = to_davinci_nand(mtd);
 
@@ -160,7 +147,7 @@ static inline u32 nand_davinci_readecc_1bit(struct mtd_info *mtd)
 static void nand_davinci_hwctl_1bit(struct mtd_info *mtd, int mode)
 {
 	struct davinci_nand_info *info;
-	u32 nandcfr;
+	uint32_t nandcfr;
 	unsigned long flags;
 
 	info = to_davinci_nand(mtd);
@@ -200,11 +187,11 @@ static int nand_davinci_correct_1bit(struct mtd_info *mtd, u_char *dat,
 				     u_char *read_ecc, u_char *calc_ecc)
 {
 	struct nand_chip *chip = mtd->priv;
-	u_int32_t eccNand = read_ecc[0] | (read_ecc[1] << 8) |
+	uint32_t eccNand = read_ecc[0] | (read_ecc[1] << 8) |
 					  (read_ecc[2] << 16);
-	u_int32_t eccCalc = calc_ecc[0] | (calc_ecc[1] << 8) |
+	uint32_t eccCalc = calc_ecc[0] | (calc_ecc[1] << 8) |
 					  (calc_ecc[2] << 16);
-	u_int32_t diff = eccCalc ^ eccNand;
+	uint32_t diff = eccCalc ^ eccNand;
 
 	if (diff) {
 		if ((((diff >> 12) ^ diff) & 0xfff) == 0xfff) {
@@ -277,7 +264,7 @@ static int nand_davinci_dev_ready(struct mtd_info *mtd)
 
 static void __init nand_dm6446evm_flash_init(struct davinci_nand_info *info)
 {
-	u32 regval, a1cr;
+	uint32_t regval, a1cr;
 
 	/*
 	 * NAND FLASH timings @ PLL1 == 459 MHz
@@ -316,7 +303,7 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	void __iomem			*vaddr;
 	void __iomem			*base;
 	int				ret;
-	u32				val;
+	uint32_t			val;
 	nand_ecc_modes_t		ecc_mode;
 
 	/* which external chipselect will we be managing? */
@@ -356,6 +343,8 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	info->mtd.name		= dev_name(&pdev->dev);
 	info->mtd.owner		= THIS_MODULE;
 
+	info->mtd.dev.parent	= &pdev->dev;
+
 	info->chip.IO_ADDR_R	= vaddr;
 	info->chip.IO_ADDR_W	= vaddr;
 	info->chip.chip_delay	= 0;
@@ -364,7 +353,7 @@ static int __init nand_davinci_probe(struct platform_device *pdev)
 	/* options such as NAND_USE_FLASH_BBT or 16-bit widths */
 	info->chip.options	= pdata ? pdata->options : 0;
 
-	info->ioaddr		= (u32 __force) vaddr;
+	info->ioaddr		= (uint32_t __force) vaddr;
 
 	info->current_cs	= info->ioaddr;
 	info->core_chipsel	= pdev->id;
