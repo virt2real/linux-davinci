@@ -2541,7 +2541,8 @@ static int emac_dev_stop(struct net_device *ndev)
 	emac_cleanup_rxch(priv, EMAC_DEF_RX_CH);
 	emac_write(EMAC_SOFTRESET, 1);
 
-	phy_disconnect(priv->phydev);
+	if (priv->phydev)
+		phy_disconnect(priv->phydev);
 
 	/* Free IRQ */
 	while ((res = platform_get_resource(priv->pdev, IORESOURCE_IRQ, i))) {
