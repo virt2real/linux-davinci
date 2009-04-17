@@ -2606,6 +2606,19 @@ static struct net_device_stats *emac_dev_getnetstats(struct net_device *ndev)
 	return &priv->net_dev_stats;
 }
 
+static const struct net_device_ops emac_netdev_ops = {
+	.ndo_open		= emac_dev_open,
+	.ndo_stop		= emac_dev_stop,
+	.ndo_start_xmit		= emac_dev_xmit,
+	.ndo_set_multicast_list	= emac_dev_mcast_set,
+	.ndo_set_mac_address	= emac_dev_setmac_addr,
+	.ndo_do_ioctl		= emac_devioctl,
+	.ndo_tx_timeout		= emac_dev_tx_timeout,
+	.ndo_get_stats		= emac_dev_getnetstats,
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	.ndo_poll_controller	= emac_poll_controller,
+#endif
+};
 
 /**
  * davinci_emac_probe: EMAC device probe
@@ -2708,20 +2721,9 @@ static int __devinit davinci_emac_probe(struct platform_device *pdev)
 		printk(KERN_WARNING "%s: using random MAC addr: %s\n",
 			__func__, print_mac(buf, priv->mac_addr));
 	}
-	/* populate the device structure */
-	ndev->validate_addr = NULL;
-	ndev->open = emac_dev_open;   /*  i.e. start device  */
-	ndev->stop = emac_dev_stop;
-	ndev->do_ioctl = emac_devioctl;
+
+	ndev->netdev_ops = &emac_netdev_ops;
 	SET_ETHTOOL_OPS(ndev, &ethtool_ops);
-	ndev->get_stats = emac_dev_getnetstats;
-	ndev->set_multicast_list = emac_dev_mcast_set;
-	ndev->hard_start_xmit = emac_dev_xmit;
-	ndev->tx_timeout = emac_dev_tx_timeout;
-	ndev->set_mac_address = emac_dev_setmac_addr;
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	ndev->poll_controller = emac_poll_controller;
-#endif
 	netif_napi_add(ndev, &priv->napi, emac_poll, EMAC_POLL_WEIGHT);
 
 	/* register the network device */
