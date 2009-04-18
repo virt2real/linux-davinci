@@ -19,6 +19,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/device.h>
+#include <linux/platform_device.h>
 
 #include <mach/hardware.h>
 #include <asm/system.h>
@@ -403,15 +404,14 @@ struct sys_timer davinci_timer = {
 
 
 /* reset board using watchdog timer */
-void davinci_watchdog_reset(void) {
+void davinci_watchdog_reset(void)
+{
 	u32 tgcr, wdtcr;
 	struct davinci_soc_info *soc_info = davinci_get_soc_info();
 	void __iomem *base = soc_info->wdt_base;
-	struct device dev;
 	struct clk *wd_clk;
 
-	dev_set_name(&dev, "watchdog");
-	wd_clk = clk_get(&dev, NULL);
+	wd_clk = clk_get(&davinci_wdt_device.dev, NULL);
 	if (WARN_ON(IS_ERR(wd_clk)))
 		return;
 	clk_enable(wd_clk);

@@ -96,4 +96,7 @@ int davinci_clk_associate(struct device *dev, const char *logical_clockname,
 			  const char *physical_clockname);
 
 int davinci_clk_init(struct davinci_clk *clocks);
+
+extern struct platform_device davinci_wdt_device;
+
 #endif
