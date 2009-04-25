@@ -55,16 +55,6 @@ enum {
 #define TGCR			0x24
 #define WDTCR			0x28
 
-/* Offsets of the 8 compare registers */
-#define	CMP12_0			0x60
-#define	CMP12_1			0x64
-#define	CMP12_2			0x68
-#define	CMP12_3			0x6c
-#define	CMP12_4			0x70
-#define	CMP12_5			0x74
-#define	CMP12_6			0x78
-#define	CMP12_7			0x7c
-
 /* Timer register bitfields */
 #define TCR_ENAMODE_DISABLE          0x0
 #define TCR_ENAMODE_ONESHOT          0x1
