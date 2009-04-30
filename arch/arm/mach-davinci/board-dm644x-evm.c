@@ -183,14 +183,14 @@ static struct platform_device davinci_evm_nandflash_device = {
 	.resource	= davinci_evm_nandflash_resource,
 };
 
-static u64 davinci_fb_dma_mask = DMA_32BIT_MASK;
+static u64 davinci_fb_dma_mask = DMA_BIT_MASK(32);
 
 static struct platform_device davinci_fb_device = {
 	.name		= "davincifb",
 	.id		= -1,
 	.dev = {
 		.dma_mask		= &davinci_fb_dma_mask,
-		.coherent_dma_mask      = DMA_32BIT_MASK,
+		.coherent_dma_mask      = DMA_BIT_MASK(32),
 	},
 	.num_resources = 0,
 };
@@ -213,7 +213,7 @@ static struct resource ide_resources[] = {
 	},
 };
 
-static u64 ide_dma_mask = DMA_32BIT_MASK;
+static u64 ide_dma_mask = DMA_BIT_MASK(32);
 
 static struct platform_device ide_dev = {
 	.name           = "palm_bk3710",
@@ -222,7 +222,7 @@ static struct platform_device ide_dev = {
 	.num_resources  = ARRAY_SIZE(ide_resources),
 	.dev = {
 		.dma_mask		= &ide_dma_mask,
-		.coherent_dma_mask      = DMA_32BIT_MASK,
+		.coherent_dma_mask      = DMA_BIT_MASK(32),
 	},
 };
 

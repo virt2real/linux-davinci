@@ -382,7 +382,7 @@ static struct davinci_clk dm355_clks[] = {
 
 /*----------------------------------------------------------------------*/
 
-static u64 dm355_spi0_dma_mask = DMA_32BIT_MASK;
+static u64 dm355_spi0_dma_mask = DMA_BIT_MASK(32);
 
 static struct resource dm355_spi0_resources[] = {
 	{
@@ -408,7 +408,7 @@ static struct platform_device dm355_spi0_device = {
 	.id = 0,
 	.dev = {
 		.dma_mask = &dm355_spi0_dma_mask,
-		.coherent_dma_mask = DMA_32BIT_MASK,
+		.coherent_dma_mask = DMA_BIT_MASK(32),
 	},
 	.num_resources = ARRAY_SIZE(dm355_spi0_resources),
 	.resource = dm355_spi0_resources,
