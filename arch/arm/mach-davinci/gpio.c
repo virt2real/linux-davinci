@@ -44,6 +44,7 @@ static struct gpio_controller *__iomem __init gpio2controller(unsigned gpio)
 	return __gpio_to_controller(gpio);
 }
 
+static int __init davinci_gpio_irq_setup(void);
 
 /*--------------------------------------------------------------------------*/
 
@@ -149,6 +150,7 @@ static int __init davinci_gpio_setup(void)
 		gpiochip_add(&chips[i].chip);
 	}
 
+	davinci_gpio_irq_setup();
 	return 0;
 }
 pure_initcall(davinci_gpio_setup);
@@ -230,6 +232,7 @@ gpio_irq_handler(unsigned irq, struct irq_desc *desc)
 		mask <<= 16;
 
 	/* temporarily mask (level sensitive) parent IRQ */
+	desc->chip->mask(irq);
 	desc->chip->ack(irq);
 	while (1) {
 		u32		status;
@@ -322,4 +325,3 @@ static int __init davinci_gpio_irq_setup(void)
 
 	return 0;
 }
-arch_initcall(davinci_gpio_irq_setup);
