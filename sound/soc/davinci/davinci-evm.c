@@ -199,13 +199,14 @@ static int __init evm_init(void)
 {
 	struct resource *resources;
 	struct evm_snd_platform_data *data;
-	int index;
+	int index, res_size;
 	int ret;
 
 	if (machine_is_davinci_evm()) {
 		davinci_cfg_reg(DM644X_MCBSP);
 
 		resources = evm_snd_resources;
+		res_size = ARRAY_SIZE(evm_snd_resources);
 		data = &evm_snd_data;
 		index = 0;
 	} else if (machine_is_davinci_dm355_evm()) {
@@ -214,6 +215,7 @@ static int __init evm_init(void)
 		davinci_cfg_reg(DM355_EVT9_ASP1_RX);
 
 		resources = dm335evm_snd_resources;
+		res_size = ARRAY_SIZE(dm335evm_snd_resources);
 		data = &dm335evm_snd_data;
 		index = 1;
 	} else
@@ -227,8 +229,8 @@ static int __init evm_init(void)
 	evm_snd_devdata.dev = &evm_snd_device->dev;
 	platform_device_add_data(evm_snd_device, data, sizeof(*data));
 
-	ret = platform_device_add_resources(evm_snd_device, evm_snd_resources,
-					    ARRAY_SIZE(evm_snd_resources));
+	ret = platform_device_add_resources(evm_snd_device, resources,
+								res_size);
 	if (ret) {
 		platform_device_put(evm_snd_device);
 		return ret;
