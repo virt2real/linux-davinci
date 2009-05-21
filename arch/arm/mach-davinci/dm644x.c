@@ -489,12 +489,13 @@ static struct edma_soc_info dm644x_edma_info = {
 	.n_region	= 4,
 	.n_slot		= 128,
 	.n_tc		= 2,
+	.n_cc		= 1,
 	.noevent	= dma_chan_dm644x_no_event,
 };
 
 static struct resource edma_resources[] = {
 	{
-		.name	= "edma_cc",
+		.name	= "edma_cc0",
 		.start	= 0x01c00000,
 		.end	= 0x01c00000 + SZ_64K - 1,
 		.flags	= IORESOURCE_MEM,
@@ -524,7 +525,7 @@ static struct resource edma_resources[] = {
 
 static struct platform_device dm644x_edma_device = {
 	.name			= "edma",
-	.id			= -1,
+	.id			= 0,
 	.dev.platform_data	= &dm644x_edma_info,
 	.num_resources		= ARRAY_SIZE(edma_resources),
 	.resource		= edma_resources,

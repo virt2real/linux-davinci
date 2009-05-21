@@ -216,6 +216,7 @@ struct edma_soc_info {
 	unsigned	n_region;
 	unsigned	n_slot;
 	unsigned	n_tc;
+	unsigned	n_cc;
 
 	/* list of channels with no even trigger; terminated by "-1" */
 	const s8	*noevent;
