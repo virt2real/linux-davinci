@@ -175,8 +175,8 @@ static struct resource evm_snd_resources[] = {
 };
 
 static struct evm_snd_platform_data evm_snd_data = {
-	.tx_dma_ch	= DAVINCI_DMA_ASP0_TX,
-	.rx_dma_ch	= DAVINCI_DMA_ASP0_RX,
+	.tx_dma_ch	= EDMA_CTLR_CHAN(0, DAVINCI_DMA_ASP0_TX),
+	.rx_dma_ch	= EDMA_CTLR_CHAN(0, DAVINCI_DMA_ASP0_RX),
 };
 
 /* DM335 EVM uses ASP1; line-out is a stereo mini-jack */
@@ -189,8 +189,8 @@ static struct resource dm335evm_snd_resources[] = {
 };
 
 static struct evm_snd_platform_data dm335evm_snd_data = {
-	.tx_dma_ch	= DAVINCI_DMA_ASP1_TX,
-	.rx_dma_ch	= DAVINCI_DMA_ASP1_RX,
+	.tx_dma_ch	= EDMA_CTLR_CHAN(0, DAVINCI_DMA_ASP1_TX),
+	.rx_dma_ch	= EDMA_CTLR_CHAN(0, DAVINCI_DMA_ASP1_RX),
 };
 
 static struct platform_device *evm_snd_device;

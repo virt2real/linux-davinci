@@ -573,28 +573,33 @@ EXPORT_SYMBOL(edma_free_channel);
  *
  * Returns the number of the slot, else negative errno.
  */
-int edma_alloc_slot(int slot)
+int edma_alloc_slot(unsigned ctlr, int slot)
 {
+	if (slot >= 0)
+		slot = EDMA_CHAN(slot);
+
 	if (slot < 0) {
-		slot = num_channels;
+		slot = edma_info[ctlr]->num_channels;
 		for (;;) {
-			slot = find_next_zero_bit(edma_inuse,
-					num_slots, slot);
-			if (slot == num_slots)
+			slot = find_next_zero_bit(edma_info[ctlr]->edma_inuse,
+					edma_info[ctlr]->num_slots, slot);
+			if (slot == edma_info[ctlr]->num_slots)
 				return -ENOMEM;
-			if (!test_and_set_bit(slot, edma_inuse))
+			if (!test_and_set_bit(slot,
+						edma_info[ctlr]->edma_inuse))
 				break;
 		}
-	} else if (slot < num_channels || slot >= num_slots) {
+	} else if (slot < edma_info[ctlr]->num_channels ||
+			slot >= edma_info[ctlr]->num_slots) {
 		return -EINVAL;
-	} else if (test_and_set_bit(slot, edma_inuse)) {
+	} else if (test_and_set_bit(slot, edma_info[ctlr]->edma_inuse)) {
 		return -EBUSY;
 	}
 
-	memcpy_toio(edmacc_regs_base + PARM_OFFSET(slot),
+	memcpy_toio(edmacc_regs_base[ctlr] + PARM_OFFSET(slot),
 			&dummy_paramset, PARM_SIZE);
 
-	return slot;
+	return EDMA_CTLR_CHAN(ctlr, slot);
 }
 EXPORT_SYMBOL(edma_alloc_slot);
 
