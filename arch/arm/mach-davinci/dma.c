@@ -107,11 +107,12 @@
 #define EDMA_MAX_DMACH           64
 #define EDMA_MAX_PARAMENTRY     512
 #define EDMA_MAX_EVQUE            2	/* FIXME too small */
+#define EDMA_MAX_CC               2
 
 
 /*****************************************************************************/
 
-static void __iomem *edmacc_regs_base;
+static void __iomem *edmacc_regs_base[EDMA_MAX_CC];
 
 static inline unsigned int edma_read(int offset)
 {
@@ -207,25 +208,39 @@ static inline void edma_parm_or(int offset, int param_no, unsigned or)
 /*****************************************************************************/
 
 /* actual number of DMA channels and slots on this silicon */
-static unsigned num_channels;
-static unsigned num_slots;
+struct edma {
+	/* how many dma resources of each type */
+	unsigned	num_channels;
+	unsigned	num_region;
+	unsigned	num_slots;
+	unsigned	num_tc;
+	unsigned	num_cc;
 
-static struct dma_interrupt_data {
-	void (*callback)(unsigned channel, unsigned short ch_status,
-			 void *data);
-	void *data;
-} intr_data[EDMA_MAX_DMACH];
+	/* list of channels with no even trigger; terminated by "-1" */
+	const s8	*noevent;
 
-/* The edma_inuse bit for each PaRAM slot is clear unless the
- * channel is in use ... by ARM or DSP, for QDMA, or whatever.
- */
-static DECLARE_BITMAP(edma_inuse, EDMA_MAX_PARAMENTRY);
+	/* The edma_inuse bit for each PaRAM slot is clear unless the
+	 * channel is in use ... by ARM or DSP, for QDMA, or whatever.
+	 */
+	DECLARE_BITMAP(edma_inuse, EDMA_MAX_PARAMENTRY);
 
-/* The edma_noevent bit for each channel is clear unless
- * it doesn't trigger DMA events on this platform.  It uses a
- * bit of SOC-specific initialization code.
- */
-static DECLARE_BITMAP(edma_noevent, EDMA_MAX_DMACH);
+	/* The edma_noevent bit for each channel is clear unless
+	 * it doesn't trigger DMA events on this platform.  It uses a
+	 * bit of SOC-specific initialization code.
+	 */
+	DECLARE_BITMAP(edma_noevent, EDMA_MAX_DMACH);
+
+	unsigned	irq_res_start;
+	unsigned	irq_res_end;
+
+	struct dma_interrupt_data {
+		void (*callback)(unsigned channel, unsigned short ch_status,
+				void *data);
+		void *data;
+	} intr_data[EDMA_MAX_DMACH];
+};
+
+static struct edma *edma_info[EDMA_MAX_CC];
 
 /* dummy param set used to (re)initialize parameter RAM slots */
 static const struct edmacc_param dummy_paramset = {
@@ -1018,11 +1033,13 @@ static int __init edma_probe(struct platform_device *pdev)
 	int			irq = 0, err_irq = 0;
 	struct resource		*r;
 	resource_size_t		len;
+	char			name[10];
 
 	if (!info)
 		return -ENODEV;
 
-	r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "edma_cc");
+	sprintf(name, "edma_cc%d", pdev->id);
+	r = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
 	if (!r)
 		return -ENODEV;
 
@@ -1032,28 +1049,41 @@ static int __init edma_probe(struct platform_device *pdev)
 	if (!r)
 		return -EBUSY;
 
-	edmacc_regs_base = ioremap(r->start, len);
-	if (!edmacc_regs_base) {
+	edmacc_regs_base[pdev->id] = ioremap(r->start, len);
+	if (!edmacc_regs_base[pdev->id]) {
 		status = -EBUSY;
 		goto fail1;
 	}
 
-	num_channels = min_t(unsigned, info->n_channel, EDMA_MAX_DMACH);
-	num_slots = min_t(unsigned, info->n_slot, EDMA_MAX_PARAMENTRY);
+	edma_info[pdev->id] = kmalloc(sizeof(struct edma), GFP_KERNEL);
+	if (!edma_info[pdev->id]) {
+		status = -ENOMEM;
+		iounmap(edmacc_regs_base[pdev->id]);
+		goto fail1;
+	}
+	memset(edma_info[pdev->id], 0, sizeof(struct edma));
 
-	dev_dbg(&pdev->dev, "DMA REG BASE ADDR=%p\n", edmacc_regs_base);
+	edma_info[pdev->id]->num_channels = min_t(unsigned, info->n_channel,
+						EDMA_MAX_DMACH);
+	edma_info[pdev->id]->num_slots = min_t(unsigned, info->n_slot,
+						EDMA_MAX_PARAMENTRY);
+	edma_info[pdev->id]->num_cc = min_t(unsigned, info->n_cc, EDMA_MAX_CC);
 
-	for (i = 0; i < num_slots; i++)
-		memcpy_toio(edmacc_regs_base + PARM_OFFSET(i),
+	dev_dbg(&pdev->dev, "DMA REG BASE ADDR=%p\n",
+		edmacc_regs_base[pdev->id]);
+
+	for (i = 0; i < edma_info[pdev->id]->num_slots; i++)
+		memcpy_toio(edmacc_regs_base[pdev->id] + PARM_OFFSET(i),
 				&dummy_paramset, PARM_SIZE);
 
 	noevent = info->noevent;
 	if (noevent) {
 		while (*noevent != -1)
-			set_bit(*noevent++, edma_noevent);
+			set_bit(*noevent++, edma_info[pdev->id]->edma_noevent);
 	}
 
 	irq = platform_get_irq(pdev, 0);
+	edma_info[pdev->id]->irq_res_start = irq;
 	status = request_irq(irq, dma_irq_handler, 0, "edma", &pdev->dev);
 	if (status < 0) {
 		dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
@@ -1062,6 +1092,7 @@ static int __init edma_probe(struct platform_device *pdev)
 	}
 
 	err_irq = platform_get_irq(pdev, 1);
+	edma_info[pdev->id]->irq_res_end = err_irq;
 	status = request_irq(err_irq, dma_ccerr_handler, 0,
 				"edma_error", &pdev->dev);
 	if (status < 0) {
@@ -1091,22 +1122,23 @@ static int __init edma_probe(struct platform_device *pdev)
 	 * This way, long transfers on the low priority queue
 	 * started by the codec engine will not cause audio defects.
 	 */
-	for (i = 0; i < num_channels; i++)
-		map_dmach_queue(i, EVENTQ_1);
+	for (i = 0; i < edma_info[pdev->id]->num_channels; i++)
+		map_dmach_queue(pdev->id, i, EVENTQ_1);
 
 	/* Event queue to TC mapping */
 	for (i = 0; queue_tc_mapping[i][0] != -1; i++)
-		map_queue_tc(queue_tc_mapping[i][0], queue_tc_mapping[i][1]);
+		map_queue_tc(pdev->id, queue_tc_mapping[i][0],
+				queue_tc_mapping[i][1]);
 
 	/* Event queue priority mapping */
 	for (i = 0; queue_priority_mapping[i][0] != -1; i++)
-		assign_priority_to_queue(queue_priority_mapping[i][0],
+		assign_priority_to_queue(pdev->id, queue_priority_mapping[i][0],
 					 queue_priority_mapping[i][1]);
 
 	for (i = 0; i < info->n_region; i++) {
-		edma_write_array2(EDMA_DRAE, i, 0, 0x0);
-		edma_write_array2(EDMA_DRAE, i, 1, 0x0);
-		edma_write_array(EDMA_QRAE, i, 0x0);
+		edma_write_array2(pdev->id, EDMA_DRAE, i, 0, 0x0);
+		edma_write_array2(pdev->id, EDMA_DRAE, i, 1, 0x0);
+		edma_write_array(pdev->id, EDMA_QRAE, i, 0x0);
 	}
 
 	return 0;
@@ -1116,7 +1148,7 @@ fail:
 		free_irq(err_irq, NULL);
 	if (irq)
 		free_irq(irq, NULL);
-	iounmap(edmacc_regs_base);
+	iounmap(edmacc_regs_base[pdev->id]);
 fail1:
 	release_mem_region(r->start, len);
 	return status;
