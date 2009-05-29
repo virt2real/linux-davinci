@@ -10,6 +10,8 @@ stkwebcam-objs	:=	stk-webcam.o stk-sensor.o
 
 omap2cam-objs	:=	omap24xxcam.o omap24xxcam-dma.o
 
+davinci-vpfe-objs   :=  ccdc_davinci.o davinci_vpfe.o
+
 videodev-objs	:=	v4l2-dev.o v4l2-ioctl.o v4l2-device.o
 
 obj-$(CONFIG_VIDEO_DEV) += videodev.o v4l2-int-device.o
@@ -130,6 +132,9 @@ obj-$(CONFIG_USB_S2255)		+= s2255drv.o
 
 obj-$(CONFIG_VIDEO_IVTV) += ivtv/
 obj-$(CONFIG_VIDEO_CX18) += cx18/
+
+obj-$(CONFIG_VIDEO_DAVINCI)     += davinci-vpfe.o
+obj-$(CONFIG_VIDEO_TVP5146)     += tvp5146.o
 
 obj-$(CONFIG_VIDEO_VIVI) += vivi.o
 obj-$(CONFIG_VIDEO_CX23885) += cx23885/

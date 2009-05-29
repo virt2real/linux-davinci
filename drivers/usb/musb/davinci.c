@@ -35,13 +35,14 @@
 #include <mach/hardware.h>
 #include <mach/memory.h>
 #include <mach/gpio.h>
+#include <mach/cputype.h>
 
 #include <asm/mach-types.h>
 
 #include "musb_core.h"
 
 #ifdef CONFIG_MACH_DAVINCI_EVM
-#define GPIO_nVBUS_DRV		87
+#define GPIO_nVBUS_DRV		120
 #endif
 
 #include "davinci.h"
@@ -417,6 +418,21 @@ int __init musb_platform_init(struct musb *musb)
 		__raw_writel(phy_ctrl, USB_PHY_CTRL);
 	}
 
+	/* On dm355, the default-A state machine needs DRVVBUS control.
+	 * If we won't be a host, there's no need to turn it on.
+	 */
+	if (cpu_is_davinci_dm355()) {
+		u32	deepsleep = __raw_readl(DM355_DEEPSLEEP);
+
+		if (is_host_enabled(musb)) {
+			deepsleep &= ~DRVVBUS_OVERRIDE;
+		} else {
+			deepsleep &= ~DRVVBUS_FORCE;
+			deepsleep |= DRVVBUS_OVERRIDE;
+		}
+		__raw_writel(deepsleep, DM355_DEEPSLEEP);
+	}
+
 	/* reset the controller */
 	musb_writel(tibase, DAVINCI_USB_CTRL_REG, 0x1);
 
@@ -438,6 +454,15 @@ int musb_platform_exit(struct musb *musb)
 {
 	if (is_host_enabled(musb))
 		del_timer_sync(&otg_workaround);
+
+	/* force VBUS off */
+	if (cpu_is_davinci_dm355()) {
+		u32	deepsleep = __raw_readl(DM355_DEEPSLEEP);
+
+		deepsleep &= ~DRVVBUS_FORCE;
+		deepsleep |= DRVVBUS_OVERRIDE;
+		__raw_writel(deepsleep, DM355_DEEPSLEEP);
+	}
 
 	davinci_source_power(musb, 0 /*off*/, 1);
 

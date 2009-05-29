@@ -20,4 +20,3 @@ obj-$(CONFIG_SENSORS_TSL2550)	+= tsl2550.o
 ifeq ($(CONFIG_I2C_DEBUG_CHIP),y)
 EXTRA_CFLAGS += -DDEBUG
 endif
-
