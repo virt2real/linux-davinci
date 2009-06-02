@@ -106,7 +106,6 @@
 
 #define EDMA_MAX_DMACH           64
 #define EDMA_MAX_PARAMENTRY     512
-#define EDMA_MAX_EVQUE            2	/* FIXME too small */
 #define EDMA_MAX_CC               2
 
 
@@ -256,22 +255,6 @@ static struct edma *edma_info[EDMA_MAX_CC];
 static const struct edmacc_param dummy_paramset = {
 	.link_bcntrld = 0xffff,
 	.ccnt = 1,
-};
-
-static const int __initconst
-queue_tc_mapping[EDMA_MAX_EVQUE + 1][2] = {
-/* {event queue no, TC no} */
-	{0, 0},
-	{1, 1},
-	{-1, -1}
-};
-
-static const int __initconst
-queue_priority_mapping[EDMA_MAX_EVQUE + 1][2] = {
-	/* {event queue no, Priority} */
-	{0, 3},
-	{1, 7},
-	{-1, -1}
 };
 
 /*****************************************************************************/
@@ -1191,6 +1174,8 @@ EXPORT_SYMBOL(edma_clear_event);
 static int __init edma_probe(struct platform_device *pdev)
 {
 	struct edma_soc_info	*info = pdev->dev.platform_data;
+	const s8		(*queue_priority_mapping)[2];
+	const s8		(*queue_tc_mapping)[2];
 	int			i;
 	int			status;
 	const s8		*noevent;
@@ -1288,6 +1273,9 @@ static int __init edma_probe(struct platform_device *pdev)
 	 */
 	for (i = 0; i < edma_info[pdev->id]->num_channels; i++)
 		map_dmach_queue(pdev->id, i, EVENTQ_1);
+
+	queue_tc_mapping = info->queue_tc_mapping;
+	queue_priority_mapping = info->queue_priority_mapping;
 
 	/* Event queue to TC mapping */
 	for (i = 0; queue_tc_mapping[i][0] != -1; i++)

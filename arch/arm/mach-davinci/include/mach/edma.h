@@ -224,6 +224,8 @@ struct edma_soc_info {
 
 	/* list of channels with no even trigger; terminated by "-1" */
 	const s8	*noevent;
+	const s8	(*queue_tc_mapping)[2];
+	const s8	(*queue_priority_mapping)[2];
 };
 
 #endif
