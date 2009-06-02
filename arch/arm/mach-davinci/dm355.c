@@ -558,13 +558,31 @@ static const s8 dma_chan_dm355_no_event[] = {
 	-1
 };
 
+static const s8
+queue_tc_mapping[][2] = {
+	/* {event queue no, TC no} */
+	{0, 0},
+	{1, 1},
+	{-1, -1},
+};
+
+static const s8
+queue_priority_mapping[][2] = {
+	/* {event queue no, Priority} */
+	{0, 3},
+	{1, 7},
+	{-1, -1},
+};
+
 static struct edma_soc_info dm355_edma_info = {
-	.n_channel	= 64,
-	.n_region	= 4,
-	.n_slot		= 128,
-	.n_tc		= 2,
-	.n_cc		= 1,
-	.noevent	= dma_chan_dm355_no_event,
+	.n_channel		= 64,
+	.n_region		= 4,
+	.n_slot			= 128,
+	.n_tc			= 2,
+	.n_cc			= 1,
+	.noevent		= dma_chan_dm355_no_event,
+	.queue_tc_mapping	= queue_tc_mapping,
+	.queue_priority_mapping	= queue_priority_mapping,
 };
 
 static struct resource edma_resources[] = {
