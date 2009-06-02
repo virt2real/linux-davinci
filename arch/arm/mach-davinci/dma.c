@@ -104,6 +104,9 @@
 
 #define PARM_OFFSET(param_no)	(EDMA_PARM + ((param_no) << 5))
 
+#define EDMA_DCHMAP	0x0100  /* 64 registers */
+#define CHMAP_EXIST	BIT(24)
+
 #define EDMA_MAX_DMACH           64
 #define EDMA_MAX_PARAMENTRY     512
 #define EDMA_MAX_CC               2
@@ -285,6 +288,24 @@ static void __init assign_priority_to_queue(unsigned ctlr, int queue_no,
 	int bit = queue_no * 4;
 	edma_modify(ctlr, EDMA_QUEPRI, ~(0x7 << bit),
 			((priority & 0x7) << bit));
+}
+
+/**
+ * map_dmach_param - Maps channel number to param entry number
+ *
+ * This maps the dma channel number to param entry numberter. In
+ * other words using the DMA channel mapping registers a param entry
+ * can be mapped to any channel
+ *
+ * Callers are responsible for ensuring the channel mapping logic is
+ * included in that particular EDMA variant (Eg : dm646x)
+ *
+ */
+static void __init map_dmach_param(unsigned ctlr)
+{
+	int i;
+	for (i = 0; i < EDMA_MAX_DMACH; i++)
+		edma_write_array(ctlr, EDMA_DCHMAP , i , (i << 5));
 }
 
 static inline void
@@ -1286,6 +1307,10 @@ static int __init edma_probe(struct platform_device *pdev)
 	for (i = 0; queue_priority_mapping[i][0] != -1; i++)
 		assign_priority_to_queue(pdev->id, queue_priority_mapping[i][0],
 					 queue_priority_mapping[i][1]);
+
+	/*  Map the channel to param entry if channel mapping logic exist */
+	if (edma_read(pdev->id, EDMA_CCCFG) & CHMAP_EXIST)
+		map_dmach_param(pdev->id);
 
 	for (i = 0; i < info->n_region; i++) {
 		edma_write_array2(pdev->id, EDMA_DRAE, i, 0, 0x0);
