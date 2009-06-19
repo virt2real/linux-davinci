@@ -5315,6 +5315,12 @@ F:	arch/arm/mach-s3c2410/
 F:	drivers/*/*s3c2410*
 F:	drivers/*/*/*s3c2410*
 
+TI DAVINCI MACHINE SUPPORT
+P:	Kevin Hilman
+M:	davinci-linux-open-source@linux.davincidsp.com
+S:	Supported
+F:	arch/arm/mach-davinci
+
 SIS 190 ETHERNET DRIVER
 P:	Francois Romieu
 M:	romieu@fr.zoreil.com
