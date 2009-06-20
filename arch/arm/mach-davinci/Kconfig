@@ -35,6 +35,7 @@ config ARCH_DAVINCI_DA830
 config ARCH_DAVINCI_DM365
 	bool "DaVinci 365 based system"
 	select AINTC
+	select ARCH_DAVINCI_DMx
 
 comment "DaVinci Board Type"
 
