@@ -20,16 +20,9 @@
 /**************************************************************************
  * Definitions
  **************************************************************************/
-#define DAVINCI_DDR_BASE	0x80000000
-#define DA830_DDR_BASE		0xc0000000
+#define DAVINCI_DDR_BASE    0x80000000
 
-#if defined(CONFIG_ARCH_DAVINCI_DA830) && defined(CONFIG_ARCH_DAVINCI_DMx)
-#error Cannot enable DaVinci and DA830 platforms concurrently
-#elif defined(CONFIG_ARCH_DAVINCI_DA830)
-#define PHYS_OFFSET DA830_DDR_BASE
-#else
 #define PHYS_OFFSET DAVINCI_DDR_BASE
-#endif
 
 /*
  * Increase size of DMA-consistent memory region
