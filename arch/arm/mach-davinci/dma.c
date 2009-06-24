@@ -100,8 +100,6 @@
 #define EDMA_SHADOW0	0x2000	/* 4 regions shadowing global channels */
 #define EDMA_PARM	0x4000	/* 128 param entries */
 
-#define DAVINCI_DMA_3PCC_BASE	0x01C00000
-
 #define PARM_OFFSET(param_no)	(EDMA_PARM + ((param_no) << 5))
 
 #define EDMA_DCHMAP	0x0100  /* 64 registers */
@@ -1215,7 +1213,7 @@ static int __init edma_probe(struct platform_device *pdev)
 
 	len = r->end - r->start + 1;
 
-	r = request_mem_region(r->start, len, r->name);
+	r = request_mem_region(r->start, len, dev_name(&pdev->dev));
 	if (!r)
 		return -EBUSY;
 
