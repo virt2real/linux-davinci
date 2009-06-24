@@ -589,7 +589,7 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	 * channel as needed to handle a scatterlist.
 	 */
 	for (i = 0; i < ARRAY_SIZE(host->links); i++) {
-		r = edma_alloc_slot(EDMA_SLOT_ANY);
+		r = edma_alloc_slot(EDMA_CTLR(host->txdma), EDMA_SLOT_ANY);
 		if (r < 0) {
 			dev_dbg(mmc_dev(host->mmc), "dma PaRAM alloc --> %d\n",
 				r);
