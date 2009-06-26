@@ -178,7 +178,7 @@ struct mmc_davinci_host {
 	u32 buffer_bytes_left;
 	u32 bytes_left;
 
-	u8 rxdma, txdma;
+	u32 rxdma, txdma;
 	bool use_dma;
 	bool do_dma;
 
@@ -190,7 +190,7 @@ struct mmc_davinci_host {
 	struct edmacc_param	tx_template;
 	struct edmacc_param	rx_template;
 	unsigned		n_link;
-	u8			links[NR_SG - 1];
+	u32			links[NR_SG - 1];
 
 	/* For PIO we walk scatterlists one segment at a time. */
 	unsigned int		sg_len;
@@ -460,7 +460,7 @@ static void __init mmc_davinci_dma_setup(struct mmc_davinci_host *host,
 	edma_read_slot(sync_dev, template);
 
 	/* don't bother with irqs or chaining */
-	template->opt |= sync_dev << 12;
+	template->opt |= EDMA_CHAN_SLOT(sync_dev) << 12;
 }
 
 static void mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
@@ -495,7 +495,7 @@ static void mmc_davinci_send_dma_request(struct mmc_davinci_host *host,
 		unsigned	count = sg_dma_len(sg);
 
 		template->link_bcntrld = sg_len
-				? (host->links[link] << 5)
+				? (EDMA_CHAN_SLOT(host->links[link]) << 5)
 				: 0xffff;
 
 		if (count > bytes_left)
@@ -589,7 +589,7 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	 * channel as needed to handle a scatterlist.
 	 */
 	for (i = 0; i < ARRAY_SIZE(host->links); i++) {
-		r = edma_alloc_slot(EDMA_SLOT_ANY);
+		r = edma_alloc_slot(EDMA_CTLR(host->txdma), EDMA_SLOT_ANY);
 		if (r < 0) {
 			dev_dbg(mmc_dev(host->mmc), "dma PaRAM alloc --> %d\n",
 				r);
