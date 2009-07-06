@@ -195,7 +195,7 @@
 #define INVERT_VOL(val)   (0x7f - val)
 
 /* Default output volume (inverted) */
-#define DEFAULT_VOL     INVERT_VOL(0x60)
+#define DEFAULT_VOL     INVERT_VOL(0x50)
 /* Default input volume */
 #define DEFAULT_GAIN    0x20
 
