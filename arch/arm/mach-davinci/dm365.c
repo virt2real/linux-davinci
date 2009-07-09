@@ -732,14 +732,16 @@ dm365_queue_priority_mapping[][2] = {
 	{-1, -1},
 };
 
-static struct edma_soc_info dm365_edma_info = {
-	.n_channel		= 64,
-	.n_region		= 4,
-	.n_slot			= 256,
-	.n_tc			= 4,
-	.n_cc			= 1,
-	.queue_tc_mapping	= dm365_queue_tc_mapping,
-	.queue_priority_mapping	= dm365_queue_priority_mapping,
+static struct edma_soc_info dm365_edma_info[] = {
+	{
+		.n_channel		= 64,
+		.n_region		= 4,
+		.n_slot			= 256,
+		.n_tc			= 4,
+		.n_cc			= 1,
+		.queue_tc_mapping	= dm365_queue_tc_mapping,
+		.queue_priority_mapping	= dm365_queue_priority_mapping,
+	},
 };
 
 static struct resource edma_resources[] = {
@@ -774,10 +776,12 @@ static struct resource edma_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
+		.name	= "edma0",
 		.start	= IRQ_CCINT0,
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
+		.name	= "edma0_err",
 		.start	= IRQ_CCERRINT,
 		.flags	= IORESOURCE_IRQ,
 	},
@@ -787,7 +791,7 @@ static struct resource edma_resources[] = {
 static struct platform_device dm365_edma_device = {
 	.name			= "edma",
 	.id			= 0,
-	.dev.platform_data	= &dm365_edma_info,
+	.dev.platform_data	= dm365_edma_info,
 	.num_resources		= ARRAY_SIZE(edma_resources),
 	.resource		= edma_resources,
 };

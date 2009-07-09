@@ -535,15 +535,17 @@ dm646x_queue_priority_mapping[][2] = {
 	{-1, -1},
 };
 
-static struct edma_soc_info dm646x_edma_info = {
-	.n_channel		= 64,
-	.n_region		= 6,	/* 0-1, 4-7 */
-	.n_slot			= 512,
-	.n_tc			= 4,
-	.n_cc			= 1,
-	.noevent		= dma_chan_dm646x_no_event,
-	.queue_tc_mapping	= dm646x_queue_tc_mapping,
-	.queue_priority_mapping	= dm646x_queue_priority_mapping,
+static struct edma_soc_info dm646x_edma_info[] = {
+	{
+		.n_channel		= 64,
+		.n_region		= 6,	/* 0-1, 4-7 */
+		.n_slot			= 512,
+		.n_tc			= 4,
+		.n_cc			= 1,
+		.noevent		= dma_chan_dm646x_no_event,
+		.queue_tc_mapping	= dm646x_queue_tc_mapping,
+		.queue_priority_mapping	= dm646x_queue_priority_mapping,
+	},
 };
 
 static struct resource edma_resources[] = {
@@ -578,10 +580,12 @@ static struct resource edma_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
+		.name	= "edma0",
 		.start	= IRQ_CCINT0,
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
+		.name	= "edma0_err",
 		.start	= IRQ_CCERRINT,
 		.flags	= IORESOURCE_IRQ,
 	},
@@ -591,7 +595,7 @@ static struct resource edma_resources[] = {
 static struct platform_device dm646x_edma_device = {
 	.name			= "edma",
 	.id			= 0,
-	.dev.platform_data	= &dm646x_edma_info,
+	.dev.platform_data	= dm646x_edma_info,
 	.num_resources		= ARRAY_SIZE(edma_resources),
 	.resource		= edma_resources,
 };

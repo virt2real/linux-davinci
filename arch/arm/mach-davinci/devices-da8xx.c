@@ -99,15 +99,17 @@ static const s8 da8xx_queue_priority_mapping[][2] = {
 	{-1, -1}
 };
 
-static struct edma_soc_info da8xx_edma_info = {
-	.n_channel		= 32,
-	.n_region		= 4,
-	.n_slot			= 128,
-	.n_tc			= 2,
-	.n_cc			= 1,
-	.noevent		= da8xx_dma_chan_no_event,
-	.queue_tc_mapping	= da8xx_queue_tc_mapping,
-	.queue_priority_mapping	= da8xx_queue_priority_mapping,
+static struct edma_soc_info da8xx_edma_info[] = {
+	{
+		.n_channel		= 32,
+		.n_region		= 4,
+		.n_slot			= 128,
+		.n_tc			= 2,
+		.n_cc			= 1,
+		.noevent		= da8xx_dma_chan_no_event,
+		.queue_tc_mapping	= da8xx_queue_tc_mapping,
+		.queue_priority_mapping	= da8xx_queue_priority_mapping,
+	},
 };
 
 static struct resource da8xx_edma_resources[] = {
@@ -130,10 +132,12 @@ static struct resource da8xx_edma_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
+		.name	= "edma0",
 		.start	= IRQ_DA8XX_TCERRINT0,
 		.flags	= IORESOURCE_IRQ,
 	},
 	{
+		.name	= "edma0_err",
 		.start	= IRQ_DA8XX_CCERRINT,
 		.flags	= IORESOURCE_IRQ,
 	},
@@ -143,7 +147,7 @@ static struct platform_device da8xx_edma_device = {
 	.name		= "edma",
 	.id		= -1,
 	.dev = {
-		.platform_data	= &da8xx_edma_info,
+		.platform_data	= da8xx_edma_info,
 	},
 	.num_resources	= ARRAY_SIZE(da8xx_edma_resources),
 	.resource	= da8xx_edma_resources,

@@ -1195,78 +1195,127 @@ static int __init edma_probe(struct platform_device *pdev)
 	struct edma_soc_info	*info = pdev->dev.platform_data;
 	const s8		(*queue_priority_mapping)[2];
 	const s8		(*queue_tc_mapping)[2];
-	int			i;
-	int			status;
+	int			i, j, found = 0;
+	int			status = -1;
 	const s8		*noevent;
-	int			irq = 0, err_irq = 0;
-	struct resource		*r;
-	resource_size_t		len;
-	char			name[10];
+	int			irq[EDMA_MAX_CC] = {0, 0};
+	int			err_irq[EDMA_MAX_CC] = {0, 0};
+	struct resource		*r[EDMA_MAX_CC] = {NULL};
+	resource_size_t		len[EDMA_MAX_CC];
+	char			res_name[10];
+	char			irq_name[10];
 
 	if (!info)
 		return -ENODEV;
 
-	sprintf(name, "edma_cc%d", pdev->id);
-	r = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
-	if (!r)
-		return -ENODEV;
+	for (j = 0; j < EDMA_MAX_CC; j++) {
+		sprintf(res_name, "edma_cc%d", j);
+		r[j] = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+						res_name);
+		if (!r[j]) {
+			if (found)
+				break;
+			else
+				return -ENODEV;
+		} else
+			found = 1;
 
-	len = r->end - r->start + 1;
+		len[j] = resource_size(r[j]);
 
-	r = request_mem_region(r->start, len, dev_name(&pdev->dev));
-	if (!r)
-		return -EBUSY;
+		r[j] = request_mem_region(r[j]->start, len[j],
+			dev_name(&pdev->dev));
+		if (!r[j]) {
+			status = -EBUSY;
+			goto fail1;
+		}
 
-	edmacc_regs_base[pdev->id] = ioremap(r->start, len);
-	if (!edmacc_regs_base[pdev->id]) {
-		status = -EBUSY;
-		goto fail1;
-	}
+		edmacc_regs_base[j] = ioremap(r[j]->start, len[j]);
+		if (!edmacc_regs_base[j]) {
+			status = -EBUSY;
+			goto fail1;
+		}
 
-	edma_info[pdev->id] = kmalloc(sizeof(struct edma), GFP_KERNEL);
-	if (!edma_info[pdev->id]) {
-		status = -ENOMEM;
-		iounmap(edmacc_regs_base[pdev->id]);
-		goto fail1;
-	}
-	memset(edma_info[pdev->id], 0, sizeof(struct edma));
+		edma_info[j] = kmalloc(sizeof(struct edma), GFP_KERNEL);
+		if (!edma_info[j]) {
+			status = -ENOMEM;
+			goto fail1;
+		}
+		memset(edma_info[j], 0, sizeof(struct edma));
 
-	edma_info[pdev->id]->num_channels = min_t(unsigned, info->n_channel,
-						EDMA_MAX_DMACH);
-	edma_info[pdev->id]->num_slots = min_t(unsigned, info->n_slot,
-						EDMA_MAX_PARAMENTRY);
-	edma_info[pdev->id]->num_cc = min_t(unsigned, info->n_cc, EDMA_MAX_CC);
+		edma_info[j]->num_channels = min_t(unsigned, info[j].n_channel,
+							EDMA_MAX_DMACH);
+		edma_info[j]->num_slots = min_t(unsigned, info[j].n_slot,
+							EDMA_MAX_PARAMENTRY);
+		edma_info[j]->num_cc = min_t(unsigned, info[j].n_cc,
+							EDMA_MAX_CC);
 
-	dev_dbg(&pdev->dev, "DMA REG BASE ADDR=%p\n",
-		edmacc_regs_base[pdev->id]);
+		dev_dbg(&pdev->dev, "DMA REG BASE ADDR=%p\n",
+			edmacc_regs_base[j]);
 
-	for (i = 0; i < edma_info[pdev->id]->num_slots; i++)
-		memcpy_toio(edmacc_regs_base[pdev->id] + PARM_OFFSET(i),
-				&dummy_paramset, PARM_SIZE);
+		for (i = 0; i < edma_info[j]->num_slots; i++)
+			memcpy_toio(edmacc_regs_base[j] + PARM_OFFSET(i),
+					&dummy_paramset, PARM_SIZE);
 
-	noevent = info->noevent;
-	if (noevent) {
-		while (*noevent != -1)
-			set_bit(*noevent++, edma_info[pdev->id]->edma_noevent);
-	}
+		noevent = info[j].noevent;
+		if (noevent) {
+			while (*noevent != -1)
+				set_bit(*noevent++, edma_info[j]->edma_noevent);
+		}
 
-	irq = platform_get_irq(pdev, 0);
-	edma_info[pdev->id]->irq_res_start = irq;
-	status = request_irq(irq, dma_irq_handler, 0, "edma", &pdev->dev);
-	if (status < 0) {
-		dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
-			irq, status);
-		goto fail;
-	}
+		sprintf(irq_name, "edma%d", j);
+		irq[j] = platform_get_irq_byname(pdev, irq_name);
+		edma_info[j]->irq_res_start = irq[j];
+		status = request_irq(irq[j], dma_irq_handler, 0, "edma",
+					&pdev->dev);
+		if (status < 0) {
+			dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
+				irq[j], status);
+			goto fail;
+		}
 
-	err_irq = platform_get_irq(pdev, 1);
-	edma_info[pdev->id]->irq_res_end = err_irq;
-	status = request_irq(err_irq, dma_ccerr_handler, 0,
-				"edma_error", &pdev->dev);
-	if (status < 0) {
-		dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
-			err_irq, status);
-		goto fail;
+		sprintf(irq_name, "edma%d_err", j);
+		err_irq[j] = platform_get_irq_byname(pdev, irq_name);
+		edma_info[j]->irq_res_end = err_irq[j];
+		status = request_irq(err_irq[j], dma_ccerr_handler, 0,
+					"edma_error", &pdev->dev);
+		if (status < 0) {
+			dev_dbg(&pdev->dev, "request_irq %d failed --> %d\n",
+				err_irq[j], status);
+			goto fail;
+		}
+
+		/* Everything lives on transfer controller 1 until otherwise
+		 * specified. This way, long transfers on the low priority queue
+		 * started by the codec engine will not cause audio defects.
+		 */
+		for (i = 0; i < edma_info[j]->num_channels; i++)
+			map_dmach_queue(j, i, EVENTQ_1);
+
+		queue_tc_mapping = info[j].queue_tc_mapping;
+		queue_priority_mapping = info[j].queue_priority_mapping;
+
+		/* Event queue to TC mapping */
+		for (i = 0; queue_tc_mapping[i][0] != -1; i++)
+			map_queue_tc(j, queue_tc_mapping[i][0],
+					queue_tc_mapping[i][1]);
+
+		/* Event queue priority mapping */
+		for (i = 0; queue_priority_mapping[i][0] != -1; i++)
+			assign_priority_to_queue(j,
+						queue_priority_mapping[i][0],
+						queue_priority_mapping[i][1]);
+
+		/* Map the channel to param entry if channel mapping logic
+		 * exist
+		 */
+		if (edma_read(j, EDMA_CCCFG) & CHMAP_EXIST)
+			map_dmach_param(j);
+
+		for (i = 0; i < info[j].n_region; i++) {
+			edma_write_array2(j, EDMA_DRAE, i, 0, 0x0);
+			edma_write_array2(j, EDMA_DRAE, i, 1, 0x0);
+			edma_write_array(j, EDMA_QRAE, i, 0x0);
+		}
 	}
 
 	if (tc_errs_handled) {
@@ -1286,46 +1335,23 @@ static int __init edma_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* Everything lives on transfer controller 1 until otherwise specified.
-	 * This way, long transfers on the low priority queue
-	 * started by the codec engine will not cause audio defects.
-	 */
-	for (i = 0; i < edma_info[pdev->id]->num_channels; i++)
-		map_dmach_queue(pdev->id, i, EVENTQ_1);
-
-	queue_tc_mapping = info->queue_tc_mapping;
-	queue_priority_mapping = info->queue_priority_mapping;
-
-	/* Event queue to TC mapping */
-	for (i = 0; queue_tc_mapping[i][0] != -1; i++)
-		map_queue_tc(pdev->id, queue_tc_mapping[i][0],
-				queue_tc_mapping[i][1]);
-
-	/* Event queue priority mapping */
-	for (i = 0; queue_priority_mapping[i][0] != -1; i++)
-		assign_priority_to_queue(pdev->id, queue_priority_mapping[i][0],
-					 queue_priority_mapping[i][1]);
-
-	/*  Map the channel to param entry if channel mapping logic exist */
-	if (edma_read(pdev->id, EDMA_CCCFG) & CHMAP_EXIST)
-		map_dmach_param(pdev->id);
-
-	for (i = 0; i < info->n_region; i++) {
-		edma_write_array2(pdev->id, EDMA_DRAE, i, 0, 0x0);
-		edma_write_array2(pdev->id, EDMA_DRAE, i, 1, 0x0);
-		edma_write_array(pdev->id, EDMA_QRAE, i, 0x0);
-	}
-
 	return 0;
 
 fail:
-	if (err_irq)
-		free_irq(err_irq, NULL);
-	if (irq)
-		free_irq(irq, NULL);
-	iounmap(edmacc_regs_base[pdev->id]);
+	for (i = 0; i < EDMA_MAX_CC; i++) {
+		if (err_irq[i])
+			free_irq(err_irq[i], &pdev->dev);
+		if (irq[i])
+			free_irq(irq[i], &pdev->dev);
+	}
 fail1:
-	release_mem_region(r->start, len);
+	for (i = 0; i < EDMA_MAX_CC; i++) {
+		if (r[i])
+			release_mem_region(r[i]->start, len[i]);
+		if (edmacc_regs_base[i])
+			iounmap(edmacc_regs_base[i]);
+		kfree(edma_info[i]);
+	}
 	return status;
 }
 
