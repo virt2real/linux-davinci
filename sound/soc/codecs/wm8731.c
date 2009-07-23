@@ -26,6 +26,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
+#include <sound/tlv.h>
 
 #include "wm8731.h"
 
@@ -113,20 +114,26 @@ static const struct soc_enum wm8731_enum[] = {
 	SOC_ENUM_SINGLE(WM8731_APDIGI, 1, 4, wm8731_deemph),
 };
 
+static const DECLARE_TLV_DB_SCALE(in_tlv, -3450, 150, 0);
+static const DECLARE_TLV_DB_SCALE(sidetone_tlv, -1500, 300, 0);
+static const DECLARE_TLV_DB_SCALE(out_tlv, -12100, 100, 1);
+
 static const struct snd_kcontrol_new wm8731_snd_controls[] = {
 
-SOC_DOUBLE_R("Master Playback Volume", WM8731_LOUT1V, WM8731_ROUT1V,
-	0, 127, 0),
+SOC_DOUBLE_R_TLV("Master Playback Volume", WM8731_LOUT1V, WM8731_ROUT1V,
+		 0, 127, 0, out_tlv),
 SOC_DOUBLE_R("Master Playback ZC Switch", WM8731_LOUT1V, WM8731_ROUT1V,
 	7, 1, 0),
 
-SOC_DOUBLE_R("Capture Volume", WM8731_LINVOL, WM8731_RINVOL, 0, 31, 0),
+SOC_DOUBLE_R_TLV("Capture Volume", WM8731_LINVOL, WM8731_RINVOL, 0, 31, 0,
+		 in_tlv),
 SOC_DOUBLE_R("Line Capture Switch", WM8731_LINVOL, WM8731_RINVOL, 7, 1, 1),
 
 SOC_SINGLE("Mic Boost (+20dB)", WM8731_APANA, 0, 1, 0),
-SOC_SINGLE("Capture Mic Switch", WM8731_APANA, 1, 1, 1),
+SOC_SINGLE("Mic Capture Switch", WM8731_APANA, 1, 1, 1),
 
-SOC_SINGLE("Sidetone Playback Volume", WM8731_APANA, 6, 3, 1),
+SOC_SINGLE_TLV("Sidetone Playback Volume", WM8731_APANA, 6, 3, 1,
+	       sidetone_tlv),
 
 SOC_SINGLE("ADC High Pass Filter Switch", WM8731_APDIGI, 0, 1, 1),
 SOC_SINGLE("Store DC Offset Switch", WM8731_APDIGI, 4, 1, 0),
@@ -457,9 +464,11 @@ struct snd_soc_dai wm8731_dai = {
 		.rates = WM8731_RATES,
 		.formats = WM8731_FORMATS,},
 	.ops = &wm8731_dai_ops,
+	.symmetric_rates = 1,
 };
 EXPORT_SYMBOL_GPL(wm8731_dai);
 
+#ifdef CONFIG_PM
 static int wm8731_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
@@ -488,6 +497,10 @@ static int wm8731_resume(struct platform_device *pdev)
 	wm8731_set_bias_level(codec, codec->suspend_bias_level);
 	return 0;
 }
+#else
+#define wm8731_suspend NULL
+#define wm8731_resume NULL
+#endif
 
 static int wm8731_probe(struct platform_device *pdev)
 {
@@ -555,7 +568,8 @@ static int wm8731_register(struct wm8731_priv *wm8731)
 
 	if (wm8731_codec) {
 		dev_err(codec->dev, "Another WM8731 is registered\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 
 	mutex_init(&codec->mutex);
@@ -578,8 +592,8 @@ static int wm8731_register(struct wm8731_priv *wm8731)
 
 	ret = wm8731_reset(codec);
 	if (ret < 0) {
-		dev_err(codec->dev, "Failed to issue reset\n");
-		return ret;
+		dev_err(codec->dev, "Failed to issue reset: %d\n", ret);
+		goto err;
 	}
 
 	wm8731_dai.dev = codec->dev;
@@ -605,17 +619,23 @@ static int wm8731_register(struct wm8731_priv *wm8731)
 	ret = snd_soc_register_codec(codec);
 	if (ret != 0) {
 		dev_err(codec->dev, "Failed to register codec: %d\n", ret);
-		return ret;
+		goto err;
 	}
 
 	ret = snd_soc_register_dai(&wm8731_dai);
 	if (ret != 0) {
 		dev_err(codec->dev, "Failed to register DAI: %d\n", ret);
 		snd_soc_unregister_codec(codec);
-		return ret;
+		goto err_codec;
 	}
 
 	return 0;
+
+err_codec:
+	snd_soc_unregister_codec(codec);
+err:
+	kfree(wm8731);
+	return ret;
 }
 
 static void wm8731_unregister(struct wm8731_priv *wm8731)
@@ -680,6 +700,21 @@ static int __devexit wm8731_spi_remove(struct spi_device *spi)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int wm8731_spi_suspend(struct spi_device *spi, pm_message_t msg)
+{
+	return snd_soc_suspend_device(&spi->dev);
+}
+
+static int wm8731_spi_resume(struct spi_device *spi)
+{
+	return snd_soc_resume_device(&spi->dev);
+}
+#else
+#define wm8731_spi_suspend NULL
+#define wm8731_spi_resume NULL
+#endif
+
 static struct spi_driver wm8731_spi_driver = {
 	.driver = {
 		.name	= "wm8731",
@@ -687,6 +722,8 @@ static struct spi_driver wm8731_spi_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= wm8731_spi_probe,
+	.suspend	= wm8731_spi_suspend,
+	.resume		= wm8731_spi_resume,
 	.remove		= __devexit_p(wm8731_spi_remove),
 };
 #endif /* CONFIG_SPI_MASTER */
@@ -720,6 +757,21 @@ static __devexit int wm8731_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int wm8731_i2c_suspend(struct i2c_client *i2c, pm_message_t msg)
+{
+	return snd_soc_suspend_device(&i2c->dev);
+}
+
+static int wm8731_i2c_resume(struct i2c_client *i2c)
+{
+	return snd_soc_resume_device(&i2c->dev);
+}
+#else
+#define wm8731_i2c_suspend NULL
+#define wm8731_i2c_resume NULL
+#endif
+
 static const struct i2c_device_id wm8731_i2c_id[] = {
 	{ "wm8731", 0 },
 	{ }
@@ -733,6 +785,8 @@ static struct i2c_driver wm8731_i2c_driver = {
 	},
 	.probe =    wm8731_i2c_probe,
 	.remove =   __devexit_p(wm8731_i2c_remove),
+	.suspend =  wm8731_i2c_suspend,
+	.resume =   wm8731_i2c_resume,
 	.id_table = wm8731_i2c_id,
 };
 #endif
