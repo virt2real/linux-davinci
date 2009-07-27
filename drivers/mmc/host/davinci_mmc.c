@@ -827,7 +827,6 @@ static void
 mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 {
 	host->data = NULL;
-	host->data_dir = DAVINCI_MMC_DATADIR_NONE;
 
 	if (host->do_dma) {
 		davinci_abort_dma(host);
@@ -838,6 +837,7 @@ mmc_davinci_xfer_done(struct mmc_davinci_host *host, struct mmc_data *data)
 			     : DMA_FROM_DEVICE);
 		host->do_dma = false;
 	}
+	host->data_dir = DAVINCI_MMC_DATADIR_NONE;
 
 	if (!data->stop || (host->cmd && host->cmd->error)) {
 		mmc_request_done(host->mmc, data->mrq);
