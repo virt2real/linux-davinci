@@ -700,9 +700,23 @@ static u64 vpif_dma_mask = DMA_BIT_MASK(32);
 static struct resource vpif_resource[] = {
 	{
 		.start	= DAVINCI_VPIF_BASE,
-		.end	= DAVINCI_VPIF_BASE + 0x03fff,
+		.end	= DAVINCI_VPIF_BASE + 0x03ff,
 		.flags	= IORESOURCE_MEM,
+	}
+};
+
+static struct platform_device vpif_dev = {
+	.name		= "vpif",
+	.id		= -1,
+	.dev		= {
+			.dma_mask 		= &vpif_dma_mask,
+			.coherent_dma_mask	= DMA_BIT_MASK(32),
 	},
+	.resource	= vpif_resource,
+	.num_resources	= ARRAY_SIZE(vpif_resource),
+};
+
+static struct resource vpif_display_resource[] = {
 	{
 		.start = IRQ_DM646X_VP_VERTINT2,
 		.end   = IRQ_DM646X_VP_VERTINT2,
@@ -722,8 +736,32 @@ static struct platform_device vpif_display_dev = {
 			.dma_mask 		= &vpif_dma_mask,
 			.coherent_dma_mask	= DMA_BIT_MASK(32),
 	},
-	.resource	= vpif_resource,
-	.num_resources	= ARRAY_SIZE(vpif_resource),
+	.resource	= vpif_display_resource,
+	.num_resources	= ARRAY_SIZE(vpif_display_resource),
+};
+
+static struct resource vpif_capture_resource[] = {
+	{
+		.start = IRQ_DM646X_VP_VERTINT0,
+		.end   = IRQ_DM646X_VP_VERTINT0,
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		.start = IRQ_DM646X_VP_VERTINT1,
+		.end   = IRQ_DM646X_VP_VERTINT1,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device vpif_capture_dev = {
+	.name		= "vpif_capture",
+	.id		= -1,
+	.dev		= {
+			.dma_mask 		= &vpif_dma_mask,
+			.coherent_dma_mask	= DMA_BIT_MASK(32),
+	},
+	.resource	= vpif_capture_resource,
+	.num_resources	= ARRAY_SIZE(vpif_capture_resource),
 };
 
 /*----------------------------------------------------------------------*/
@@ -854,7 +892,8 @@ void __init dm646x_init_mcasp1(struct snd_platform_data *pdata)
 	platform_device_register(&dm646x_dit_device);
 }
 
-void dm646x_setup_vpif(struct vpif_config *config)
+void dm646x_setup_vpif(struct vpif_display_config *display_config,
+		       struct vpif_capture_config *capture_config)
 {
 	unsigned int value;
 	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
@@ -872,8 +911,11 @@ void dm646x_setup_vpif(struct vpif_config *config)
 	davinci_cfg_reg(DM646X_PTSOMUX_DISABLE);
 	davinci_cfg_reg(DM646X_PTSIMUX_DISABLE);
 
-	vpif_display_dev.dev.platform_data = config;
+	vpif_display_dev.dev.platform_data = display_config;
+	vpif_capture_dev.dev.platform_data = capture_config;
+	platform_device_register(&vpif_dev);
 	platform_device_register(&vpif_display_dev);
+	platform_device_register(&vpif_capture_dev);
 }
 
 void __init dm646x_init(void)
