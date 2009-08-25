@@ -47,7 +47,6 @@
 #include <mach/i2c.h>
 #include <mach/mmc.h>
 #include <mach/emac.h>
-#include <mach/common.h>
 
 #if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
     defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
