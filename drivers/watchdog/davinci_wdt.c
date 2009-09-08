@@ -70,7 +70,7 @@ static unsigned long wdt_status;
 
 static struct resource	*wdt_mem;
 static void __iomem	*wdt_base;
-struct clk              *wdt_clk;
+struct clk		*wdt_clk;
 
 static void wdt_service(void)
 {
@@ -90,7 +90,6 @@ static void wdt_enable(void)
 	u32 timer_margin;
 	u32 wdt_freq;
 
-	BUG_ON(!wdt_clk);
 	wdt_freq = clk_get_rate(wdt_clk);
 
 	spin_lock(&io_lock);
@@ -206,8 +205,9 @@ static int __devinit davinci_wdt_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 
 	wdt_clk = clk_get(dev, NULL);
-	if (WARN_ON(!wdt_clk))
-		return -ENODEV;
+	if (WARN_ON(IS_ERR(wdt_clk)))
+		return PTR_ERR(wdt_clk);
+
 	clk_enable(wdt_clk);
 
 	if (heartbeat < 1 || heartbeat > MAX_HEARTBEAT)
@@ -257,10 +257,8 @@ static int __devexit davinci_wdt_remove(struct platform_device *pdev)
 		wdt_mem = NULL;
 	}
 
-	if (wdt_clk) {
-		clk_disable(wdt_clk);
-		clk_put(wdt_clk);
-	}
+	clk_disable(wdt_clk);
+	clk_put(wdt_clk);
 
 	return 0;
 }
