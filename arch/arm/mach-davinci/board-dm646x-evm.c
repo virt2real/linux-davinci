@@ -62,19 +62,6 @@
 #define DM646X_EVM_PHY_MASK		(0x2)
 #define DM646X_EVM_MDIO_FREQUENCY	(2200000) /* PHY bus frequency */
 
-#define VIDCLKCTL_OFFSET	(0x38)
-#define VSCLKDIS_OFFSET		(0x6c)
-
-#define VCH2CLK_MASK		(BIT_MASK(10) | BIT_MASK(9) | BIT_MASK(8))
-#define VCH2CLK_SYSCLK8		(BIT(9))
-#define VCH2CLK_AUXCLK		(BIT(9) | BIT(8))
-#define VCH3CLK_MASK		(BIT_MASK(14) | BIT_MASK(13) | BIT_MASK(12))
-#define VCH3CLK_SYSCLK8		(BIT(13))
-#define VCH3CLK_AUXCLK		(BIT(14) | BIT(13))
-
-#define VIDCH2CLK		(BIT(10))
-#define VIDCH3CLK		(BIT(11))
-
 static struct davinci_uart_config uart_config __initdata = {
 	.enabled_uarts = (1 << 0),
 };
@@ -300,40 +287,6 @@ static struct snd_platform_data dm646x_evm_snd_data[] = {
 	},
 };
 
-static struct i2c_client *cpld_client;
-
-static int cpld_video_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
-{
-	cpld_client = client;
-	return 0;
-}
-
-static int __devexit cpld_video_remove(struct i2c_client *client)
-{
-	cpld_client = NULL;
-	return 0;
-}
-
-static const struct i2c_device_id cpld_video_id[] = {
-	{ "cpld_video", 0 },
-	{ }
-};
-
-static struct i2c_driver cpld_video_driver = {
-	.driver = {
-		.name	= "cpld_video",
-	},
-	.probe		= cpld_video_probe,
-	.remove		= cpld_video_remove,
-	.id_table	= cpld_video_id,
-};
-
-static void evm_init_cpld(void)
-{
-	i2c_add_driver(&cpld_video_driver);
-}
-
 static struct i2c_board_info __initdata i2c_info[] =  {
 	{
 		I2C_BOARD_INFO("24c256", 0x50),
@@ -347,9 +300,6 @@ static struct i2c_board_info __initdata i2c_info[] =  {
 		I2C_BOARD_INFO("cpld_reg0", 0x3a),
 	},
 	{
-		I2C_BOARD_INFO("cpld_video", 0x3B),
-	},
-	{
 		I2C_BOARD_INFO("tlv320aic33", 0x18),
 	}
 };
@@ -359,85 +309,11 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 	.bus_delay      = 0 /* usec */,
 };
 
-static int set_vpif_clock(int mux_mode, int hd)
-{
-	int val = 0;
-	int err = 0;
-	unsigned int value;
-	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
-
-	if (!cpld_client)
-		return -ENXIO;
-
-	/* disable the clock */
-	value = __raw_readl(base + VSCLKDIS_OFFSET);
-	value |= (VIDCH3CLK | VIDCH2CLK);
-	__raw_writel(value, base + VSCLKDIS_OFFSET);
-
-	val = i2c_smbus_read_byte(cpld_client);
-	if (val < 0)
-		return val;
-
-	if (mux_mode == 1)
-		val &= ~0x40;
-	else
-		val |= 0x40;
-
-	err = i2c_smbus_write_byte(cpld_client, val);
-	if (err)
-		return err;
-
-	value = __raw_readl(base + VIDCLKCTL_OFFSET);
-	value &= ~(VCH2CLK_MASK);
-	value &= ~(VCH3CLK_MASK);
-
-	if (hd >= 1)
-		value |= (VCH2CLK_SYSCLK8 | VCH3CLK_SYSCLK8);
-	else
-		value |= (VCH2CLK_AUXCLK | VCH3CLK_AUXCLK);
-
-	__raw_writel(value, base + VIDCLKCTL_OFFSET);
-
-	/* enable the clock */
-	value = __raw_readl(base + VSCLKDIS_OFFSET);
-	value &= ~(VIDCH3CLK | VIDCH2CLK);
-	__raw_writel(value, base + VSCLKDIS_OFFSET);
-
-	return 0;
-}
-
-static const struct vpif_subdev_info dm646x_vpif_subdev[] = {
-	{
-		.addr	= 0x2A,
-		.name	= "adv7343",
-	},
-	{
-		.addr	= 0x2C,
-		.name	= "ths7303",
-	},
-};
-
-static const char *output[] = {
-	"Composite",
-	"Component",
-	"S-Video",
-};
-
-static struct vpif_config dm646x_vpif_config = {
-	.set_clock	= set_vpif_clock,
-	.subdevinfo	= dm646x_vpif_subdev,
-	.subdev_count	= ARRAY_SIZE(dm646x_vpif_subdev),
-	.output		= output,
-	.output_count	= ARRAY_SIZE(output),
-	.card_name	= "DM646x EVM",
-};
-
 static void __init evm_init_i2c(void)
 {
 	davinci_init_i2c(&i2c_pdata);
 	i2c_add_driver(&dm6467evm_cpld_driver);
 	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
-	evm_init_cpld();
 }
 
 static void __init davinci_map_io(void)
@@ -459,7 +335,6 @@ static __init void evm_init(void)
 
 	soc_info->emac_pdata->phy_mask = DM646X_EVM_PHY_MASK;
 	soc_info->emac_pdata->mdio_max_freq = DM646X_EVM_MDIO_FREQUENCY;
-	dm646x_setup_vpif(&dm646x_vpif_config);
 }
 
 static __init void davinci_dm646x_evm_irq_init(void)

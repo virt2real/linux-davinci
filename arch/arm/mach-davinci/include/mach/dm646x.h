@@ -29,28 +29,4 @@ void __init dm646x_init_ide(void);
 void __init dm646x_init_mcasp0(struct snd_platform_data *pdata);
 void __init dm646x_init_mcasp1(struct snd_platform_data *pdata);
 
-void dm646x_video_init(void);
-
-struct vpif_output {
-	u16 id;
-	const char *name;
-};
-
-struct vpif_subdev_info {
-	unsigned short addr;
-	const char *name;
-};
-
-struct vpif_config {
-	int (*set_clock)(int, int);
-	const struct vpif_subdev_info *subdevinfo;
-	int subdev_count;
-	const char **output;
-	int output_count;
-	const char *card_name;
-};
-
-
-void dm646x_setup_vpif(struct vpif_config *config);
-
 #endif /* __ASM_ARCH_DM646X_H */
