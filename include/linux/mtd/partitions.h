@@ -10,6 +10,7 @@
 #define MTD_PARTITIONS_H
 
 #include <linux/types.h>
+#include <linux/memory.h>
 
 
 /*
@@ -40,6 +41,8 @@ struct mtd_partition {
 	uint64_t offset;		/* offset within the master MTD space */
 	uint32_t mask_flags;		/* master MTD flags to mask out for this partition */
 	struct nand_ecclayout *ecclayout;	/* out of band layout for this partition (NAND only)*/
+	void (*setup)(struct memory_accessor *, void *context);
+	void *context;
 };
 
 #define MTDPART_OFS_NXTBLK	(-2)
