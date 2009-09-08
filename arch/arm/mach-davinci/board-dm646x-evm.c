@@ -33,7 +33,7 @@
 #include <linux/i2c/at24.h>
 #include <linux/i2c/pcf857x.h>
 #include <linux/etherdevice.h>
-#include <media/tvp514x.h>
+
 #include <asm/setup.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -62,8 +62,8 @@
 #define DM646X_EVM_PHY_MASK		(0x2)
 #define DM646X_EVM_MDIO_FREQUENCY	(2200000) /* PHY bus frequency */
 
-#define VIDCLKCTL_OFFSET	(DAVINCI_SYSTEM_MODULE_BASE + 0x38)
-#define VSCLKDIS_OFFSET		(DAVINCI_SYSTEM_MODULE_BASE + 0x6c)
+#define VIDCLKCTL_OFFSET	(0x38)
+#define VSCLKDIS_OFFSET		(0x6c)
 
 #define VCH2CLK_MASK		(BIT_MASK(10) | BIT_MASK(9) | BIT_MASK(8))
 #define VCH2CLK_SYSCLK8		(BIT(9))
@@ -74,18 +74,6 @@
 
 #define VIDCH2CLK		(BIT(10))
 #define VIDCH3CLK		(BIT(11))
-#define VIDCH1CLK		(BIT(4))
-#define TVP7002_INPUT		(BIT(4))
-#define TVP5147_INPUT		(~BIT(4))
-#define VPIF_INPUT_ONE_CHANNEL	(BIT(5))
-#define VPIF_INPUT_TWO_CHANNEL	(~BIT(5))
-#define TVP5147_CH0		"tvp514x-0"
-#define TVP5147_CH1		"tvp514x-1"
-
-static void __iomem *vpif_vidclkctl_reg;
-static void __iomem *vpif_vsclkdis_reg;
-/* spin lock for updating above registers */
-static spinlock_t vpif_reg_lock;
 
 static struct davinci_uart_config uart_config __initdata = {
 	.enabled_uarts = (1 << 0),
@@ -359,7 +347,7 @@ static struct i2c_board_info __initdata i2c_info[] =  {
 		I2C_BOARD_INFO("cpld_reg0", 0x3a),
 	},
 	{
-		I2C_BOARD_INFO("cpld_video", 0x3b),
+		I2C_BOARD_INFO("cpld_video", 0x3B),
 	},
 	{
 		I2C_BOARD_INFO("tlv320aic33", 0x18),
@@ -373,20 +361,18 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 
 static int set_vpif_clock(int mux_mode, int hd)
 {
-	unsigned long flags;
-	unsigned int value;
 	int val = 0;
 	int err = 0;
+	unsigned int value;
+	void __iomem *base = IO_ADDRESS(DAVINCI_SYSTEM_MODULE_BASE);
 
-	if (!vpif_vidclkctl_reg || !vpif_vsclkdis_reg || !cpld_client)
+	if (!cpld_client)
 		return -ENXIO;
 
 	/* disable the clock */
-	spin_lock_irqsave(&vpif_reg_lock, flags);
-	value = __raw_readl(vpif_vsclkdis_reg);
+	value = __raw_readl(base + VSCLKDIS_OFFSET);
 	value |= (VIDCH3CLK | VIDCH2CLK);
-	__raw_writel(value, vpif_vsclkdis_reg);
-	spin_unlock_irqrestore(&vpif_reg_lock, flags);
+	__raw_writel(value, base + VSCLKDIS_OFFSET);
 
 	val = i2c_smbus_read_byte(cpld_client);
 	if (val < 0)
@@ -401,7 +387,7 @@ static int set_vpif_clock(int mux_mode, int hd)
 	if (err)
 		return err;
 
-	value = __raw_readl(vpif_vidclkctl_reg);
+	value = __raw_readl(base + VIDCLKCTL_OFFSET);
 	value &= ~(VCH2CLK_MASK);
 	value &= ~(VCH3CLK_MASK);
 
@@ -410,30 +396,24 @@ static int set_vpif_clock(int mux_mode, int hd)
 	else
 		value |= (VCH2CLK_AUXCLK | VCH3CLK_AUXCLK);
 
-	__raw_writel(value, vpif_vidclkctl_reg);
+	__raw_writel(value, base + VIDCLKCTL_OFFSET);
 
 	/* enable the clock */
-	spin_lock_irqsave(&vpif_reg_lock, flags);
-	value = __raw_readl(vpif_vsclkdis_reg);
+	value = __raw_readl(base + VSCLKDIS_OFFSET);
 	value &= ~(VIDCH3CLK | VIDCH2CLK);
-	__raw_writel(value, vpif_vsclkdis_reg);
-	spin_unlock_irqrestore(&vpif_reg_lock, flags);
+	__raw_writel(value, base + VSCLKDIS_OFFSET);
 
 	return 0;
 }
 
-static struct vpif_subdev_info dm646x_vpif_subdev[] = {
+static const struct vpif_subdev_info dm646x_vpif_subdev[] = {
 	{
+		.addr	= 0x2A,
 		.name	= "adv7343",
-		.board_info = {
-			I2C_BOARD_INFO("adv7343", 0x2a),
-		},
 	},
 	{
+		.addr	= 0x2C,
 		.name	= "ths7303",
-		.board_info = {
-			I2C_BOARD_INFO("ths7303", 0x2c),
-		},
 	},
 };
 
@@ -443,7 +423,7 @@ static const char *output[] = {
 	"S-Video",
 };
 
-static struct vpif_display_config dm646x_vpif_display_config = {
+static struct vpif_config dm646x_vpif_config = {
 	.set_clock	= set_vpif_clock,
 	.subdevinfo	= dm646x_vpif_subdev,
 	.subdev_count	= ARRAY_SIZE(dm646x_vpif_subdev),
@@ -451,177 +431,6 @@ static struct vpif_display_config dm646x_vpif_display_config = {
 	.output_count	= ARRAY_SIZE(output),
 	.card_name	= "DM646x EVM",
 };
-
-/**
- * setup_vpif_input_path()
- * @channel: channel id (0 - CH0, 1 - CH1)
- * @sub_dev_name: ptr sub device name
- *
- * This will set vpif input to capture data from tvp514x or
- * tvp7002.
- */
-static int setup_vpif_input_path(int channel, const char *sub_dev_name)
-{
-	int err = 0;
-	int val;
-
-	/* for channel 1, we don't do anything */
-	if (channel != 0)
-		return 0;
-
-	if (!cpld_client)
-		return -ENXIO;
-
-	val = i2c_smbus_read_byte(cpld_client);
-	if (val < 0)
-		return val;
-
-	if (!strcmp(sub_dev_name, TVP5147_CH0) ||
-	    !strcmp(sub_dev_name, TVP5147_CH1))
-		val &= TVP5147_INPUT;
-	else
-		val |= TVP7002_INPUT;
-
-	err = i2c_smbus_write_byte(cpld_client, val);
-	if (err)
-		return err;
-	return 0;
-}
-
-/**
- * setup_vpif_input_channel_mode()
- * @mux_mode:  mux mode. 0 - 1 channel or (1) - 2 channel
- *
- * This will setup input mode to one channel (TVP7002) or 2 channel (TVP5147)
- */
-static int setup_vpif_input_channel_mode(int mux_mode)
-{
-	unsigned long flags;
-	int err = 0;
-	int val;
-	u32 value;
-
-	if (!vpif_vsclkdis_reg || !cpld_client)
-		return -ENXIO;
-
-	val = i2c_smbus_read_byte(cpld_client);
-	if (val < 0)
-		return val;
-
-	spin_lock_irqsave(&vpif_reg_lock, flags);
-	value = __raw_readl(vpif_vsclkdis_reg);
-	if (mux_mode) {
-		val &= VPIF_INPUT_TWO_CHANNEL;
-		value |= VIDCH1CLK;
-	} else {
-		val |= VPIF_INPUT_ONE_CHANNEL;
-		value &= ~VIDCH1CLK;
-	}
-	__raw_writel(value, vpif_vsclkdis_reg);
-	spin_unlock_irqrestore(&vpif_reg_lock, flags);
-
-	err = i2c_smbus_write_byte(cpld_client, val);
-	if (err)
-		return err;
-
-	return 0;
-}
-
-static struct tvp514x_platform_data tvp5146_pdata = {
-	.clk_polarity = 0,
-	.hs_polarity = 1,
-	.vs_polarity = 1
-};
-
-#define TVP514X_STD_ALL (V4L2_STD_NTSC | V4L2_STD_PAL)
-
-static struct vpif_subdev_info vpif_capture_sdev_info[] = {
-	{
-		.name	= TVP5147_CH0,
-		.board_info = {
-			I2C_BOARD_INFO("tvp5146", 0x5d),
-			.platform_data = &tvp5146_pdata,
-		},
-		.input = INPUT_CVBS_VI2B,
-		.output = OUTPUT_10BIT_422_EMBEDDED_SYNC,
-		.can_route = 1,
-		.vpif_if = {
-			.if_type = VPIF_IF_BT656,
-			.hd_pol = 1,
-			.vd_pol = 1,
-			.fid_pol = 0,
-		},
-	},
-	{
-		.name	= TVP5147_CH1,
-		.board_info = {
-			I2C_BOARD_INFO("tvp5146", 0x5c),
-			.platform_data = &tvp5146_pdata,
-		},
-		.input = INPUT_SVIDEO_VI2C_VI1C,
-		.output = OUTPUT_10BIT_422_EMBEDDED_SYNC,
-		.can_route = 1,
-		.vpif_if = {
-			.if_type = VPIF_IF_BT656,
-			.hd_pol = 1,
-			.vd_pol = 1,
-			.fid_pol = 0,
-		},
-	},
-};
-
-static const struct vpif_input dm6467_ch0_inputs[] = {
-	{
-		.input = {
-			.index = 0,
-			.name = "Composite",
-			.type = V4L2_INPUT_TYPE_CAMERA,
-			.std = TVP514X_STD_ALL,
-		},
-		.subdev_name = TVP5147_CH0,
-	},
-};
-
-static const struct vpif_input dm6467_ch1_inputs[] = {
-       {
-		.input = {
-			.index = 0,
-			.name = "S-Video",
-			.type = V4L2_INPUT_TYPE_CAMERA,
-			.std = TVP514X_STD_ALL,
-		},
-		.subdev_name = TVP5147_CH1,
-	},
-};
-
-static struct vpif_capture_config dm646x_vpif_capture_cfg = {
-	.setup_input_path = setup_vpif_input_path,
-	.setup_input_channel_mode = setup_vpif_input_channel_mode,
-	.subdev_info = vpif_capture_sdev_info,
-	.subdev_count = ARRAY_SIZE(vpif_capture_sdev_info),
-	.chan_config[0] = {
-		.inputs = dm6467_ch0_inputs,
-		.input_count = ARRAY_SIZE(dm6467_ch0_inputs),
-	},
-	.chan_config[1] = {
-		.inputs = dm6467_ch1_inputs,
-		.input_count = ARRAY_SIZE(dm6467_ch1_inputs),
-	},
-};
-
-static void __init evm_init_video(void)
-{
-	vpif_vidclkctl_reg = ioremap(VIDCLKCTL_OFFSET, 4);
-	vpif_vsclkdis_reg = ioremap(VSCLKDIS_OFFSET, 4);
-	if (!vpif_vidclkctl_reg || !vpif_vsclkdis_reg) {
-		pr_err("Can't map VPIF VIDCLKCTL or VSCLKDIS registers\n");
-		return;
-	}
-	spin_lock_init(&vpif_reg_lock);
-
-	dm646x_setup_vpif(&dm646x_vpif_display_config,
-			  &dm646x_vpif_capture_cfg);
-}
 
 static void __init evm_init_i2c(void)
 {
@@ -650,7 +459,7 @@ static __init void evm_init(void)
 
 	soc_info->emac_pdata->phy_mask = DM646X_EVM_PHY_MASK;
 	soc_info->emac_pdata->mdio_max_freq = DM646X_EVM_MDIO_FREQUENCY;
-	evm_init_video();
+	dm646x_setup_vpif(&dm646x_vpif_config);
 }
 
 static __init void davinci_dm646x_evm_irq_init(void)
