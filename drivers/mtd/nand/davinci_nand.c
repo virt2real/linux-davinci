@@ -522,8 +522,8 @@ static struct nand_ecclayout hwecc4_2048 __initconst = {
 		54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
 		},
 	.oobfree = {
-		/* 1 byte at offset 0 holds manufacturer badblock marker */
-		{.offset = 1, .length = 23, },
+		/* 2 bytes at offset 0 hold manufacturer badblock markers */
+		{.offset = 2, .length = 22, },
 		/* 5 bytes at offset 8 hold BBT markers */
 		/* 8 bytes at offset 16 hold JFFS2 clean markers */
 	},
