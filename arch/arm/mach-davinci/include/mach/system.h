@@ -13,6 +13,7 @@
 
 #include <linux/io.h>
 #include <mach/hardware.h>
+#include <asm/proc-fns.h>
 
 extern void davinci_watchdog_reset(void);
 
