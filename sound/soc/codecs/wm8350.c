@@ -63,6 +63,8 @@ struct wm8350_data {
 	struct wm8350_jack_data hpl;
 	struct wm8350_jack_data hpr;
 	struct regulator_bulk_data supplies[ARRAY_SIZE(supply_names)];
+	int fll_freq_out;
+	int fll_freq_in;
 };
 
 static unsigned int wm8350_codec_cache_read(struct snd_soc_codec *codec,
@@ -610,7 +612,7 @@ SOC_DAPM_SINGLE("Switch", WM8350_BEEP_VOLUME, 15, 1, 1);
 
 /* Out4 Capture Mux */
 static const struct snd_kcontrol_new wm8350_out4_capture_controls =
-SOC_DAPM_ENUM("Route", wm8350_enum[8]);
+SOC_DAPM_ENUM("Route", wm8350_enum[7]);
 
 static const struct snd_soc_dapm_widget wm8350_dapm_widgets[] = {
 
@@ -1104,9 +1106,13 @@ static int wm8350_set_fll(struct snd_soc_dai *codec_dai,
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct wm8350 *wm8350 = codec->control_data;
+	struct wm8350_data *priv = codec->private_data;
 	struct _fll_div fll_div;
 	int ret = 0;
 	u16 fll_1, fll_4;
+
+	if (freq_in == priv->fll_freq_in && freq_out == priv->fll_freq_out)
+		return 0;
 
 	/* power down FLL - we need to do this for reconfiguration */
 	wm8350_clear_bits(wm8350, WM8350_POWER_MGMT_4,
@@ -1141,6 +1147,9 @@ static int wm8350_set_fll(struct snd_soc_dai *codec_dai,
 	/* power FLL on */
 	wm8350_set_bits(wm8350, WM8350_POWER_MGMT_4, WM8350_FLL_OSC_ENA);
 	wm8350_set_bits(wm8350, WM8350_POWER_MGMT_4, WM8350_FLL_ENA);
+
+	priv->fll_freq_out = freq_out;
+	priv->fll_freq_in = freq_in;
 
 	return 0;
 }

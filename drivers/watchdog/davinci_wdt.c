@@ -88,7 +88,7 @@ static void wdt_enable(void)
 {
 	u32 tgcr;
 	u32 timer_margin;
-	u32 wdt_freq;
+	unsigned long wdt_freq;
 
 	wdt_freq = clk_get_rate(wdt_clk);
 
