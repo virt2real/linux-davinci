@@ -10,7 +10,6 @@
  * or implied.
  */
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/console.h>
 #include <linux/interrupt.h>
@@ -25,13 +24,10 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
-#include <mach/common.h>
-#include <mach/irqs.h>
 #include <mach/cp_intc.h>
 #include <mach/mux.h>
 #include <mach/nand.h>
 #include <mach/da8xx.h>
-#include <mach/asp.h>
 #include <mach/usb.h>
 
 #define DA830_EVM_PHY_MASK		0x0
