@@ -12,35 +12,37 @@
  * or implied.
  */
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/console.h>
 #include <linux/i2c.h>
 #include <linux/i2c/at24.h>
+#include <linux/i2c/pca953x.h>
 #include <linux/gpio.h>
 #include <linux/platform_device.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/physmap.h>
+#include <linux/regulator/machine.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
-#include <mach/common.h>
-#include <mach/irqs.h>
 #include <mach/cp_intc.h>
 #include <mach/da8xx.h>
 #include <mach/nand.h>
+#include <mach/mux.h>
 
 #define DA850_EVM_PHY_MASK		0x1
 #define DA850_EVM_MDIO_FREQUENCY	2200000 /* PHY bus frequency */
 
+#define DA850_LCD_PWR_PIN		GPIO_TO_PIN(2, 8)
 #define DA850_LCD_BL_PIN		GPIO_TO_PIN(2, 15)
-#define DA850_LCD_PWR_PIN		GPIO_TO_PIN(8, 10)
 
 #define DA850_MMCSD_CD_PIN		GPIO_TO_PIN(4, 0)
 #define DA850_MMCSD_WP_PIN		GPIO_TO_PIN(4, 1)
+
+#define DA850_MII_MDIO_CLKEN_PIN	GPIO_TO_PIN(2, 6)
 
 static struct mtd_partition da850_evm_norflash_partition[] = {
 	{
@@ -143,10 +145,90 @@ static struct platform_device da850_evm_nandflash_device = {
 	.resource	= da850_evm_nandflash_resource,
 };
 
+static u32 ui_card_detected;
+static void da850_evm_setup_nor_nand(void);
+
+static int da850_evm_ui_expander_setup(struct i2c_client *client, unsigned gpio,
+						unsigned ngpio, void *c)
+{
+	struct davinci_soc_info *soc_info = &davinci_soc_info;
+	int sel_a, sel_b, sel_c, ret;
+
+	sel_a = gpio + 7;
+	sel_b = gpio + 6;
+	sel_c = gpio + 5;
+
+	ret = gpio_request(sel_a, "sel_a");
+	if (ret) {
+		pr_warning("Cannot open UI expander pin %d\n", sel_a);
+		goto exp_setup_sela_fail;
+	}
+
+	ret = gpio_request(sel_b, "sel_b");
+	if (ret) {
+		pr_warning("Cannot open UI expander pin %d\n", sel_b);
+		goto exp_setup_selb_fail;
+	}
+
+	ret = gpio_request(sel_c, "sel_c");
+	if (ret) {
+		pr_warning("Cannot open UI expander pin %d\n", sel_c);
+		goto exp_setup_selc_fail;
+	}
+
+	/* deselect all functionalities */
+	gpio_direction_output(sel_a, 1);
+	gpio_direction_output(sel_b, 1);
+	gpio_direction_output(sel_c, 1);
+
+	ui_card_detected = 1;
+	pr_info("DA850/OMAP-L138 EVM UI card detected\n");
+
+	da850_evm_setup_nor_nand();
+
+	if (soc_info->emac_pdata->rmii_en)
+		/* enable RMII */
+		gpio_set_value(sel_a, 0);
+
+	return 0;
+
+exp_setup_selc_fail:
+	gpio_free(sel_b);
+exp_setup_selb_fail:
+	gpio_free(sel_a);
+exp_setup_sela_fail:
+	return ret;
+}
+
+static int da850_evm_ui_expander_teardown(struct i2c_client *client,
+					unsigned gpio, unsigned ngpio, void *c)
+{
+	/* deselect all functionalities */
+	gpio_set_value(gpio + 5, 1);
+	gpio_set_value(gpio + 6, 1);
+	gpio_set_value(gpio + 7, 1);
+
+	gpio_free(gpio + 5);
+	gpio_free(gpio + 6);
+	gpio_free(gpio + 7);
+
+	return 0;
+}
+
+static struct pca953x_platform_data da850_evm_ui_expander_info = {
+	.gpio_base	= DAVINCI_N_GPIO,
+	.setup		= da850_evm_ui_expander_setup,
+	.teardown	= da850_evm_ui_expander_teardown,
+};
+
 static struct i2c_board_info __initdata da850_evm_i2c_devices[] = {
 	{
 		I2C_BOARD_INFO("tlv320aic3x", 0x18),
-	}
+	},
+	{
+		I2C_BOARD_INFO("tca6416", 0x20),
+		.platform_data = &da850_evm_ui_expander_info,
+	},
 };
 
 static struct davinci_i2c_platform_data da850_evm_i2c_0_pdata = {
@@ -250,12 +332,152 @@ static void __init da850_evm_init_nor(void)
 	iounmap(aemif_addr);
 }
 
-#if defined(CONFIG_MTD_PHYSMAP) || \
-    defined(CONFIG_MTD_PHYSMAP_MODULE)
-#define HAS_NOR 1
-#else
-#define HAS_NOR 0
-#endif
+/* TPS65070 voltage regulator support */
+
+/* 3.3V */
+struct regulator_consumer_supply tps65070_dcdc1_consumers[] = {
+	{
+		.supply = "usb0_vdda33",
+	},
+	{
+		.supply = "usb1_vdda33",
+	},
+};
+
+/* 3.3V or 1.8V */
+struct regulator_consumer_supply tps65070_dcdc2_consumers[] = {
+	{
+		.supply = "dvdd3318_a",
+	},
+	{
+		.supply = "dvdd3318_b",
+	},
+	{
+		.supply = "dvdd3318_c",
+	},
+};
+
+/* 1.2V */
+struct regulator_consumer_supply tps65070_dcdc3_consumers[] = {
+	{
+		.supply = "cvdd",
+	},
+};
+
+/* 1.8V LDO */
+struct regulator_consumer_supply tps65070_ldo1_consumers[] = {
+	{
+		.supply = "sata_vddr",
+	},
+	{
+		.supply = "usb0_vdda18",
+	},
+	{
+		.supply = "usb1_vdda18",
+	},
+	{
+		.supply = "ddr_dvdd18",
+	},
+};
+
+/* 1.2V LDO */
+struct regulator_consumer_supply tps65070_ldo2_consumers[] = {
+	{
+		.supply = "sata_vdd",
+	},
+	{
+		.supply = "pll0_vdda",
+	},
+	{
+		.supply = "pll1_vdda",
+	},
+	{
+		.supply = "usbs_cvdd",
+	},
+	{
+		.supply = "vddarnwa1",
+	},
+};
+
+struct regulator_init_data tps65070_regulator_data[] = {
+	/* dcdc1 */
+	{
+		.constraints = {
+			.min_uV = 3150000,
+			.max_uV = 3450000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(tps65070_dcdc1_consumers),
+		.consumer_supplies = tps65070_dcdc1_consumers,
+	},
+
+	/* dcdc2 */
+	{
+		.constraints = {
+			.min_uV = 1710000,
+			.max_uV = 3450000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(tps65070_dcdc2_consumers),
+		.consumer_supplies = tps65070_dcdc2_consumers,
+	},
+
+	/* dcdc3 */
+	{
+		.constraints = {
+			.min_uV = 950000,
+			.max_uV = 1320000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(tps65070_dcdc3_consumers),
+		.consumer_supplies = tps65070_dcdc3_consumers,
+	},
+
+	/* ldo1 */
+	{
+		.constraints = {
+			.min_uV = 1710000,
+			.max_uV = 1890000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(tps65070_ldo1_consumers),
+		.consumer_supplies = tps65070_ldo1_consumers,
+	},
+
+	/* ldo2 */
+	{
+		.constraints = {
+			.min_uV = 1140000,
+			.max_uV = 1320000,
+			.valid_ops_mask = (REGULATOR_CHANGE_VOLTAGE |
+				REGULATOR_CHANGE_STATUS),
+			.boot_on = 1,
+		},
+		.num_consumer_supplies = ARRAY_SIZE(tps65070_ldo2_consumers),
+		.consumer_supplies = tps65070_ldo2_consumers,
+	},
+};
+
+static struct i2c_board_info __initdata da850evm_tps65070_info[] = {
+	{
+		I2C_BOARD_INFO("tps6507x", 0x48),
+		.platform_data = &tps65070_regulator_data[0],
+	},
+};
+
+static int __init pmic_tps65070_init(void)
+{
+	return i2c_register_board_info(1, da850evm_tps65070_info,
+					ARRAY_SIZE(da850evm_tps65070_info));
+}
 
 #if defined(CONFIG_MMC_DAVINCI) || \
     defined(CONFIG_MMC_DAVINCI_MODULE)
@@ -264,25 +486,94 @@ static void __init da850_evm_init_nor(void)
 #define HAS_MMC 0
 #endif
 
+static void da850_evm_setup_nor_nand(void)
+{
+	int ret = 0;
+
+	if (ui_card_detected & !HAS_MMC) {
+		ret = da8xx_pinmux_setup(da850_nand_pins);
+		if (ret)
+			pr_warning("da850_evm_init: nand mux setup failed: "
+					"%d\n",	ret);
+
+		ret = da8xx_pinmux_setup(da850_nor_pins);
+		if (ret)
+			pr_warning("da850_evm_init: nor mux setup failed: %d\n",
+				ret);
+
+		da850_evm_init_nor();
+
+		platform_add_devices(da850_evm_devices,
+					ARRAY_SIZE(da850_evm_devices));
+	}
+}
+
+static const short da850_evm_lcdc_pins[] = {
+	DA850_GPIO2_8, DA850_GPIO2_15,
+	-1
+};
+
+static int __init da850_evm_config_emac(u8 rmii_en)
+{
+	void __iomem *cfg_chip3_base;
+	int ret;
+	u32 val;
+
+	cfg_chip3_base = DA8XX_SYSCFG_VIRT(DA8XX_CFGCHIP3_REG);
+
+	/* configure the CFGCHIP3 register for RMII or MII */
+	val = __raw_readl(cfg_chip3_base);
+	if (rmii_en)
+		val |= BIT(8);
+	else
+		val &= ~BIT(8);
+
+	__raw_writel(val, cfg_chip3_base);
+
+	if (!rmii_en)
+		ret = da8xx_pinmux_setup(da850_cpgmac_pins);
+	else
+		ret = da8xx_pinmux_setup(da850_rmii_pins);
+	if (ret)
+		pr_warning("da850_evm_init: cpgmac/rmii mux setup failed: %d\n",
+				ret);
+
+	ret = davinci_cfg_reg(DA850_GPIO2_6);
+	if (ret)
+		pr_warning("da850_evm_init:GPIO(2,6) mux setup "
+							"failed\n");
+
+	ret = gpio_request(DA850_MII_MDIO_CLKEN_PIN, "mdio_clk_en");
+	if (ret) {
+		pr_warning("Cannot open GPIO %d\n",
+					DA850_MII_MDIO_CLKEN_PIN);
+		return ret;
+	}
+
+	if (rmii_en) {
+		/* Disable MII MDIO clock */
+		gpio_direction_output(DA850_MII_MDIO_CLKEN_PIN, 1);
+		pr_info("EMAC: RMII PHY configured, MII PHY will not be"
+							" functional\n");
+	} else {
+		/* Enable MII MDIO clock */
+		gpio_direction_output(DA850_MII_MDIO_CLKEN_PIN, 0);
+		pr_info("EMAC: MII PHY configured, RMII PHY will not be"
+							" functional\n");
+	}
+
+	return 0;
+}
+
 static __init void da850_evm_init(void)
 {
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
 	int ret;
 
-	ret = da8xx_pinmux_setup(da850_nand_pins);
+	ret = pmic_tps65070_init();
 	if (ret)
-		pr_warning("da850_evm_init: nand mux setup failed: %d\n",
+		pr_warning("da850_evm_init: TPS65070 PMIC init failed: %d\n",
 				ret);
-
-	ret = da8xx_pinmux_setup(da850_nor_pins);
-	if (ret)
-		pr_warning("da850_evm_init: nor mux setup failed: %d\n",
-				ret);
-
-	da850_evm_init_nor();
-
-	platform_add_devices(da850_evm_devices,
-				ARRAY_SIZE(da850_evm_devices));
 
 	ret = da8xx_register_edma();
 	if (ret)
@@ -301,12 +592,15 @@ static __init void da850_evm_init(void)
 
 	soc_info->emac_pdata->phy_mask = DA850_EVM_PHY_MASK;
 	soc_info->emac_pdata->mdio_max_freq = DA850_EVM_MDIO_FREQUENCY;
+#ifdef CONFIG_DA850_UI_RMII
+	soc_info->emac_pdata->rmii_en = 1;
+#else
 	soc_info->emac_pdata->rmii_en = 0;
+#endif
 
-	ret = da8xx_pinmux_setup(da850_cpgmac_pins);
+	ret = da850_evm_config_emac(soc_info->emac_pdata->rmii_en);
 	if (ret)
-		pr_warning("da850_evm_init: cpgmac mux setup failed: %d\n",
-				ret);
+		pr_warning("da850_evm_init: emac setup failed: %d\n", ret);
 
 	ret = da8xx_register_emac();
 	if (ret)
@@ -319,11 +613,6 @@ static __init void da850_evm_init(void)
 				ret);
 
 	if (HAS_MMC) {
-		if (HAS_NOR)
-			pr_warning("WARNING: both NOR Flash and MMC/SD are "
-				"enabled, but they share AEMIF pins.\n"
-				"\tDisable one of them.\n");
-
 		ret = da8xx_pinmux_setup(da850_mmcsd0_pins);
 		if (ret)
 			pr_warning("da850_evm_init: mmcsd0 mux setup failed:"
@@ -365,21 +654,36 @@ static __init void da850_evm_init(void)
 		pr_warning("da850_evm_init: mcasp mux setup failed: %d\n",
 				ret);
 
-	da8xx_init_mcasp(0, &da850_evm_snd_data);
+	da8xx_register_mcasp(0, &da850_evm_snd_data);
 
 	ret = da8xx_pinmux_setup(da850_lcdcntl_pins);
 	if (ret)
 		pr_warning("da850_evm_init: lcdcntl mux setup failed: %d\n",
 				ret);
 
+	/* Handle board specific muxing for LCD here */
+	ret = da8xx_pinmux_setup(da850_evm_lcdc_pins);
+	if (ret)
+		pr_warning("da850_evm_init: evm specific lcd mux setup "
+				"failed: %d\n",	ret);
+
 	ret = da850_lcd_hw_init();
 	if (ret)
 		pr_warning("da850_evm_init: lcd initialization failed: %d\n",
 				ret);
 
-	ret = da8xx_register_lcdc();
+	ret = da8xx_register_lcdc(&sharp_lk043t1dg01_pdata);
 	if (ret)
 		pr_warning("da850_evm_init: lcdc registration failed: %d\n",
+				ret);
+
+	ret = da8xx_register_rtc();
+	if (ret)
+		pr_warning("da850_evm_init: rtc setup failed: %d\n", ret);
+
+	ret = da850_register_cpufreq();
+	if (ret)
+		pr_warning("da850_evm_init: cpufreq registration failed: %d\n",
 				ret);
 }
 

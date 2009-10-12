@@ -13,9 +13,8 @@
  * GNU General Public License for more details.
  */
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/init.h>
-#include <linux/dma-mapping.h>
+#include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/io.h>
 #include <linux/clk.h>
@@ -24,20 +23,17 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/nand.h>
-#include <asm/setup.h>
+
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
-#include <asm/mach/map.h>
+
 #include <mach/mux.h>
-#include <mach/hardware.h>
 #include <mach/dm365.h>
-#include <mach/psc.h>
 #include <mach/common.h>
 #include <mach/i2c.h>
 #include <mach/serial.h>
 #include <mach/mmc.h>
 #include <mach/nand.h>
-
 
 static inline int have_imager(void)
 {
@@ -144,6 +140,7 @@ static struct davinci_nand_pdata davinci_nand_data = {
 	.nr_parts		= ARRAY_SIZE(davinci_nand_partitions),
 	.ecc_mode		= NAND_ECC_HW,
 	.options		= NAND_USE_FLASH_BBT,
+	.ecc_bits		= 4,
 };
 
 static struct resource davinci_nand_resources[] = {
@@ -176,10 +173,15 @@ static struct at24_platform_data eeprom_info = {
 	.context	= (void *)0x7f00,
 };
 
+static struct snd_platform_data dm365_evm_snd_data;
+
 static struct i2c_board_info i2c_info[] = {
 	{
 		I2C_BOARD_INFO("24c256", 0x50),
 		.platform_data	= &eeprom_info,
+	},
+	{
+		I2C_BOARD_INFO("tlv320aic3x", 0x18),
 	},
 };
 
@@ -472,6 +474,8 @@ static __init void dm365_evm_init(void)
 
 	/* maybe setup mmc1/etc ... _after_ mmc0 */
 	evm_init_cpld();
+
+	dm365_init_asp(&dm365_evm_snd_data);
 }
 
 static __init void dm365_evm_irq_init(void)

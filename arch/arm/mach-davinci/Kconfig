@@ -32,6 +32,8 @@ config ARCH_DAVINCI_DA830
         bool "DA830/OMAP-L137 based system"
 	select CP_INTC
 	select ARCH_DAVINCI_DA8XX
+	select ARCH_HAS_CPUFREQ
+	select CPU_DCACHE_WRITETHROUGH # needed on silicon revs 1.0, 1.1
 
 config ARCH_DAVINCI_DA850
 	bool "DA850/OMAP-L138 based system"
@@ -101,12 +103,64 @@ config MACH_DAVINCI_DA830_EVM
 	help
 	  Say Y here to select the TI DA830/OMAP-L137 Evaluation Module.
 
+config DA830_UI
+	bool "DA830/OMAP-L137 UI (User Interface) board support"
+	depends on MACH_DAVINCI_DA830_EVM
+	help
+	  Say Y here if you have the DA830/OMAP-L137 UI
+	  (User Interface) board installed and you want to
+	  enable the peripherals located on User Interface
+	  board.
+
+choice
+	prompt "Select DA830/OMAP-L137 UI board peripheral"
+	depends on DA830_UI
+
+config DA830_UI_LCD
+	bool "LCD"
+	help
+	  Say Y here to use the LCD as a framebuffer or simple character
+	  display.
+
+endchoice
+
 config MACH_DAVINCI_DA850_EVM
 	bool "TI DA850/OMAP-L138 Reference Platform"
 	default ARCH_DAVINCI_DA850
 	depends on ARCH_DAVINCI_DA850
 	help
 	  Say Y here to select the TI DA850/OMAP-L138 Evaluation Module.
+
+config DA850_UI_EXP
+	bool "DA850/OMAP-L138 UI (User Interface) board expander configuration"
+	depends on MACH_DAVINCI_DA850_EVM
+	select GPIO_PCA953X
+	help
+	  Say Y here if you have the DA850/OMAP-L138 UI
+	  (User Interface) board installed and you want to
+	  enable the peripherals located on User Interface
+	  board contorlled by TCA6416 expander.
+
+choice
+	prompt "Select peripherals connected to expander on UI board"
+	depends on DA850_UI_EXP
+
+config DA850_UI_NONE
+	bool "No peripheral is enabled"
+	help
+	  Say Y if you do not want to enable any of the peripherals connected
+	  to TCA6416 expander on DA850/OMAP-L138 EVM UI card
+
+config DA850_UI_RMII
+	bool "RMII Ethernet PHY"
+	help
+	  Say Y if you want to use the RMII PHY on the DA850/OMAP-L138 EVM.
+	  This PHY is found on the UI daughter card that is supplied with
+	  the EVM.
+	  NOTE: Please take care while choosing this option, MII PHY will
+	  not be functional if RMII mode is selected.
+
+endchoice
 
 config DAVINCI_MUX
 	bool "DAVINCI multiplexing support"
