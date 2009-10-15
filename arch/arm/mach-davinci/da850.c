@@ -25,6 +25,7 @@
 #include <mach/time.h>
 #include <mach/da8xx.h>
 #include <mach/cpufreq.h>
+#include <linux/platform_device.h>
 
 #include "clock.h"
 #include "mux.h"
