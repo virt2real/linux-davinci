@@ -423,4 +423,14 @@ config KEYBOARD_W90P910
 	  To compile this driver as a module, choose M here: the
 	  module will be called w90p910_keypad.
 
+config KEYBOARD_DAVINCI
+	tristate "TI DaVinci Key Scan"
+	depends on ARCH_DAVINCI_DM365
+	help
+	  Say Y to enable keypad module support for the TI DaVinci
+	  platforms (DM365).
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called davinci_keyscan.
+
 endif
