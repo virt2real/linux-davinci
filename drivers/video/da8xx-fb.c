@@ -28,6 +28,7 @@
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/clk.h>
+#include <linux/cpufreq.h>
 #include <video/da8xx-fb.h>
 
 #define DRIVER_NAME "da8xx_lcdc"
@@ -113,6 +114,10 @@ struct da8xx_fb_par {
 	unsigned short pseudo_palette[16];
 	unsigned int databuf_sz;
 	unsigned int palette_sz;
+	unsigned int pxl_clk;
+#ifdef CONFIG_CPU_FREQ
+	struct notifier_block	freq_transition;
+#endif
 };
 
 /* Variable Screen Information */
@@ -155,7 +160,7 @@ struct da8xx_panel {
 	int		vfp;		/* Vertical front porch */
 	int		vbp;		/* Vertical back porch */
 	int		vsw;		/* Vertical Sync Pulse Width */
-	int		pxl_clk;	/* Pixel clock */
+	unsigned int	pxl_clk;	/* Pixel clock */
 	unsigned char	invert_pxl_clk;	/* Invert Pixel clock */
 };
 
@@ -171,7 +176,7 @@ static struct da8xx_panel known_lcd_panels[] = {
 		.vfp = 2,
 		.vbp = 2,
 		.vsw = 0,
-		.pxl_clk = 0x10,
+		.pxl_clk = 4608000,
 		.invert_pxl_clk = 1,
 	},
 	/* Sharp LK043T1DG01 */
@@ -185,7 +190,7 @@ static struct da8xx_panel known_lcd_panels[] = {
 		.vfp = 2,
 		.vbp = 2,
 		.vsw = 10,
-		.pxl_clk = 0x12,
+		.pxl_clk = 7833600,
 		.invert_pxl_clk = 0,
 	},
 };
@@ -451,6 +456,18 @@ static void lcd_reset(struct da8xx_fb_par *par)
 	lcdc_write(0, LCD_RASTER_CTRL_REG);
 }
 
+static void lcd_calc_clk_divider(struct da8xx_fb_par *par)
+{
+	unsigned int lcd_clk, div;
+
+	lcd_clk = clk_get_rate(par->lcdc_clk);
+	div = lcd_clk / par->pxl_clk;
+
+	/* Configure the LCD clock divisor. */
+	lcdc_write(LCD_CLK_DIVISOR(div) |
+			(LCD_RASTER_MODE & 0x1), LCD_CTRL_REG);
+}
+
 static int lcd_init(struct da8xx_fb_par *par, const struct lcd_ctrl_config *cfg,
 		struct da8xx_panel *panel)
 {
@@ -459,9 +476,8 @@ static int lcd_init(struct da8xx_fb_par *par, const struct lcd_ctrl_config *cfg,
 
 	lcd_reset(par);
 
-	/* Configure the LCD clock divisor. */
-	lcdc_write(LCD_CLK_DIVISOR(panel->pxl_clk) |
-			(LCD_RASTER_MODE & 0x1), LCD_CTRL_REG);
+	/* Calculate the divider */
+	lcd_calc_clk_divider(par);
 
 	if (panel->invert_pxl_clk)
 		lcdc_write((lcdc_read(LCD_RASTER_TIMING_2_REG) |
@@ -574,6 +590,41 @@ static int fb_check_var(struct fb_var_screeninfo *var,
 	return err;
 }
 
+#ifdef CONFIG_CPU_FREQ
+static int lcd_da8xx_cpufreq_transition(struct notifier_block *nb,
+				     unsigned long val, void *data)
+{
+	struct da8xx_fb_par *par;
+	unsigned int reg;
+
+	par = container_of(nb, struct da8xx_fb_par, freq_transition);
+	if (val == CPUFREQ_PRECHANGE) {
+		reg = lcdc_read(LCD_RASTER_CTRL_REG);
+		lcdc_write(reg & ~LCD_RASTER_ENABLE, LCD_RASTER_CTRL_REG);
+	} else if (val == CPUFREQ_POSTCHANGE) {
+		lcd_calc_clk_divider(par);
+		reg = lcdc_read(LCD_RASTER_CTRL_REG);
+		lcdc_write(reg | LCD_RASTER_ENABLE, LCD_RASTER_CTRL_REG);
+	}
+
+	return 0;
+}
+
+static inline int lcd_da8xx_cpufreq_register(struct da8xx_fb_par *par)
+{
+	par->freq_transition.notifier_call = lcd_da8xx_cpufreq_transition;
+
+	return cpufreq_register_notifier(&par->freq_transition,
+					 CPUFREQ_TRANSITION_NOTIFIER);
+}
+
+static inline void lcd_da8xx_cpufreq_deregister(struct da8xx_fb_par *par)
+{
+	cpufreq_unregister_notifier(&par->freq_transition,
+				    CPUFREQ_TRANSITION_NOTIFIER);
+}
+#endif
+
 static int __devexit fb_remove(struct platform_device *dev)
 {
 	struct fb_info *info = dev_get_drvdata(&dev->dev);
@@ -581,6 +632,9 @@ static int __devexit fb_remove(struct platform_device *dev)
 	if (info) {
 		struct da8xx_fb_par *par = info->par;
 
+#ifdef CONFIG_CPU_FREQ
+		lcd_da8xx_cpufreq_deregister(par);
+#endif
 		if (lcdc_read(LCD_RASTER_CTRL_REG) & LCD_RASTER_ENABLE)
 			lcd_disable_raster(par);
 		lcdc_write(0, LCD_RASTER_CTRL_REG);
@@ -721,6 +775,8 @@ static int __init fb_probe(struct platform_device *device)
 	}
 
 	par = da8xx_fb_info->par;
+	par->lcdc_clk = fb_clk;
+	par->pxl_clk = lcdc_info->pxl_clk;
 
 	if (lcd_init(par, lcd_cfg, lcdc_info) < 0) {
 		dev_err(&device->dev, "lcd_init failed\n");
@@ -752,8 +808,6 @@ static int __init fb_probe(struct platform_device *device)
 	da8xx_fb_fix.smem_start = par->p_palette_base + par->palette_sz;
 	da8xx_fb_fix.smem_len = par->databuf_sz - par->palette_sz;
 	da8xx_fb_fix.line_length = (lcdc_info->width * lcd_cfg->bpp) / 8;
-
-	par->lcdc_clk = fb_clk;
 
 	par->irq = platform_get_irq(device, 0);
 	if (par->irq < 0) {
@@ -811,11 +865,24 @@ static int __init fb_probe(struct platform_device *device)
 		goto err_dealloc_cmap;
 	}
 
+#ifdef CONFIG_CPU_FREQ
+	ret = lcd_da8xx_cpufreq_register(par);
+	if (ret) {
+		dev_err(&device->dev, "failed to register cpufreq\n");
+		goto err_cpu_freq;
+	}
+#endif
+
 	/* enable raster engine */
 	lcdc_write(lcdc_read(LCD_RASTER_CTRL_REG) |
 			LCD_RASTER_ENABLE, LCD_RASTER_CTRL_REG);
 
 	return 0;
+
+#ifdef CONFIG_CPU_FREQ
+err_cpu_freq:
+	unregister_framebuffer(da8xx_fb_info);
+#endif
 
 err_dealloc_cmap:
 	fb_dealloc_cmap(&da8xx_fb_info->cmap);
