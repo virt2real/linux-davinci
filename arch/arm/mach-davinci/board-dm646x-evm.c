@@ -722,9 +722,9 @@ static __init void davinci_dm646x_evm_irq_init(void)
 void __init dm646x_board_setup_refclk(struct clk *clk)
 {
 	if (machine_is_davinci_dm6467tevm())
-		clk->rate = DM6467T_EVM_REF_FREQ;
+		atomic_set(&clk->rate, DM6467T_EVM_REF_FREQ);
 	else
-		clk->rate = DM646X_EVM_REF_FREQ;
+		atomic_set(&clk->rate, DM646X_EVM_REF_FREQ);
 }
 
 MACHINE_START(DAVINCI_DM6467_EVM, "DaVinci DM646x EVM")

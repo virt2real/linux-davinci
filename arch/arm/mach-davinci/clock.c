@@ -28,7 +28,6 @@
 
 static LIST_HEAD(clocks);
 static DEFINE_MUTEX(clocks_mutex);
-static DEFINE_SPINLOCK(clockfw_lock);
 
 static unsigned psc_domain(struct clk *clk)
 {
@@ -41,15 +40,16 @@ static void __clk_enable(struct clk *clk)
 {
 	if (clk->parent)
 		__clk_enable(clk->parent);
-	if (clk->usecount++ == 0 && (clk->flags & CLK_PSC))
+	if (atomic_read(&clk->usecount) == 0 && (clk->flags & CLK_PSC))
 		davinci_psc_config(psc_domain(clk), clk->gpsc, clk->lpsc, 1);
+	atomic_inc(&clk->usecount);
 }
 
 static void __clk_disable(struct clk *clk)
 {
-	if (WARN_ON(clk->usecount == 0))
+	if (WARN_ON(atomic_read(&clk->usecount) == 0))
 		return;
-	if (--clk->usecount == 0 && !(clk->flags & CLK_PLL))
+	if (atomic_dec_and_test(&clk->usecount) && !(clk->flags & CLK_PLL))
 		davinci_psc_config(psc_domain(clk), clk->gpsc, clk->lpsc, 0);
 	if (clk->parent)
 		__clk_disable(clk->parent);
@@ -57,14 +57,10 @@ static void __clk_disable(struct clk *clk)
 
 int clk_enable(struct clk *clk)
 {
-	unsigned long flags;
-
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
-	spin_lock_irqsave(&clockfw_lock, flags);
 	__clk_enable(clk);
-	spin_unlock_irqrestore(&clockfw_lock, flags);
 
 	return 0;
 }
@@ -72,14 +68,10 @@ EXPORT_SYMBOL(clk_enable);
 
 void clk_disable(struct clk *clk)
 {
-	unsigned long flags;
-
 	if (clk == NULL || IS_ERR(clk))
 		return;
 
-	spin_lock_irqsave(&clockfw_lock, flags);
 	__clk_disable(clk);
-	spin_unlock_irqrestore(&clockfw_lock, flags);
 }
 EXPORT_SYMBOL(clk_disable);
 
@@ -88,7 +80,7 @@ unsigned long clk_get_rate(struct clk *clk)
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
-	return clk->rate;
+	return atomic_read(&clk->rate);
 }
 EXPORT_SYMBOL(clk_get_rate);
 
@@ -100,7 +92,7 @@ long clk_round_rate(struct clk *clk, unsigned long rate)
 	if (clk->round_rate)
 		return clk->round_rate(clk, rate);
 
-	return clk->rate;
+	return atomic_read(&clk->rate);
 }
 EXPORT_SYMBOL(clk_round_rate);
 
@@ -111,28 +103,27 @@ static void propagate_rate(struct clk *root)
 
 	list_for_each_entry(clk, &root->children, childnode) {
 		if (clk->recalc)
-			clk->rate = clk->recalc(clk);
+			atomic_set(&clk->rate, clk->recalc(clk));
 		propagate_rate(clk);
 	}
 }
 
 int clk_set_rate(struct clk *clk, unsigned long rate)
 {
-	unsigned long flags;
 	int ret = -EINVAL;
 
 	if (clk == NULL || IS_ERR(clk))
 		return ret;
 
-	spin_lock_irqsave(&clockfw_lock, flags);
 	if (clk->set_rate)
 		ret = clk->set_rate(clk, rate);
 	if (ret == 0) {
 		if (clk->recalc)
-			clk->rate = clk->recalc(clk);
+			atomic_set(&clk->rate, clk->recalc(clk));
+		mutex_lock(&clocks_mutex);
 		propagate_rate(clk);
+		mutex_unlock(&clocks_mutex);
 	}
-	spin_unlock_irqrestore(&clockfw_lock, flags);
 
 	return ret;
 }
@@ -140,26 +131,22 @@ EXPORT_SYMBOL(clk_set_rate);
 
 int clk_set_parent(struct clk *clk, struct clk *parent)
 {
-	unsigned long flags;
-
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
 	/* Cannot change parent on enabled clock */
-	if (WARN_ON(clk->usecount))
+	if (WARN_ON(atomic_read(&clk->usecount)))
 		return -EINVAL;
 
 	mutex_lock(&clocks_mutex);
 	clk->parent = parent;
 	list_del_init(&clk->childnode);
 	list_add(&clk->childnode, &clk->parent->children);
-	mutex_unlock(&clocks_mutex);
 
-	spin_lock_irqsave(&clockfw_lock, flags);
 	if (clk->recalc)
-		clk->rate = clk->recalc(clk);
+		atomic_set(&clk->rate, clk->recalc(clk));
 	propagate_rate(clk);
-	spin_unlock_irqrestore(&clockfw_lock, flags);
+	mutex_unlock(&clocks_mutex);
 
 	return 0;
 }
@@ -170,7 +157,7 @@ int clk_register(struct clk *clk)
 	if (clk == NULL || IS_ERR(clk))
 		return -EINVAL;
 
-	if (WARN(clk->parent && !clk->parent->rate,
+	if (WARN(clk->parent && !atomic_read(&clk->parent->rate),
 			"CLK: %s parent %s has no rate!\n",
 			clk->name, clk->parent->name))
 		return -EINVAL;
@@ -184,16 +171,16 @@ int clk_register(struct clk *clk)
 	mutex_unlock(&clocks_mutex);
 
 	/* If rate is already set, use it */
-	if (clk->rate)
+	if (atomic_read(&clk->rate))
 		return 0;
 
 	/* Else, see if there is a way to calculate it */
 	if (clk->recalc)
-		clk->rate = clk->recalc(clk);
+		atomic_set(&clk->rate, clk->recalc(clk));
 
 	/* Otherwise, default to parent rate */
 	else if (clk->parent)
-		clk->rate = clk->parent->rate;
+		atomic_set(&clk->rate, atomic_read(&clk->parent->rate));
 
 	return 0;
 }
@@ -219,9 +206,9 @@ static int __init clk_disable_unused(void)
 {
 	struct clk *ck;
 
-	spin_lock_irq(&clockfw_lock);
+	mutex_lock(&clocks_mutex);
 	list_for_each_entry(ck, &clocks, node) {
-		if (ck->usecount > 0)
+		if (atomic_read(&ck->usecount) > 0)
 			continue;
 		if (!(ck->flags & CLK_PSC))
 			continue;
@@ -233,7 +220,7 @@ static int __init clk_disable_unused(void)
 		pr_info("Clocks: disable unused %s\n", ck->name);
 		davinci_psc_config(psc_domain(ck), ck->gpsc, ck->lpsc, 0);
 	}
-	spin_unlock_irq(&clockfw_lock);
+	mutex_unlock(&clocks_mutex);
 
 	return 0;
 }
@@ -244,7 +231,7 @@ static unsigned long clk_sysclk_recalc(struct clk *clk)
 {
 	u32 v, plldiv;
 	struct pll_data *pll;
-	unsigned long rate = clk->rate;
+	unsigned long rate = atomic_read(&clk->rate);
 
 	/* If this is the PLL base clock, no more calculations needed */
 	if (clk->pll_data)
@@ -253,7 +240,7 @@ static unsigned long clk_sysclk_recalc(struct clk *clk)
 	if (WARN_ON(!clk->parent))
 		return rate;
 
-	rate = clk->parent->rate;
+	rate = atomic_read(&clk->parent->rate);
 
 	/* Otherwise, the parent must be a PLL */
 	if (WARN_ON(!clk->parent->pll_data))
@@ -281,9 +268,9 @@ static unsigned long clk_sysclk_recalc(struct clk *clk)
 static unsigned long clk_leafclk_recalc(struct clk *clk)
 {
 	if (WARN_ON(!clk->parent))
-		return clk->rate;
+		return atomic_read(&clk->rate);
 
-	return clk->parent->rate;
+	return atomic_read(&clk->parent->rate);
 }
 
 static unsigned long clk_pllclk_recalc(struct clk *clk)
@@ -291,11 +278,11 @@ static unsigned long clk_pllclk_recalc(struct clk *clk)
 	u32 ctrl, mult = 1, prediv = 1, postdiv = 1;
 	u8 bypass;
 	struct pll_data *pll = clk->pll_data;
-	unsigned long rate = clk->rate;
+	unsigned long rate = atomic_read(&clk->rate);
 
 	pll->base = IO_ADDRESS(pll->phys_base);
 	ctrl = __raw_readl(pll->base + PLLCTL);
-	rate = pll->input_rate = clk->parent->rate;
+	rate = pll->input_rate = atomic_read(&clk->parent->rate);
 
 	if (ctrl & PLLCTL_PLLEN) {
 		bypass = 0;
@@ -333,8 +320,8 @@ static unsigned long clk_pllclk_recalc(struct clk *clk)
 		rate /= postdiv;
 	}
 
-	pr_debug("PLL%d: input = %lu MHz [ ",
-		 pll->num, clk->parent->rate / 1000000);
+	pr_debug("PLL%d: input = %u MHz [ ",
+		 pll->num, atomic_read(&clk->parent->rate) / 1000000);
 	if (bypass)
 		pr_debug("bypass ");
 	if (prediv > 1)
@@ -443,7 +430,7 @@ int __init davinci_clk_init(struct davinci_clk *clocks)
 		}
 
 		if (clk->recalc)
-			clk->rate = clk->recalc(clk);
+			atomic_set(&clk->rate, clk->recalc(clk));
 
 		if (clk->lpsc)
 			clk->flags |= CLK_PSC;
@@ -505,7 +492,8 @@ dump_clock(struct seq_file *s, unsigned nest, struct clk *parent)
 			min(i, (unsigned)(sizeof(buf) - 1 - nest)));
 
 	seq_printf(s, "%s users=%2d %-3s %9ld Hz\n",
-		   buf, parent->usecount, state, clk_get_rate(parent));
+			buf, atomic_read(&parent->usecount), state,
+			clk_get_rate(parent));
 	/* REVISIT show device associations too */
 
 	/* cost is now small, but not linear... */

@@ -55,7 +55,7 @@ static struct pll_data pll2_data = {
 static struct clk ref_clk = {
 	.name = "ref_clk",
 	/* FIXME -- crystal rate is board-specific */
-	.rate = DM355_REF_FREQ,
+	.rate = ATOMIC_INIT(DM355_REF_FREQ),
 };
 
 static struct clk pll1_clk = {
@@ -314,7 +314,7 @@ static struct clk timer2_clk = {
 	.name = "timer2",
 	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER2,
-	.usecount = 1,              /* REVISIT: why cant' this be disabled? */
+	.usecount = ATOMIC_INIT(1), /* REVISIT: why cant' this be disabled? */
 };
 
 static struct clk timer3_clk = {
