@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/spinlock.h>
 
 #include <mach/cputype.h>
 #include <mach/psc.h>
@@ -53,6 +54,9 @@ void davinci_psc_config(unsigned int domain, unsigned int ctlr,
 	void __iomem *psc_base;
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
 	u32 next_state = enable ? 0x3 : 0x2; /* 0x3 enables, 0x2 disables */
+	/* Protect against simultaneous enable/disable of PSCs */
+	DEFINE_SPINLOCK(lock);
+	unsigned long flags;
 
 	if (!soc_info->psc_bases || (ctlr >= soc_info->psc_bases_num)) {
 		pr_warning("PSC: Bad psc data: 0x%x[%d]\n",
@@ -62,6 +66,7 @@ void davinci_psc_config(unsigned int domain, unsigned int ctlr,
 
 	psc_base = soc_info->psc_bases[ctlr];
 
+	spin_lock_irqsave(&lock, flags);
 	mdctl = __raw_readl(psc_base + MDCTL + 4 * id);
 	mdctl &= ~MDSTAT_STATE_MASK;
 	mdctl |= next_state;
@@ -100,4 +105,5 @@ void davinci_psc_config(unsigned int domain, unsigned int ctlr,
 	do {
 		mdstat = __raw_readl(psc_base + MDSTAT + 4 * id);
 	} while (!((mdstat & MDSTAT_STATE_MASK) == next_state));
+	spin_unlock_irqrestore(&lock, flags);
 }

@@ -55,7 +55,7 @@ static struct pll_data pll0_data = {
 
 static struct clk ref_clk = {
 	.name		= "ref_clk",
-	.rate		= DA850_REF_FREQ,
+	.rate		= ATOMIC_INIT(DA850_REF_FREQ),
 };
 
 static struct clk pll0_clk = {
@@ -1025,7 +1025,7 @@ static int da850_set_pll0rate(struct clk *clk, unsigned long armrate)
 
 static int da850_round_armrate(struct clk *clk, unsigned long rate)
 {
-	return clk->rate;
+	return atomic_read(&clk->rate);
 }
 #endif
 

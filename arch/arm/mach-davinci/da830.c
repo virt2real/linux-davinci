@@ -43,7 +43,7 @@ static struct pll_data pll0_data = {
 
 static struct clk ref_clk = {
 	.name		= "ref_clk",
-	.rate		= DA830_REF_FREQ,
+	.rate		= ATOMIC_INIT(DA830_REF_FREQ),
 };
 
 static struct clk pll0_clk = {

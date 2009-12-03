@@ -84,8 +84,8 @@ struct clk {
 	struct list_head	node;
 	struct module		*owner;
 	const char		*name;
-	unsigned long		rate;
-	u8			usecount;
+	atomic_t		rate;
+	atomic_t		usecount;
 	u8			lpsc;
 	u8			gpsc;
 	u32			flags;

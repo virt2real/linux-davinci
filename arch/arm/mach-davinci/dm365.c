@@ -52,7 +52,7 @@ static struct pll_data pll2_data = {
 
 static struct clk ref_clk = {
 	.name		= "ref_clk",
-	.rate		= DM365_REF_FREQ,
+	.rate		= ATOMIC_INIT(DM365_REF_FREQ),
 };
 
 static struct clk pll1_clk = {
@@ -358,7 +358,7 @@ static struct clk timer2_clk = {
 	.name		= "timer2",
 	.parent		= &pll1_aux_clk,
 	.lpsc		= DAVINCI_LPSC_TIMER2,
-	.usecount	= 1,
+	.usecount	= ATOMIC_INIT(1),
 };
 
 static struct clk timer3_clk = {

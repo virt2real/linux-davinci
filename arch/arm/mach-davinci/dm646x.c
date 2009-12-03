@@ -60,7 +60,7 @@ static struct clk ref_clk = {
 
 static struct clk aux_clkin = {
 	.name = "aux_clkin",
-	.rate = DM646X_AUX_FREQ,
+	.rate = ATOMIC_INIT(DM646X_AUX_FREQ),
 };
 
 static struct clk pll1_clk = {
@@ -158,7 +158,7 @@ static struct clk dsp_clk = {
 	.parent = &pll1_sysclk1,
 	.lpsc = DM646X_LPSC_C64X_CPU,
 	.flags = PSC_DSP,
-	.usecount = 1,			/* REVISIT how to disable? */
+	.usecount = ATOMIC_INIT(1),		/* REVISIT how to disable? */
 };
 
 static struct clk arm_clk = {
@@ -262,14 +262,14 @@ static struct clk pwm0_clk = {
 	.name = "pwm0",
 	.parent = &pll1_sysclk3,
 	.lpsc = DM646X_LPSC_PWM0,
-	.usecount = 1,            /* REVIST: disabling hangs system */
+	.usecount = ATOMIC_INIT(1),	/* REVIST: disabling hangs system */
 };
 
 static struct clk pwm1_clk = {
 	.name = "pwm1",
 	.parent = &pll1_sysclk3,
 	.lpsc = DM646X_LPSC_PWM1,
-	.usecount = 1,            /* REVIST: disabling hangs system */
+	.usecount = ATOMIC_INIT(1),	/* REVIST: disabling hangs system */
 };
 
 static struct clk timer0_clk = {
