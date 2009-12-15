@@ -49,7 +49,8 @@ static void __clk_disable(struct clk *clk)
 {
 	if (WARN_ON(atomic_read(&clk->usecount) == 0))
 		return;
-	if (atomic_dec_and_test(&clk->usecount) && !(clk->flags & CLK_PLL))
+	if (atomic_dec_and_test(&clk->usecount) && !(clk->flags & CLK_PLL)
+						&& (clk->flags & CLK_PSC))
 		davinci_psc_config(psc_domain(clk), clk->gpsc, clk->lpsc, 0);
 	if (clk->parent)
 		__clk_disable(clk->parent);
