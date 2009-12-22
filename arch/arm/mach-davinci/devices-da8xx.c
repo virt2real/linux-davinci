@@ -42,7 +42,8 @@
 #define DA8XX_MDIO_REG_OFFSET		0x4000
 #define DA8XX_EMAC_CTRL_RAM_SIZE	SZ_8K
 
-void __iomem *da8xx_syscfg_base;
+void __iomem *da8xx_syscfg0_base;
+void __iomem *da8xx_syscfg1_base;
 
 static struct plat_serial8250_port da8xx_serial_pdata[] = {
 	{
@@ -481,11 +482,31 @@ static struct platform_device da8xx_rtc_device = {
 
 int da8xx_register_rtc(void)
 {
+	int ret;
+
 	/* Unlock the rtc's registers */
 	__raw_writel(0x83e70b13, IO_ADDRESS(DA8XX_RTC_BASE + 0x6c));
 	__raw_writel(0x95a4f1e0, IO_ADDRESS(DA8XX_RTC_BASE + 0x70));
 
-	return platform_device_register(&da8xx_rtc_device);
+	ret = platform_device_register(&da8xx_rtc_device);
+	if (!ret)
+		/* Atleast on DA850, RTC is a wakeup source */
+		device_init_wakeup(&da8xx_rtc_device.dev, true);
+
+	return ret;
+}
+
+static void __iomem *da8xx_ddr2_ctlr_base;
+void __iomem * __init da8xx_get_mem_ctlr(void)
+{
+	if (da8xx_ddr2_ctlr_base)
+		return da8xx_ddr2_ctlr_base;
+
+	da8xx_ddr2_ctlr_base = ioremap(DA8XX_DDR2_CTL_BASE, SZ_32K);
+	if (!da8xx_ddr2_ctlr_base)
+		pr_warning("%s: Unable to map DDR2 controller",	__func__);
+
+	return da8xx_ddr2_ctlr_base;
 }
 
 static struct resource da8xx_cpuidle_resources[] = {
@@ -513,6 +534,7 @@ static struct platform_device da8xx_cpuidle_device = {
 
 int __init da8xx_register_cpuidle(void)
 {
+	da8xx_cpuidle_pdata.ddr2_ctlr_base = da8xx_get_mem_ctlr();
+
 	return platform_device_register(&da8xx_cpuidle_device);
 }
-

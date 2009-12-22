@@ -40,6 +40,7 @@
 #define DA850_REF_FREQ		24000000
 
 #define CFGCHIP3_ASYNC3_CLKSRC	BIT(4)
+#define CFGCHIP3_PLL1_MASTER_LOCK	BIT(5)
 #define CFGCHIP0_PLL_MASTER_LOCK	BIT(4)
 
 static int da850_set_armrate(struct clk *clk, unsigned long rate);
@@ -54,7 +55,7 @@ static struct pll_data pll0_data = {
 
 static struct clk ref_clk = {
 	.name		= "ref_clk",
-	.rate		= DA850_REF_FREQ,
+	.rate		= ATOMIC_INIT(DA850_REF_FREQ),
 };
 
 static struct clk pll0_clk = {
@@ -770,6 +771,12 @@ static struct map_desc da850_io_desc[] = {
 		.length		= DA8XX_CP_INTC_SIZE,
 		.type		= MT_DEVICE
 	},
+	{
+		.virtual	= SRAM_VIRT,
+		.pfn		= __phys_to_pfn(DA8XX_ARM_RAM_BASE),
+		.length		= SZ_8K,
+		.type		= MT_DEVICE
+	},
 };
 
 static void __iomem *da850_psc_bases[] = {
@@ -838,12 +845,12 @@ static void da850_set_async3_src(int pllnum)
 		}
        }
 
-	v = __raw_readl(DA8XX_SYSCFG_VIRT(DA8XX_CFGCHIP3_REG));
+	v = __raw_readl(DA8XX_SYSCFG0_VIRT(DA8XX_CFGCHIP3_REG));
 	if (pllnum)
 		v |= CFGCHIP3_ASYNC3_CLKSRC;
 	else
 		v &= ~CFGCHIP3_ASYNC3_CLKSRC;
-	__raw_writel(v, DA8XX_SYSCFG_VIRT(DA8XX_CFGCHIP3_REG));
+	__raw_writel(v, DA8XX_SYSCFG0_VIRT(DA8XX_CFGCHIP3_REG));
 }
 
 #ifdef CONFIG_CPU_FREQ
@@ -987,18 +994,12 @@ static int da850_set_pll0rate(struct clk *clk, unsigned long index)
 	unsigned int prediv, mult, postdiv;
 	struct da850_opp *opp;
 	struct pll_data *pll = clk->pll_data;
-	unsigned int v;
 	int ret;
 
 	opp = (struct da850_opp *) da850_freq_table[index].index;
 	prediv = opp->prediv;
 	mult = opp->mult;
 	postdiv = opp->postdiv;
-
-	/* Unlock writing to PLL registers */
-	v = __raw_readl(DA8XX_SYSCFG_VIRT(DA8XX_CFGCHIP0_REG));
-	v &= ~CFGCHIP0_PLL_MASTER_LOCK;
-	__raw_writel(v, DA8XX_SYSCFG_VIRT(DA8XX_CFGCHIP0_REG));
 
 	ret = davinci_set_pllrate(pll, prediv, mult, postdiv);
 	if (WARN_ON(ret))
@@ -1024,7 +1025,7 @@ static int da850_set_pll0rate(struct clk *clk, unsigned long armrate)
 
 static int da850_round_armrate(struct clk *clk, unsigned long rate)
 {
-	return clk->rate;
+	return atomic_read(&clk->rate);
 }
 #endif
 
@@ -1049,17 +1050,25 @@ static struct davinci_soc_info davinci_soc_info_da850 = {
 	.gpio_irq		= IRQ_DA8XX_GPIO0,
 	.serial_dev		= &da8xx_serial_device,
 	.emac_pdata		= &da8xx_emac_pdata,
+	.sram_dma		= DA8XX_ARM_RAM_BASE,
+	.sram_len		= SZ_8K,
 };
 
 void __init da850_init(void)
 {
-	da8xx_syscfg_base = ioremap(DA8XX_SYSCFG_BASE, SZ_4K);
-	if (WARN(!da8xx_syscfg_base, "Unable to map syscfg module"))
+	unsigned int v;
+
+	da8xx_syscfg0_base = ioremap(DA8XX_SYSCFG0_BASE, SZ_4K);
+	if (WARN(!da8xx_syscfg0_base, "Unable to map syscfg0 module"))
+		return;
+
+	da8xx_syscfg1_base = ioremap(DA8XX_SYSCFG1_BASE, SZ_4K);
+	if (WARN(!da8xx_syscfg1_base, "Unable to map syscfg1 module"))
 		return;
 
 	davinci_soc_info_da850.jtag_id_base =
-					DA8XX_SYSCFG_VIRT(DA8XX_JTAG_ID_REG);
-	davinci_soc_info_da850.pinmux_base = DA8XX_SYSCFG_VIRT(0x120);
+					DA8XX_SYSCFG0_VIRT(DA8XX_JTAG_ID_REG);
+	davinci_soc_info_da850.pinmux_base = DA8XX_SYSCFG0_VIRT(0x120);
 
 	davinci_common_init(&davinci_soc_info_da850);
 
@@ -1071,4 +1080,14 @@ void __init da850_init(void)
 	 * be any noticible change even in non-DVFS use cases.
 	 */
 	da850_set_async3_src(1);
+
+	/* Unlock writing to PLL0 registers */
+	v = __raw_readl(DA8XX_SYSCFG0_VIRT(DA8XX_CFGCHIP0_REG));
+	v &= ~CFGCHIP0_PLL_MASTER_LOCK;
+	__raw_writel(v, DA8XX_SYSCFG0_VIRT(DA8XX_CFGCHIP0_REG));
+
+	/* Unlock writing to PLL1 registers */
+	v = __raw_readl(DA8XX_SYSCFG0_VIRT(DA8XX_CFGCHIP3_REG));
+	v &= ~CFGCHIP3_PLL1_MASTER_LOCK;
+	__raw_writel(v, DA8XX_SYSCFG0_VIRT(DA8XX_CFGCHIP3_REG));
 }
