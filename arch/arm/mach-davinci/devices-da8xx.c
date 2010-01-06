@@ -111,6 +111,29 @@ static const s8 da850_queue_priority_mapping[][2] = {
 	{-1, -1}
 };
 
+/*
+ * The following EDMA channels/slots are not being used by drivers (for
+ * example: Timer, GPIO, UART events etc) on da830/omap-l137, hence they
+ * are being reserved for codecs on the DSP side.
+ */
+static const s16 da830_dma_rsv_chans[][2] = {
+	/* (offset, number) */
+	{ 8,  2},
+	{12,  2},
+	{24,  4},
+	{30,  2},
+	{-1, -1}
+};
+
+static const s16 da830_dma_rsv_slots[][2] = {
+	/* (offset, number) */
+	{ 8,  2},
+	{12,  2},
+	{24,  4},
+	{30, 26},
+	{-1, -1}
+};
+
 static struct edma_soc_info da830_edma_info[] = {
 	{
 		.n_channel		= 32,
@@ -118,6 +141,8 @@ static struct edma_soc_info da830_edma_info[] = {
 		.n_slot			= 128,
 		.n_tc			= 2,
 		.n_cc			= 1,
+		.rsv_chans		= da830_dma_rsv_chans,
+		.rsv_slots		= da830_dma_rsv_slots,
 		.queue_tc_mapping	= da8xx_queue_tc_mapping,
 		.queue_priority_mapping	= da8xx_queue_priority_mapping,
 	},
