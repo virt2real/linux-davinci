@@ -280,6 +280,8 @@ struct edma_soc_info {
 	unsigned	n_cc;
 	enum dma_event_q	default_queue;
 
+	const s16	(*rsv_chans)[2];
+	const s16	(*rsv_slots)[2];
 	const s8	(*queue_tc_mapping)[2];
 	const s8	(*queue_priority_mapping)[2];
 };
