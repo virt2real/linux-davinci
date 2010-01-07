@@ -55,7 +55,7 @@ static struct pll_data pll2_data = {
 static struct clk ref_clk = {
 	.name = "ref_clk",
 	/* FIXME -- crystal rate is board-specific */
-	.rate = DM355_REF_FREQ,
+	.rate = ATOMIC_INIT(DM355_REF_FREQ),
 };
 
 static struct clk pll1_clk = {
@@ -314,7 +314,7 @@ static struct clk timer2_clk = {
 	.name = "timer2",
 	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER2,
-	.usecount = 1,              /* REVISIT: why cant' this be disabled? */
+	.usecount = ATOMIC_INIT(1), /* REVISIT: why cant' this be disabled? */
 };
 
 static struct clk timer3_clk = {
@@ -564,13 +564,6 @@ static u8 dm355_default_priorities[DAVINCI_N_AINTC_IRQ] = {
 
 /*----------------------------------------------------------------------*/
 
-static const s8 dma_chan_dm355_no_event[] = {
-	12, 13, 24, 56, 57,
-	58, 59, 60, 61, 62,
-	63,
-	-1
-};
-
 static const s8
 queue_tc_mapping[][2] = {
 	/* {event queue no, TC no} */
@@ -594,7 +587,6 @@ static struct edma_soc_info dm355_edma_info[] = {
 		.n_slot			= 128,
 		.n_tc			= 2,
 		.n_cc			= 1,
-		.noevent		= dma_chan_dm355_no_event,
 		.queue_tc_mapping	= queue_tc_mapping,
 		.queue_priority_mapping	= queue_priority_mapping,
 	},

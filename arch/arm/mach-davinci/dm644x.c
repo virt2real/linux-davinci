@@ -47,7 +47,7 @@ static struct pll_data pll2_data = {
 
 static struct clk ref_clk = {
 	.name = "ref_clk",
-	.rate = DM644X_REF_FREQ,
+	.rate = ATOMIC_INIT(DM644X_REF_FREQ),
 };
 
 static struct clk pll1_clk = {
@@ -131,7 +131,7 @@ static struct clk dsp_clk = {
 	.parent = &pll1_sysclk1,
 	.lpsc = DAVINCI_LPSC_GEM,
 	.flags = PSC_DSP,
-	.usecount = 1,			/* REVISIT how to disable? */
+	.usecount = ATOMIC_INIT(1),	/* REVISIT how to disable? */
 };
 
 static struct clk arm_clk = {
@@ -146,7 +146,7 @@ static struct clk vicp_clk = {
 	.parent = &pll1_sysclk2,
 	.lpsc = DAVINCI_LPSC_IMCOP,
 	.flags = PSC_DSP,
-	.usecount = 1,			/* REVISIT how to disable? */
+	.usecount = ATOMIC_INIT(1),	/* REVISIT how to disable? */
 };
 
 static struct clk vpss_master_clk = {
@@ -274,7 +274,7 @@ static struct clk timer2_clk = {
 	.name = "timer2",
 	.parent = &pll1_aux_clk,
 	.lpsc = DAVINCI_LPSC_TIMER2,
-	.usecount = 1,              /* REVISIT: why cant' this be disabled? */
+	.usecount = ATOMIC_INIT(1), /* REVISIT: why cant' this be disabled? */
 };
 
 struct davinci_clk dm644x_clks[] = {
@@ -479,15 +479,6 @@ static u8 dm644x_default_priorities[DAVINCI_N_AINTC_IRQ] = {
 
 /*----------------------------------------------------------------------*/
 
-static const s8 dma_chan_dm644x_no_event[] = {
-	 0,  1, 12, 13, 14,
-	15, 25, 30, 31, 45,
-	46, 47, 55, 56, 57,
-	58, 59, 60, 61, 62,
-	63,
-	-1
-};
-
 static const s8
 queue_tc_mapping[][2] = {
 	/* {event queue no, TC no} */
@@ -511,7 +502,6 @@ static struct edma_soc_info dm644x_edma_info[] = {
 		.n_slot			= 128,
 		.n_tc			= 2,
 		.n_cc			= 1,
-		.noevent		= dma_chan_dm644x_no_event,
 		.queue_tc_mapping	= queue_tc_mapping,
 		.queue_priority_mapping	= queue_priority_mapping,
 	},
