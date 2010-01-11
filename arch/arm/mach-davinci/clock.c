@@ -49,7 +49,8 @@ static void __clk_disable(struct clk *clk)
 {
 	if (WARN_ON(clk->usecount == 0))
 		return;
-	if (--clk->usecount == 0 && !(clk->flags & CLK_PLL))
+	if (--clk->usecount == 0 && !(clk->flags & CLK_PLL) &&
+	    (clk->flags & CLK_PSC))
 		davinci_psc_config(psc_domain(clk), clk->gpsc, clk->lpsc, 0);
 	if (clk->parent)
 		__clk_disable(clk->parent);
@@ -376,7 +377,7 @@ int davinci_set_pllrate(struct pll_data *pll, unsigned int prediv,
 		locktime = ((2000 * prediv) / 100);
 		prediv = (prediv - 1) | PLLDIV_EN;
 	} else {
-		locktime = 20;
+		locktime = PLL_LOCK_TIME;
 	}
 	if (postdiv)
 		postdiv = (postdiv - 1) | PLLDIV_EN;
@@ -389,12 +390,7 @@ int davinci_set_pllrate(struct pll_data *pll, unsigned int prediv,
 	ctrl &= ~(PLLCTL_PLLENSRC | PLLCTL_PLLEN);
 	__raw_writel(ctrl, pll->base + PLLCTL);
 
-	/*
-	 * Wait for 4 OSCIN/CLKIN cycles to ensure that the PLLC has switched
-	 * to bypass mode. Delay of 1us ensures we are good for all > 4MHz
-	 * OSCIN/CLKIN inputs. Typically the input is ~25MHz.
-	 */
-	udelay(1);
+	udelay(PLL_BYPASS_TIME);
 
 	/* Reset and enable PLL */
 	ctrl &= ~(PLLCTL_PLLRST | PLLCTL_PLLDIS);
@@ -408,11 +404,7 @@ int davinci_set_pllrate(struct pll_data *pll, unsigned int prediv,
 	if (pll->flags & PLL_HAS_POSTDIV)
 		__raw_writel(postdiv, pll->base + POSTDIV);
 
-	/*
-	 * Wait for PLL to reset properly, OMAP-L138 datasheet says
-	 * 'min' time = 125ns
-	 */
-	udelay(1);
+	udelay(PLL_RESET_TIME);
 
 	/* Bring PLL out of reset */
 	ctrl |= PLLCTL_PLLRST;
@@ -471,24 +463,10 @@ int __init davinci_clk_init(struct clk_lookup *clocks)
 	return 0;
 }
 
-#ifdef CONFIG_PROC_FS
-#include <linux/proc_fs.h>
+#ifdef CONFIG_DEBUG_FS
+
+#include <linux/debugfs.h>
 #include <linux/seq_file.h>
-
-static void *davinci_ck_start(struct seq_file *m, loff_t *pos)
-{
-	return *pos < 1 ? (void *)1 : NULL;
-}
-
-static void *davinci_ck_next(struct seq_file *m, void *v, loff_t *pos)
-{
-	++*pos;
-	return NULL;
-}
-
-static void davinci_ck_stop(struct seq_file *m, void *v)
-{
-}
 
 #define CLKNAME_MAX	10		/* longest clock name */
 #define NEST_DELTA	2
@@ -528,41 +506,38 @@ dump_clock(struct seq_file *s, unsigned nest, struct clk *parent)
 
 static int davinci_ck_show(struct seq_file *m, void *v)
 {
-	/* Show clock tree; we know the main oscillator is first.
-	 * We trust nonzero usecounts equate to PSC enables...
+	struct clk *clk;
+
+	/*
+	 * Show clock tree; We trust nonzero usecounts equate to PSC enables...
 	 */
 	mutex_lock(&clocks_mutex);
-	if (!list_empty(&clocks))
-		dump_clock(m, 0, list_first_entry(&clocks, struct clk, node));
+	list_for_each_entry(clk, &clocks, node)
+		if (!clk->parent)
+			dump_clock(m, 0, clk);
 	mutex_unlock(&clocks_mutex);
 
 	return 0;
 }
 
-static const struct seq_operations davinci_ck_op = {
-	.start	= davinci_ck_start,
-	.next	= davinci_ck_next,
-	.stop	= davinci_ck_stop,
-	.show	= davinci_ck_show
-};
-
 static int davinci_ck_open(struct inode *inode, struct file *file)
 {
-	return seq_open(file, &davinci_ck_op);
+	return single_open(file, davinci_ck_show, NULL);
 }
 
-static const struct file_operations proc_davinci_ck_operations = {
+static const struct file_operations davinci_ck_operations = {
 	.open		= davinci_ck_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
-	.release	= seq_release,
+	.release	= single_release,
 };
 
-static int __init davinci_ck_proc_init(void)
+static int __init davinci_clk_debugfs_init(void)
 {
-	proc_create("davinci_clocks", 0, NULL, &proc_davinci_ck_operations);
+	debugfs_create_file("davinci_clocks", S_IFREG | S_IRUGO, NULL, NULL,
+						&davinci_ck_operations);
 	return 0;
 
 }
-__initcall(davinci_ck_proc_init);
-#endif /* CONFIG_DEBUG_PROC_FS */
+device_initcall(davinci_clk_debugfs_init);
+#endif /* CONFIG_DEBUG_FS */
