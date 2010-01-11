@@ -35,9 +35,9 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
+#include <linux/cpufreq.h>
 
 #include <mach/hardware.h>
-
 #include <mach/i2c.h>
 
 /* ----- global defines ----------------------------------------------- */
@@ -71,37 +71,29 @@
 #define DAVINCI_I2C_IVR_NACK	0x02
 #define DAVINCI_I2C_IVR_AL	0x01
 
-#define DAVINCI_I2C_STR_BB	(1 << 12)
-#define DAVINCI_I2C_STR_RSFULL	(1 << 11)
-#define DAVINCI_I2C_STR_SCD	(1 << 5)
-#define DAVINCI_I2C_STR_ARDY	(1 << 2)
-#define DAVINCI_I2C_STR_NACK	(1 << 1)
-#define DAVINCI_I2C_STR_AL	(1 << 0)
+#define DAVINCI_I2C_STR_BB	BIT(12)
+#define DAVINCI_I2C_STR_RSFULL	BIT(11)
+#define DAVINCI_I2C_STR_SCD	BIT(5)
+#define DAVINCI_I2C_STR_ARDY	BIT(2)
+#define DAVINCI_I2C_STR_NACK	BIT(1)
+#define DAVINCI_I2C_STR_AL	BIT(0)
 
-#define DAVINCI_I2C_MDR_NACK	(1 << 15)
-#define DAVINCI_I2C_MDR_STT	(1 << 13)
-#define DAVINCI_I2C_MDR_STP	(1 << 11)
-#define DAVINCI_I2C_MDR_MST	(1 << 10)
-#define DAVINCI_I2C_MDR_TRX	(1 << 9)
-#define DAVINCI_I2C_MDR_XA	(1 << 8)
-#define DAVINCI_I2C_MDR_RM	(1 << 7)
-#define DAVINCI_I2C_MDR_IRS	(1 << 5)
+#define DAVINCI_I2C_MDR_NACK	BIT(15)
+#define DAVINCI_I2C_MDR_STT	BIT(13)
+#define DAVINCI_I2C_MDR_STP	BIT(11)
+#define DAVINCI_I2C_MDR_MST	BIT(10)
+#define DAVINCI_I2C_MDR_TRX	BIT(9)
+#define DAVINCI_I2C_MDR_XA	BIT(8)
+#define DAVINCI_I2C_MDR_RM	BIT(7)
+#define DAVINCI_I2C_MDR_IRS	BIT(5)
 
-#define DAVINCI_I2C_IMR_AAS	(1 << 6)
-#define DAVINCI_I2C_IMR_SCD	(1 << 5)
-#define DAVINCI_I2C_IMR_XRDY	(1 << 4)
-#define DAVINCI_I2C_IMR_RRDY	(1 << 3)
-#define DAVINCI_I2C_IMR_ARDY	(1 << 2)
-#define DAVINCI_I2C_IMR_NACK	(1 << 1)
-#define DAVINCI_I2C_IMR_AL	(1 << 0)
-
-#define MOD_REG_BIT(val, mask, set) do { \
-	if (set) { \
-		val |= mask; \
-	} else { \
-		val &= ~mask; \
-	} \
-} while (0)
+#define DAVINCI_I2C_IMR_AAS	BIT(6)
+#define DAVINCI_I2C_IMR_SCD	BIT(5)
+#define DAVINCI_I2C_IMR_XRDY	BIT(4)
+#define DAVINCI_I2C_IMR_RRDY	BIT(3)
+#define DAVINCI_I2C_IMR_ARDY	BIT(2)
+#define DAVINCI_I2C_IMR_NACK	BIT(1)
+#define DAVINCI_I2C_IMR_AL	BIT(0)
 
 struct davinci_i2c_dev {
 	struct device           *dev;
@@ -115,6 +107,10 @@ struct davinci_i2c_dev {
 	int			stop;
 	u8			terminate;
 	struct i2c_adapter	adapter;
+#ifdef CONFIG_CPU_FREQ
+	struct completion	xfr_complete;
+	struct notifier_block	freq_transition;
+#endif
 };
 
 /* default platform data to use if not supplied in the platform_device */
@@ -134,12 +130,21 @@ static inline u16 davinci_i2c_read_reg(struct davinci_i2c_dev *i2c_dev, int reg)
 	return __raw_readw(i2c_dev->base + reg);
 }
 
-/*
- * This functions configures I2C and brings I2C out of reset.
- * This function is called during I2C init function. This function
- * also gets called if I2C encounters any errors.
- */
-static int i2c_davinci_init(struct davinci_i2c_dev *dev)
+static inline void davinci_i2c_reset_ctrl(struct davinci_i2c_dev *i2c_dev,
+								int val)
+{
+	u16 w;
+
+	w = davinci_i2c_read_reg(i2c_dev, DAVINCI_I2C_MDR_REG);
+	if (!val)	/* put I2C into reset */
+		w &= ~DAVINCI_I2C_MDR_IRS;
+	else		/* take I2C out of reset */
+		w |= DAVINCI_I2C_MDR_IRS;
+
+	davinci_i2c_write_reg(i2c_dev, DAVINCI_I2C_MDR_REG, w);
+}
+
+static void i2c_davinci_calc_clk_dividers(struct davinci_i2c_dev *dev)
 {
 	struct davinci_i2c_platform_data *pdata = dev->dev->platform_data;
 	u16 psc;
@@ -148,15 +153,6 @@ static int i2c_davinci_init(struct davinci_i2c_dev *dev)
 	u32 clkh;
 	u32 clkl;
 	u32 input_clock = clk_get_rate(dev->clk);
-	u16 w;
-
-	if (!pdata)
-		pdata = &davinci_i2c_platform_data_default;
-
-	/* put I2C into reset */
-	w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
-	MOD_REG_BIT(w, DAVINCI_I2C_MDR_IRS, 0);
-	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
 
 	/* NOTE: I2C Clock divider programming info
 	 * As per I2C specs the following formulas provide prescaler
@@ -188,12 +184,32 @@ static int i2c_davinci_init(struct davinci_i2c_dev *dev)
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_CLKH_REG, clkh);
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_CLKL_REG, clkl);
 
+	dev_dbg(dev->dev, "input_clock = %d, CLK = %d\n", input_clock, clk);
+}
+
+/*
+ * This function configures I2C and brings I2C out of reset.
+ * This function is called during I2C init function. This function
+ * also gets called if I2C encounters any errors.
+ */
+static int i2c_davinci_init(struct davinci_i2c_dev *dev)
+{
+	struct davinci_i2c_platform_data *pdata = dev->dev->platform_data;
+
+	if (!pdata)
+		pdata = &davinci_i2c_platform_data_default;
+
+	/* put I2C into reset */
+	davinci_i2c_reset_ctrl(dev, 0);
+
+	/* compute clock dividers */
+	i2c_davinci_calc_clk_dividers(dev);
+
 	/* Respond at reserved "SMBus Host" slave address" (and zero);
 	 * we seem to have no option to not respond...
 	 */
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_OAR_REG, 0x08);
 
-	dev_dbg(dev->dev, "input_clock = %d, CLK = %d\n", input_clock, clk);
 	dev_dbg(dev->dev, "PSC  = %d\n",
 		davinci_i2c_read_reg(dev, DAVINCI_I2C_PSC_REG));
 	dev_dbg(dev->dev, "CLKL = %d\n",
@@ -204,9 +220,7 @@ static int i2c_davinci_init(struct davinci_i2c_dev *dev)
 		pdata->bus_freq, pdata->bus_delay);
 
 	/* Take the I2C module out of reset: */
-	w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
-	MOD_REG_BIT(w, DAVINCI_I2C_MDR_IRS, 1);
-	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
+	davinci_i2c_reset_ctrl(dev, 1);
 
 	/* Enable interrupts */
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_IMR_REG, I2C_DAVINCI_INTR_ALL);
@@ -287,9 +301,9 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 	/* Enable receive or transmit interrupts */
 	w = davinci_i2c_read_reg(dev, DAVINCI_I2C_IMR_REG);
 	if (msg->flags & I2C_M_RD)
-		MOD_REG_BIT(w, DAVINCI_I2C_IMR_RRDY, 1);
+		w |= DAVINCI_I2C_IMR_RRDY;
 	else
-		MOD_REG_BIT(w, DAVINCI_I2C_IMR_XRDY, 1);
+		w |= DAVINCI_I2C_IMR_XRDY;
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_IMR_REG, w);
 
 	dev->terminate = 0;
@@ -346,7 +360,7 @@ i2c_davinci_xfer_msg(struct i2c_adapter *adap, struct i2c_msg *msg, int stop)
 			return msg->len;
 		if (stop) {
 			w = davinci_i2c_read_reg(dev, DAVINCI_I2C_MDR_REG);
-			MOD_REG_BIT(w, DAVINCI_I2C_MDR_STP, 1);
+			w |= DAVINCI_I2C_MDR_STP;
 			davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, w);
 		}
 		return -EREMOTEIO;
@@ -379,6 +393,11 @@ i2c_davinci_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		if (ret < 0)
 			return ret;
 	}
+
+#ifdef CONFIG_CPU_FREQ
+	complete(&dev->xfr_complete);
+#endif
+
 	return num;
 }
 
@@ -482,7 +501,7 @@ static irqreturn_t i2c_davinci_isr(int this_irq, void *dev_id)
 
 				w = davinci_i2c_read_reg(dev,
 							 DAVINCI_I2C_IMR_REG);
-				MOD_REG_BIT(w, DAVINCI_I2C_IMR_XRDY, 0);
+				w &= ~DAVINCI_I2C_IMR_XRDY;
 				davinci_i2c_write_reg(dev,
 						      DAVINCI_I2C_IMR_REG,
 						      w);
@@ -510,6 +529,48 @@ static irqreturn_t i2c_davinci_isr(int this_irq, void *dev_id)
 
 	return count ? IRQ_HANDLED : IRQ_NONE;
 }
+
+#ifdef CONFIG_CPU_FREQ
+static int i2c_davinci_cpufreq_transition(struct notifier_block *nb,
+				     unsigned long val, void *data)
+{
+	struct davinci_i2c_dev *dev;
+
+	dev = container_of(nb, struct davinci_i2c_dev, freq_transition);
+	if (val == CPUFREQ_PRECHANGE) {
+		wait_for_completion(&dev->xfr_complete);
+		davinci_i2c_reset_ctrl(dev, 0);
+	} else if (val == CPUFREQ_POSTCHANGE) {
+		i2c_davinci_calc_clk_dividers(dev);
+		davinci_i2c_reset_ctrl(dev, 1);
+	}
+
+	return 0;
+}
+
+static inline int i2c_davinci_cpufreq_register(struct davinci_i2c_dev *dev)
+{
+	dev->freq_transition.notifier_call = i2c_davinci_cpufreq_transition;
+
+	return cpufreq_register_notifier(&dev->freq_transition,
+					 CPUFREQ_TRANSITION_NOTIFIER);
+}
+
+static inline void i2c_davinci_cpufreq_deregister(struct davinci_i2c_dev *dev)
+{
+	cpufreq_unregister_notifier(&dev->freq_transition,
+				    CPUFREQ_TRANSITION_NOTIFIER);
+}
+#else
+static inline int i2c_davinci_cpufreq_register(struct davinci_i2c_dev *dev)
+{
+	return 0;
+}
+
+static inline void i2c_davinci_cpufreq_deregister(struct davinci_i2c_dev *dev)
+{
+}
+#endif
 
 static struct i2c_algorithm i2c_davinci_algo = {
 	.master_xfer	= i2c_davinci_xfer,
@@ -550,6 +611,9 @@ static int davinci_i2c_probe(struct platform_device *pdev)
 	}
 
 	init_completion(&dev->cmd_complete);
+#ifdef CONFIG_CPU_FREQ
+	init_completion(&dev->xfr_complete);
+#endif
 	dev->dev = get_device(&pdev->dev);
 	dev->irq = irq->start;
 	platform_set_drvdata(pdev, dev);
@@ -561,13 +625,24 @@ static int davinci_i2c_probe(struct platform_device *pdev)
 	}
 	clk_enable(dev->clk);
 
-	dev->base = (void __iomem *)IO_ADDRESS(mem->start);
+	dev->base = ioremap(mem->start, resource_size(mem));
+	if (!dev->base) {
+		r = -EBUSY;
+		goto err_mem_ioremap;
+	}
+
 	i2c_davinci_init(dev);
 
 	r = request_irq(dev->irq, i2c_davinci_isr, 0, pdev->name, dev);
 	if (r) {
 		dev_err(&pdev->dev, "failure requesting irq %i\n", dev->irq);
 		goto err_unuse_clocks;
+	}
+
+	r = i2c_davinci_cpufreq_register(dev);
+	if (r) {
+		dev_err(&pdev->dev, "failed to register cpufreq\n");
+		goto err_free_irq;
 	}
 
 	adap = &dev->adapter;
@@ -591,6 +666,8 @@ static int davinci_i2c_probe(struct platform_device *pdev)
 err_free_irq:
 	free_irq(dev->irq, dev);
 err_unuse_clocks:
+	iounmap(dev->base);
+err_mem_ioremap:
 	clk_disable(dev->clk);
 	clk_put(dev->clk);
 	dev->clk = NULL;
@@ -609,6 +686,8 @@ static int davinci_i2c_remove(struct platform_device *pdev)
 	struct davinci_i2c_dev *dev = platform_get_drvdata(pdev);
 	struct resource *mem;
 
+	i2c_davinci_cpufreq_deregister(dev);
+
 	platform_set_drvdata(pdev, NULL);
 	i2c_del_adapter(&dev->adapter);
 	put_device(&pdev->dev);
@@ -619,12 +698,48 @@ static int davinci_i2c_remove(struct platform_device *pdev)
 
 	davinci_i2c_write_reg(dev, DAVINCI_I2C_MDR_REG, 0);
 	free_irq(IRQ_I2C, dev);
+	iounmap(dev->base);
 	kfree(dev);
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	release_mem_region(mem->start, resource_size(mem));
 	return 0;
 }
+
+#ifdef CONFIG_PM
+static int davinci_i2c_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct davinci_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
+
+	/* put I2C into reset */
+	davinci_i2c_reset_ctrl(i2c_dev, 0);
+	clk_disable(i2c_dev->clk);
+
+	return 0;
+}
+
+static int davinci_i2c_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct davinci_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
+
+	clk_enable(i2c_dev->clk);
+	/* take I2C out of reset */
+	davinci_i2c_reset_ctrl(i2c_dev, 1);
+
+	return 0;
+}
+
+static struct dev_pm_ops davinci_i2c_pm = {
+	.suspend        = davinci_i2c_suspend,
+	.resume         = davinci_i2c_resume,
+};
+
+#define davinci_i2c_pm_ops (&davinci_i2c_pm)
+#else
+#define davinci_i2c_pm_ops NULL
+#endif
 
 /* work with hotplug and coldplug */
 MODULE_ALIAS("platform:i2c_davinci");
@@ -635,6 +750,7 @@ static struct platform_driver davinci_i2c_driver = {
 	.driver		= {
 		.name	= "i2c_davinci",
 		.owner	= THIS_MODULE,
+		.pm	= davinci_i2c_pm_ops,
 	},
 };
 
