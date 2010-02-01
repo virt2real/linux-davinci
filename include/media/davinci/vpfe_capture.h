@@ -31,8 +31,6 @@
 #include <media/videobuf-dma-contig.h>
 #include <media/davinci/vpfe_types.h>
 
-#define VPFE_CAPTURE_NUM_DECODERS        5
-
 /* Macros */
 #define VPFE_MAJOR_RELEASE              0
 #define VPFE_MINOR_RELEASE              0
@@ -91,9 +89,6 @@ struct vpfe_config {
 	char *card_name;
 	/* ccdc name */
 	char *ccdc;
-	/* vpfe clock */
-	struct clk *vpssclk;
-	struct clk *slaveclk;
 };
 
 struct vpfe_device {
@@ -193,8 +188,12 @@ struct vpfe_config_params {
  * color space conversion, culling etc. This is an experimental ioctl that
  * will change in future kernels. So use this ioctl with care !
  * TODO: This is to be split into multiple ioctls and also explore the
- * possibility of extending the v4l2 api to include this
+ * possibility of extending the v4l2 api to include this.
+ * VPFE_CMD_G_CCDC_RAW_PARAMS - EXPERIMENTAL IOCTL to get the current raw
+ * capture parameters
  **/
 #define VPFE_CMD_S_CCDC_RAW_PARAMS _IOW('V', BASE_VIDIOC_PRIVATE + 1, \
+					void *)
+#define VPFE_CMD_G_CCDC_RAW_PARAMS _IOR('V', BASE_VIDIOC_PRIVATE + 2, \
 					void *)
 #endif				/* _DAVINCI_VPFE_H */
