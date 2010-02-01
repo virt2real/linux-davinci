@@ -758,12 +758,83 @@ static unsigned int vpfe_poll(struct file *file, poll_table *wait)
 	return 0;
 }
 
+static long vpfe_param_handler(struct file *file, void *priv,
+		int cmd, void *param)
+{
+	struct vpfe_device *vpfe_dev = video_drvdata(file);
+	int ret = 0;
+
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_param_handler\n");
+
+	if (NULL == param) {
+		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
+			"Invalid user ptr\n");
+		return -EINVAL;
+	}
+
+	if (vpfe_dev->started) {
+		/* only allowed if streaming is not started */
+		v4l2_err(&vpfe_dev->v4l2_dev, "device already started\n");
+		return -EBUSY;
+	}
+
+	switch (cmd) {
+	case VPFE_CMD_S_CCDC_RAW_PARAMS:
+		v4l2_warn(&vpfe_dev->v4l2_dev,
+			  "VPFE_CMD_S_CCDC_RAW_PARAMS: experimental ioctl\n");
+		ret = mutex_lock_interruptible(&vpfe_dev->lock);
+		if (ret)
+			return ret;
+		ret = ccdc_dev->hw_ops.set_params(param);
+		if (ret) {
+			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
+				"Error in setting parameters in CCDC\n");
+			goto unlock_out;
+		}
+
+		if (vpfe_get_ccdc_image_format(vpfe_dev, &vpfe_dev->fmt) < 0) {
+			v4l2_err(&vpfe_dev->v4l2_dev,
+				"Invalid image format at CCDC\n");
+			ret = -EINVAL;
+		}
+unlock_out:
+		mutex_unlock(&vpfe_dev->lock);
+		break;
+	case VPFE_CMD_G_CCDC_RAW_PARAMS:
+		v4l2_warn(&vpfe_dev->v4l2_dev,
+			  "VPFE_CMD_G_CCDC_RAW_PARAMS: experimental ioctl\n");
+		if (!ccdc_dev->hw_ops.get_params) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = ccdc_dev->hw_ops.get_params(param);
+		if (ret) {
+			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
+				"Error in getting parameters from CCDC\n");
+		}
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
+}
+
+static long vpfe_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	if (cmd == VPFE_CMD_S_CCDC_RAW_PARAMS ||
+	    cmd == VPFE_CMD_G_CCDC_RAW_PARAMS)
+		return vpfe_param_handler(file, file->private_data, cmd,
+					 (void *)arg);
+	return video_ioctl2(file, cmd, arg);
+}
+
 /* vpfe capture driver file operations */
 static const struct v4l2_file_operations vpfe_fops = {
 	.owner = THIS_MODULE,
 	.open = vpfe_open,
 	.release = vpfe_release,
-	.unlocked_ioctl = video_ioctl2,
+	.unlocked_ioctl = vpfe_ioctl,
 	.mmap = vpfe_mmap,
 	.poll = vpfe_poll
 };
@@ -1681,50 +1752,6 @@ unlock_out:
 	return ret;
 }
 
-
-static long vpfe_param_handler(struct file *file, void *priv,
-		int cmd, void *param)
-{
-	struct vpfe_device *vpfe_dev = video_drvdata(file);
-	int ret = 0;
-
-	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_param_handler\n");
-
-	if (vpfe_dev->started) {
-		/* only allowed if streaming is not started */
-		v4l2_err(&vpfe_dev->v4l2_dev, "device already started\n");
-		return -EBUSY;
-	}
-
-	ret = mutex_lock_interruptible(&vpfe_dev->lock);
-	if (ret)
-		return ret;
-
-	switch (cmd) {
-	case VPFE_CMD_S_CCDC_RAW_PARAMS:
-		v4l2_warn(&vpfe_dev->v4l2_dev,
-			  "VPFE_CMD_S_CCDC_RAW_PARAMS: experimental ioctl\n");
-		ret = ccdc_dev->hw_ops.set_params(param);
-		if (ret) {
-			v4l2_err(&vpfe_dev->v4l2_dev,
-				"Error in setting parameters in CCDC\n");
-			goto unlock_out;
-		}
-		if (vpfe_get_ccdc_image_format(vpfe_dev, &vpfe_dev->fmt) < 0) {
-			v4l2_err(&vpfe_dev->v4l2_dev,
-				"Invalid image format at CCDC\n");
-			goto unlock_out;
-		}
-		break;
-	default:
-		ret = -EINVAL;
-	}
-unlock_out:
-	mutex_unlock(&vpfe_dev->lock);
-	return ret;
-}
-
-
 /* vpfe capture ioctl operations */
 static const struct v4l2_ioctl_ops vpfe_ioctl_ops = {
 	.vidioc_querycap	 = vpfe_querycap,
@@ -1750,7 +1777,6 @@ static const struct v4l2_ioctl_ops vpfe_ioctl_ops = {
 	.vidioc_cropcap		 = vpfe_cropcap,
 	.vidioc_g_crop		 = vpfe_g_crop,
 	.vidioc_s_crop		 = vpfe_s_crop,
-	.vidioc_default		 = vpfe_param_handler,
 };
 
 static struct vpfe_device *vpfe_initialize(void)
