@@ -25,6 +25,9 @@ static struct mfd_cell tps6507x_devs[] = {
 	{
 		.name = "tps6507x-pmic",
 	},
+	{
+		.name = "tps6507x-ts",
+	},
 };
 
 
