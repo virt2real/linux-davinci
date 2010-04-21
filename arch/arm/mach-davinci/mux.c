@@ -91,7 +91,7 @@ int __init_or_module davinci_cfg_reg(const unsigned long index)
 }
 EXPORT_SYMBOL(davinci_cfg_reg);
 
-int da8xx_pinmux_setup(const short pins[])
+int __init_or_module davinci_cfg_reg_list(const short pins[])
 {
 	int i, error = -EINVAL;
 

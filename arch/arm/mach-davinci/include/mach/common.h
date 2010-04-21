@@ -12,6 +12,9 @@
 #ifndef __ARCH_ARM_MACH_DAVINCI_COMMON_H
 #define __ARCH_ARM_MACH_DAVINCI_COMMON_H
 
+#include <linux/compiler.h>
+#include <linux/types.h>
+
 struct sys_timer;
 
 extern struct sys_timer davinci_timer;
@@ -67,6 +70,7 @@ struct davinci_soc_info {
 extern struct davinci_soc_info davinci_soc_info;
 
 extern void davinci_common_init(struct davinci_soc_info *soc_info);
+extern void davinci_init_ide(void);
 
 /* standard place to map on-chip SRAMs; they *may* support DMA */
 #define SRAM_VIRT	0xfffe0000

@@ -24,16 +24,25 @@ static DEFINE_SPINLOCK(gpio_lock);
 
 struct davinci_gpio {
 	struct gpio_chip	chip;
-	struct gpio_controller	*__iomem regs;
+	struct gpio_controller	__iomem *regs;
 	int			irq_base;
 };
 
 static struct davinci_gpio chips[DIV_ROUND_UP(DAVINCI_N_GPIO, 32)];
 
 /* create a non-inlined version */
-static struct gpio_controller __iomem * __init gpio2controller(unsigned gpio)
+static struct gpio_controller __iomem __init *gpio2controller(unsigned gpio)
 {
 	return __gpio_to_controller(gpio);
+}
+
+static inline struct gpio_controller __iomem *irq2controller(int irq)
+{
+	struct gpio_controller __iomem *g;
+
+	g = (__force struct gpio_controller __iomem *)get_irq_chip_data(irq);
+
+	return g;
 }
 
 static int __init davinci_gpio_irq_setup(void);
@@ -48,7 +57,7 @@ static int __init davinci_gpio_irq_setup(void);
 static int davinci_direction_in(struct gpio_chip *chip, unsigned offset)
 {
 	struct davinci_gpio *d = container_of(chip, struct davinci_gpio, chip);
-	struct gpio_controller *__iomem g = d->regs;
+	struct gpio_controller __iomem *g = d->regs;
 	u32 temp;
 
 	spin_lock(&gpio_lock);
@@ -70,7 +79,7 @@ static int davinci_direction_in(struct gpio_chip *chip, unsigned offset)
 static int davinci_gpio_get(struct gpio_chip *chip, unsigned offset)
 {
 	struct davinci_gpio *d = container_of(chip, struct davinci_gpio, chip);
-	struct gpio_controller *__iomem g = d->regs;
+	struct gpio_controller __iomem *g = d->regs;
 
 	return (1 << offset) & __raw_readl(&g->in_data);
 }
@@ -79,7 +88,7 @@ static int
 davinci_direction_out(struct gpio_chip *chip, unsigned offset, int value)
 {
 	struct davinci_gpio *d = container_of(chip, struct davinci_gpio, chip);
-	struct gpio_controller *__iomem g = d->regs;
+	struct gpio_controller __iomem *g = d->regs;
 	u32 temp;
 	u32 mask = 1 << offset;
 
@@ -99,7 +108,7 @@ static void
 davinci_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	struct davinci_gpio *d = container_of(chip, struct davinci_gpio, chip);
-	struct gpio_controller *__iomem g = d->regs;
+	struct gpio_controller __iomem *g = d->regs;
 
 	__raw_writel((1 << offset), value ? &g->set_data : &g->clr_data);
 }
@@ -161,7 +170,7 @@ pure_initcall(davinci_gpio_setup);
 
 static void gpio_irq_disable(unsigned irq)
 {
-	struct gpio_controller *__iomem g = get_irq_chip_data(irq);
+	struct gpio_controller __iomem *g = irq2controller(irq);
 	u32 mask = (u32) get_irq_data(irq);
 
 	__raw_writel(mask, &g->clr_falling);
@@ -170,7 +179,7 @@ static void gpio_irq_disable(unsigned irq)
 
 static void gpio_irq_enable(unsigned irq)
 {
-	struct gpio_controller *__iomem g = get_irq_chip_data(irq);
+	struct gpio_controller __iomem *g = irq2controller(irq);
 	u32 mask = (u32) get_irq_data(irq);
 	unsigned status = irq_desc[irq].status;
 
@@ -186,7 +195,7 @@ static void gpio_irq_enable(unsigned irq)
 
 static int gpio_irq_type(unsigned irq, unsigned trigger)
 {
-	struct gpio_controller *__iomem g = get_irq_chip_data(irq);
+	struct gpio_controller __iomem *g = irq2controller(irq);
 	u32 mask = (u32) get_irq_data(irq);
 
 	if (trigger & ~(IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
@@ -215,7 +224,7 @@ static struct irq_chip gpio_irqchip = {
 static void
 gpio_irq_handler(unsigned irq, struct irq_desc *desc)
 {
-	struct gpio_controller *__iomem g = get_irq_chip_data(irq);
+	struct gpio_controller __iomem *g = irq2controller(irq);
 	u32 mask = 0xffff;
 
 	/* we only care about one bank */
@@ -276,7 +285,7 @@ static int gpio_to_irq_unbanked(struct gpio_chip *chip, unsigned offset)
 
 static int gpio_irq_type_unbanked(unsigned irq, unsigned trigger)
 {
-	struct gpio_controller *__iomem g = get_irq_chip_data(irq);
+	struct gpio_controller __iomem *g = irq2controller(irq);
 	u32 mask = (u32) get_irq_data(irq);
 
 	if (trigger & ~(IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
@@ -305,7 +314,7 @@ static int __init davinci_gpio_irq_setup(void)
 	u32		binten = 0;
 	unsigned	ngpio, bank_irq;
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
-	struct gpio_controller	*__iomem g;
+	struct gpio_controller	__iomem *g;
 
 	ngpio = soc_info->gpio_num;
 
@@ -362,7 +371,7 @@ static int __init davinci_gpio_irq_setup(void)
 		for (gpio = 0; gpio < soc_info->gpio_unbanked; gpio++, irq++) {
 			set_irq_chip(irq, &gpio_irqchip_unbanked);
 			set_irq_data(irq, (void *) __gpio_mask(gpio));
-			set_irq_chip_data(irq, g);
+			set_irq_chip_data(irq, (__force void *) g);
 			irq_desc[irq].status |= IRQ_TYPE_EDGE_BOTH;
 		}
 
@@ -385,12 +394,12 @@ static int __init davinci_gpio_irq_setup(void)
 
 		/* set up all irqs in this bank */
 		set_irq_chained_handler(bank_irq, gpio_irq_handler);
-		set_irq_chip_data(bank_irq, g);
-		set_irq_data(bank_irq, (void *)irq);
+		set_irq_chip_data(bank_irq, (__force void *) g);
+		set_irq_data(bank_irq, (void *) irq);
 
 		for (i = 0; i < 16 && gpio < ngpio; i++, irq++, gpio++) {
 			set_irq_chip(irq, &gpio_irqchip);
-			set_irq_chip_data(irq, g);
+			set_irq_chip_data(irq, (__force void *) g);
 			set_irq_data(irq, (void *) __gpio_mask(gpio));
 			set_irq_handler(irq, handle_simple_irq);
 			set_irq_flags(irq, IRQF_VALID);
