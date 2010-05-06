@@ -450,11 +450,6 @@ void __init dm355_init_spi0(unsigned chipselect_mask,
 
 /*----------------------------------------------------------------------*/
 
-#define PINMUX0		0x00
-#define PINMUX1		0x04
-#define PINMUX2		0x08
-#define PINMUX3		0x0c
-#define PINMUX4		0x10
 #define INTMUX		0x18
 #define EVTMUX		0x1c
 
@@ -798,7 +793,7 @@ static void __iomem *dm355_psc_bases[] = {
  * T1_BOT: Timer 1, bottom:  (used by DSP in TI DSPLink code)
  * T1_TOP: Timer 1, top   :  <unused>
  */
-struct davinci_timer_info dm355_timer_info = {
+static struct davinci_timer_info dm355_timer_info = {
 	.timers		= davinci_timer_instance,
 	.clockevent_id	= T0_BOT,
 	.clocksource_id	= T0_TOP,
@@ -859,12 +854,14 @@ static struct davinci_soc_info davinci_soc_info_dm355 = {
 	.intc_irq_prios		= dm355_default_priorities,
 	.intc_irq_num		= DAVINCI_N_AINTC_IRQ,
 	.timer_info		= &dm355_timer_info,
+	.gpio_type		= GPIO_TYPE_DAVINCI,
 	.gpio_base		= IO_ADDRESS(DAVINCI_GPIO_BASE),
 	.gpio_num		= 104,
 	.gpio_irq		= IRQ_DM355_GPIOBNK0,
 	.serial_dev		= &dm355_serial_device,
 	.sram_dma		= 0x00010000,
 	.sram_len		= SZ_32K,
+	.reset_device		= &davinci_wdt_device,
 };
 
 void __init dm355_init_asp1(u32 evt_enable, struct snd_platform_data *pdata)

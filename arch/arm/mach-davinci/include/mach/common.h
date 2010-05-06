@@ -12,6 +12,9 @@
 #ifndef __ARCH_ARM_MACH_DAVINCI_COMMON_H
 #define __ARCH_ARM_MACH_DAVINCI_COMMON_H
 
+#include <linux/compiler.h>
+#include <linux/types.h>
+
 struct sys_timer;
 
 extern struct sys_timer davinci_timer;
@@ -34,6 +37,8 @@ struct davinci_timer_info {
 	unsigned int			clocksource_id;
 };
 
+struct davinci_gpio_controller;
+
 /* SoC specific init support */
 struct davinci_soc_info {
 	struct map_desc			*io_desc;
@@ -54,19 +59,25 @@ struct davinci_soc_info {
 	u8				*intc_irq_prios;
 	unsigned long			intc_irq_num;
 	struct davinci_timer_info	*timer_info;
+	int				gpio_type;
 	void __iomem			*gpio_base;
 	unsigned			gpio_num;
 	unsigned			gpio_irq;
 	unsigned			gpio_unbanked;
+	struct davinci_gpio_controller	*gpio_ctlrs;
+	int				gpio_ctlrs_num;
 	struct platform_device		*serial_dev;
 	struct emac_platform_data	*emac_pdata;
 	dma_addr_t			sram_dma;
 	unsigned			sram_len;
+	struct platform_device		*reset_device;
+	void				(*reset)(struct platform_device *);
 };
 
 extern struct davinci_soc_info davinci_soc_info;
 
 extern void davinci_common_init(struct davinci_soc_info *soc_info);
+extern void davinci_init_ide(void);
 
 /* standard place to map on-chip SRAMs; they *may* support DMA */
 #define SRAM_VIRT	0xfffe0000

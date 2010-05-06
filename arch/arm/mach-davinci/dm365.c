@@ -467,11 +467,6 @@ static struct clk_lookup dm365_clks[] = {
 
 /*----------------------------------------------------------------------*/
 
-#define PINMUX0		0x00
-#define PINMUX1		0x04
-#define PINMUX2		0x08
-#define PINMUX3		0x0c
-#define PINMUX4		0x10
 #define INTMUX		0x18
 #define EVTMUX		0x1c
 
@@ -576,6 +571,7 @@ MUX_CFG(DM365,	SPI4_SDENA1,	4,   16,    3,    2,	 false)
 MUX_CFG(DM365,	GPIO20,		3,   21,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO33,		4,   12,    3,	  0,	 false)
 MUX_CFG(DM365,	GPIO40,		4,   26,    3,	  0,	 false)
+MUX_CFG(DM365,	GPIO64_57,	2,   6,     1,	  0,	 false)
 
 MUX_CFG(DM365,	VOUT_FIELD,	1,   18,    3,	  1,	 false)
 MUX_CFG(DM365,	VOUT_FIELD_G81,	1,   18,    3,	  0,	 false)
@@ -1010,7 +1006,7 @@ static void __iomem *dm365_psc_bases[] = {
 	IO_ADDRESS(DAVINCI_PWR_SLEEP_CNTRL_BASE),
 };
 
-struct davinci_timer_info dm365_timer_info = {
+static struct davinci_timer_info dm365_timer_info = {
 	.timers		= davinci_timer_instance,
 	.clockevent_id	= T0_BOT,
 	.clocksource_id	= T0_TOP,
@@ -1063,6 +1059,7 @@ static struct davinci_soc_info davinci_soc_info_dm365 = {
 	.intc_irq_prios		= dm365_default_priorities,
 	.intc_irq_num		= DAVINCI_N_AINTC_IRQ,
 	.timer_info		= &dm365_timer_info,
+	.gpio_type		= GPIO_TYPE_DAVINCI,
 	.gpio_base		= IO_ADDRESS(DAVINCI_GPIO_BASE),
 	.gpio_num		= 104,
 	.gpio_irq		= IRQ_DM365_GPIO0,
@@ -1071,6 +1068,7 @@ static struct davinci_soc_info davinci_soc_info_dm365 = {
 	.emac_pdata		= &dm365_emac_pdata,
 	.sram_dma		= 0x00010000,
 	.sram_len		= SZ_32K,
+	.reset_device		= &davinci_wdt_device,
 };
 
 void __init dm365_init_asp(struct snd_platform_data *pdata)
