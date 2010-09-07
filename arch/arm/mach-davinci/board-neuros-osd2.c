@@ -39,9 +39,6 @@
 #include <mach/mmc.h>
 #include <mach/usb.h>
 
-#define NEUROS_OSD2_PHY_MASK		0x2
-#define NEUROS_OSD2_MDIO_FREQUENCY	2200000 /* PHY bus frequency */
-
 #define LXT971_PHY_ID			0x001378e2
 #define LXT971_PHY_MASK			0xfffffff0
 
@@ -218,7 +215,6 @@ static struct davinci_mmc_config davinci_ntosd2_mmc_config = {
 static __init void davinci_ntosd2_init(void)
 {
 	struct clk *aemif_clk;
-	struct davinci_soc_info *soc_info = &davinci_soc_info;
 	int	status;
 
 	aemif_clk = clk_get(NULL, "aemif");
@@ -251,9 +247,6 @@ static __init void davinci_ntosd2_init(void)
 
 	davinci_serial_init(&uart_config);
 	dm644x_init_asp(&dm644x_ntosd2_snd_data);
-
-	soc_info->emac_pdata->phy_mask = NEUROS_OSD2_PHY_MASK;
-	soc_info->emac_pdata->mdio_max_freq = NEUROS_OSD2_MDIO_FREQUENCY;
 
 	davinci_setup_usb(1000, 8);
 	/*

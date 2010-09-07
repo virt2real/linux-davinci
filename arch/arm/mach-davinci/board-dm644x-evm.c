@@ -39,9 +39,6 @@
 #include <mach/usb.h>
 #include <mach/aemif.h>
 
-#define DM644X_EVM_PHY_MASK		(0x2)
-#define DM644X_EVM_MDIO_FREQUENCY	(2200000) /* PHY bus frequency */
-
 #define LXT971_PHY_ID	(0x001378e2)
 #define LXT971_PHY_MASK	(0xfffffff0)
 
@@ -672,7 +669,6 @@ static int davinci_phy_fixup(struct phy_device *phydev)
 static __init void davinci_evm_init(void)
 {
 	struct clk *aemif_clk;
-	struct davinci_soc_info *soc_info = &davinci_soc_info;
 
 	aemif_clk = clk_get(NULL, "aemif");
 	clk_enable(aemif_clk);
@@ -706,9 +702,6 @@ static __init void davinci_evm_init(void)
 
 	davinci_serial_init(&uart_config);
 	dm644x_init_asp(&dm644x_evm_snd_data);
-
-	soc_info->emac_pdata->phy_mask = DM644X_EVM_PHY_MASK;
-	soc_info->emac_pdata->mdio_max_freq = DM644X_EVM_MDIO_FREQUENCY;
 
 	/* Register the fixup for PHY on DaVinci */
 	phy_register_fixup_for_uid(LXT971_PHY_ID, LXT971_PHY_MASK,
