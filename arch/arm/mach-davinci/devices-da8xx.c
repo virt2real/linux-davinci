@@ -42,7 +42,6 @@
 #define DA8XX_EMAC_CTRL_REG_OFFSET	0x3000
 #define DA8XX_EMAC_MOD_REG_OFFSET	0x2000
 #define DA8XX_EMAC_RAM_OFFSET		0x0000
-#define DA8XX_MDIO_REG_OFFSET		0x4000
 #define DA8XX_EMAC_CTRL_RAM_SIZE	SZ_8K
 
 void __iomem *da8xx_syscfg0_base;
@@ -352,7 +351,7 @@ int __init da8xx_register_watchdog(void)
 static struct resource da8xx_emac_resources[] = {
 	{
 		.start	= DA8XX_EMAC_CPPI_PORT_BASE,
-		.end	= DA8XX_EMAC_CPPI_PORT_BASE + 0x5000 - 1,
+		.end	= DA8XX_EMAC_CPPI_PORT_BASE + SZ_16K - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 	{
@@ -381,7 +380,6 @@ struct emac_platform_data da8xx_emac_pdata = {
 	.ctrl_reg_offset	= DA8XX_EMAC_CTRL_REG_OFFSET,
 	.ctrl_mod_reg_offset	= DA8XX_EMAC_MOD_REG_OFFSET,
 	.ctrl_ram_offset	= DA8XX_EMAC_RAM_OFFSET,
-	.mdio_reg_offset	= DA8XX_MDIO_REG_OFFSET,
 	.ctrl_ram_size		= DA8XX_EMAC_CTRL_RAM_SIZE,
 	.version		= EMAC_VERSION_2,
 };
@@ -396,9 +394,34 @@ static struct platform_device da8xx_emac_device = {
 	.resource	= da8xx_emac_resources,
 };
 
+static struct resource da8xx_mdio_resources[] = {
+	{
+		.start	= DA8XX_EMAC_MDIO_BASE,
+		.end	= DA8XX_EMAC_MDIO_BASE + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device da8xx_mdio_device = {
+	.name		= "davinci_mdio",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(da8xx_mdio_resources),
+	.resource	= da8xx_mdio_resources,
+};
+
 int __init da8xx_register_emac(void)
 {
-	return platform_device_register(&da8xx_emac_device);
+	int ret;
+
+	ret = platform_device_register(&da8xx_mdio_device);
+	if (ret < 0)
+		return ret;
+	ret = platform_device_register(&da8xx_emac_device);
+	if (ret < 0)
+		return ret;
+	ret = clk_add_alias(NULL, dev_name(&da8xx_mdio_device.dev),
+			    NULL, &da8xx_emac_device.dev);
+	return ret;
 }
 
 static struct resource da830_mcasp1_resources[] = {
