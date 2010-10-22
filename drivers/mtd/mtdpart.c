@@ -37,6 +37,7 @@ static LIST_HEAD(mtd_partitions);
 struct mtd_part {
 	struct mtd_info mtd;
 	struct mtd_info *master;
+	struct memory_accessor macc;
 	uint64_t offset;
 	struct list_head list;
 };
@@ -346,6 +347,39 @@ int del_mtd_partitions(struct mtd_info *master)
 }
 EXPORT_SYMBOL(del_mtd_partitions);
 
+/*
+ * This lets other kernel code access the flash data. For example, it
+ * might hold a board's Ethernet address, or board-specific calibration
+ * data generated on the manufacturing floor.
+ */
+static ssize_t mtd_macc_read(struct memory_accessor *macc, char *buf,
+			off_t offset, size_t count)
+{
+	struct mtd_part *part = container_of(macc, struct mtd_part, macc);
+	ssize_t ret = -EIO;
+	size_t retlen;
+
+	if (part_read((struct mtd_info *)part, offset, count,
+			&retlen, buf) == 0)
+		ret = retlen;
+
+	return ret;
+}
+
+static ssize_t mtd_macc_write(struct memory_accessor *macc, const char *buf,
+			off_t offset, size_t count)
+{
+	struct mtd_part *part = container_of(macc, struct mtd_part, macc);
+	ssize_t ret = -EIO;
+	size_t retlen;
+
+	if (part_write((struct mtd_info *)part, offset, count,
+			&retlen, buf) == 0)
+		ret = retlen;
+
+	return ret;
+}
+
 static struct mtd_part *add_one_partition(struct mtd_info *master,
 		const struct mtd_partition *part, int partno,
 		uint64_t cur_offset)
@@ -382,6 +416,9 @@ static struct mtd_part *add_one_partition(struct mtd_info *master,
 
 	slave->mtd.read = part_read;
 	slave->mtd.write = part_write;
+
+	slave->macc.read = mtd_macc_read;
+	slave->macc.write = mtd_macc_write;
 
 	if (master->panic_write)
 		slave->mtd.panic_write = part_panic_write;
@@ -448,6 +485,9 @@ static struct mtd_part *add_one_partition(struct mtd_info *master,
 
 	printk(KERN_NOTICE "0x%012llx-0x%012llx : \"%s\"\n", (unsigned long long)slave->offset,
 		(unsigned long long)(slave->offset + slave->mtd.size), slave->mtd.name);
+
+	if (part->setup)
+		part->setup(&slave->macc, (void *)part->context);
 
 	/* let's do some sanity checks */
 	if (slave->offset >= master->size) {
