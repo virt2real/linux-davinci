@@ -48,7 +48,7 @@ int __init davinci_psc_is_clk_active(unsigned int ctlr, unsigned int id)
 
 /* Enable or disable a PSC domain */
 void davinci_psc_config(unsigned int domain, unsigned int ctlr,
-		unsigned int id, u32 next_state)
+		unsigned int id, u32 next_state, bool force)
 {
 	u32 epcpr, ptcmd, ptstat, pdstat, pdctl1, mdstat, mdctl;
 	void __iomem *psc_base;
@@ -65,6 +65,8 @@ void davinci_psc_config(unsigned int domain, unsigned int ctlr,
 	mdctl = __raw_readl(psc_base + MDCTL + 4 * id);
 	mdctl &= ~MDSTAT_STATE_MASK;
 	mdctl |= next_state;
+	if (force)
+		mdctl |= MDCTL_FORCE;
 	__raw_writel(mdctl, psc_base + MDCTL + 4 * id);
 
 	pdstat = __raw_readl(psc_base + PDSTAT);

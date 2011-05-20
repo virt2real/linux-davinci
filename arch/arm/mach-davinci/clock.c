@@ -44,7 +44,7 @@ static void __clk_enable(struct clk *clk)
 		__clk_enable(clk->parent);
 	if (clk->usecount++ == 0 && (clk->flags & CLK_PSC))
 		davinci_psc_config(psc_domain(clk), clk->gpsc, clk->lpsc,
-				PSC_STATE_ENABLE);
+				PSC_STATE_ENABLE, !!(clk->flags & PSC_FORCE));
 }
 
 static void __clk_disable(struct clk *clk)
@@ -55,7 +55,8 @@ static void __clk_disable(struct clk *clk)
 	    (clk->flags & CLK_PSC))
 		davinci_psc_config(psc_domain(clk), clk->gpsc, clk->lpsc,
 				(clk->flags & PSC_SWRSTDISABLE) ?
-				PSC_STATE_SWRSTDISABLE : PSC_STATE_DISABLE);
+				PSC_STATE_SWRSTDISABLE : PSC_STATE_DISABLE,
+				!!(clk->flags & PSC_FORCE));
 	if (clk->parent)
 		__clk_disable(clk->parent);
 }
@@ -240,7 +241,8 @@ static int __init clk_disable_unused(void)
 
 		davinci_psc_config(psc_domain(ck), ck->gpsc, ck->lpsc,
 				(ck->flags & PSC_SWRSTDISABLE) ?
-				PSC_STATE_SWRSTDISABLE : PSC_STATE_DISABLE);
+				PSC_STATE_SWRSTDISABLE : PSC_STATE_DISABLE,
+				!!(ck->flags & PSC_FORCE));
 	}
 	spin_unlock_irq(&clockfw_lock);
 
