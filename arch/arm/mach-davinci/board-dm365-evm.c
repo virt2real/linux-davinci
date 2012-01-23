@@ -179,6 +179,9 @@ static struct snd_platform_data dm365_evm_snd_data = {
 
 static struct i2c_board_info i2c_info[] = {
 	{
+		I2C_BOARD_INFO("dm365evm_keys", 0x25),
+	},
+	{
 		I2C_BOARD_INFO("24c256", 0x50),
 		.platform_data	= &eeprom_info,
 	},
