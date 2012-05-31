@@ -44,7 +44,7 @@ static struct __initdata orion_addr_map_cfg addr_map_cfg = {
 	.bridge_virt_base = BRIDGE_VIRT_BASE,
 };
 
-static const struct __initdata orion_addr_map_info addr_map_info[] = {
+static const struct orion_addr_map_info addr_map_info[] __initconst = {
 	/*
 	 * Windows for PCIe IO+MEM space.
 	 */
