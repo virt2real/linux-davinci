@@ -906,7 +906,7 @@ static int da850_sata_init(struct device *dev, void __iomem *addr)
 	if (IS_ERR(da850_sata_clk))
 		return PTR_ERR(da850_sata_clk);
 
-	ret = clk_enable(da850_sata_clk);
+	ret = clk_prepare_enable(da850_sata_clk);
 	if (ret)
 		goto err0;
 
@@ -937,7 +937,7 @@ static int da850_sata_init(struct device *dev, void __iomem *addr)
 	return 0;
 
 err1:
-	clk_disable(da850_sata_clk);
+	clk_disable_unprepare(da850_sata_clk);
 err0:
 	clk_put(da850_sata_clk);
 	return ret;
@@ -945,7 +945,7 @@ err0:
 
 static void da850_sata_exit(struct device *dev)
 {
-	clk_disable(da850_sata_clk);
+	clk_disable_unprepare(da850_sata_clk);
 	clk_put(da850_sata_clk);
 }
 
