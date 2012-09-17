@@ -843,7 +843,7 @@ static int davinci_spi_probe(struct platform_device *pdev)
 		ret = -ENODEV;
 		goto put_master;
 	}
-	clk_enable(dspi->clk);
+	clk_prepare_enable(dspi->clk);
 
 	master->bus_num = pdev->id;
 	master->num_chipselect = pdata->num_chipselect;
@@ -927,7 +927,7 @@ free_dma:
 	dma_release_channel(dspi->dma_rx);
 	dma_release_channel(dspi->dma_tx);
 free_clk:
-	clk_disable(dspi->clk);
+	clk_disable_unprepare(dspi->clk);
 	clk_put(dspi->clk);
 put_master:
 	spi_master_put(master);
@@ -963,7 +963,7 @@ static int davinci_spi_remove(struct platform_device *pdev)
 
 	spi_bitbang_stop(&dspi->bitbang);
 
-	clk_disable(dspi->clk);
+	clk_disable_unprepare(dspi->clk);
 	clk_put(dspi->clk);
 	spi_master_put(master);
 	free_irq(dspi->irq, dspi);
