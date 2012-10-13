@@ -119,8 +119,6 @@ static DEFINE_SPINLOCK(davinci_rtc_lock);
 struct davinci_rtc {
 	struct rtc_device 		*rtc;
 	void __iomem			*base;
-	resource_size_t			pbase;
-	size_t				base_size;
 	int				irq;
 };
 
@@ -482,46 +480,32 @@ static int __init davinci_rtc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct davinci_rtc *davinci_rtc;
-	struct resource *res, *mem;
+	struct resource *res;
 	int ret = 0;
 
-	davinci_rtc = kzalloc(sizeof(struct davinci_rtc), GFP_KERNEL);
+	davinci_rtc = devm_kzalloc(&pdev->dev, sizeof(struct davinci_rtc),
+		GFP_KERNEL);
 	if (!davinci_rtc) {
 		dev_dbg(dev, "could not allocate memory for private data\n");
 		return -ENOMEM;
 	}
 
-	davinci_rtc->irq = platform_get_irq(pdev, 0);
-	if (davinci_rtc->irq < 0) {
-		dev_err(dev, "no RTC irq\n");
-		ret = davinci_rtc->irq;
-		goto fail1;
-	}
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
 		dev_err(dev, "no mem resource\n");
-		ret = -EINVAL;
-		goto fail1;
+		return -EINVAL;
 	}
 
-	davinci_rtc->pbase = res->start;
-	davinci_rtc->base_size = resource_size(res);
-
-	mem = request_mem_region(davinci_rtc->pbase, davinci_rtc->base_size,
-				 pdev->name);
-	if (!mem) {
-		dev_err(dev, "RTC registers at %08x are not free\n",
-			davinci_rtc->pbase);
-		ret = -EBUSY;
-		goto fail1;
-	}
-
-	davinci_rtc->base = ioremap(davinci_rtc->pbase, davinci_rtc->base_size);
+	davinci_rtc->base = devm_request_and_ioremap(&pdev->dev, res);
 	if (!davinci_rtc->base) {
-		dev_err(dev, "unable to ioremap MEM resource\n");
-		ret = -ENOMEM;
-		goto fail2;
+		dev_err(&pdev->dev, "Unable to request mem region and grab IOs for device.\n");
+		return -EBUSY;
+	}
+
+	davinci_rtc->irq = platform_get_irq(pdev, 0);
+	if (davinci_rtc->irq < 0) {
+		dev_err(dev, "no RTC irq\n");
+		return davinci_rtc->irq;
 	}
 
 	platform_set_drvdata(pdev, davinci_rtc);
@@ -529,9 +513,10 @@ static int __init davinci_rtc_probe(struct platform_device *pdev)
 	davinci_rtc->rtc = rtc_device_register(pdev->name, &pdev->dev,
 				    &davinci_rtc_ops, THIS_MODULE);
 	if (IS_ERR(davinci_rtc->rtc)) {
+		ret = PTR_ERR(davinci_rtc->rtc);
 		dev_err(dev, "unable to register RTC device, err %ld\n",
 				PTR_ERR(davinci_rtc->rtc));
-		goto fail3;
+		return ret;
 	}
 
 	rtcif_write(davinci_rtc, PRTCIF_INTFLG_RTCSS, PRTCIF_INTFLG);
@@ -545,7 +530,7 @@ static int __init davinci_rtc_probe(struct platform_device *pdev)
 			  0, "davinci_rtc", davinci_rtc);
 	if (ret < 0) {
 		dev_err(dev, "unable to register davinci RTC interrupt\n");
-		goto fail4;
+		goto err_dev_unreg;
 	}
 
 	/* Enable interrupts */
@@ -559,15 +544,8 @@ static int __init davinci_rtc_probe(struct platform_device *pdev)
 
 	return 0;
 
-fail4:
+err_dev_unreg:
 	rtc_device_unregister(davinci_rtc->rtc);
-fail3:
-	platform_set_drvdata(pdev, NULL);
-	iounmap(davinci_rtc->base);
-fail2:
-	release_mem_region(davinci_rtc->pbase, davinci_rtc->base_size);
-fail1:
-	kfree(davinci_rtc);
 
 	return ret;
 }
@@ -584,12 +562,7 @@ static int __devexit davinci_rtc_remove(struct platform_device *pdev)
 
 	rtc_device_unregister(davinci_rtc->rtc);
 
-	iounmap(davinci_rtc->base);
-	release_mem_region(davinci_rtc->pbase, davinci_rtc->base_size);
-
 	platform_set_drvdata(pdev, NULL);
-
-	kfree(davinci_rtc);
 
 	return 0;
 }
