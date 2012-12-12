@@ -713,9 +713,16 @@ static struct pinctrl *pinctrl_get_locked(struct device *dev)
 	if (WARN_ON(!dev))
 		return ERR_PTR(-EINVAL);
 
+	/*
+	 * See if somebody else (such as the device core) has already
+	 * obtained a handle to the pinctrl for this device. In that case,
+	 * return another pointer to it.
+	 */
 	p = find_pinctrl(dev);
-	if (p != NULL)
-		return ERR_PTR(-EBUSY);
+	if (p != NULL) {
+		dev_dbg(dev, "obtain a copy of previously claimed pinctrl\n");
+		return p;
+	}
 
 	return create_pinctrl(dev);
 }
