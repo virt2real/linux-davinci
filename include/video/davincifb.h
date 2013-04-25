@@ -13,7 +13,7 @@
 #ifndef _DAVINCIFB_H_
 #define _DAVINCIFB_H_
 
-#include <mach/io.h>
+#include <mach/hardware.h>
 
 /* Base registers */
 #define	VPBE_REG_BASE				0x01c72780
