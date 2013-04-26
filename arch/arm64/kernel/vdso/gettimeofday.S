@@ -62,17 +62,18 @@ ENTRY(__kernel_gettimeofday)
 	/* If tv is NULL, skip to the timezone code. */
 	cbz	x0, 2f
 	bl	__do_get_tspec
-	seqcnt_check w9, 1b
+	seqcnt_check w13, 1b
 
 	/* Convert ns to us. */
-	mov	x13, #1000
-	lsl	x13, x13, x12
-	udiv	x11, x11, x13
-	stp	x10, x11, [x0, #TVAL_TV_SEC]
+	mov	x11, #1000
+	udiv	x10, x10, x11
+	stp	x9, x10, [x0, #TVAL_TV_SEC]
 2:
 	/* If tz is NULL, return 0. */
 	cbz	x1, 3f
 	ldp	w4, w5, [vdso_data, #VDSO_TZ_MINWEST]
+	seqcnt_read w13
+	seqcnt_check w13, 1b
 	stp	w4, w5, [x1, #TZ_MINWEST]
 3:
 	mov	x0, xzr
@@ -101,17 +102,17 @@ ENTRY(__kernel_clock_gettime)
 	cbnz	use_syscall, 7f
 
 	bl	__do_get_tspec
-	seqcnt_check w9, 1b
+	seqcnt_check w13, 1b
 
 	cmp	w0, #CLOCK_MONOTONIC
 	b.ne	6f
 
 	/* Get wtm timespec. */
-	ldp	x13, x14, [vdso_data, #VDSO_WTM_CLK_SEC]
+	ldp	x14, x15, [vdso_data, #VDSO_WTM_CLK_SEC]
 
 	/* Check the sequence counter. */
-	seqcnt_read w9
-	seqcnt_check w9, 1b
+	seqcnt_read w13
+	seqcnt_check w13, 1b
 	b	4f
 2:
 	cmp	w0, #CLOCK_REALTIME_COARSE
@@ -121,40 +122,37 @@ ENTRY(__kernel_clock_gettime)
 	/* Get coarse timespec. */
 	adr	vdso_data, _vdso_data
 3:	seqcnt_acquire
-	ldp	x10, x11, [vdso_data, #VDSO_XTIME_CRS_SEC]
-
-	/* Get wtm timespec. */
-	ldp	x13, x14, [vdso_data, #VDSO_WTM_CLK_SEC]
-
-	/* Check the sequence counter. */
-	seqcnt_read w9
-	seqcnt_check w9, 3b
+	ldp	x9, x10, [vdso_data, #VDSO_XTIME_CRS_SEC]
 
 	cmp	w0, #CLOCK_MONOTONIC_COARSE
 	b.ne	6f
+
+	/* Get wtm timespec. */
+	ldp	x14, x15, [vdso_data, #VDSO_WTM_CLK_SEC]
+
+	/* Check the sequence counter. */
+	seqcnt_read w13
+	seqcnt_check w13, 3b
 4:
 	/* Add on wtm timespec. */
-	add	x10, x10, x13
-	lsl	x14, x14, x12
-	add	x11, x11, x14
+	add	x9, x9, x14
+	add	x10, x10, x15
 
 	/* Normalise the new timespec. */
-	mov	x15, #NSEC_PER_SEC_LO16
-	movk	x15, #NSEC_PER_SEC_HI16, lsl #16
-	lsl	x15, x15, x12
-	cmp	x11, x15
+	mov	x14, #NSEC_PER_SEC_LO16
+	movk	x14, #NSEC_PER_SEC_HI16, lsl #16
+	cmp	x10, x14
 	b.lt	5f
-	sub	x11, x11, x15
-	add	x10, x10, #1
+	sub	x10, x10, x14
+	add	x9, x9, #1
 5:
-	cmp	x11, #0
+	cmp	x10, #0
 	b.ge	6f
-	add	x11, x11, x15
-	sub	x10, x10, #1
+	add	x10, x10, x14
+	sub	x9, x9, #1
 
 6:	/* Store to the user timespec. */
-	lsr	x11, x11, x12
-	stp	x10, x11, [x1, #TSPEC_TV_SEC]
+	stp	x9, x10, [x1, #TSPEC_TV_SEC]
 	mov	x0, xzr
 	ret	x2
 7:
@@ -205,39 +203,39 @@ ENDPROC(__kernel_clock_getres)
  * Expects vdso_data to be initialised.
  * Clobbers the temporary registers (x9 - x15).
  * Returns:
- *  - w9		= vDSO sequence counter
- *  - (x10, x11)	= (ts->tv_sec, shifted ts->tv_nsec)
- *  - w12		= cs_shift
+ *  - (x9, x10) = (ts->tv_sec, ts->tv_nsec)
+ *  - (x11, x12) = (xtime->tv_sec, xtime->tv_nsec)
+ *  - w13 = vDSO sequence counter
  */
 ENTRY(__do_get_tspec)
 	.cfi_startproc
 
 	/* Read from the vDSO data page. */
 	ldr	x10, [vdso_data, #VDSO_CS_CYCLE_LAST]
-	ldp	x13, x14, [vdso_data, #VDSO_XTIME_CLK_SEC]
-	ldp	w11, w12, [vdso_data, #VDSO_CS_MULT]
-	seqcnt_read w9
+	ldp	x11, x12, [vdso_data, #VDSO_XTIME_CLK_SEC]
+	ldp	w14, w15, [vdso_data, #VDSO_CS_MULT]
+	seqcnt_read w13
 
-	/* Read the virtual counter. */
+	/* Read the physical counter. */
 	isb
-	mrs	x15, cntvct_el0
+	mrs	x9, cntpct_el0
 
 	/* Calculate cycle delta and convert to ns. */
-	sub	x10, x15, x10
+	sub	x10, x9, x10
 	/* We can only guarantee 56 bits of precision. */
-	movn	x15, #0xff00, lsl #48
-	and	x10, x15, x10
-	mul	x10, x10, x11
+	movn	x9, #0xff0, lsl #48
+	and	x10, x9, x10
+	mul	x10, x10, x14
+	lsr	x10, x10, x15
 
 	/* Use the kernel time to calculate the new timespec. */
-	mov	x11, #NSEC_PER_SEC_LO16
-	movk	x11, #NSEC_PER_SEC_HI16, lsl #16
-	lsl	x11, x11, x12
-	add	x15, x10, x14
-	udiv	x14, x15, x11
-	add	x10, x13, x14
-	mul	x13, x14, x11
-	sub	x11, x15, x13
+	add	x10, x12, x10
+	mov	x14, #NSEC_PER_SEC_LO16
+	movk	x14, #NSEC_PER_SEC_HI16, lsl #16
+	udiv	x15, x10, x14
+	add	x9, x15, x11
+	mul	x14, x14, x15
+	sub	x10, x10, x14
 
 	ret
 	.cfi_endproc

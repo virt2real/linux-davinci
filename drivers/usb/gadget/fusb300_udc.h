@@ -673,6 +673,4 @@ struct fusb300 {
 	u8			reenum;		/* if re-enumeration */
 };
 
-#define to_fusb300(g)		(container_of((g), struct fusb300, gadget))
-
 #endif

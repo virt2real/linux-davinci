@@ -237,6 +237,6 @@ MACHINE_START(AML_M5900, "AML_M5900")
 	.map_io		= amlm5900_map_io,
 	.init_irq	= s3c24xx_init_irq,
 	.init_machine	= amlm5900_init,
-	.init_time	= s3c24xx_timer_init,
+	.timer		= &s3c24xx_timer,
 	.restart	= s3c2410_restart,
 MACHINE_END

@@ -48,6 +48,7 @@
 #include <sound/soc.h>
 
 #include <linux/platform_data/asoc-imx-ssi.h>
+#include <mach/hardware.h>
 
 #include "imx-ssi.h"
 
@@ -496,8 +497,6 @@ static void imx_ssi_ac97_reset(struct snd_ac97 *ac97)
 
 	if (imx_ssi->ac97_reset)
 		imx_ssi->ac97_reset(ac97);
-	/* First read sometimes fails, do a dummy read */
-	imx_ssi_ac97_read(ac97, 0);
 }
 
 static void imx_ssi_ac97_warm_reset(struct snd_ac97 *ac97)
@@ -506,9 +505,6 @@ static void imx_ssi_ac97_warm_reset(struct snd_ac97 *ac97)
 
 	if (imx_ssi->ac97_warm_reset)
 		imx_ssi->ac97_warm_reset(ac97);
-
-	/* First read sometimes fails, do a dummy read */
-	imx_ssi_ac97_read(ac97, 0);
 }
 
 struct snd_ac97_bus_ops soc_ac97_ops = {
@@ -555,9 +551,10 @@ static int imx_ssi_probe(struct platform_device *pdev)
 		goto failed_get_resource;
 	}
 
-	ssi->base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(ssi->base)) {
-		ret = PTR_ERR(ssi->base);
+	ssi->base = devm_request_and_ioremap(&pdev->dev, res);
+	if (!ssi->base) {
+		dev_err(&pdev->dev, "ioremap failed\n");
+		ret = -ENODEV;
 		goto failed_register;
 	}
 
@@ -642,7 +639,7 @@ failed_clk:
 	return ret;
 }
 
-static int imx_ssi_remove(struct platform_device *pdev)
+static int __devexit imx_ssi_remove(struct platform_device *pdev)
 {
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	struct imx_ssi *ssi = platform_get_drvdata(pdev);
@@ -663,7 +660,7 @@ static int imx_ssi_remove(struct platform_device *pdev)
 
 static struct platform_driver imx_ssi_driver = {
 	.probe = imx_ssi_probe,
-	.remove = imx_ssi_remove,
+	.remove = __devexit_p(imx_ssi_remove),
 
 	.driver = {
 		.name = "imx-ssi",

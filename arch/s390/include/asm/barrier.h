@@ -13,12 +13,15 @@
  * to devices.
  */
 
+static inline void mb(void)
+{
 #ifdef CONFIG_HAVE_MARCH_Z196_FEATURES
-/* Fast-BCR without checkpoint synchronization */
-#define mb() do {  asm volatile("bcr 14,0" : : : "memory"); } while (0)
+	/* Fast-BCR without checkpoint synchronization */
+	asm volatile("bcr 14,0" : : : "memory");
 #else
-#define mb() do {  asm volatile("bcr 15,0" : : : "memory"); } while (0)
+	asm volatile("bcr 15,0" : : : "memory");
 #endif
+}
 
 #define rmb()				mb()
 #define wmb()				mb()

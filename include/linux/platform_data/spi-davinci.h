@@ -19,7 +19,7 @@
 #ifndef __ARCH_ARM_DAVINCI_SPI_H
 #define __ARCH_ARM_DAVINCI_SPI_H
 
-#include <linux/platform_data/edma.h>
+#include <mach/edma.h>
 
 #define SPI_INTERN_CS	0xFF
 

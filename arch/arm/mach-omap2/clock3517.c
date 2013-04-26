@@ -21,9 +21,11 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 
+#include <plat/clock.h>
+
 #include "clock.h"
 #include "clock3517.h"
-#include "cm3xxx.h"
+#include "cm2xxx_3xxx.h"
 #include "cm-regbits-34xx.h"
 
 /*
@@ -47,7 +49,7 @@
  * in the enable register itsel at a bit offset of 4 from the enable
  * bit. A value of 1 indicates that clock is enabled.
  */
-static void am35xx_clk_find_idlest(struct clk_hw_omap *clk,
+static void am35xx_clk_find_idlest(struct clk *clk,
 					    void __iomem **idlest_reg,
 					    u8 *idlest_bit,
 					    u8 *idlest_val)
@@ -71,9 +73,8 @@ static void am35xx_clk_find_idlest(struct clk_hw_omap *clk,
  * associate this type of code with per-module data structures to
  * avoid this issue, and remove the casts.  No return value.
  */
-static void am35xx_clk_find_companion(struct clk_hw_omap *clk,
-				      void __iomem **other_reg,
-				      u8 *other_bit)
+static void am35xx_clk_find_companion(struct clk *clk, void __iomem **other_reg,
+					    u8 *other_bit)
 {
 	*other_reg = (__force void __iomem *)(clk->enable_reg);
 	if (clk->enable_bit & AM35XX_IPSS_ICK_MASK)
@@ -81,7 +82,10 @@ static void am35xx_clk_find_companion(struct clk_hw_omap *clk,
 	else
 		*other_bit = clk->enable_bit - AM35XX_IPSS_ICK_FCK_OFFSET;
 }
-const struct clk_hw_omap_ops clkhwops_am35xx_ipss_module_wait = {
+
+const struct clkops clkops_am35xx_ipss_module_wait = {
+	.enable		= omap2_dflt_clk_enable,
+	.disable	= omap2_dflt_clk_disable,
 	.find_idlest	= am35xx_clk_find_idlest,
 	.find_companion	= am35xx_clk_find_companion,
 };
@@ -97,7 +101,7 @@ const struct clk_hw_omap_ops clkhwops_am35xx_ipss_module_wait = {
  * CM_{I,F}CLKEN bit.  Pass back the correct info via @idlest_reg
  * and @idlest_bit.  No return value.
  */
-static void am35xx_clk_ipss_find_idlest(struct clk_hw_omap *clk,
+static void am35xx_clk_ipss_find_idlest(struct clk *clk,
 					    void __iomem **idlest_reg,
 					    u8 *idlest_bit,
 					    u8 *idlest_val)
@@ -110,9 +114,13 @@ static void am35xx_clk_ipss_find_idlest(struct clk_hw_omap *clk,
 	*idlest_val = OMAP34XX_CM_IDLEST_VAL;
 }
 
-const struct clk_hw_omap_ops clkhwops_am35xx_ipss_wait = {
-	.allow_idle	= omap2_clkt_iclk_allow_idle,
-	.deny_idle	= omap2_clkt_iclk_deny_idle,
+const struct clkops clkops_am35xx_ipss_wait = {
+	.enable		= omap2_dflt_clk_enable,
+	.disable	= omap2_dflt_clk_disable,
 	.find_idlest	= am35xx_clk_ipss_find_idlest,
 	.find_companion	= omap2_clk_dflt_find_companion,
+	.allow_idle	= omap2_clkt_iclk_allow_idle,
+	.deny_idle	= omap2_clkt_iclk_deny_idle,
 };
+
+

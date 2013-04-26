@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2013 B.A.T.M.A.N. contributors:
+/* Copyright (C) 2009-2012 B.A.T.M.A.N. contributors:
  *
  * Marek Lindner
  *
@@ -114,6 +114,7 @@ static struct batadv_gw_node *
 batadv_gw_get_best_gw_node(struct batadv_priv *bat_priv)
 {
 	struct batadv_neigh_node *router;
+	struct hlist_node *node;
 	struct batadv_gw_node *gw_node, *curr_gw = NULL;
 	uint32_t max_gw_factor = 0, tmp_gw_factor = 0;
 	uint32_t gw_divisor;
@@ -126,7 +127,7 @@ batadv_gw_get_best_gw_node(struct batadv_priv *bat_priv)
 	gw_divisor *= 64;
 
 	rcu_read_lock();
-	hlist_for_each_entry_rcu(gw_node, &bat_priv->gw.list, list) {
+	hlist_for_each_entry_rcu(gw_node, node, &bat_priv->gw.list, list) {
 		if (gw_node->deleted)
 			continue;
 
@@ -343,6 +344,7 @@ void batadv_gw_node_update(struct batadv_priv *bat_priv,
 			   struct batadv_orig_node *orig_node,
 			   uint8_t new_gwflags)
 {
+	struct hlist_node *node;
 	struct batadv_gw_node *gw_node, *curr_gw;
 
 	/* Note: We don't need a NULL check here, since curr_gw never gets
@@ -353,7 +355,7 @@ void batadv_gw_node_update(struct batadv_priv *bat_priv,
 	curr_gw = batadv_gw_get_selected_gw_node(bat_priv);
 
 	rcu_read_lock();
-	hlist_for_each_entry_rcu(gw_node, &bat_priv->gw.list, list) {
+	hlist_for_each_entry_rcu(gw_node, node, &bat_priv->gw.list, list) {
 		if (gw_node->orig_node != orig_node)
 			continue;
 
@@ -401,7 +403,7 @@ void batadv_gw_node_delete(struct batadv_priv *bat_priv,
 void batadv_gw_node_purge(struct batadv_priv *bat_priv)
 {
 	struct batadv_gw_node *gw_node, *curr_gw;
-	struct hlist_node *node_tmp;
+	struct hlist_node *node, *node_tmp;
 	unsigned long timeout = msecs_to_jiffies(2 * BATADV_PURGE_TIMEOUT);
 	int do_deselect = 0;
 
@@ -409,7 +411,7 @@ void batadv_gw_node_purge(struct batadv_priv *bat_priv)
 
 	spin_lock_bh(&bat_priv->gw.list_lock);
 
-	hlist_for_each_entry_safe(gw_node, node_tmp,
+	hlist_for_each_entry_safe(gw_node, node, node_tmp,
 				  &bat_priv->gw.list, list) {
 		if (((!gw_node->deleted) ||
 		     (time_before(jiffies, gw_node->deleted + timeout))) &&
@@ -474,11 +476,23 @@ int batadv_gw_client_seq_print_text(struct seq_file *seq, void *offset)
 	struct batadv_priv *bat_priv = netdev_priv(net_dev);
 	struct batadv_hard_iface *primary_if;
 	struct batadv_gw_node *gw_node;
-	int gw_count = 0;
+	struct hlist_node *node;
+	int gw_count = 0, ret = 0;
 
-	primary_if = batadv_seq_print_text_primary_if_get(seq);
-	if (!primary_if)
+	primary_if = batadv_primary_if_get_selected(bat_priv);
+	if (!primary_if) {
+		ret = seq_printf(seq,
+				 "BATMAN mesh %s disabled - please specify interfaces to enable it\n",
+				 net_dev->name);
 		goto out;
+	}
+
+	if (primary_if->if_status != BATADV_IF_ACTIVE) {
+		ret = seq_printf(seq,
+				 "BATMAN mesh %s disabled - primary interface not active\n",
+				 net_dev->name);
+		goto out;
+	}
 
 	seq_printf(seq,
 		   "      %-12s (%s/%i) %17s [%10s]: gw_class ... [B.A.T.M.A.N. adv %s, MainIF/MAC: %s/%pM (%s)]\n",
@@ -487,7 +501,7 @@ int batadv_gw_client_seq_print_text(struct seq_file *seq, void *offset)
 		   primary_if->net_dev->dev_addr, net_dev->name);
 
 	rcu_read_lock();
-	hlist_for_each_entry_rcu(gw_node, &bat_priv->gw.list, list) {
+	hlist_for_each_entry_rcu(gw_node, node, &bat_priv->gw.list, list) {
 		if (gw_node->deleted)
 			continue;
 
@@ -505,7 +519,7 @@ int batadv_gw_client_seq_print_text(struct seq_file *seq, void *offset)
 out:
 	if (primary_if)
 		batadv_hardif_free_ref(primary_if);
-	return 0;
+	return ret;
 }
 
 static bool batadv_is_type_dhcprequest(struct sk_buff *skb, int header_len)

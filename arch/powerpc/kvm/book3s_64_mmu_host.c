@@ -93,7 +93,7 @@ int kvmppc_mmu_map_page(struct kvm_vcpu *vcpu, struct kvmppc_pte *orig_pte)
 
 	/* Get host physical address for gpa */
 	hpaddr = kvmppc_gfn_to_pfn(vcpu, orig_pte->raddr >> PAGE_SHIFT);
-	if (is_error_noslot_pfn(hpaddr)) {
+	if (is_error_pfn(hpaddr)) {
 		printk(KERN_INFO "Couldn't get guest page for gfn %lx!\n", orig_pte->eaddr);
 		r = -EINVAL;
 		goto out;
@@ -171,7 +171,6 @@ map_again:
 
 		kvmppc_mmu_hpte_cache_map(vcpu, pte);
 	}
-	kvm_release_pfn_clean(hpaddr >> PAGE_SHIFT);
 
 out:
 	return r;
@@ -326,8 +325,8 @@ int kvmppc_mmu_init(struct kvm_vcpu *vcpu)
 	vcpu3s->context_id[0] = err;
 
 	vcpu3s->proto_vsid_max = ((vcpu3s->context_id[0] + 1)
-				  << ESID_BITS) - 1;
-	vcpu3s->proto_vsid_first = vcpu3s->context_id[0] << ESID_BITS;
+				  << USER_ESID_BITS) - 1;
+	vcpu3s->proto_vsid_first = vcpu3s->context_id[0] << USER_ESID_BITS;
 	vcpu3s->proto_vsid_next = vcpu3s->proto_vsid_first;
 
 	kvmppc_mmu_hpte_init(vcpu);

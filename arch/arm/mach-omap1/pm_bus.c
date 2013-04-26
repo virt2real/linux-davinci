@@ -19,7 +19,8 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 
-#include "soc.h"
+#include <plat/omap_device.h>
+#include <plat/omap-pm.h>
 
 #ifdef CONFIG_PM_RUNTIME
 static int omap1_pm_runtime_suspend(struct device *dev)

@@ -44,23 +44,33 @@ struct max77686_clk {
 	struct clk_lookup *lookup;
 };
 
-static struct max77686_clk *to_max77686_clk(struct clk_hw *hw)
+static struct max77686_clk *get_max77686_clk(struct clk_hw *hw)
 {
 	return container_of(hw, struct max77686_clk, hw);
 }
 
 static int max77686_clk_prepare(struct clk_hw *hw)
 {
-	struct max77686_clk *max77686 = to_max77686_clk(hw);
+	struct max77686_clk *max77686;
+	int ret;
 
-	return regmap_update_bits(max77686->iodev->regmap,
-				  MAX77686_REG_32KHZ, max77686->mask,
-				  max77686->mask);
+	max77686 = get_max77686_clk(hw);
+	if (!max77686)
+		return -ENOMEM;
+
+	ret = regmap_update_bits(max77686->iodev->regmap,
+		MAX77686_REG_32KHZ, max77686->mask, max77686->mask);
+
+	return ret;
 }
 
 static void max77686_clk_unprepare(struct clk_hw *hw)
 {
-	struct max77686_clk *max77686 = to_max77686_clk(hw);
+	struct max77686_clk *max77686;
+
+	max77686 = get_max77686_clk(hw);
+	if (!max77686)
+		return;
 
 	regmap_update_bits(max77686->iodev->regmap,
 		MAX77686_REG_32KHZ, max77686->mask, ~max77686->mask);
@@ -68,9 +78,13 @@ static void max77686_clk_unprepare(struct clk_hw *hw)
 
 static int max77686_clk_is_enabled(struct clk_hw *hw)
 {
-	struct max77686_clk *max77686 = to_max77686_clk(hw);
+	struct max77686_clk *max77686;
 	int ret;
 	u32 val;
+
+	max77686 = get_max77686_clk(hw);
+	if (!max77686)
+		return -ENOMEM;
 
 	ret = regmap_read(max77686->iodev->regmap,
 				MAX77686_REG_32KHZ, &val);
@@ -116,8 +130,9 @@ static int max77686_clk_register(struct device *dev,
 	if (IS_ERR(clk))
 		return -ENOMEM;
 
-	max77686->lookup = kzalloc(sizeof(struct clk_lookup), GFP_KERNEL);
-	if (!max77686->lookup)
+	max77686->lookup = devm_kzalloc(dev, sizeof(struct clk_lookup),
+					GFP_KERNEL);
+	if (IS_ERR(max77686->lookup))
 		return -ENOMEM;
 
 	max77686->lookup->con_id = hw->init->name;
@@ -128,7 +143,7 @@ static int max77686_clk_register(struct device *dev,
 	return 0;
 }
 
-static int max77686_clk_probe(struct platform_device *pdev)
+static __devinit int max77686_clk_probe(struct platform_device *pdev)
 {
 	struct max77686_dev *iodev = dev_get_drvdata(pdev->dev.parent);
 	struct max77686_clk **max77686_clks;
@@ -136,13 +151,13 @@ static int max77686_clk_probe(struct platform_device *pdev)
 
 	max77686_clks = devm_kzalloc(&pdev->dev, sizeof(struct max77686_clk *)
 					* MAX77686_CLKS_NUM, GFP_KERNEL);
-	if (!max77686_clks)
+	if (IS_ERR(max77686_clks))
 		return -ENOMEM;
 
 	for (i = 0; i < MAX77686_CLKS_NUM; i++) {
 		max77686_clks[i] = devm_kzalloc(&pdev->dev,
 					sizeof(struct max77686_clk), GFP_KERNEL);
-		if (!max77686_clks[i])
+		if (IS_ERR(max77686_clks[i]))
 			return -ENOMEM;
 	}
 
@@ -184,7 +199,7 @@ out:
 	return ret;
 }
 
-static int max77686_clk_remove(struct platform_device *pdev)
+static int __devexit max77686_clk_remove(struct platform_device *pdev)
 {
 	struct max77686_clk **max77686_clks = platform_get_drvdata(pdev);
 	int i;
@@ -208,7 +223,7 @@ static struct platform_driver max77686_clk_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe = max77686_clk_probe,
-	.remove = max77686_clk_remove,
+	.remove = __devexit_p(max77686_clk_remove),
 	.id_table = max77686_clk_id,
 };
 

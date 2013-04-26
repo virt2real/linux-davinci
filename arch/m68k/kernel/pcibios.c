@@ -87,7 +87,7 @@ int pcibios_enable_device(struct pci_dev *dev, int mask)
 	return 0;
 }
 
-void pcibios_fixup_bus(struct pci_bus *bus)
+void __devinit pcibios_fixup_bus(struct pci_bus *bus)
 {
 	struct pci_dev *dev;
 
@@ -97,7 +97,7 @@ void pcibios_fixup_bus(struct pci_bus *bus)
 	}
 }
 
-char *pcibios_setup(char *str)
+char __devinit *pcibios_setup(char *str)
 {
 	return str;
 }

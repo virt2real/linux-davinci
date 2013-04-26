@@ -195,7 +195,7 @@ nv17_tv_detect(struct drm_encoder *encoder, struct drm_connector *connector)
 		break;
 	}
 
-	drm_object_property_set_value(&connector->base,
+	drm_connector_property_set_value(connector,
 					 conf->tv_subconnector_property,
 					 tv_enc->subconnector);
 
@@ -672,25 +672,25 @@ static int nv17_tv_create_resources(struct drm_encoder *encoder,
 
 	drm_mode_create_tv_properties(dev, num_tv_norms, nv17_tv_norm_names);
 
-	drm_object_attach_property(&connector->base,
+	drm_connector_attach_property(connector,
 					conf->tv_select_subconnector_property,
 					tv_enc->select_subconnector);
-	drm_object_attach_property(&connector->base,
+	drm_connector_attach_property(connector,
 					conf->tv_subconnector_property,
 					tv_enc->subconnector);
-	drm_object_attach_property(&connector->base,
+	drm_connector_attach_property(connector,
 					conf->tv_mode_property,
 					tv_enc->tv_norm);
-	drm_object_attach_property(&connector->base,
+	drm_connector_attach_property(connector,
 					conf->tv_flicker_reduction_property,
 					tv_enc->flicker);
-	drm_object_attach_property(&connector->base,
+	drm_connector_attach_property(connector,
 					conf->tv_saturation_property,
 					tv_enc->saturation);
-	drm_object_attach_property(&connector->base,
+	drm_connector_attach_property(connector,
 					conf->tv_hue_property,
 					tv_enc->hue);
-	drm_object_attach_property(&connector->base,
+	drm_connector_attach_property(connector,
 					conf->tv_overscan_property,
 					tv_enc->overscan);
 
@@ -768,7 +768,7 @@ static int nv17_tv_set_property(struct drm_encoder *encoder,
 				.crtc = crtc,
 			};
 
-			drm_mode_set_config_internal(&modeset);
+			crtc->funcs->set_config(&modeset);
 		}
 	}
 

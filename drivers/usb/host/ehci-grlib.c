@@ -25,7 +25,7 @@
  * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <linux/err.h>
+
 #include <linux/signal.h>
 
 #include <linux/of_irq.h>
@@ -33,6 +33,22 @@
 #include <linux/of_platform.h>
 
 #define GRUSBHC_HCIVERSION 0x0100 /* Known value of cap. reg. HCIVERSION */
+
+/* called during probe() after chip reset completes */
+static int ehci_grlib_setup(struct usb_hcd *hcd)
+{
+	struct ehci_hcd	*ehci = hcd_to_ehci(hcd);
+	int		retval;
+
+	retval = ehci_setup(hcd);
+	if (retval)
+		return retval;
+
+	ehci_port_power(ehci, 1);
+
+	return retval;
+}
+
 
 static const struct hc_driver ehci_grlib_hc_driver = {
 	.description		= hcd_name,
@@ -48,7 +64,7 @@ static const struct hc_driver ehci_grlib_hc_driver = {
 	/*
 	 * basic lifecycle operations
 	 */
-	.reset			= ehci_setup,
+	.reset			= ehci_grlib_setup,
 	.start			= ehci_run,
 	.stop			= ehci_stop,
 	.shutdown		= ehci_shutdown,
@@ -82,7 +98,7 @@ static const struct hc_driver ehci_grlib_hc_driver = {
 };
 
 
-static int ehci_hcd_grlib_probe(struct platform_device *op)
+static int __devinit ehci_hcd_grlib_probe(struct platform_device *op)
 {
 	struct device_node *dn = op->dev.of_node;
 	struct usb_hcd *hcd;
@@ -118,9 +134,10 @@ static int ehci_hcd_grlib_probe(struct platform_device *op)
 		goto err_irq;
 	}
 
-	hcd->regs = devm_ioremap_resource(&op->dev, &res);
-	if (IS_ERR(hcd->regs)) {
-		rv = PTR_ERR(hcd->regs);
+	hcd->regs = devm_request_and_ioremap(&op->dev, &res);
+	if (!hcd->regs) {
+		pr_err("%s: devm_request_and_ioremap failed\n", __FILE__);
+		rv = -ENOMEM;
 		goto err_ioremap;
 	}
 

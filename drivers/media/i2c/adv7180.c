@@ -402,6 +402,9 @@ static const struct v4l2_subdev_video_ops adv7180_video_ops = {
 static const struct v4l2_subdev_core_ops adv7180_core_ops = {
 	.g_chip_ident = adv7180_g_chip_ident,
 	.s_std = adv7180_s_std,
+	.queryctrl = v4l2_subdev_queryctrl,
+	.g_ctrl = v4l2_subdev_g_ctrl,
+	.s_ctrl = v4l2_subdev_s_ctrl,
 };
 
 static const struct v4l2_subdev_ops adv7180_ops = {
@@ -537,8 +540,8 @@ static int init_device(struct i2c_client *client, struct adv7180_state *state)
 	return 0;
 }
 
-static int adv7180_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static __devinit int adv7180_probe(struct i2c_client *client,
+				   const struct i2c_device_id *id)
 {
 	struct adv7180_state *state;
 	struct v4l2_subdev *sd;
@@ -584,7 +587,7 @@ err:
 	return ret;
 }
 
-static int adv7180_remove(struct i2c_client *client)
+static __devexit int adv7180_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct adv7180_state *state = to_state(sd);
@@ -649,7 +652,7 @@ static struct i2c_driver adv7180_driver = {
 		   .name = KBUILD_MODNAME,
 		   },
 	.probe = adv7180_probe,
-	.remove = adv7180_remove,
+	.remove = __devexit_p(adv7180_remove),
 #ifdef CONFIG_PM
 	.suspend = adv7180_suspend,
 	.resume = adv7180_resume,

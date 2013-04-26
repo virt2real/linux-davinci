@@ -2646,25 +2646,24 @@ static int __net_init igmp_net_init(struct net *net)
 {
 	struct proc_dir_entry *pde;
 
-	pde = proc_create("igmp", S_IRUGO, net->proc_net, &igmp_mc_seq_fops);
+	pde = proc_net_fops_create(net, "igmp", S_IRUGO, &igmp_mc_seq_fops);
 	if (!pde)
 		goto out_igmp;
-	pde = proc_create("mcfilter", S_IRUGO, net->proc_net,
-			  &igmp_mcf_seq_fops);
+	pde = proc_net_fops_create(net, "mcfilter", S_IRUGO, &igmp_mcf_seq_fops);
 	if (!pde)
 		goto out_mcfilter;
 	return 0;
 
 out_mcfilter:
-	remove_proc_entry("igmp", net->proc_net);
+	proc_net_remove(net, "igmp");
 out_igmp:
 	return -ENOMEM;
 }
 
 static void __net_exit igmp_net_exit(struct net *net)
 {
-	remove_proc_entry("mcfilter", net->proc_net);
-	remove_proc_entry("igmp", net->proc_net);
+	proc_net_remove(net, "mcfilter");
+	proc_net_remove(net, "igmp");
 }
 
 static struct pernet_operations igmp_net_ops = {

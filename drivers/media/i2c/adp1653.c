@@ -3,10 +3,10 @@
  *
  * Copyright (C) 2008--2011 Nokia Corporation
  *
- * Contact: Sakari Ailus <sakari.ailus@iki.fi>
+ * Contact: Sakari Ailus <sakari.ailus@maxwell.research.nokia.com>
  *
  * Contributors:
- *	Sakari Ailus <sakari.ailus@iki.fi>
+ *	Sakari Ailus <sakari.ailus@maxwell.research.nokia.com>
  *	Tuukka Toivonen <tuukkat76@gmail.com>
  *
  * This program is free software; you can redistribute it and/or

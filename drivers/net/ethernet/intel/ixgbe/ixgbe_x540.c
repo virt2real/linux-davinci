@@ -1,7 +1,7 @@
 /*******************************************************************************
 
   Intel 10 Gigabit PCI Express Linux driver
-  Copyright(c) 1999 - 2013 Intel Corporation.
+  Copyright(c) 1999 - 2012 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify it
   under the terms and conditions of the GNU General Public License,
@@ -72,13 +72,14 @@ static s32 ixgbe_get_invariants_X540(struct ixgbe_hw *hw)
  *  ixgbe_setup_mac_link_X540 - Set the auto advertised capabilitires
  *  @hw: pointer to hardware structure
  *  @speed: new link speed
+ *  @autoneg: true if autonegotiation enabled
  *  @autoneg_wait_to_complete: true when waiting for completion is needed
  **/
 static s32 ixgbe_setup_mac_link_X540(struct ixgbe_hw *hw,
-				     ixgbe_link_speed speed,
-				     bool autoneg_wait_to_complete)
+                                     ixgbe_link_speed speed, bool autoneg,
+                                     bool autoneg_wait_to_complete)
 {
-	return hw->phy.ops.setup_link_speed(hw, speed,
+	return hw->phy.ops.setup_link_speed(hw, speed, autoneg,
 	                                    autoneg_wait_to_complete);
 }
 
@@ -151,7 +152,7 @@ mac_reset_top:
 	hw->mac.ops.get_san_mac_addr(hw, hw->mac.san_addr);
 
 	/* Add the SAN MAC address to the RAR only if it's a valid address */
-	if (is_valid_ether_addr(hw->mac.san_addr)) {
+	if (ixgbe_validate_mac_addr(hw->mac.san_addr) == 0) {
 		hw->mac.ops.set_rar(hw, hw->mac.num_rar_entries - 1,
 		                    hw->mac.san_addr, 0, IXGBE_RAH_AV);
 
@@ -878,7 +879,6 @@ static struct ixgbe_phy_operations phy_ops_X540 = {
 	.setup_link_speed       = &ixgbe_setup_phy_link_speed_generic,
 	.read_i2c_byte          = &ixgbe_read_i2c_byte_generic,
 	.write_i2c_byte         = &ixgbe_write_i2c_byte_generic,
-	.read_i2c_sff8472	= &ixgbe_read_i2c_sff8472_generic,
 	.read_i2c_eeprom        = &ixgbe_read_i2c_eeprom_generic,
 	.write_i2c_eeprom       = &ixgbe_write_i2c_eeprom_generic,
 	.check_overtemp         = &ixgbe_tn_check_overtemp,

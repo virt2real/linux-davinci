@@ -25,10 +25,10 @@
 #include <asm/mach/time.h>
 #include <asm/mach/irq.h>
 
+#include <mach/at91_aic.h>
 #include <mach/at91_pmc.h>
 #include <mach/cpu.h>
 
-#include "at91_aic.h"
 #include "generic.h"
 #include "pm.h"
 
@@ -36,8 +36,8 @@
  * Show the reason for the previous system reset.
  */
 
-#include "at91_rstc.h"
-#include "at91_shdwc.h"
+#include <mach/at91_rstc.h>
+#include <mach/at91_shdwc.h>
 
 static void __init show_reset_status(void)
 {
@@ -201,10 +201,7 @@ extern u32 at91_slow_clock_sz;
 
 static int at91_pm_enter(suspend_state_t state)
 {
-	if (of_have_populated_dt())
-		at91_pinctrl_gpio_suspend();
-	else
-		at91_gpio_suspend();
+	at91_gpio_suspend();
 	at91_irq_suspend();
 
 	pr_debug("AT91: PM - wake mask %08x, pm state %d\n",
@@ -289,10 +286,7 @@ static int at91_pm_enter(suspend_state_t state)
 error:
 	target_state = PM_SUSPEND_ON;
 	at91_irq_resume();
-	if (of_have_populated_dt())
-		at91_pinctrl_gpio_resume();
-	else
-		at91_gpio_resume();
+	at91_gpio_resume();
 	return 0;
 }
 

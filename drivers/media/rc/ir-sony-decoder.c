@@ -45,8 +45,7 @@ static int ir_sony_decode(struct rc_dev *dev, struct ir_raw_event ev)
 	u32 scancode;
 	u8 device, subdevice, function;
 
-	if (!(dev->raw->enabled_protocols &
-	      (RC_BIT_SONY12 | RC_BIT_SONY15 | RC_BIT_SONY20)))
+	if (!(dev->raw->enabled_protocols & RC_TYPE_SONY))
 		return 0;
 
 	if (!is_timing_event(ev)) {
@@ -124,28 +123,16 @@ static int ir_sony_decode(struct rc_dev *dev, struct ir_raw_event ev)
 
 		switch (data->count) {
 		case 12:
-			if (!(dev->raw->enabled_protocols & RC_BIT_SONY12)) {
-				data->state = STATE_INACTIVE;
-				return 0;
-			}
 			device    = bitrev8((data->bits <<  3) & 0xF8);
 			subdevice = 0;
 			function  = bitrev8((data->bits >>  4) & 0xFE);
 			break;
 		case 15:
-			if (!(dev->raw->enabled_protocols & RC_BIT_SONY15)) {
-				data->state = STATE_INACTIVE;
-				return 0;
-			}
 			device    = bitrev8((data->bits >>  0) & 0xFF);
 			subdevice = 0;
 			function  = bitrev8((data->bits >>  7) & 0xFE);
 			break;
 		case 20:
-			if (!(dev->raw->enabled_protocols & RC_BIT_SONY20)) {
-				data->state = STATE_INACTIVE;
-				return 0;
-			}
 			device    = bitrev8((data->bits >>  5) & 0xF8);
 			subdevice = bitrev8((data->bits >>  0) & 0xFF);
 			function  = bitrev8((data->bits >> 12) & 0xFE);
@@ -170,7 +157,7 @@ out:
 }
 
 static struct ir_raw_handler sony_handler = {
-	.protocols	= RC_BIT_SONY12 | RC_BIT_SONY15 | RC_BIT_SONY20,
+	.protocols	= RC_TYPE_SONY,
 	.decode		= ir_sony_decode,
 };
 

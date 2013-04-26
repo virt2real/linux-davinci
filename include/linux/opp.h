@@ -47,6 +47,15 @@ int opp_enable(struct device *dev, unsigned long freq);
 int opp_disable(struct device *dev, unsigned long freq);
 
 struct srcu_notifier_head *opp_get_notifier(struct device *dev);
+
+#ifdef CONFIG_OF
+int of_init_opp_table(struct device *dev);
+#else
+static inline int of_init_opp_table(struct device *dev)
+{
+	return -EINVAL;
+}
+#endif /* CONFIG_OF */
 #else
 static inline unsigned long opp_get_voltage(struct opp *opp)
 {
@@ -102,15 +111,6 @@ static inline struct srcu_notifier_head *opp_get_notifier(struct device *dev)
 	return ERR_PTR(-EINVAL);
 }
 #endif		/* CONFIG_PM_OPP */
-
-#if defined(CONFIG_PM_OPP) && defined(CONFIG_OF)
-int of_init_opp_table(struct device *dev);
-#else
-static inline int of_init_opp_table(struct device *dev)
-{
-	return -EINVAL;
-}
-#endif
 
 #if defined(CONFIG_CPU_FREQ) && defined(CONFIG_PM_OPP)
 int opp_init_cpufreq_table(struct device *dev,

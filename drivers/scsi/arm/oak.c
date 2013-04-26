@@ -129,7 +129,8 @@ static struct scsi_host_template oakscsi_template = {
 	.proc_name		= "oakscsi",
 };
 
-static int oakscsi_probe(struct expansion_card *ec, const struct ecard_id *id)
+static int __devinit
+oakscsi_probe(struct expansion_card *ec, const struct ecard_id *id)
 {
 	struct Scsi_Host *host;
 	int ret = -ENOMEM;
@@ -181,7 +182,7 @@ static int oakscsi_probe(struct expansion_card *ec, const struct ecard_id *id)
 	return ret;
 }
 
-static void oakscsi_remove(struct expansion_card *ec)
+static void __devexit oakscsi_remove(struct expansion_card *ec)
 {
 	struct Scsi_Host *host = ecard_get_drvdata(ec);
 
@@ -201,7 +202,7 @@ static const struct ecard_id oakscsi_cids[] = {
 
 static struct ecard_driver oakscsi_driver = {
 	.probe		= oakscsi_probe,
-	.remove		= oakscsi_remove,
+	.remove		= __devexit_p(oakscsi_remove),
 	.id_table	= oakscsi_cids,
 	.drv = {
 		.name		= "oakscsi",

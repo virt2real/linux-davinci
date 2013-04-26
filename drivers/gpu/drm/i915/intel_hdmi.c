@@ -36,19 +36,14 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 
-static struct drm_device *intel_hdmi_to_dev(struct intel_hdmi *intel_hdmi)
-{
-	return hdmi_to_dig_port(intel_hdmi)->base.base.dev;
-}
-
 static void
 assert_hdmi_port_disabled(struct intel_hdmi *intel_hdmi)
 {
-	struct drm_device *dev = intel_hdmi_to_dev(intel_hdmi);
+	struct drm_device *dev = intel_hdmi->base.base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	uint32_t enabled_bits;
 
-	enabled_bits = HAS_DDI(dev) ? DDI_BUF_CTL_ENABLE : SDVO_ENABLE;
+	enabled_bits = IS_HASWELL(dev) ? DDI_BUF_CTL_ENABLE : SDVO_ENABLE;
 
 	WARN(I915_READ(intel_hdmi->sdvox_reg) & enabled_bits,
 	     "HDMI port enabled, expecting disabled\n");
@@ -56,14 +51,13 @@ assert_hdmi_port_disabled(struct intel_hdmi *intel_hdmi)
 
 struct intel_hdmi *enc_to_intel_hdmi(struct drm_encoder *encoder)
 {
-	struct intel_digital_port *intel_dig_port =
-		container_of(encoder, struct intel_digital_port, base.base);
-	return &intel_dig_port->hdmi;
+	return container_of(encoder, struct intel_hdmi, base.base);
 }
 
 static struct intel_hdmi *intel_attached_hdmi(struct drm_connector *connector)
 {
-	return enc_to_intel_hdmi(&intel_attached_encoder(connector)->base);
+	return container_of(intel_attached_encoder(connector),
+			    struct intel_hdmi, base);
 }
 
 void intel_dip_infoframe_csum(struct dip_infoframe *frame)
@@ -331,7 +325,6 @@ static void intel_set_infoframe(struct drm_encoder *encoder,
 static void intel_hdmi_set_avi_infoframe(struct drm_encoder *encoder,
 					 struct drm_display_mode *adjusted_mode)
 {
-	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
 	struct dip_infoframe avi_if = {
 		.type = DIP_TYPE_AVI,
 		.ver = DIP_VERSION_AVI,
@@ -340,15 +333,6 @@ static void intel_hdmi_set_avi_infoframe(struct drm_encoder *encoder,
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLCLK)
 		avi_if.body.avi.YQ_CN_PR |= DIP_AVI_PR_2;
-
-	if (intel_hdmi->rgb_quant_range_selectable) {
-		if (adjusted_mode->private_flags & INTEL_MODE_LIMITED_COLOR_RANGE)
-			avi_if.body.avi.ITC_EC_Q_SC |= DIP_AVI_RGB_QUANT_RANGE_LIMITED;
-		else
-			avi_if.body.avi.ITC_EC_Q_SC |= DIP_AVI_RGB_QUANT_RANGE_FULL;
-	}
-
-	avi_if.body.avi.VIC = drm_match_cea_mode(adjusted_mode);
 
 	intel_set_infoframe(encoder, &avi_if);
 }
@@ -372,8 +356,7 @@ static void g4x_set_infoframes(struct drm_encoder *encoder,
 			       struct drm_display_mode *adjusted_mode)
 {
 	struct drm_i915_private *dev_priv = encoder->dev->dev_private;
-	struct intel_digital_port *intel_dig_port = enc_to_dig_port(encoder);
-	struct intel_hdmi *intel_hdmi = &intel_dig_port->hdmi;
+	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
 	u32 reg = VIDEO_DIP_CTL;
 	u32 val = I915_READ(reg);
 	u32 port;
@@ -400,11 +383,11 @@ static void g4x_set_infoframes(struct drm_encoder *encoder,
 		return;
 	}
 
-	switch (intel_dig_port->port) {
-	case PORT_B:
+	switch (intel_hdmi->sdvox_reg) {
+	case SDVOB:
 		port = VIDEO_DIP_PORT_B;
 		break;
-	case PORT_C:
+	case SDVOC:
 		port = VIDEO_DIP_PORT_C;
 		break;
 	default:
@@ -437,8 +420,7 @@ static void ibx_set_infoframes(struct drm_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = encoder->dev->dev_private;
 	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->crtc);
-	struct intel_digital_port *intel_dig_port = enc_to_dig_port(encoder);
-	struct intel_hdmi *intel_hdmi = &intel_dig_port->hdmi;
+	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
 	u32 reg = TVIDEO_DIP_CTL(intel_crtc->pipe);
 	u32 val = I915_READ(reg);
 	u32 port;
@@ -457,14 +439,14 @@ static void ibx_set_infoframes(struct drm_encoder *encoder,
 		return;
 	}
 
-	switch (intel_dig_port->port) {
-	case PORT_B:
+	switch (intel_hdmi->sdvox_reg) {
+	case HDMIB:
 		port = VIDEO_DIP_PORT_B;
 		break;
-	case PORT_C:
+	case HDMIC:
 		port = VIDEO_DIP_PORT_C;
 		break;
-	case PORT_D:
+	case HDMID:
 		port = VIDEO_DIP_PORT_D;
 		break;
 	default:
@@ -772,42 +754,47 @@ static int intel_hdmi_mode_valid(struct drm_connector *connector,
 	return MODE_OK;
 }
 
-bool intel_hdmi_mode_fixup(struct drm_encoder *encoder,
-			   const struct drm_display_mode *mode,
-			   struct drm_display_mode *adjusted_mode)
+static bool intel_hdmi_mode_fixup(struct drm_encoder *encoder,
+				  const struct drm_display_mode *mode,
+				  struct drm_display_mode *adjusted_mode)
 {
-	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
+	return true;
+}
 
-	if (intel_hdmi->color_range_auto) {
-		/* See CEA-861-E - 5.1 Default Encoding Parameters */
-		if (intel_hdmi->has_hdmi_sink &&
-		    drm_match_cea_mode(adjusted_mode) > 1)
-			intel_hdmi->color_range = SDVO_COLOR_RANGE_16_235;
-		else
-			intel_hdmi->color_range = 0;
+static bool g4x_hdmi_connected(struct intel_hdmi *intel_hdmi)
+{
+	struct drm_device *dev = intel_hdmi->base.base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	uint32_t bit;
+
+	switch (intel_hdmi->sdvox_reg) {
+	case SDVOB:
+		bit = HDMIB_HOTPLUG_LIVE_STATUS;
+		break;
+	case SDVOC:
+		bit = HDMIC_HOTPLUG_LIVE_STATUS;
+		break;
+	default:
+		bit = 0;
+		break;
 	}
 
-	if (intel_hdmi->color_range)
-		adjusted_mode->private_flags |= INTEL_MODE_LIMITED_COLOR_RANGE;
-
-	return true;
+	return I915_READ(PORT_HOTPLUG_STAT) & bit;
 }
 
 static enum drm_connector_status
 intel_hdmi_detect(struct drm_connector *connector, bool force)
 {
-	struct drm_device *dev = connector->dev;
 	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
-	struct intel_digital_port *intel_dig_port =
-		hdmi_to_dig_port(intel_hdmi);
-	struct intel_encoder *intel_encoder = &intel_dig_port->base;
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_i915_private *dev_priv = connector->dev->dev_private;
 	struct edid *edid;
 	enum drm_connector_status status = connector_status_disconnected;
 
+	if (IS_G4X(connector->dev) && !g4x_hdmi_connected(intel_hdmi))
+		return status;
+
 	intel_hdmi->has_hdmi_sink = false;
 	intel_hdmi->has_audio = false;
-	intel_hdmi->rgb_quant_range_selectable = false;
 	edid = drm_get_edid(connector,
 			    intel_gmbus_get_adapter(dev_priv,
 						    intel_hdmi->ddc_bus));
@@ -819,8 +806,6 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 				intel_hdmi->has_hdmi_sink =
 						drm_detect_hdmi_monitor(edid);
 			intel_hdmi->has_audio = drm_detect_monitor_audio(edid);
-			intel_hdmi->rgb_quant_range_selectable =
-				drm_rgb_quant_range_selectable(edid);
 		}
 		kfree(edid);
 	}
@@ -829,7 +814,6 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 		if (intel_hdmi->force_audio != HDMI_AUDIO_AUTO)
 			intel_hdmi->has_audio =
 				(intel_hdmi->force_audio == HDMI_AUDIO_ON);
-		intel_encoder->type = INTEL_OUTPUT_HDMI;
 	}
 
 	return status;
@@ -875,12 +859,10 @@ intel_hdmi_set_property(struct drm_connector *connector,
 			uint64_t val)
 {
 	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
-	struct intel_digital_port *intel_dig_port =
-		hdmi_to_dig_port(intel_hdmi);
 	struct drm_i915_private *dev_priv = connector->dev->dev_private;
 	int ret;
 
-	ret = drm_object_property_set_value(&connector->base, property, val);
+	ret = drm_connector_property_set_value(connector, property, val);
 	if (ret)
 		return ret;
 
@@ -906,29 +888,21 @@ intel_hdmi_set_property(struct drm_connector *connector,
 	}
 
 	if (property == dev_priv->broadcast_rgb_property) {
-		switch (val) {
-		case INTEL_BROADCAST_RGB_AUTO:
-			intel_hdmi->color_range_auto = true;
-			break;
-		case INTEL_BROADCAST_RGB_FULL:
-			intel_hdmi->color_range_auto = false;
-			intel_hdmi->color_range = 0;
-			break;
-		case INTEL_BROADCAST_RGB_LIMITED:
-			intel_hdmi->color_range_auto = false;
-			intel_hdmi->color_range = SDVO_COLOR_RANGE_16_235;
-			break;
-		default:
-			return -EINVAL;
-		}
+		if (val == !!intel_hdmi->color_range)
+			return 0;
+
+		intel_hdmi->color_range = val ? SDVO_COLOR_RANGE_16_235 : 0;
 		goto done;
 	}
 
 	return -EINVAL;
 
 done:
-	if (intel_dig_port->base.base.crtc)
-		intel_crtc_restore_mode(intel_dig_port->base.base.crtc);
+	if (intel_hdmi->base.base.crtc) {
+		struct drm_crtc *crtc = intel_hdmi->base.base.crtc;
+		intel_set_mode(crtc, &crtc->mode,
+			       crtc->x, crtc->y, crtc->fb);
+	}
 
 	return 0;
 }
@@ -940,9 +914,16 @@ static void intel_hdmi_destroy(struct drm_connector *connector)
 	kfree(connector);
 }
 
+static const struct drm_encoder_helper_funcs intel_hdmi_helper_funcs_hsw = {
+	.mode_fixup = intel_hdmi_mode_fixup,
+	.mode_set = intel_ddi_mode_set,
+	.disable = intel_encoder_noop,
+};
+
 static const struct drm_encoder_helper_funcs intel_hdmi_helper_funcs = {
 	.mode_fixup = intel_hdmi_mode_fixup,
 	.mode_set = intel_hdmi_mode_set,
+	.disable = intel_encoder_noop,
 };
 
 static const struct drm_connector_funcs intel_hdmi_connector_funcs = {
@@ -968,45 +949,65 @@ intel_hdmi_add_properties(struct intel_hdmi *intel_hdmi, struct drm_connector *c
 {
 	intel_attach_force_audio_property(connector);
 	intel_attach_broadcast_rgb_property(connector);
-	intel_hdmi->color_range_auto = true;
 }
 
-void intel_hdmi_init_connector(struct intel_digital_port *intel_dig_port,
-			       struct intel_connector *intel_connector)
+void intel_hdmi_init(struct drm_device *dev, int sdvox_reg, enum port port)
 {
-	struct drm_connector *connector = &intel_connector->base;
-	struct intel_hdmi *intel_hdmi = &intel_dig_port->hdmi;
-	struct intel_encoder *intel_encoder = &intel_dig_port->base;
-	struct drm_device *dev = intel_encoder->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	enum port port = intel_dig_port->port;
+	struct drm_connector *connector;
+	struct intel_encoder *intel_encoder;
+	struct intel_connector *intel_connector;
+	struct intel_hdmi *intel_hdmi;
 
+	intel_hdmi = kzalloc(sizeof(struct intel_hdmi), GFP_KERNEL);
+	if (!intel_hdmi)
+		return;
+
+	intel_connector = kzalloc(sizeof(struct intel_connector), GFP_KERNEL);
+	if (!intel_connector) {
+		kfree(intel_hdmi);
+		return;
+	}
+
+	intel_encoder = &intel_hdmi->base;
+	drm_encoder_init(dev, &intel_encoder->base, &intel_hdmi_enc_funcs,
+			 DRM_MODE_ENCODER_TMDS);
+
+	connector = &intel_connector->base;
 	drm_connector_init(dev, connector, &intel_hdmi_connector_funcs,
 			   DRM_MODE_CONNECTOR_HDMIA);
 	drm_connector_helper_add(connector, &intel_hdmi_connector_helper_funcs);
 
+	intel_encoder->type = INTEL_OUTPUT_HDMI;
+
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
 	connector->interlace_allowed = 1;
 	connector->doublescan_allowed = 0;
+	intel_encoder->crtc_mask = (1 << 0) | (1 << 1) | (1 << 2);
 
+	intel_encoder->cloneable = false;
+
+	intel_hdmi->ddi_port = port;
 	switch (port) {
 	case PORT_B:
 		intel_hdmi->ddc_bus = GMBUS_PORT_DPB;
-		dev_priv->hotplug_supported_mask |= PORTB_HOTPLUG_INT_STATUS;
+		dev_priv->hotplug_supported_mask |= HDMIB_HOTPLUG_INT_STATUS;
 		break;
 	case PORT_C:
 		intel_hdmi->ddc_bus = GMBUS_PORT_DPC;
-		dev_priv->hotplug_supported_mask |= PORTC_HOTPLUG_INT_STATUS;
+		dev_priv->hotplug_supported_mask |= HDMIC_HOTPLUG_INT_STATUS;
 		break;
 	case PORT_D:
 		intel_hdmi->ddc_bus = GMBUS_PORT_DPD;
-		dev_priv->hotplug_supported_mask |= PORTD_HOTPLUG_INT_STATUS;
+		dev_priv->hotplug_supported_mask |= HDMID_HOTPLUG_INT_STATUS;
 		break;
 	case PORT_A:
 		/* Internal port only for eDP. */
 	default:
 		BUG();
 	}
+
+	intel_hdmi->sdvox_reg = sdvox_reg;
 
 	if (!HAS_PCH_SPLIT(dev)) {
 		intel_hdmi->write_infoframe = g4x_write_infoframe;
@@ -1025,10 +1026,21 @@ void intel_hdmi_init_connector(struct intel_digital_port *intel_dig_port,
 		intel_hdmi->set_infoframes = cpt_set_infoframes;
 	}
 
-	if (HAS_DDI(dev))
-		intel_connector->get_hw_state = intel_ddi_connector_get_hw_state;
-	else
-		intel_connector->get_hw_state = intel_connector_get_hw_state;
+	if (IS_HASWELL(dev)) {
+		intel_encoder->enable = intel_enable_ddi;
+		intel_encoder->disable = intel_disable_ddi;
+		intel_encoder->get_hw_state = intel_ddi_get_hw_state;
+		drm_encoder_helper_add(&intel_encoder->base,
+				       &intel_hdmi_helper_funcs_hsw);
+	} else {
+		intel_encoder->enable = intel_enable_hdmi;
+		intel_encoder->disable = intel_disable_hdmi;
+		intel_encoder->get_hw_state = intel_hdmi_get_hw_state;
+		drm_encoder_helper_add(&intel_encoder->base,
+				       &intel_hdmi_helper_funcs);
+	}
+	intel_connector->get_hw_state = intel_connector_get_hw_state;
+
 
 	intel_hdmi_add_properties(intel_hdmi, connector);
 
@@ -1043,43 +1055,4 @@ void intel_hdmi_init_connector(struct intel_digital_port *intel_dig_port,
 		u32 temp = I915_READ(PEG_BAND_GAP_DATA);
 		I915_WRITE(PEG_BAND_GAP_DATA, (temp & ~0xf) | 0xd);
 	}
-}
-
-void intel_hdmi_init(struct drm_device *dev, int sdvox_reg, enum port port)
-{
-	struct intel_digital_port *intel_dig_port;
-	struct intel_encoder *intel_encoder;
-	struct drm_encoder *encoder;
-	struct intel_connector *intel_connector;
-
-	intel_dig_port = kzalloc(sizeof(struct intel_digital_port), GFP_KERNEL);
-	if (!intel_dig_port)
-		return;
-
-	intel_connector = kzalloc(sizeof(struct intel_connector), GFP_KERNEL);
-	if (!intel_connector) {
-		kfree(intel_dig_port);
-		return;
-	}
-
-	intel_encoder = &intel_dig_port->base;
-	encoder = &intel_encoder->base;
-
-	drm_encoder_init(dev, &intel_encoder->base, &intel_hdmi_enc_funcs,
-			 DRM_MODE_ENCODER_TMDS);
-	drm_encoder_helper_add(&intel_encoder->base, &intel_hdmi_helper_funcs);
-
-	intel_encoder->enable = intel_enable_hdmi;
-	intel_encoder->disable = intel_disable_hdmi;
-	intel_encoder->get_hw_state = intel_hdmi_get_hw_state;
-
-	intel_encoder->type = INTEL_OUTPUT_HDMI;
-	intel_encoder->crtc_mask = (1 << 0) | (1 << 1) | (1 << 2);
-	intel_encoder->cloneable = false;
-
-	intel_dig_port->port = port;
-	intel_dig_port->hdmi.sdvox_reg = sdvox_reg;
-	intel_dig_port->dp.output_reg = 0;
-
-	intel_hdmi_init_connector(intel_dig_port, intel_connector);
 }

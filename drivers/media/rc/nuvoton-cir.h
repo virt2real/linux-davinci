@@ -103,6 +103,7 @@ struct nvt_dev {
 
 	/* rx settings */
 	bool learning_enabled;
+	bool carrier_detect_enabled;
 
 	/* track cir wake state */
 	u8 wake_state;

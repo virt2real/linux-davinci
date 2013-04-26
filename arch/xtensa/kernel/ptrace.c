@@ -53,8 +53,9 @@ int ptrace_getregs(struct task_struct *child, void __user *uregs)
 {
 	struct pt_regs *regs = task_pt_regs(child);
 	xtensa_gregset_t __user *gregset = uregs;
+	unsigned long wm = regs->wmask;
 	unsigned long wb = regs->windowbase;
-	int i;
+	int live, i;
 
 	if (!access_ok(VERIFY_WRITE, uregs, sizeof(xtensa_gregset_t)))
 		return -EIO;
@@ -66,11 +67,13 @@ int ptrace_getregs(struct task_struct *child, void __user *uregs)
 	__put_user(regs->lcount, &gregset->lcount);
 	__put_user(regs->windowstart, &gregset->windowstart);
 	__put_user(regs->windowbase, &gregset->windowbase);
-	__put_user(regs->threadptr, &gregset->threadptr);
 
-	for (i = 0; i < XCHAL_NUM_AREGS; i++)
-		__put_user(regs->areg[i],
-				gregset->a + ((wb * 4 + i) % XCHAL_NUM_AREGS));
+	live = (wm & 2) ? 4 : (wm & 4) ? 8 : (wm & 8) ? 12 : 16;
+
+	for (i = 0; i < live; i++)
+		__put_user(regs->areg[i],gregset->a+((wb*4+i)%XCHAL_NUM_AREGS));
+	for (i = XCHAL_NUM_AREGS - (wm >> 4) * 4; i < XCHAL_NUM_AREGS; i++)
+		__put_user(regs->areg[i],gregset->a+((wb*4+i)%XCHAL_NUM_AREGS));
 
 	return 0;
 }
@@ -81,7 +84,7 @@ int ptrace_setregs(struct task_struct *child, void __user *uregs)
 	xtensa_gregset_t *gregset = uregs;
 	const unsigned long ps_mask = PS_CALLINC_MASK | PS_OWB_MASK;
 	unsigned long ps;
-	unsigned long wb, ws;
+	unsigned long wb;
 
 	if (!access_ok(VERIFY_WRITE, uregs, sizeof(xtensa_gregset_t)))
 		return -EIO;
@@ -91,33 +94,21 @@ int ptrace_setregs(struct task_struct *child, void __user *uregs)
 	__get_user(regs->lbeg, &gregset->lbeg);
 	__get_user(regs->lend, &gregset->lend);
 	__get_user(regs->lcount, &gregset->lcount);
-	__get_user(ws, &gregset->windowstart);
+	__get_user(regs->windowstart, &gregset->windowstart);
 	__get_user(wb, &gregset->windowbase);
-	__get_user(regs->threadptr, &gregset->threadptr);
 
 	regs->ps = (regs->ps & ~ps_mask) | (ps & ps_mask) | (1 << PS_EXCM_BIT);
 
 	if (wb >= XCHAL_NUM_AREGS / 4)
 		return -EFAULT;
 
-	if (wb != regs->windowbase || ws != regs->windowstart) {
-		unsigned long rotws, wmask;
-
-		rotws = (((ws | (ws << WSBITS)) >> wb) &
-				((1 << WSBITS) - 1)) & ~1;
-		wmask = ((rotws ? WSBITS + 1 - ffs(rotws) : 0) << 4) |
-			(rotws & 0xF) | 1;
-		regs->windowbase = wb;
-		regs->windowstart = ws;
-		regs->wmask = wmask;
-	}
+	regs->windowbase = wb;
 
 	if (wb != 0 &&  __copy_from_user(regs->areg + XCHAL_NUM_AREGS - wb * 4,
-				gregset->a, wb * 16))
+					 gregset->a, wb * 16))
 		return -EFAULT;
 
-	if (__copy_from_user(regs->areg, gregset->a + wb * 4,
-				(WSBITS - wb) * 16))
+	if (__copy_from_user(regs->areg, gregset->a + wb*4, (WSBITS-wb) * 16))
 		return -EFAULT;
 
 	return 0;
@@ -163,7 +154,7 @@ int ptrace_setxregs(struct task_struct *child, void __user *uregs)
 	coprocessor_flush_all(ti);
 	coprocessor_release_all(ti);
 
-	ret |= __copy_from_user(&ti->xtregs_cp, &xtregs->cp0,
+	ret |= __copy_from_user(&ti->xtregs_cp, &xtregs->cp0, 
 				sizeof(xtregs_coprocessor_t));
 #endif
 	ret |= __copy_from_user(&regs->xtregs_opt, &xtregs->opt,
@@ -352,3 +343,4 @@ void do_syscall_trace_leave(struct pt_regs *regs)
 			&& (current->ptrace & PT_PTRACED))
 		do_syscall_trace();
 }
+

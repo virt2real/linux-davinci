@@ -281,7 +281,7 @@ int nfs_readdir_search_for_cookie(struct nfs_cache_array *array, nfs_readdir_des
 
 	for (i = 0; i < array->size; i++) {
 		if (array->array[i].cookie == *desc->dir_cookie) {
-			struct nfs_inode *nfsi = NFS_I(file_inode(desc->file));
+			struct nfs_inode *nfsi = NFS_I(desc->file->f_path.dentry->d_inode);
 			struct nfs_open_dir_context *ctx = desc->file->private_data;
 
 			new_pos = desc->current_index + i;
@@ -450,8 +450,7 @@ void nfs_prime_dcache(struct dentry *parent, struct nfs_entry *entry)
 			nfs_refresh_inode(dentry->d_inode, entry->fattr);
 			goto out;
 		} else {
-			if (d_invalidate(dentry) != 0)
-				goto out;
+			d_drop(dentry);
 			dput(dentry);
 		}
 	}
@@ -629,7 +628,7 @@ out:
 static
 int nfs_readdir_filler(nfs_readdir_descriptor_t *desc, struct page* page)
 {
-	struct inode	*inode = file_inode(desc->file);
+	struct inode	*inode = desc->file->f_path.dentry->d_inode;
 	int ret;
 
 	ret = nfs_readdir_xdr_to_array(desc, page, inode);
@@ -660,7 +659,7 @@ void cache_page_release(nfs_readdir_descriptor_t *desc)
 static
 struct page *get_cache_page(nfs_readdir_descriptor_t *desc)
 {
-	return read_cache_page(file_inode(desc->file)->i_mapping,
+	return read_cache_page(desc->file->f_path.dentry->d_inode->i_mapping,
 			desc->page_index, (filler_t *)nfs_readdir_filler, desc);
 }
 
@@ -764,7 +763,7 @@ int uncached_readdir(nfs_readdir_descriptor_t *desc, void *dirent,
 {
 	struct page	*page = NULL;
 	int		status;
-	struct inode *inode = file_inode(desc->file);
+	struct inode *inode = desc->file->f_path.dentry->d_inode;
 	struct nfs_open_dir_context *ctx = desc->file->private_data;
 
 	dfprintk(DIRCACHE, "NFS: uncached_readdir() searching for cookie %Lu\n",
@@ -871,7 +870,7 @@ out:
 	return res;
 }
 
-static loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int whence)
+static loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int origin)
 {
 	struct dentry *dentry = filp->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
@@ -880,10 +879,10 @@ static loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int whence)
 	dfprintk(FILE, "NFS: llseek dir(%s/%s, %lld, %d)\n",
 			dentry->d_parent->d_name.name,
 			dentry->d_name.name,
-			offset, whence);
+			offset, origin);
 
 	mutex_lock(&inode->i_mutex);
-	switch (whence) {
+	switch (origin) {
 		case 1:
 			offset += filp->f_pos;
 		case 0:
@@ -979,11 +978,10 @@ static int nfs_is_exclusive_create(struct inode *dir, unsigned int flags)
  * particular file and the "nocto" mount flag is not set.
  *
  */
-static
+static inline
 int nfs_lookup_verify_inode(struct inode *inode, unsigned int flags)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
-	int ret;
 
 	if (IS_AUTOMOUNT(inode))
 		return 0;
@@ -994,13 +992,9 @@ int nfs_lookup_verify_inode(struct inode *inode, unsigned int flags)
 	if ((flags & LOOKUP_OPEN) && !(server->flags & NFS_MOUNT_NOCTO) &&
 	    (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode)))
 		goto out_force;
-out:
-	return (inode->i_nlink == 0) ? -ENOENT : 0;
+	return 0;
 out_force:
-	ret = __nfs_revalidate_inode(server, inode);
-	if (ret != 0)
-		return ret;
-	goto out;
+	return __nfs_revalidate_inode(server, inode);
 }
 
 /*
@@ -1106,8 +1100,6 @@ out_set_verifier:
 out_zap_parent:
 	nfs_zap_caches(dir);
  out_bad:
-	nfs_free_fattr(fattr);
-	nfs_free_fhandle(fhandle);
 	nfs_mark_for_revalidate(dir);
 	if (inode && S_ISDIR(inode->i_mode)) {
 		/* Purge readdir caches. */
@@ -1120,6 +1112,8 @@ out_zap_parent:
 		shrink_dcache_parent(dentry);
 	}
 	d_drop(dentry);
+	nfs_free_fattr(fattr);
+	nfs_free_fhandle(fhandle);
 	dput(parent);
 	dfprintk(LOOKUPCACHE, "NFS: %s(%s/%s) is invalid\n",
 			__func__, dentry->d_parent->d_name.name,
@@ -1133,45 +1127,6 @@ out_error:
 			__func__, dentry->d_parent->d_name.name,
 			dentry->d_name.name, error);
 	return error;
-}
-
-/*
- * A weaker form of d_revalidate for revalidating just the dentry->d_inode
- * when we don't really care about the dentry name. This is called when a
- * pathwalk ends on a dentry that was not found via a normal lookup in the
- * parent dir (e.g.: ".", "..", procfs symlinks or mountpoint traversals).
- *
- * In this situation, we just want to verify that the inode itself is OK
- * since the dentry might have changed on the server.
- */
-static int nfs_weak_revalidate(struct dentry *dentry, unsigned int flags)
-{
-	int error;
-	struct inode *inode = dentry->d_inode;
-
-	/*
-	 * I believe we can only get a negative dentry here in the case of a
-	 * procfs-style symlink. Just assume it's correct for now, but we may
-	 * eventually need to do something more here.
-	 */
-	if (!inode) {
-		dfprintk(LOOKUPCACHE, "%s: %s/%s has negative inode\n",
-				__func__, dentry->d_parent->d_name.name,
-				dentry->d_name.name);
-		return 1;
-	}
-
-	if (is_bad_inode(inode)) {
-		dfprintk(LOOKUPCACHE, "%s: %s/%s has dud inode\n",
-				__func__, dentry->d_parent->d_name.name,
-				dentry->d_name.name);
-		return 0;
-	}
-
-	error = nfs_revalidate_inode(NFS_SERVER(inode), inode);
-	dfprintk(LOOKUPCACHE, "NFS: %s: inode %lu is %s\n",
-			__func__, inode->i_ino, error ? "invalid" : "valid");
-	return !error;
 }
 
 /*
@@ -1200,14 +1155,11 @@ static int nfs_dentry_delete(const struct dentry *dentry)
 
 }
 
-/* Ensure that we revalidate inode->i_nlink */
 static void nfs_drop_nlink(struct inode *inode)
 {
 	spin_lock(&inode->i_lock);
-	/* drop the inode if we're reasonably sure this is the last link */
-	if (inode->i_nlink == 1)
-		clear_nlink(inode);
-	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_ATTR;
+	if (inode->i_nlink > 0)
+		drop_nlink(inode);
 	spin_unlock(&inode->i_lock);
 }
 
@@ -1222,8 +1174,8 @@ static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 		NFS_I(inode)->cache_validity |= NFS_INO_INVALID_DATA;
 
 	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
+		drop_nlink(inode);
 		nfs_complete_unlink(dentry, inode);
-		nfs_drop_nlink(inode);
 	}
 	iput(inode);
 }
@@ -1241,7 +1193,6 @@ static void nfs_d_release(struct dentry *dentry)
 
 const struct dentry_operations nfs_dentry_operations = {
 	.d_revalidate	= nfs_lookup_revalidate,
-	.d_weak_revalidate	= nfs_weak_revalidate,
 	.d_delete	= nfs_dentry_delete,
 	.d_iput		= nfs_dentry_iput,
 	.d_automount	= nfs_d_automount,
@@ -1695,8 +1646,10 @@ static int nfs_safe_remove(struct dentry *dentry)
 	if (inode != NULL) {
 		NFS_PROTO(inode)->return_delegation(inode);
 		error = NFS_PROTO(dir)->remove(dir, &dentry->d_name);
+		/* The VFS may want to delete this inode */
 		if (error == 0)
 			nfs_drop_nlink(inode);
+		nfs_mark_for_revalidate(inode);
 	} else
 		error = NFS_PROTO(dir)->remove(dir, &dentry->d_name);
 	if (error == -ENOENT)
@@ -2193,16 +2146,12 @@ static int nfs_open_permission_mask(int openflags)
 {
 	int mask = 0;
 
-	if (openflags & __FMODE_EXEC) {
-		/* ONLY check exec rights */
-		mask = MAY_EXEC;
-	} else {
-		if ((openflags & O_ACCMODE) != O_WRONLY)
-			mask |= MAY_READ;
-		if ((openflags & O_ACCMODE) != O_RDONLY)
-			mask |= MAY_WRITE;
-	}
-
+	if ((openflags & O_ACCMODE) != O_WRONLY)
+		mask |= MAY_READ;
+	if ((openflags & O_ACCMODE) != O_RDONLY)
+		mask |= MAY_WRITE;
+	if (openflags & __FMODE_EXEC)
+		mask |= MAY_EXEC;
 	return mask;
 }
 

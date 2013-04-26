@@ -618,8 +618,9 @@ static char *otp_setup(struct mtd_info *device, char revision)
 /*
  * Register DataFlash device with MTD subsystem.
  */
-static int add_dataflash_otp(struct spi_device *spi, char *name, int nr_pages,
-			     int pagesize, int pageoffset, char revision)
+static int __devinit
+add_dataflash_otp(struct spi_device *spi, char *name,
+		int nr_pages, int pagesize, int pageoffset, char revision)
 {
 	struct dataflash		*priv;
 	struct mtd_info			*device;
@@ -678,8 +679,9 @@ static int add_dataflash_otp(struct spi_device *spi, char *name, int nr_pages,
 	return err;
 }
 
-static inline int add_dataflash(struct spi_device *spi, char *name,
-				int nr_pages, int pagesize, int pageoffset)
+static inline int __devinit
+add_dataflash(struct spi_device *spi, char *name,
+		int nr_pages, int pagesize, int pageoffset)
 {
 	return add_dataflash_otp(spi, name, nr_pages, pagesize,
 			pageoffset, 0);
@@ -703,7 +705,7 @@ struct flash_info {
 #define IS_POW2PS	0x0001		/* uses 2^N byte pages */
 };
 
-static struct flash_info dataflash_data[] = {
+static struct flash_info __devinitdata dataflash_data [] = {
 
 	/*
 	 * NOTE:  chips with SUP_POW2PS (rev D and up) need two entries,
@@ -738,7 +740,7 @@ static struct flash_info dataflash_data[] = {
 	{ "at45db642d",  0x1f2800, 8192, 1024, 10, SUP_POW2PS | IS_POW2PS},
 };
 
-static struct flash_info *jedec_probe(struct spi_device *spi)
+static struct flash_info *__devinit jedec_probe(struct spi_device *spi)
 {
 	int			tmp;
 	uint8_t			code = OP_READ_ID;
@@ -821,7 +823,7 @@ static struct flash_info *jedec_probe(struct spi_device *spi)
  *   AT45DB0642  64Mbit  (8M)    xx111xxx (0x3c)   8192   1056     11
  *   AT45DB1282  128Mbit (16M)   xx0100xx (0x10)  16384   1056     11
  */
-static int dataflash_probe(struct spi_device *spi)
+static int __devinit dataflash_probe(struct spi_device *spi)
 {
 	int status;
 	struct flash_info	*info;
@@ -895,7 +897,7 @@ static int dataflash_probe(struct spi_device *spi)
 	return status;
 }
 
-static int dataflash_remove(struct spi_device *spi)
+static int __devexit dataflash_remove(struct spi_device *spi)
 {
 	struct dataflash	*flash = dev_get_drvdata(&spi->dev);
 	int			status;
@@ -918,7 +920,7 @@ static struct spi_driver dataflash_driver = {
 	},
 
 	.probe		= dataflash_probe,
-	.remove		= dataflash_remove,
+	.remove		= __devexit_p(dataflash_remove),
 
 	/* FIXME:  investigate suspend and resume... */
 };

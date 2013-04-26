@@ -1132,12 +1132,12 @@ long keyctl_instantiate_key_iov(key_serial_t id,
 	ret = rw_copy_check_uvector(WRITE, _payload_iov, ioc,
 				    ARRAY_SIZE(iovstack), iovstack, &iov);
 	if (ret < 0)
-		goto err;
+		return ret;
 	if (ret == 0)
 		goto no_payload_free;
 
 	ret = keyctl_instantiate_key_common(id, iov, ioc, ret, ringid);
-err:
+
 	if (iov != iovstack)
 		kfree(iov);
 	return ret;
@@ -1495,8 +1495,7 @@ long keyctl_session_to_parent(void)
 		goto error_keyring;
 	newwork = &cred->rcu;
 
-	cred->session_keyring = key_ref_to_ptr(keyring_r);
-	keyring_r = NULL;
+	cred->tgcred->session_keyring = key_ref_to_ptr(keyring_r);
 	init_task_work(newwork, key_change_session_keyring);
 
 	me = current;
@@ -1520,7 +1519,7 @@ long keyctl_session_to_parent(void)
 	mycred = current_cred();
 	pcred = __task_cred(parent);
 	if (mycred == pcred ||
-	    mycred->session_keyring == pcred->session_keyring) {
+	    mycred->tgcred->session_keyring == pcred->tgcred->session_keyring) {
 		ret = 0;
 		goto unlock;
 	}
@@ -1536,9 +1535,9 @@ long keyctl_session_to_parent(void)
 		goto unlock;
 
 	/* the keyrings must have the same UID */
-	if ((pcred->session_keyring &&
-	     !uid_eq(pcred->session_keyring->uid, mycred->euid)) ||
-	    !uid_eq(mycred->session_keyring->uid, mycred->euid))
+	if ((pcred->tgcred->session_keyring &&
+	     !uid_eq(pcred->tgcred->session_keyring->uid, mycred->euid)) ||
+	    !uid_eq(mycred->tgcred->session_keyring->uid, mycred->euid))
 		goto unlock;
 
 	/* cancel an already pending keyring replacement */

@@ -18,6 +18,7 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  *
 */
+#define CIFS_DEBUG		/* BB temporary */
 
 #ifndef _H_CIFS_DEBUG
 #define _H_CIFS_DEBUG
@@ -36,39 +37,49 @@ void dump_smb(void *, int);
 #define CIFS_RC		0x02
 #define CIFS_TIMER	0x04
 
-extern int cifsFYI;
-
 /*
  *	debug ON
  *	--------
  */
-#ifdef CONFIG_CIFS_DEBUG
+#ifdef CIFS_DEBUG
 
 /* information message: e.g., configuration, major event */
-#define cifsfyi(fmt, ...)						\
+extern int cifsFYI;
+#define cifsfyi(fmt, arg...)						\
 do {									\
 	if (cifsFYI & CIFS_INFO)					\
-		printk(KERN_DEBUG "%s: " fmt "\n",			\
-		       __FILE__, ##__VA_ARGS__);			\
+		printk(KERN_DEBUG "%s: " fmt "\n", __FILE__, ##arg);	\
 } while (0)
 
-#define cFYI(set, fmt, ...)						\
+#define cFYI(set, fmt, arg...)			\
+do {						\
+	if (set)				\
+		cifsfyi(fmt, ##arg);		\
+} while (0)
+
+#define cifswarn(fmt, arg...)			\
+	printk(KERN_WARNING fmt "\n", ##arg)
+
+/* debug event message: */
+extern int cifsERROR;
+
+#define cEVENT(fmt, arg...)						\
 do {									\
-	if (set)							\
-		cifsfyi(fmt, ##__VA_ARGS__);				\
+	if (cifsERROR)							\
+		printk(KERN_EVENT "%s: " fmt "\n", __FILE__, ##arg);	\
 } while (0)
-
-#define cifswarn(fmt, ...)						\
-	printk(KERN_WARNING fmt "\n", ##__VA_ARGS__)
 
 /* error event message: e.g., i/o error */
-#define cifserror(fmt, ...)						\
-	printk(KERN_ERR "CIFS VFS: " fmt "\n", ##__VA_ARGS__);		\
+#define cifserror(fmt, arg...)					\
+do {								\
+	if (cifsERROR)						\
+		printk(KERN_ERR "CIFS VFS: " fmt "\n", ##arg);	\
+} while (0)
 
-#define cERROR(set, fmt, ...)						\
-do {									\
-	if (set)							\
-		cifserror(fmt, ##__VA_ARGS__);				\
+#define cERROR(set, fmt, arg...)		\
+do {						\
+	if (set)				\
+		cifserror(fmt, ##arg);		\
 } while (0)
 
 /*
@@ -76,27 +87,10 @@ do {									\
  *	---------
  */
 #else		/* _CIFS_DEBUG */
-#define cifsfyi(fmt, ...)						\
-do {									\
-	if (0)								\
-		printk(KERN_DEBUG "%s: " fmt "\n",			\
-		       __FILE__, ##__VA_ARGS__);			\
-} while (0)
-#define cFYI(set, fmt, ...)						\
-do {									\
-	if (0 && set)							\
-		cifsfyi(fmt, ##__VA_ARGS__);				\
-} while (0)
-#define cifserror(fmt, ...)						\
-do {									\
-	if (0)								\
-		printk(KERN_ERR "CIFS VFS: " fmt "\n", ##__VA_ARGS__);	\
-} while (0)
-#define cERROR(set, fmt, ...)						\
-do {									\
-	if (0 && set)							\
-		cifserror(fmt, ##__VA_ARGS__);				\
-} while (0)
+#define cERROR(set, fmt, arg...)
+#define cEVENT(fmt, arg...)
+#define cFYI(set, fmt, arg...)
+#define cifserror(fmt, arg...)
 #endif		/* _CIFS_DEBUG */
 
 #endif				/* _H_CIFS_DEBUG */

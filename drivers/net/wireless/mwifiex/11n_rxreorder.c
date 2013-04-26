@@ -58,7 +58,8 @@ mwifiex_11n_dispatch_pkt(struct mwifiex_private *priv,
 			if (priv->bss_role == MWIFIEX_BSS_ROLE_UAP)
 				mwifiex_handle_uap_rx_forward(priv, rx_tmp_ptr);
 			else
-				mwifiex_process_rx_packet(priv, rx_tmp_ptr);
+				mwifiex_process_rx_packet(priv->adapter,
+							  rx_tmp_ptr);
 		}
 	}
 
@@ -105,7 +106,7 @@ mwifiex_11n_scan_and_dispatch(struct mwifiex_private *priv,
 		if (priv->bss_role == MWIFIEX_BSS_ROLE_UAP)
 			mwifiex_handle_uap_rx_forward(priv, rx_tmp_ptr);
 		else
-			mwifiex_process_rx_packet(priv, rx_tmp_ptr);
+			mwifiex_process_rx_packet(priv->adapter, rx_tmp_ptr);
 	}
 
 	spin_lock_irqsave(&priv->rx_pkt_lock, flags);
@@ -272,8 +273,11 @@ mwifiex_11n_create_rx_reorder_tbl(struct mwifiex_private *priv, u8 *ta,
 	}
 	/* if !tbl then create one */
 	new_node = kzalloc(sizeof(struct mwifiex_rx_reorder_tbl), GFP_KERNEL);
-	if (!new_node)
+	if (!new_node) {
+		dev_err(priv->adapter->dev, "%s: failed to alloc new_node\n",
+			__func__);
 		return;
+	}
 
 	INIT_LIST_HEAD(&new_node->list);
 	new_node->tid = tid;
@@ -438,7 +442,8 @@ int mwifiex_11n_rx_reorder_pkt(struct mwifiex_private *priv,
 			if (priv->bss_role == MWIFIEX_BSS_ROLE_UAP)
 				mwifiex_handle_uap_rx_forward(priv, payload);
 			else
-				mwifiex_process_rx_packet(priv, payload);
+				mwifiex_process_rx_packet(priv->adapter,
+							  payload);
 		}
 		return 0;
 	}

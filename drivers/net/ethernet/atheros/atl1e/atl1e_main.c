@@ -534,7 +534,7 @@ static void atl1e_setup_pcicmd(struct pci_dev *pdev)
  * @adapter: board private structure to initialize
  *
  */
-static int atl1e_alloc_queues(struct atl1e_adapter *adapter)
+static int __devinit atl1e_alloc_queues(struct atl1e_adapter *adapter)
 {
 	return 0;
 }
@@ -547,7 +547,7 @@ static int atl1e_alloc_queues(struct atl1e_adapter *adapter)
  * Fields are initialized based on PCI device information and
  * OS network device settings (MTU size).
  */
-static int atl1e_sw_init(struct atl1e_adapter *adapter)
+static int __devinit atl1e_sw_init(struct atl1e_adapter *adapter)
 {
 	struct atl1e_hw *hw   = &adapter->hw;
 	struct pci_dev	*pdev = adapter->pdev;
@@ -819,6 +819,8 @@ static int atl1e_setup_ring_resources(struct atl1e_adapter *adapter)
 	size = sizeof(struct atl1e_tx_buffer) * (tx_ring->count);
 	tx_ring->tx_buffer = kzalloc(size, GFP_KERNEL);
 	if (tx_ring->tx_buffer == NULL) {
+		netdev_err(adapter->netdev, "kzalloc failed, size = D%d\n",
+			   size);
 		err = -ENOMEM;
 		goto failed;
 	}
@@ -1849,19 +1851,34 @@ static void atl1e_free_irq(struct atl1e_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 
 	free_irq(adapter->pdev->irq, netdev);
+
+	if (adapter->have_msi)
+		pci_disable_msi(adapter->pdev);
 }
 
 static int atl1e_request_irq(struct atl1e_adapter *adapter)
 {
 	struct pci_dev    *pdev   = adapter->pdev;
 	struct net_device *netdev = adapter->netdev;
+	int flags = 0;
 	int err = 0;
 
-	err = request_irq(pdev->irq, atl1e_intr, IRQF_SHARED, netdev->name,
-			  netdev);
+	adapter->have_msi = true;
+	err = pci_enable_msi(pdev);
+	if (err) {
+		netdev_dbg(netdev,
+			   "Unable to allocate MSI interrupt Error: %d\n", err);
+		adapter->have_msi = false;
+	}
+
+	if (!adapter->have_msi)
+		flags |= IRQF_SHARED;
+	err = request_irq(pdev->irq, atl1e_intr, flags, netdev->name, netdev);
 	if (err) {
 		netdev_dbg(adapter->netdev,
 			   "Unable to allocate interrupt Error: %d\n", err);
+		if (adapter->have_msi)
+			pci_disable_msi(pdev);
 		return err;
 	}
 	netdev_dbg(netdev, "atl1e_request_irq OK\n");
@@ -2218,7 +2235,8 @@ static int atl1e_init_netdev(struct net_device *netdev, struct pci_dev *pdev)
  * The OS initialization, configuring of the adapter private structure,
  * and a hardware reset occur.
  */
-static int atl1e_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit atl1e_probe(struct pci_dev *pdev,
+				 const struct pci_device_id *ent)
 {
 	struct net_device *netdev;
 	struct atl1e_adapter *adapter = NULL;
@@ -2325,11 +2343,11 @@ static int atl1e_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	memcpy(netdev->dev_addr, adapter->hw.mac_addr, netdev->addr_len);
+	memcpy(netdev->perm_addr, adapter->hw.mac_addr, netdev->addr_len);
 	netdev_dbg(netdev, "mac address : %pM\n", adapter->hw.mac_addr);
 
 	INIT_WORK(&adapter->reset_task, atl1e_reset_task);
 	INIT_WORK(&adapter->link_chg_task, atl1e_link_chg_task);
-	netif_set_gso_max_size(netdev, MAX_TSO_SEG_SIZE);
 	err = register_netdev(netdev);
 	if (err) {
 		netdev_err(netdev, "register netdevice failed\n");
@@ -2369,7 +2387,7 @@ err_dma:
  * Hot-Plug event, or because the driver is going to be removed from
  * memory.
  */
-static void atl1e_remove(struct pci_dev *pdev)
+static void __devexit atl1e_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct atl1e_adapter *adapter = netdev_priv(netdev);
@@ -2481,7 +2499,7 @@ static struct pci_driver atl1e_driver = {
 	.name     = atl1e_driver_name,
 	.id_table = atl1e_pci_tbl,
 	.probe    = atl1e_probe,
-	.remove   = atl1e_remove,
+	.remove   = __devexit_p(atl1e_remove),
 	/* Power Management Hooks */
 #ifdef CONFIG_PM
 	.suspend  = atl1e_suspend,

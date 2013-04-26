@@ -101,7 +101,7 @@ static unsigned int bitrate(struct usb_gadget *g)
 /*
  */
 
-#define RNDIS_STATUS_INTERVAL_MS	32
+#define LOG2_STATUS_INTERVAL_MSEC	5	/* 1 << 5 == 32 msec */
 #define STATUS_BYTECOUNT		8	/* 8 bytes data */
 
 
@@ -190,7 +190,7 @@ static struct usb_endpoint_descriptor fs_notify_desc = {
 	.bEndpointAddress =	USB_DIR_IN,
 	.bmAttributes =		USB_ENDPOINT_XFER_INT,
 	.wMaxPacketSize =	cpu_to_le16(STATUS_BYTECOUNT),
-	.bInterval =		RNDIS_STATUS_INTERVAL_MS,
+	.bInterval =		1 << LOG2_STATUS_INTERVAL_MSEC,
 };
 
 static struct usb_endpoint_descriptor fs_in_desc = {
@@ -236,7 +236,7 @@ static struct usb_endpoint_descriptor hs_notify_desc = {
 	.bEndpointAddress =	USB_DIR_IN,
 	.bmAttributes =		USB_ENDPOINT_XFER_INT,
 	.wMaxPacketSize =	cpu_to_le16(STATUS_BYTECOUNT),
-	.bInterval =		USB_MS_TO_HS_INTERVAL(RNDIS_STATUS_INTERVAL_MS)
+	.bInterval =		LOG2_STATUS_INTERVAL_MSEC + 4,
 };
 
 static struct usb_endpoint_descriptor hs_in_desc = {
@@ -284,7 +284,7 @@ static struct usb_endpoint_descriptor ss_notify_desc = {
 	.bEndpointAddress =	USB_DIR_IN,
 	.bmAttributes =		USB_ENDPOINT_XFER_INT,
 	.wMaxPacketSize =	cpu_to_le16(STATUS_BYTECOUNT),
-	.bInterval =		USB_MS_TO_HS_INTERVAL(RNDIS_STATUS_INTERVAL_MS)
+	.bInterval =		LOG2_STATUS_INTERVAL_MSEC + 4,
 };
 
 static struct usb_ss_ep_comp_descriptor ss_intr_comp_desc = {
@@ -447,13 +447,14 @@ static void rndis_response_complete(struct usb_ep *ep, struct usb_request *req)
 static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_rndis			*rndis = req->context;
+	struct usb_composite_dev	*cdev = rndis->port.func.config->cdev;
 	int				status;
 
 	/* received RNDIS command from USB_CDC_SEND_ENCAPSULATED_COMMAND */
 //	spin_lock(&dev->lock);
 	status = rndis_msg_parser(rndis->config, (u8 *) req->buf);
 	if (status < 0)
-		pr_err("RNDIS command error %d, %d/%d\n",
+		ERROR(cdev, "RNDIS command error %d, %d/%d\n",
 			status, req->actual, req->length);
 //	spin_unlock(&dev->lock);
 }
@@ -721,22 +722,42 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 	rndis->notify_req->context = rndis;
 	rndis->notify_req->complete = rndis_response_complete;
 
+	/* copy descriptors, and track endpoint copies */
+	f->descriptors = usb_copy_descriptors(eth_fs_function);
+	if (!f->descriptors)
+		goto fail;
+
 	/* support all relevant hardware speeds... we expect that when
 	 * hardware is dual speed, all bulk-capable endpoints work at
 	 * both speeds
 	 */
-	hs_in_desc.bEndpointAddress = fs_in_desc.bEndpointAddress;
-	hs_out_desc.bEndpointAddress = fs_out_desc.bEndpointAddress;
-	hs_notify_desc.bEndpointAddress = fs_notify_desc.bEndpointAddress;
+	if (gadget_is_dualspeed(c->cdev->gadget)) {
+		hs_in_desc.bEndpointAddress =
+				fs_in_desc.bEndpointAddress;
+		hs_out_desc.bEndpointAddress =
+				fs_out_desc.bEndpointAddress;
+		hs_notify_desc.bEndpointAddress =
+				fs_notify_desc.bEndpointAddress;
 
-	ss_in_desc.bEndpointAddress = fs_in_desc.bEndpointAddress;
-	ss_out_desc.bEndpointAddress = fs_out_desc.bEndpointAddress;
-	ss_notify_desc.bEndpointAddress = fs_notify_desc.bEndpointAddress;
+		/* copy descriptors, and track endpoint copies */
+		f->hs_descriptors = usb_copy_descriptors(eth_hs_function);
+		if (!f->hs_descriptors)
+			goto fail;
+	}
 
-	status = usb_assign_descriptors(f, eth_fs_function, eth_hs_function,
-			eth_ss_function);
-	if (status)
-		goto fail;
+	if (gadget_is_superspeed(c->cdev->gadget)) {
+		ss_in_desc.bEndpointAddress =
+				fs_in_desc.bEndpointAddress;
+		ss_out_desc.bEndpointAddress =
+				fs_out_desc.bEndpointAddress;
+		ss_notify_desc.bEndpointAddress =
+				fs_notify_desc.bEndpointAddress;
+
+		/* copy descriptors, and track endpoint copies */
+		f->ss_descriptors = usb_copy_descriptors(eth_ss_function);
+		if (!f->ss_descriptors)
+			goto fail;
+	}
 
 	rndis->port.open = rndis_open;
 	rndis->port.close = rndis_close;
@@ -767,7 +788,12 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 	return 0;
 
 fail:
-	usb_free_all_descriptors(f);
+	if (gadget_is_superspeed(c->cdev->gadget) && f->ss_descriptors)
+		usb_free_descriptors(f->ss_descriptors);
+	if (gadget_is_dualspeed(c->cdev->gadget) && f->hs_descriptors)
+		usb_free_descriptors(f->hs_descriptors);
+	if (f->descriptors)
+		usb_free_descriptors(f->descriptors);
 
 	if (rndis->notify_req) {
 		kfree(rndis->notify_req->buf);
@@ -777,9 +803,9 @@ fail:
 	/* we might as well release our claims on endpoints */
 	if (rndis->notify)
 		rndis->notify->driver_data = NULL;
-	if (rndis->port.out_ep)
+	if (rndis->port.out_ep->desc)
 		rndis->port.out_ep->driver_data = NULL;
-	if (rndis->port.in_ep)
+	if (rndis->port.in_ep->desc)
 		rndis->port.in_ep->driver_data = NULL;
 
 	ERROR(cdev, "%s: can't bind, err %d\n", f->name, status);
@@ -794,9 +820,13 @@ rndis_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	rndis_deregister(rndis->config);
 	rndis_exit();
-
 	rndis_string_defs[0].id = 0;
-	usb_free_all_descriptors(f);
+
+	if (gadget_is_superspeed(c->cdev->gadget))
+		usb_free_descriptors(f->ss_descriptors);
+	if (gadget_is_dualspeed(c->cdev->gadget))
+		usb_free_descriptors(f->hs_descriptors);
+	usb_free_descriptors(f->descriptors);
 
 	kfree(rndis->notify_req->buf);
 	usb_ep_free_request(rndis->notify, rndis->notify_req);
@@ -821,19 +851,34 @@ rndis_bind_config_vendor(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 	if (!can_support_rndis(c) || !ethaddr)
 		return -EINVAL;
 
+	/* maybe allocate device-global string IDs */
 	if (rndis_string_defs[0].id == 0) {
+
 		/* ... and setup RNDIS itself */
 		status = rndis_init();
 		if (status < 0)
 			return status;
 
-		status = usb_string_ids_tab(c->cdev, rndis_string_defs);
-		if (status)
+		/* control interface label */
+		status = usb_string_id(c->cdev);
+		if (status < 0)
 			return status;
+		rndis_string_defs[0].id = status;
+		rndis_control_intf.iInterface = status;
 
-		rndis_control_intf.iInterface = rndis_string_defs[0].id;
-		rndis_data_intf.iInterface = rndis_string_defs[1].id;
-		rndis_iad_descriptor.iFunction = rndis_string_defs[2].id;
+		/* data interface label */
+		status = usb_string_id(c->cdev);
+		if (status < 0)
+			return status;
+		rndis_string_defs[1].id = status;
+		rndis_data_intf.iInterface = status;
+
+		/* IAD iFunction label */
+		status = usb_string_id(c->cdev);
+		if (status < 0)
+			return status;
+		rndis_string_defs[2].id = status;
+		rndis_iad_descriptor.iFunction = status;
 	}
 
 	/* allocate and initialize one new instance */

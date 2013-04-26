@@ -196,7 +196,7 @@ static const struct net_device_ops macsonic_netdev_ops = {
 	.ndo_set_mac_address	= eth_mac_addr,
 };
 
-static int macsonic_init(struct net_device *dev)
+static int __devinit macsonic_init(struct net_device *dev)
 {
 	struct sonic_local* lp = netdev_priv(dev);
 
@@ -245,7 +245,7 @@ static int macsonic_init(struct net_device *dev)
                           memcmp(mac, "\x00\x80\x19", 3) && \
                           memcmp(mac, "\x00\x05\x02", 3))
 
-static void mac_onboard_sonic_ethernet_addr(struct net_device *dev)
+static void __devinit mac_onboard_sonic_ethernet_addr(struct net_device *dev)
 {
 	struct sonic_local *lp = netdev_priv(dev);
 	const int prom_addr = ONBOARD_SONIC_PROM_BASE;
@@ -309,7 +309,7 @@ static void mac_onboard_sonic_ethernet_addr(struct net_device *dev)
 	eth_hw_addr_random(dev);
 }
 
-static int mac_onboard_sonic_probe(struct net_device *dev)
+static int __devinit mac_onboard_sonic_probe(struct net_device *dev)
 {
 	struct sonic_local* lp = netdev_priv(dev);
 	int sr;
@@ -420,8 +420,9 @@ static int mac_onboard_sonic_probe(struct net_device *dev)
 	return macsonic_init(dev);
 }
 
-static int mac_nubus_sonic_ethernet_addr(struct net_device *dev,
-					 unsigned long prom_addr, int id)
+static int __devinit mac_nubus_sonic_ethernet_addr(struct net_device *dev,
+						unsigned long prom_addr,
+						int id)
 {
 	int i;
 	for(i = 0; i < 6; i++)
@@ -434,7 +435,7 @@ static int mac_nubus_sonic_ethernet_addr(struct net_device *dev,
 	return 0;
 }
 
-static int macsonic_ident(struct nubus_dev *ndev)
+static int __devinit macsonic_ident(struct nubus_dev *ndev)
 {
 	if (ndev->dr_hw == NUBUS_DRHW_ASANTE_LC &&
 	    ndev->dr_sw == NUBUS_DRSW_SONIC_LC)
@@ -459,7 +460,7 @@ static int macsonic_ident(struct nubus_dev *ndev)
 	return -1;
 }
 
-static int mac_nubus_sonic_probe(struct net_device *dev)
+static int __devinit mac_nubus_sonic_probe(struct net_device *dev)
 {
 	static int slots;
 	struct nubus_dev* ndev = NULL;
@@ -572,7 +573,7 @@ static int mac_nubus_sonic_probe(struct net_device *dev)
 	return macsonic_init(dev);
 }
 
-static int mac_sonic_probe(struct platform_device *pdev)
+static int __devinit mac_sonic_probe(struct platform_device *pdev)
 {
 	struct net_device *dev;
 	struct sonic_local *lp;
@@ -618,7 +619,7 @@ MODULE_ALIAS("platform:macsonic");
 
 #include "sonic.c"
 
-static int mac_sonic_device_remove(struct platform_device *pdev)
+static int __devexit mac_sonic_device_remove (struct platform_device *pdev)
 {
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct sonic_local* lp = netdev_priv(dev);
@@ -633,7 +634,7 @@ static int mac_sonic_device_remove(struct platform_device *pdev)
 
 static struct platform_driver mac_sonic_driver = {
 	.probe  = mac_sonic_probe,
-	.remove = mac_sonic_device_remove,
+	.remove = __devexit_p(mac_sonic_device_remove),
 	.driver	= {
 		.name	= mac_sonic_string,
 		.owner	= THIS_MODULE,

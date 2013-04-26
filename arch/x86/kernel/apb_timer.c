@@ -240,7 +240,7 @@ static int apbt_cpuhp_notify(struct notifier_block *n,
 		dw_apb_clockevent_pause(adev->timer);
 		if (system_state == SYSTEM_RUNNING) {
 			pr_debug("skipping APBT CPU %lu offline\n", cpu);
-		} else {
+		} else if (adev) {
 			pr_debug("APBT clockevent for cpu %lu offline\n", cpu);
 			dw_apb_clockevent_stop(adev->timer);
 		}
@@ -311,6 +311,7 @@ void __init apbt_time_init(void)
 #ifdef CONFIG_SMP
 	int i;
 	struct sfi_timer_table_entry *p_mtmr;
+	unsigned int percpu_timer;
 	struct apbt_dev *adev;
 #endif
 
@@ -345,10 +346,13 @@ void __init apbt_time_init(void)
 		return;
 	}
 	pr_debug("%s: %d CPUs online\n", __func__, num_online_cpus());
-	if (num_possible_cpus() <= sfi_mtimer_num)
+	if (num_possible_cpus() <= sfi_mtimer_num) {
+		percpu_timer = 1;
 		apbt_num_timers_used = num_possible_cpus();
-	else
+	} else {
+		percpu_timer = 0;
 		apbt_num_timers_used = 1;
+	}
 	pr_debug("%s: %d APB timers used\n", __func__, apbt_num_timers_used);
 
 	/* here we set up per CPU timer data structure */

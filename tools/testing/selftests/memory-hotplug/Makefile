@@ -1,6 +1,6 @@
 all:
 
 run_tests:
-	@./on-off-test.sh || echo "memory-hotplug selftests: [FAIL]"
+	./on-off-test.sh
 
 clean:

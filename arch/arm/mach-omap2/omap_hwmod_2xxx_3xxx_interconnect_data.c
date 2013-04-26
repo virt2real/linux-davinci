@@ -13,7 +13,8 @@
  */
 #include <asm/sizes.h>
 
-#include "omap_hwmod.h"
+#include <plat/omap_hwmod.h>
+#include <plat/serial.h>
 
 #include "omap_hwmod_common_data.h"
 

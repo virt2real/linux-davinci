@@ -45,7 +45,7 @@
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
 
-#include "soc.h"
+#include <plat/cpu.h>
 
 #include <mach/hardware.h>
 

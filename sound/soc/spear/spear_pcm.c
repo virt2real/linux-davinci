@@ -149,9 +149,9 @@ static void spear_pcm_free(struct snd_pcm *pcm)
 
 static u64 spear_pcm_dmamask = DMA_BIT_MASK(32);
 
-static int spear_pcm_new(struct snd_soc_pcm_runtime *rtd)
+static int spear_pcm_new(struct snd_card *card,
+		struct snd_soc_dai *dai, struct snd_pcm *pcm)
 {
-	struct snd_card *card = rtd->card->snd_card;
 	int ret;
 
 	if (!card->dev->dma_mask)
@@ -159,16 +159,16 @@ static int spear_pcm_new(struct snd_soc_pcm_runtime *rtd)
 	if (!card->dev->coherent_dma_mask)
 		card->dev->coherent_dma_mask = DMA_BIT_MASK(32);
 
-	if (rtd->cpu_dai->driver->playback.channels_min) {
-		ret = spear_pcm_preallocate_dma_buffer(rtd->pcm,
+	if (dai->driver->playback.channels_min) {
+		ret = spear_pcm_preallocate_dma_buffer(pcm,
 				SNDRV_PCM_STREAM_PLAYBACK,
 				spear_pcm_hardware.buffer_bytes_max);
 		if (ret)
 			return ret;
 	}
 
-	if (rtd->cpu_dai->driver->capture.channels_min) {
-		ret = spear_pcm_preallocate_dma_buffer(rtd->pcm,
+	if (dai->driver->capture.channels_min) {
+		ret = spear_pcm_preallocate_dma_buffer(pcm,
 				SNDRV_PCM_STREAM_CAPTURE,
 				spear_pcm_hardware.buffer_bytes_max);
 		if (ret)
@@ -184,12 +184,12 @@ struct snd_soc_platform_driver spear_soc_platform = {
 	.pcm_free	=	spear_pcm_free,
 };
 
-static int spear_soc_platform_probe(struct platform_device *pdev)
+static int __devinit spear_soc_platform_probe(struct platform_device *pdev)
 {
 	return snd_soc_register_platform(&pdev->dev, &spear_soc_platform);
 }
 
-static int spear_soc_platform_remove(struct platform_device *pdev)
+static int __devexit spear_soc_platform_remove(struct platform_device *pdev)
 {
 	snd_soc_unregister_platform(&pdev->dev);
 
@@ -203,7 +203,7 @@ static struct platform_driver spear_pcm_driver = {
 	},
 
 	.probe = spear_soc_platform_probe,
-	.remove = spear_soc_platform_remove,
+	.remove = __devexit_p(spear_soc_platform_remove),
 };
 
 module_platform_driver(spear_pcm_driver);

@@ -185,7 +185,7 @@ static struct gpio_chip sch_gpio_resume = {
 	.set			= sch_gpio_resume_set,
 };
 
-static int sch_gpio_probe(struct platform_device *pdev)
+static int __devinit sch_gpio_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	int err, id;
@@ -271,7 +271,7 @@ err_sch_gpio_core:
 	return err;
 }
 
-static int sch_gpio_remove(struct platform_device *pdev)
+static int __devexit sch_gpio_remove(struct platform_device *pdev)
 {
 	struct resource *res;
 	if (gpio_ba) {
@@ -303,7 +303,7 @@ static struct platform_driver sch_gpio_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe		= sch_gpio_probe,
-	.remove		= sch_gpio_remove,
+	.remove		= __devexit_p(sch_gpio_remove),
 };
 
 module_platform_driver(sch_gpio_driver);

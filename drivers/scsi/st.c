@@ -977,7 +977,7 @@ static int check_tape(struct scsi_tape *STp, struct file *filp)
 	struct st_modedef *STm;
 	struct st_partstat *STps;
 	char *name = tape_name(STp);
-	struct inode *inode = file_inode(filp);
+	struct inode *inode = filp->f_path.dentry->d_inode;
 	int mode = TAPE_MODE(inode);
 
 	STp->ready = ST_READY;
@@ -4076,7 +4076,7 @@ static int st_probe(struct device *dev)
 	struct st_modedef *STm;
 	struct st_partstat *STps;
 	struct st_buffer *buffer;
-	int i, error;
+	int i, dev_num, error;
 	char *stp;
 
 	if (SDp->type != TYPE_TAPE)
@@ -4178,17 +4178,27 @@ static int st_probe(struct device *dev)
 	    tpnt->blksize_changed = 0;
 	mutex_init(&tpnt->lock);
 
-	idr_preload(GFP_KERNEL);
+	if (!idr_pre_get(&st_index_idr, GFP_KERNEL)) {
+		pr_warn("st: idr expansion failed\n");
+		error = -ENOMEM;
+		goto out_put_disk;
+	}
+
 	spin_lock(&st_index_lock);
-	error = idr_alloc(&st_index_idr, tpnt, 0, ST_MAX_TAPES + 1, GFP_NOWAIT);
+	error = idr_get_new(&st_index_idr, tpnt, &dev_num);
 	spin_unlock(&st_index_lock);
-	idr_preload_end();
-	if (error < 0) {
+	if (error) {
 		pr_warn("st: idr allocation failed: %d\n", error);
 		goto out_put_disk;
 	}
-	tpnt->index = error;
-	sprintf(disk->disk_name, "st%d", tpnt->index);
+
+	if (dev_num > ST_MAX_TAPES) {
+		pr_err("st: Too many tape devices (max. %d).\n", ST_MAX_TAPES);
+		goto out_put_index;
+	}
+
+	tpnt->index = dev_num;
+	sprintf(disk->disk_name, "st%d", dev_num);
 
 	dev_set_drvdata(dev, tpnt);
 
@@ -4208,8 +4218,9 @@ static int st_probe(struct device *dev)
 
 out_remove_devs:
 	remove_cdevs(tpnt);
+out_put_index:
 	spin_lock(&st_index_lock);
-	idr_remove(&st_index_idr, tpnt->index);
+	idr_remove(&st_index_idr, dev_num);
 	spin_unlock(&st_index_lock);
 out_put_disk:
 	put_disk(disk);

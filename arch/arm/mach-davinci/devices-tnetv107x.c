@@ -18,10 +18,10 @@
 #include <linux/dma-mapping.h>
 #include <linux/clk.h>
 #include <linux/slab.h>
-#include <linux/platform_data/edma.h>
 
 #include <mach/common.h>
 #include <mach/irqs.h>
+#include <mach/edma.h>
 #include <mach/tnetv107x.h>
 
 #include "clock.h"
@@ -218,7 +218,7 @@ static u64 mmc1_dma_mask = DMA_BIT_MASK(32);
 
 static struct platform_device mmc_devices[2] = {
 	{
-		.name		= "dm6441-mmc",
+		.name		= "davinci_mmc",
 		.id		= 0,
 		.dev		= {
 			.dma_mask		= &mmc0_dma_mask,
@@ -228,7 +228,7 @@ static struct platform_device mmc_devices[2] = {
 		.resource	= mmc0_resources
 	},
 	{
-		.name		= "dm6441-mmc",
+		.name		= "davinci_mmc",
 		.id		= 1,
 		.dev		= {
 			.dma_mask		= &mmc1_dma_mask,

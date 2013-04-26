@@ -536,7 +536,8 @@ static struct dma_map_ops sun4v_dma_ops = {
 	.unmap_sg			= dma_4v_unmap_sg,
 };
 
-static void pci_sun4v_scan_bus(struct pci_pbm_info *pbm, struct device *parent)
+static void __devinit pci_sun4v_scan_bus(struct pci_pbm_info *pbm,
+					 struct device *parent)
 {
 	struct property *prop;
 	struct device_node *dp;
@@ -549,8 +550,8 @@ static void pci_sun4v_scan_bus(struct pci_pbm_info *pbm, struct device *parent)
 	/* XXX register error interrupt handlers XXX */
 }
 
-static unsigned long probe_existing_entries(struct pci_pbm_info *pbm,
-					    struct iommu *iommu)
+static unsigned long __devinit probe_existing_entries(struct pci_pbm_info *pbm,
+						      struct iommu *iommu)
 {
 	struct iommu_arena *arena = &iommu->arena;
 	unsigned long i, cnt = 0;
@@ -577,7 +578,7 @@ static unsigned long probe_existing_entries(struct pci_pbm_info *pbm,
 	return cnt;
 }
 
-static int pci_sun4v_iommu_init(struct pci_pbm_info *pbm)
+static int __devinit pci_sun4v_iommu_init(struct pci_pbm_info *pbm)
 {
 	static const u32 vdma_default[] = { 0x80000000, 0x80000000 };
 	struct iommu *iommu = pbm->iommu;
@@ -878,8 +879,8 @@ static void pci_sun4v_msi_init(struct pci_pbm_info *pbm)
 }
 #endif /* !(CONFIG_PCI_MSI) */
 
-static int pci_sun4v_pbm_init(struct pci_pbm_info *pbm,
-			      struct platform_device *op, u32 devhandle)
+static int __devinit pci_sun4v_pbm_init(struct pci_pbm_info *pbm,
+					struct platform_device *op, u32 devhandle)
 {
 	struct device_node *dp = op->dev.of_node;
 	int err;
@@ -918,7 +919,7 @@ static int pci_sun4v_pbm_init(struct pci_pbm_info *pbm,
 	return 0;
 }
 
-static int pci_sun4v_probe(struct platform_device *op)
+static int __devinit pci_sun4v_probe(struct platform_device *op)
 {
 	const struct linux_prom64_registers *regs;
 	static int hvapi_negotiated = 0;

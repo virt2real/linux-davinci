@@ -131,7 +131,7 @@ static irqreturn_t i2c_pca_pf_handler(int this_irq, void *dev_id)
 }
 
 
-static int i2c_pca_pf_probe(struct platform_device *pdev)
+static int __devinit i2c_pca_pf_probe(struct platform_device *pdev)
 {
 	struct i2c_pca_pf_data *i2c;
 	struct resource *res;
@@ -257,9 +257,10 @@ e_print:
 	return ret;
 }
 
-static int i2c_pca_pf_remove(struct platform_device *pdev)
+static int __devexit i2c_pca_pf_remove(struct platform_device *pdev)
 {
 	struct i2c_pca_pf_data *i2c = platform_get_drvdata(pdev);
+	platform_set_drvdata(pdev, NULL);
 
 	i2c_del_adapter(&i2c->adap);
 
@@ -278,7 +279,7 @@ static int i2c_pca_pf_remove(struct platform_device *pdev)
 
 static struct platform_driver i2c_pca_pf_driver = {
 	.probe = i2c_pca_pf_probe,
-	.remove = i2c_pca_pf_remove,
+	.remove = __devexit_p(i2c_pca_pf_remove),
 	.driver = {
 		.name = "i2c-pca-platform",
 		.owner = THIS_MODULE,

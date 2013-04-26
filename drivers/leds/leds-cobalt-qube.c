@@ -34,7 +34,7 @@ static struct led_classdev qube_front_led = {
 	.default_trigger	= "default-on",
 };
 
-static int cobalt_qube_led_probe(struct platform_device *pdev)
+static int __devinit cobalt_qube_led_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	int retval;
@@ -43,7 +43,7 @@ static int cobalt_qube_led_probe(struct platform_device *pdev)
 	if (!res)
 		return -EBUSY;
 
-	led_port = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	led_port = ioremap(res->start, resource_size(res));
 	if (!led_port)
 		return -ENOMEM;
 
@@ -52,29 +52,32 @@ static int cobalt_qube_led_probe(struct platform_device *pdev)
 
 	retval = led_classdev_register(&pdev->dev, &qube_front_led);
 	if (retval)
-		goto err_null;
+		goto err_iounmap;
 
 	return 0;
 
-err_null:
+err_iounmap:
+	iounmap(led_port);
 	led_port = NULL;
 
 	return retval;
 }
 
-static int cobalt_qube_led_remove(struct platform_device *pdev)
+static int __devexit cobalt_qube_led_remove(struct platform_device *pdev)
 {
 	led_classdev_unregister(&qube_front_led);
 
-	if (led_port)
+	if (led_port) {
+		iounmap(led_port);
 		led_port = NULL;
+	}
 
 	return 0;
 }
 
 static struct platform_driver cobalt_qube_led_driver = {
 	.probe	= cobalt_qube_led_probe,
-	.remove	= cobalt_qube_led_remove,
+	.remove	= __devexit_p(cobalt_qube_led_remove),
 	.driver	= {
 		.name	= "cobalt-qube-leds",
 		.owner	= THIS_MODULE,

@@ -1037,11 +1037,10 @@ static int configfs_dump(struct configfs_dirent *sd, int level)
 static int configfs_depend_prep(struct dentry *origin,
 				struct config_item *target)
 {
-	struct configfs_dirent *child_sd, *sd;
+	struct configfs_dirent *child_sd, *sd = origin->d_fsdata;
 	int ret = 0;
 
-	BUG_ON(!origin || !origin->d_fsdata);
-	sd = origin->d_fsdata;
+	BUG_ON(!origin || !sd);
 
 	if (sd->s_element == target)  /* Boo-yah */
 		goto out;
@@ -1614,19 +1613,19 @@ static int configfs_readdir(struct file * filp, void * dirent, filldir_t filldir
 	return 0;
 }
 
-static loff_t configfs_dir_lseek(struct file *file, loff_t offset, int whence)
+static loff_t configfs_dir_lseek(struct file * file, loff_t offset, int origin)
 {
 	struct dentry * dentry = file->f_path.dentry;
 
 	mutex_lock(&dentry->d_inode->i_mutex);
-	switch (whence) {
+	switch (origin) {
 		case 1:
 			offset += file->f_pos;
 		case 0:
 			if (offset >= 0)
 				break;
 		default:
-			mutex_unlock(&file_inode(file)->i_mutex);
+			mutex_unlock(&file->f_path.dentry->d_inode->i_mutex);
 			return -EINVAL;
 	}
 	if (offset != file->f_pos) {

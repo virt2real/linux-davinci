@@ -19,11 +19,11 @@
 #include "exynos_dp_core.h"
 #include "exynos_dp_reg.h"
 
-#define COMMON_INT_MASK_1	0
-#define COMMON_INT_MASK_2	0
-#define COMMON_INT_MASK_3	0
-#define COMMON_INT_MASK_4	(HOTPLUG_CHG | HPD_LOST | PLUG)
-#define INT_STA_MASK		INT_HPD
+#define COMMON_INT_MASK_1 (0)
+#define COMMON_INT_MASK_2 (0)
+#define COMMON_INT_MASK_3 (0)
+#define COMMON_INT_MASK_4 (0)
+#define INT_STA_MASK (0)
 
 void exynos_dp_enable_video_mute(struct exynos_dp_device *dp, bool enable)
 {
@@ -88,7 +88,7 @@ void exynos_dp_init_analog_param(struct exynos_dp_device *dp)
 void exynos_dp_init_interrupt(struct exynos_dp_device *dp)
 {
 	/* Set interrupt pin assertion polarity as high */
-	writel(INT_POL1 | INT_POL0, dp->reg_base + EXYNOS_DP_INT_CTL);
+	writel(INT_POL, dp->reg_base + EXYNOS_DP_INT_CTL);
 
 	/* Clear pending regisers */
 	writel(0xff, dp->reg_base + EXYNOS_DP_COMMON_INT_STA_1);
@@ -324,7 +324,7 @@ void exynos_dp_init_analog_func(struct exynos_dp_device *dp)
 	writel(reg, dp->reg_base + EXYNOS_DP_FUNC_EN_2);
 }
 
-void exynos_dp_clear_hotplug_interrupts(struct exynos_dp_device *dp)
+void exynos_dp_init_hpd(struct exynos_dp_device *dp)
 {
 	u32 reg;
 
@@ -333,36 +333,10 @@ void exynos_dp_clear_hotplug_interrupts(struct exynos_dp_device *dp)
 
 	reg = INT_HPD;
 	writel(reg, dp->reg_base + EXYNOS_DP_INT_STA);
-}
-
-void exynos_dp_init_hpd(struct exynos_dp_device *dp)
-{
-	u32 reg;
-
-	exynos_dp_clear_hotplug_interrupts(dp);
 
 	reg = readl(dp->reg_base + EXYNOS_DP_SYS_CTL_3);
 	reg &= ~(F_HPD | HPD_CTRL);
 	writel(reg, dp->reg_base + EXYNOS_DP_SYS_CTL_3);
-}
-
-enum dp_irq_type exynos_dp_get_irq_type(struct exynos_dp_device *dp)
-{
-	u32 reg;
-
-	/* Parse hotplug interrupt status register */
-	reg = readl(dp->reg_base + EXYNOS_DP_COMMON_INT_STA_4);
-
-	if (reg & PLUG)
-		return DP_IRQ_TYPE_HP_CABLE_IN;
-
-	if (reg & HPD_LOST)
-		return DP_IRQ_TYPE_HP_CABLE_OUT;
-
-	if (reg & HOTPLUG_CHG)
-		return DP_IRQ_TYPE_HP_CHANGE;
-
-	return DP_IRQ_TYPE_UNKNOWN;
 }
 
 void exynos_dp_reset_aux(struct exynos_dp_device *dp)
@@ -517,7 +491,7 @@ int exynos_dp_read_byte_from_dpcd(struct exynos_dp_device *dp,
 	int i;
 	int retval;
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 10; i++) {
 		/* Clear AUX CH data buffer */
 		reg = BUF_CLR;
 		writel(reg, dp->reg_base + EXYNOS_DP_BUFFER_DATA_CTL);
@@ -578,7 +552,7 @@ int exynos_dp_write_bytes_to_dpcd(struct exynos_dp_device *dp,
 		else
 			cur_data_count = count - start_offset;
 
-		for (i = 0; i < 3; i++) {
+		for (i = 0; i < 10; i++) {
 			/* Select DPCD device address */
 			reg = AUX_ADDR_7_0(reg_addr + start_offset);
 			writel(reg, dp->reg_base + EXYNOS_DP_AUX_ADDR_7_0);
@@ -643,7 +617,7 @@ int exynos_dp_read_bytes_from_dpcd(struct exynos_dp_device *dp,
 			cur_data_count = count - start_offset;
 
 		/* AUX CH Request Transaction process */
-		for (i = 0; i < 3; i++) {
+		for (i = 0; i < 10; i++) {
 			/* Select DPCD device address */
 			reg = AUX_ADDR_7_0(reg_addr + start_offset);
 			writel(reg, dp->reg_base + EXYNOS_DP_AUX_ADDR_7_0);
@@ -726,15 +700,17 @@ int exynos_dp_read_byte_from_i2c(struct exynos_dp_device *dp,
 	int i;
 	int retval;
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 10; i++) {
 		/* Clear AUX CH data buffer */
 		reg = BUF_CLR;
 		writel(reg, dp->reg_base + EXYNOS_DP_BUFFER_DATA_CTL);
 
 		/* Select EDID device */
 		retval = exynos_dp_select_i2c_device(dp, device_addr, reg_addr);
-		if (retval != 0)
+		if (retval != 0) {
+			dev_err(dp->dev, "Select EDID device fail!\n");
 			continue;
+		}
 
 		/*
 		 * Set I2C transaction and read data
@@ -774,7 +750,7 @@ int exynos_dp_read_bytes_from_i2c(struct exynos_dp_device *dp,
 	int retval = 0;
 
 	for (i = 0; i < count; i += 16) {
-		for (j = 0; j < 3; j++) {
+		for (j = 0; j < 100; j++) {
 			/* Clear AUX CH data buffer */
 			reg = BUF_CLR;
 			writel(reg, dp->reg_base + EXYNOS_DP_BUFFER_DATA_CTL);
@@ -1058,20 +1034,24 @@ void exynos_dp_init_video(struct exynos_dp_device *dp)
 	writel(reg, dp->reg_base + EXYNOS_DP_VIDEO_CTL_8);
 }
 
-void exynos_dp_set_video_color_format(struct exynos_dp_device *dp)
+void exynos_dp_set_video_color_format(struct exynos_dp_device *dp,
+			u32 color_depth,
+			u32 color_space,
+			u32 dynamic_range,
+			u32 ycbcr_coeff)
 {
 	u32 reg;
 
 	/* Configure the input color depth, color space, dynamic range */
-	reg = (dp->video_info->dynamic_range << IN_D_RANGE_SHIFT) |
-		(dp->video_info->color_depth << IN_BPC_SHIFT) |
-		(dp->video_info->color_space << IN_COLOR_F_SHIFT);
+	reg = (dynamic_range << IN_D_RANGE_SHIFT) |
+		(color_depth << IN_BPC_SHIFT) |
+		(color_space << IN_COLOR_F_SHIFT);
 	writel(reg, dp->reg_base + EXYNOS_DP_VIDEO_CTL_2);
 
 	/* Set Input Color YCbCr Coefficients to ITU601 or ITU709 */
 	reg = readl(dp->reg_base + EXYNOS_DP_VIDEO_CTL_3);
 	reg &= ~IN_YC_COEFFI_MASK;
-	if (dp->video_info->ycbcr_coeff)
+	if (ycbcr_coeff)
 		reg |= IN_YC_COEFFI_ITU709;
 	else
 		reg |= IN_YC_COEFFI_ITU601;
@@ -1198,7 +1178,8 @@ int exynos_dp_is_video_stream_on(struct exynos_dp_device *dp)
 	return 0;
 }
 
-void exynos_dp_config_video_slave_mode(struct exynos_dp_device *dp)
+void exynos_dp_config_video_slave_mode(struct exynos_dp_device *dp,
+			struct video_info *video_info)
 {
 	u32 reg;
 
@@ -1209,17 +1190,17 @@ void exynos_dp_config_video_slave_mode(struct exynos_dp_device *dp)
 
 	reg = readl(dp->reg_base + EXYNOS_DP_VIDEO_CTL_10);
 	reg &= ~INTERACE_SCAN_CFG;
-	reg |= (dp->video_info->interlaced << 2);
+	reg |= (video_info->interlaced << 2);
 	writel(reg, dp->reg_base + EXYNOS_DP_VIDEO_CTL_10);
 
 	reg = readl(dp->reg_base + EXYNOS_DP_VIDEO_CTL_10);
 	reg &= ~VSYNC_POLARITY_CFG;
-	reg |= (dp->video_info->v_sync_polarity << 1);
+	reg |= (video_info->v_sync_polarity << 1);
 	writel(reg, dp->reg_base + EXYNOS_DP_VIDEO_CTL_10);
 
 	reg = readl(dp->reg_base + EXYNOS_DP_VIDEO_CTL_10);
 	reg &= ~HSYNC_POLARITY_CFG;
-	reg |= (dp->video_info->h_sync_polarity << 0);
+	reg |= (video_info->h_sync_polarity << 0);
 	writel(reg, dp->reg_base + EXYNOS_DP_VIDEO_CTL_10);
 
 	reg = AUDIO_MODE_SPDIF_MODE | VIDEO_MODE_SLAVE_MODE;

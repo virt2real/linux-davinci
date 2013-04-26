@@ -12,7 +12,7 @@ extern "C" {
 
 #include <assert.h>
 #include <stdio.h>
-#include "list.h"
+#include <sys/queue.h>
 #ifndef __cplusplus
 #include <stdbool.h>
 #endif
@@ -175,11 +175,12 @@ struct menu {
 #define MENU_ROOT		0x0002
 
 struct jump_key {
-	struct list_head entries;
+	CIRCLEQ_ENTRY(jump_key) entries;
 	size_t offset;
 	struct menu *target;
 	int index;
 };
+CIRCLEQ_HEAD(jk_head, jump_key);
 
 #define JUMP_NB			9
 

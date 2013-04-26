@@ -109,7 +109,7 @@ void t4_set_reg_field(struct adapter *adapter, unsigned int addr, u32 mask,
  *	Reads registers that are accessed indirectly through an address/data
  *	register pair.
  */
-void t4_read_indirect(struct adapter *adap, unsigned int addr_reg,
+static void t4_read_indirect(struct adapter *adap, unsigned int addr_reg,
 			     unsigned int data_reg, u32 *vals,
 			     unsigned int nregs, unsigned int start_idx)
 {
@@ -497,9 +497,8 @@ int t4_memory_write(struct adapter *adap, int mtype, u32 addr, u32 len,
 }
 
 #define EEPROM_STAT_ADDR   0x7bfc
+#define VPD_BASE           0
 #define VPD_LEN            512
-#define VPD_BASE           0x400
-#define VPD_BASE_OLD       0
 
 /**
  *	t4_seeprom_wp - enable/disable EEPROM write protection
@@ -525,7 +524,7 @@ int t4_seeprom_wp(struct adapter *adapter, bool enable)
 int get_vpd_params(struct adapter *adapter, struct vpd_params *p)
 {
 	u32 cclk_param, cclk_val;
-	int i, ret, addr;
+	int i, ret;
 	int ec, sn;
 	u8 *vpd, csum;
 	unsigned int vpdr_len, kw_offset, id_len;
@@ -534,12 +533,7 @@ int get_vpd_params(struct adapter *adapter, struct vpd_params *p)
 	if (!vpd)
 		return -ENOMEM;
 
-	ret = pci_read_vpd(adapter->pdev, VPD_BASE, sizeof(u32), vpd);
-	if (ret < 0)
-		goto out;
-	addr = *vpd == 0x82 ? VPD_BASE : VPD_BASE_OLD;
-
-	ret = pci_read_vpd(adapter->pdev, addr, VPD_LEN, vpd);
+	ret = pci_read_vpd(adapter->pdev, VPD_BASE, VPD_LEN, vpd);
 	if (ret < 0)
 		goto out;
 
@@ -654,12 +648,12 @@ static int sf1_read(struct adapter *adapter, unsigned int byte_cnt, int cont,
 
 	if (!byte_cnt || byte_cnt > 4)
 		return -EINVAL;
-	if (t4_read_reg(adapter, SF_OP) & SF_BUSY)
+	if (t4_read_reg(adapter, SF_OP) & BUSY)
 		return -EBUSY;
 	cont = cont ? SF_CONT : 0;
 	lock = lock ? SF_LOCK : 0;
 	t4_write_reg(adapter, SF_OP, lock | cont | BYTECNT(byte_cnt - 1));
-	ret = t4_wait_op_done(adapter, SF_OP, SF_BUSY, 0, SF_ATTEMPTS, 5);
+	ret = t4_wait_op_done(adapter, SF_OP, BUSY, 0, SF_ATTEMPTS, 5);
 	if (!ret)
 		*valp = t4_read_reg(adapter, SF_DATA);
 	return ret;
@@ -682,14 +676,14 @@ static int sf1_write(struct adapter *adapter, unsigned int byte_cnt, int cont,
 {
 	if (!byte_cnt || byte_cnt > 4)
 		return -EINVAL;
-	if (t4_read_reg(adapter, SF_OP) & SF_BUSY)
+	if (t4_read_reg(adapter, SF_OP) & BUSY)
 		return -EBUSY;
 	cont = cont ? SF_CONT : 0;
 	lock = lock ? SF_LOCK : 0;
 	t4_write_reg(adapter, SF_DATA, val);
 	t4_write_reg(adapter, SF_OP, lock |
 		     cont | BYTECNT(byte_cnt - 1) | OP_WR);
-	return t4_wait_op_done(adapter, SF_OP, SF_BUSY, 0, SF_ATTEMPTS, 5);
+	return t4_wait_op_done(adapter, SF_OP, BUSY, 0, SF_ATTEMPTS, 5);
 }
 
 /**
@@ -2009,7 +2003,7 @@ void t4_tp_wr_bits_indirect(struct adapter *adap, unsigned int addr,
  *
  *	Initialize the congestion control parameters.
  */
-static void init_cong_ctrl(unsigned short *a, unsigned short *b)
+static void __devinit init_cong_ctrl(unsigned short *a, unsigned short *b)
 {
 	a[0] = a[1] = a[2] = a[3] = a[4] = a[5] = a[6] = a[7] = a[8] = 1;
 	a[9] = 2;
@@ -2258,40 +2252,20 @@ int t4_wol_pat_enable(struct adapter *adap, unsigned int port, unsigned int map,
 		t4_write_reg(adap, EPIO_REG(DATA0), mask0);
 		t4_write_reg(adap, EPIO_REG(OP), ADDRESS(i) | EPIOWR);
 		t4_read_reg(adap, EPIO_REG(OP));                /* flush */
-		if (t4_read_reg(adap, EPIO_REG(OP)) & SF_BUSY)
+		if (t4_read_reg(adap, EPIO_REG(OP)) & BUSY)
 			return -ETIMEDOUT;
 
 		/* write CRC */
 		t4_write_reg(adap, EPIO_REG(DATA0), crc);
 		t4_write_reg(adap, EPIO_REG(OP), ADDRESS(i + 32) | EPIOWR);
 		t4_read_reg(adap, EPIO_REG(OP));                /* flush */
-		if (t4_read_reg(adap, EPIO_REG(OP)) & SF_BUSY)
+		if (t4_read_reg(adap, EPIO_REG(OP)) & BUSY)
 			return -ETIMEDOUT;
 	}
 #undef EPIO_REG
 
 	t4_set_reg_field(adap, PORT_REG(port, XGMAC_PORT_CFG2), 0, PATEN);
 	return 0;
-}
-
-/*     t4_mk_filtdelwr - create a delete filter WR
- *     @ftid: the filter ID
- *     @wr: the filter work request to populate
- *     @qid: ingress queue to receive the delete notification
- *
- *     Creates a filter work request to delete the supplied filter.  If @qid is
- *     negative the delete notification is suppressed.
- */
-void t4_mk_filtdelwr(unsigned int ftid, struct fw_filter_wr *wr, int qid)
-{
-	memset(wr, 0, sizeof(*wr));
-	wr->op_pkd = htonl(FW_WR_OP(FW_FILTER_WR));
-	wr->len16_pkd = htonl(FW_WR_LEN16(sizeof(*wr) / 16));
-	wr->tid_to_iq = htonl(V_FW_FILTER_WR_TID(ftid) |
-			V_FW_FILTER_WR_NOREPLY(qid < 0));
-	wr->del_filter_to_l2tix = htonl(F_FW_FILTER_WR_DEL_FILTER);
-	if (qid >= 0)
-		wr->rx_chan_rx_rpl_iq = htons(V_FW_FILTER_WR_RX_RPL_IQ(qid));
 }
 
 #define INIT_CMD(var, cmd, rd_wr) do { \
@@ -2431,7 +2405,7 @@ int t4_fw_hello(struct adapter *adap, unsigned int mbox, unsigned int evt_mbox,
 retry:
 	memset(&c, 0, sizeof(c));
 	INIT_CMD(c, HELLO, WRITE);
-	c.err_to_clearinit = htonl(
+	c.err_to_mbasyncnot = htonl(
 		FW_HELLO_CMD_MASTERDIS(master == MASTER_CANT) |
 		FW_HELLO_CMD_MASTERFORCE(master == MASTER_MUST) |
 		FW_HELLO_CMD_MBMASTER(master == MASTER_MUST ? mbox :
@@ -2452,7 +2426,7 @@ retry:
 		return ret;
 	}
 
-	v = ntohl(c.err_to_clearinit);
+	v = ntohl(c.err_to_mbasyncnot);
 	master_mbox = FW_HELLO_CMD_MBMASTER_GET(v);
 	if (state) {
 		if (v & FW_HELLO_CMD_ERR)
@@ -2545,7 +2519,6 @@ int t4_fw_bye(struct adapter *adap, unsigned int mbox)
 {
 	struct fw_bye_cmd c;
 
-	memset(&c, 0, sizeof(c));
 	INIT_CMD(c, BYE, WRITE);
 	return t4_wr_mbox(adap, mbox, &c, sizeof(c), NULL);
 }
@@ -2562,7 +2535,6 @@ int t4_early_init(struct adapter *adap, unsigned int mbox)
 {
 	struct fw_initialize_cmd c;
 
-	memset(&c, 0, sizeof(c));
 	INIT_CMD(c, INITIALIZE, WRITE);
 	return t4_wr_mbox(adap, mbox, &c, sizeof(c), NULL);
 }
@@ -2579,7 +2551,6 @@ int t4_fw_reset(struct adapter *adap, unsigned int mbox, int reset)
 {
 	struct fw_reset_cmd c;
 
-	memset(&c, 0, sizeof(c));
 	INIT_CMD(c, RESET, WRITE);
 	c.val = htonl(reset);
 	return t4_wr_mbox(adap, mbox, &c, sizeof(c), NULL);
@@ -2800,7 +2771,7 @@ int t4_fw_config_file(struct adapter *adap, unsigned int mbox,
 		htonl(FW_CMD_OP(FW_CAPS_CONFIG_CMD) |
 		      FW_CMD_REQUEST |
 		      FW_CMD_READ);
-	caps_cmd.cfvalid_to_len16 =
+	caps_cmd.retval_len16 =
 		htonl(FW_CAPS_CONFIG_CMD_CFVALID |
 		      FW_CAPS_CONFIG_CMD_MEMTYPE_CF(mtype) |
 		      FW_CAPS_CONFIG_CMD_MEMADDR64K_CF(maddr >> 16) |
@@ -2823,7 +2794,7 @@ int t4_fw_config_file(struct adapter *adap, unsigned int mbox,
 		htonl(FW_CMD_OP(FW_CAPS_CONFIG_CMD) |
 		      FW_CMD_REQUEST |
 		      FW_CMD_WRITE);
-	caps_cmd.cfvalid_to_len16 = htonl(FW_LEN16(caps_cmd));
+	caps_cmd.retval_len16 = htonl(FW_LEN16(caps_cmd));
 	return t4_wr_mbox(adap, mbox, &caps_cmd, sizeof(caps_cmd), NULL);
 }
 
@@ -2857,7 +2828,7 @@ int t4_fixup_host_params(struct adapter *adap, unsigned int page_size,
 		     HOSTPAGESIZEPF7(sge_hps));
 
 	t4_set_reg_field(adap, SGE_CONTROL,
-			 INGPADBOUNDARY_MASK |
+			 INGPADBOUNDARY(INGPADBOUNDARY_MASK) |
 			 EGRSTATUSPAGESIZE_MASK,
 			 INGPADBOUNDARY(fl_align_log - 5) |
 			 EGRSTATUSPAGESIZE(stat_len != 64));
@@ -3307,7 +3278,6 @@ int t4_identify_port(struct adapter *adap, unsigned int mbox, unsigned int viid,
 {
 	struct fw_vi_enable_cmd c;
 
-	memset(&c, 0, sizeof(c));
 	c.op_to_viid = htonl(FW_CMD_OP(FW_VI_ENABLE_CMD) | FW_CMD_REQUEST |
 			     FW_CMD_EXEC | FW_VI_ENABLE_CMD_VIID(viid));
 	c.ien_to_len16 = htonl(FW_VI_ENABLE_CMD_LED | FW_LEN16(c));
@@ -3466,7 +3436,8 @@ int t4_handle_fw_rpl(struct adapter *adap, const __be64 *rpl)
 	return 0;
 }
 
-static void get_pci_mode(struct adapter *adapter, struct pci_params *p)
+static void __devinit get_pci_mode(struct adapter *adapter,
+				   struct pci_params *p)
 {
 	u16 val;
 
@@ -3485,7 +3456,8 @@ static void get_pci_mode(struct adapter *adapter, struct pci_params *p)
  *	Initializes the SW state maintained for each link, including the link's
  *	capabilities and default speed/flow-control/autonegotiation settings.
  */
-static void init_link_config(struct link_config *lc, unsigned int caps)
+static void __devinit init_link_config(struct link_config *lc,
+				       unsigned int caps)
 {
 	lc->supported = caps;
 	lc->requested_speed = 0;
@@ -3509,7 +3481,7 @@ int t4_wait_dev_ready(struct adapter *adap)
 	return t4_read_reg(adap, PL_WHOAMI) != 0xffffffff ? 0 : -EIO;
 }
 
-static int get_flash_params(struct adapter *adap)
+static int __devinit get_flash_params(struct adapter *adap)
 {
 	int ret;
 	u32 info;
@@ -3545,7 +3517,7 @@ static int get_flash_params(struct adapter *adap)
  *	values for some adapter tunables, take PHYs out of reset, and
  *	initialize the MDIO interface.
  */
-int t4_prep_adapter(struct adapter *adapter)
+int __devinit t4_prep_adapter(struct adapter *adapter)
 {
 	int ret;
 
@@ -3573,7 +3545,7 @@ int t4_prep_adapter(struct adapter *adapter)
 	return 0;
 }
 
-int t4_port_init(struct adapter *adap, int mbox, int pf, int vf)
+int __devinit t4_port_init(struct adapter *adap, int mbox, int pf, int vf)
 {
 	u8 addr[6];
 	int ret, i, j = 0;
@@ -3609,6 +3581,7 @@ int t4_port_init(struct adapter *adap, int mbox, int pf, int vf)
 		p->lport = j;
 		p->rss_size = rss_size;
 		memcpy(adap->port[i]->dev_addr, addr, ETH_ALEN);
+		memcpy(adap->port[i]->perm_addr, addr, ETH_ALEN);
 		adap->port[i]->dev_id = j;
 
 		ret = ntohl(c.u.info.lstatus_to_modtype);

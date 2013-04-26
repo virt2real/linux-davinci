@@ -12,6 +12,10 @@
 
 #include "csr_result.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Result Codes */
 #define CSR_SDIO_RESULT_INVALID_VALUE   ((CsrResult) 1) /* Invalid argument value */
 #define CSR_SDIO_RESULT_NO_DEVICE       ((CsrResult) 2) /* The specified device is no longer present */
@@ -719,5 +723,9 @@ CsrResult CsrSdioHardReset(CsrSdioFunction *function);
  *----------------------------------------------------------------------------*/
 void CsrSdioFunctionActive(CsrSdioFunction *function);
 void CsrSdioFunctionIdle(CsrSdioFunction *function);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

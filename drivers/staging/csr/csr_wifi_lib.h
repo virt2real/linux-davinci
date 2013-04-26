@@ -12,6 +12,11 @@
 
 #include "csr_wifi_fsm_event.h"
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*----------------------------------------------------------------------------*
  *  CsrWifiFsmEventInit
  *
@@ -99,5 +104,9 @@ typedef struct
  *
  *----------------------------------------------------------------------------*/
 CsrWifiEventCsrUint16CsrUint8* CsrWifiEventCsrUint16CsrUint8_struct(u16 primtype, u16 msgtype, CsrSchedQid dst, CsrSchedQid src, u16 value16, u8 value8);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CSR_WIFI_LIB_H__ */

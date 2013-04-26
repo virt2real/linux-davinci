@@ -128,7 +128,7 @@ static int qstat_show(struct seq_file *m, void *v)
 static int qstat_seq_open(struct inode *inode, struct file *filp)
 {
 	return single_open(filp, qstat_show,
-			   file_inode(filp)->i_private);
+			   filp->f_path.dentry->d_inode->i_private);
 }
 
 static const struct file_operations debugfs_fops = {
@@ -221,7 +221,7 @@ static ssize_t qperf_seq_write(struct file *file, const char __user *ubuf,
 static int qperf_seq_open(struct inode *inode, struct file *filp)
 {
 	return single_open(filp, qperf_show,
-			   file_inode(filp)->i_private);
+			   filp->f_path.dentry->d_inode->i_private);
 }
 
 static struct file_operations debugfs_perf_fops = {
@@ -232,8 +232,7 @@ static struct file_operations debugfs_perf_fops = {
 	.llseek  = seq_lseek,
 	.release = single_release,
 };
-
-static void setup_debugfs_entry(struct qdio_q *q)
+static void setup_debugfs_entry(struct qdio_q *q, struct ccw_device *cdev)
 {
 	char name[QDIO_DEBUGFS_NAME_LEN];
 
@@ -264,12 +263,12 @@ void qdio_setup_debug_entries(struct qdio_irq *irq_ptr, struct ccw_device *cdev)
 		irq_ptr->debugfs_perf = NULL;
 
 	for_each_input_queue(irq_ptr, q, i)
-		setup_debugfs_entry(q);
+		setup_debugfs_entry(q, cdev);
 	for_each_output_queue(irq_ptr, q, i)
-		setup_debugfs_entry(q);
+		setup_debugfs_entry(q, cdev);
 }
 
-void qdio_shutdown_debug_entries(struct qdio_irq *irq_ptr)
+void qdio_shutdown_debug_entries(struct qdio_irq *irq_ptr, struct ccw_device *cdev)
 {
 	struct qdio_q *q;
 	int i;

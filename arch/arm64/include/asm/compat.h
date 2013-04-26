@@ -23,7 +23,6 @@
  */
 #include <linux/types.h>
 #include <linux/sched.h>
-#include <linux/ptrace.h>
 
 #define COMPAT_USER_HZ		100
 #define COMPAT_UTS_MACHINE	"armv8l\0\0"
@@ -210,11 +209,10 @@ static inline compat_uptr_t ptr_to_compat(void __user *uptr)
 	return (u32)(unsigned long)uptr;
 }
 
-#define compat_user_stack_pointer() (current_pt_regs()->compat_sp)
-
 static inline void __user *arch_compat_alloc_user_space(long len)
 {
-	return (void __user *)compat_user_stack_pointer() - len;
+	struct pt_regs *regs = task_pt_regs(current);
+	return (void __user *)regs->compat_sp - len;
 }
 
 struct compat_ipc64_perm {

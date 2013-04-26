@@ -38,12 +38,13 @@ struct ibmvtpm_dev {
 	struct vio_dev *vdev;
 	struct ibmvtpm_crq_queue crq_queue;
 	dma_addr_t crq_dma_handle;
+	spinlock_t lock;
+	struct tasklet_struct tasklet;
 	u32 rtce_size;
 	void __iomem *rtce_buf;
 	dma_addr_t rtce_dma_handle;
 	spinlock_t rtce_lock;
-	wait_queue_head_t wq;
-	u16 res_len;
+	struct ibmvtpm_crq crq_res;
 	u32 vtpm_version;
 };
 

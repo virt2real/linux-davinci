@@ -350,7 +350,7 @@ static struct clk_init_data wm831x_clkout_init = {
 	.flags = CLK_SET_RATE_PARENT,
 };
 
-static int wm831x_clk_probe(struct platform_device *pdev)
+static __devinit int wm831x_clk_probe(struct platform_device *pdev)
 {
 	struct wm831x *wm831x = dev_get_drvdata(pdev->dev.parent);
 	struct wm831x_clk *clkdata;
@@ -370,33 +370,49 @@ static int wm831x_clk_probe(struct platform_device *pdev)
 	clkdata->xtal_ena = ret & WM831X_XTAL_ENA;
 
 	clkdata->xtal_hw.init = &wm831x_xtal_init;
-	clkdata->xtal = devm_clk_register(&pdev->dev, &clkdata->xtal_hw);
-	if (IS_ERR(clkdata->xtal))
-		return PTR_ERR(clkdata->xtal);
+	clkdata->xtal = clk_register(&pdev->dev, &clkdata->xtal_hw);
+	if (!clkdata->xtal)
+		return -EINVAL;
 
 	clkdata->fll_hw.init = &wm831x_fll_init;
-	clkdata->fll = devm_clk_register(&pdev->dev, &clkdata->fll_hw);
-	if (IS_ERR(clkdata->fll))
-		return PTR_ERR(clkdata->fll);
+	clkdata->fll = clk_register(&pdev->dev, &clkdata->fll_hw);
+	if (!clkdata->fll) {
+		ret = -EINVAL;
+		goto err_xtal;
+	}
 
 	clkdata->clkout_hw.init = &wm831x_clkout_init;
-	clkdata->clkout = devm_clk_register(&pdev->dev, &clkdata->clkout_hw);
-	if (IS_ERR(clkdata->clkout))
-		return PTR_ERR(clkdata->clkout);
+	clkdata->clkout = clk_register(&pdev->dev, &clkdata->clkout_hw);
+	if (!clkdata->clkout) {
+		ret = -EINVAL;
+		goto err_fll;
+	}
 
 	dev_set_drvdata(&pdev->dev, clkdata);
 
 	return 0;
+
+err_fll:
+	clk_unregister(clkdata->fll);
+err_xtal:
+	clk_unregister(clkdata->xtal);
+	return ret;
 }
 
-static int wm831x_clk_remove(struct platform_device *pdev)
+static int __devexit wm831x_clk_remove(struct platform_device *pdev)
 {
+	struct wm831x_clk *clkdata = dev_get_drvdata(&pdev->dev);
+
+	clk_unregister(clkdata->clkout);
+	clk_unregister(clkdata->fll);
+	clk_unregister(clkdata->xtal);
+
 	return 0;
 }
 
 static struct platform_driver wm831x_clk_driver = {
 	.probe = wm831x_clk_probe,
-	.remove = wm831x_clk_remove,
+	.remove = __devexit_p(wm831x_clk_remove),
 	.driver		= {
 		.name	= "wm831x-clk",
 		.owner	= THIS_MODULE,

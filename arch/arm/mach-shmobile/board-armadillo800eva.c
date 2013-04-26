@@ -124,14 +124,6 @@
  * this command is required when playback.
  *
  * # amixer set "Headphone" 50
- *
- * this command is required when capture.
- *
- * # amixer set "Input PGA" 15
- * # amixer set "Left Input Mixer MicP" on
- * # amixer set "Left Input Mixer MicN" on
- * # amixer set "Right Input Mixer MicN" on
- * # amixer set "Right Input Mixer MicP" on
  */
 
 /*
@@ -708,9 +700,9 @@ static int mt9t111_power(struct device *dev, int mode)
 		/* video1 (= CON1 camera) expect 24MHz */
 		clk_set_rate(mclk, clk_round_rate(mclk, 24000000));
 		clk_enable(mclk);
-		gpio_set_value(GPIO_PORT158, 1);
+		gpio_direction_output(GPIO_PORT158, 1);
 	} else {
-		gpio_set_value(GPIO_PORT158, 0);
+		gpio_direction_output(GPIO_PORT158, 0);
 		clk_disable(mclk);
 	}
 
@@ -776,6 +768,32 @@ static struct platform_device ceu0_device = {
 };
 
 /* FSI */
+static int fsi_hdmi_set_rate(struct device *dev, int rate, int enable)
+{
+	struct clk *fsib;
+	int ret;
+
+	/* it support 48KHz only */
+	if (48000 != rate)
+		return -EINVAL;
+
+	fsib = clk_get(dev, "ickb");
+	if (IS_ERR(fsib))
+		return -EINVAL;
+
+	if (enable) {
+		ret = SH_FSI_ACKMD_256 | SH_FSI_BPFMD_64;
+		clk_enable(fsib);
+	} else {
+		ret = 0;
+		clk_disable(fsib);
+	}
+
+	clk_put(fsib);
+
+	return ret;
+}
+
 static struct sh_fsi_platform_info fsi_info = {
 	/* FSI-WM8978 */
 	.port_a = {
@@ -784,8 +802,8 @@ static struct sh_fsi_platform_info fsi_info = {
 	/* FSI-HDMI */
 	.port_b = {
 		.flags		= SH_FSI_FMT_SPDIF |
-				  SH_FSI_ENABLE_STREAM_MODE |
-				  SH_FSI_CLK_CPG,
+				  SH_FSI_ENABLE_STREAM_MODE,
+		.set_rate	= fsi_hdmi_set_rate,
 		.tx_id		= SHDMA_SLAVE_FSIB_TX,
 	}
 };
@@ -814,21 +832,21 @@ static struct platform_device fsi_device = {
 };
 
 /* FSI-WM8978 */
+static struct asoc_simple_dai_init_info fsi_wm8978_init_info = {
+	.fmt		= SND_SOC_DAIFMT_I2S,
+	.codec_daifmt	= SND_SOC_DAIFMT_CBM_CFM | SND_SOC_DAIFMT_NB_NF,
+	.cpu_daifmt	= SND_SOC_DAIFMT_CBS_CFS,
+	.sysclk		= 12288000,
+};
+
 static struct asoc_simple_card_info fsi_wm8978_info = {
 	.name		= "wm8978",
 	.card		= "FSI2A-WM8978",
+	.cpu_dai	= "fsia-dai",
 	.codec		= "wm8978.0-001a",
 	.platform	= "sh_fsi2",
-	.daifmt		= SND_SOC_DAIFMT_I2S,
-	.cpu_dai = {
-		.name	= "fsia-dai",
-		.fmt	= SND_SOC_DAIFMT_CBS_CFS | SND_SOC_DAIFMT_IB_NF,
-	},
-	.codec_dai = {
-		.name	= "wm8978-hifi",
-		.fmt	= SND_SOC_DAIFMT_CBM_CFM | SND_SOC_DAIFMT_NB_NF,
-		.sysclk	= 12288000,
-	},
+	.codec_dai	= "wm8978-hifi",
+	.init		= &fsi_wm8978_init_info,
 };
 
 static struct platform_device fsi_wm8978_device = {
@@ -840,18 +858,18 @@ static struct platform_device fsi_wm8978_device = {
 };
 
 /* FSI-HDMI */
+static struct asoc_simple_dai_init_info fsi2_hdmi_init_info = {
+	.cpu_daifmt	= SND_SOC_DAIFMT_CBM_CFM,
+};
+
 static struct asoc_simple_card_info fsi2_hdmi_info = {
 	.name		= "HDMI",
 	.card		= "FSI2B-HDMI",
+	.cpu_dai	= "fsib-dai",
 	.codec		= "sh-mobile-hdmi",
 	.platform	= "sh_fsi2",
-	.cpu_dai = {
-		.name	= "fsib-dai",
-		.fmt	= SND_SOC_DAIFMT_CBM_CFM,
-	},
-	.codec_dai = {
-		.name = "sh_mobile_hdmi-hifi",
-	},
+	.codec_dai	= "sh_mobile_hdmi-hifi",
+	.init		= &fsi2_hdmi_init_info,
 };
 
 static struct platform_device fsi_hdmi_device = {
@@ -920,11 +938,13 @@ static void __init eva_clock_init(void)
 	struct clk *xtal1	= clk_get(NULL, "extal1");
 	struct clk *usb24s	= clk_get(NULL, "usb24s");
 	struct clk *fsibck	= clk_get(NULL, "fsibck");
+	struct clk *fsib	= clk_get(&fsi_device.dev, "ickb");
 
 	if (IS_ERR(system)	||
 	    IS_ERR(xtal1)	||
 	    IS_ERR(usb24s)	||
-	    IS_ERR(fsibck)) {
+	    IS_ERR(fsibck)	||
+	    IS_ERR(fsib)) {
 		pr_err("armadillo800eva board clock init failed\n");
 		goto clock_error;
 	}
@@ -936,7 +956,9 @@ static void __init eva_clock_init(void)
 	clk_set_parent(usb24s, system);
 
 	/* FSIBCK is 12.288MHz, and it is parent of FSI-B */
+	clk_set_parent(fsib, fsibck);
 	clk_set_rate(fsibck, 12288000);
+	clk_set_rate(fsib,   12288000);
 
 clock_error:
 	if (!IS_ERR(system))
@@ -947,6 +969,8 @@ clock_error:
 		clk_put(usb24s);
 	if (!IS_ERR(fsibck))
 		clk_put(fsibck);
+	if (!IS_ERR(fsib))
+		clk_put(fsib);
 }
 
 /*
@@ -1000,12 +1024,16 @@ static void __init eva_init(void)
 	gpio_request(GPIO_FN_LCD0_DISP,		NULL);
 	gpio_request(GPIO_FN_LCD0_LCLK_PORT165,	NULL);
 
-	gpio_request_one(GPIO_PORT61, GPIOF_OUT_INIT_HIGH, NULL); /* LCDDON */
-	gpio_request_one(GPIO_PORT202, GPIOF_OUT_INIT_LOW, NULL); /* LCD0_LED_CONT */
+	gpio_request(GPIO_PORT61, NULL); /* LCDDON */
+	gpio_direction_output(GPIO_PORT61, 1);
+
+	gpio_request(GPIO_PORT202, NULL); /* LCD0_LED_CONT */
+	gpio_direction_output(GPIO_PORT202, 0);
 
 	/* Touchscreen */
 	gpio_request(GPIO_FN_IRQ10,	NULL); /* TP_INT */
-	gpio_request_one(GPIO_PORT166, GPIOF_OUT_INIT_HIGH, NULL); /* TP_RST_B */
+	gpio_request(GPIO_PORT166,	NULL); /* TP_RST_B */
+	gpio_direction_output(GPIO_PORT166, 1);
 
 	/* GETHER */
 	gpio_request(GPIO_FN_ET_CRS,		NULL);
@@ -1028,10 +1056,12 @@ static void __init eva_init(void)
 	gpio_request(GPIO_FN_ET_RX_DV,		NULL);
 	gpio_request(GPIO_FN_ET_RX_CLK,		NULL);
 
-	gpio_request_one(GPIO_PORT18, GPIOF_OUT_INIT_HIGH, NULL); /* PHY_RST */
+	gpio_request(GPIO_PORT18, NULL); /* PHY_RST */
+	gpio_direction_output(GPIO_PORT18, 1);
 
 	/* USB */
-	gpio_request_one(GPIO_PORT159, GPIOF_IN, NULL); /* USB_DEVICE_MODE */
+	gpio_request(GPIO_PORT159, NULL); /* USB_DEVICE_MODE */
+	gpio_direction_input(GPIO_PORT159);
 
 	if (gpio_get_value(GPIO_PORT159)) {
 		/* USB Host */
@@ -1045,7 +1075,8 @@ static void __init eva_init(void)
 		 * and select GPIO_PORT209 here
 		 */
 		gpio_request(GPIO_FN_IRQ7_PORT209, NULL);
-		gpio_request_one(GPIO_PORT209, GPIOF_IN, NULL);
+		gpio_request(GPIO_PORT209, NULL);
+		gpio_direction_input(GPIO_PORT209);
 
 		platform_device_register(&usbhsf_device);
 		usb = &usbhsf_device;
@@ -1060,9 +1091,12 @@ static void __init eva_init(void)
 	gpio_request(GPIO_FN_SDHI0_D3, NULL);
 	gpio_request(GPIO_FN_SDHI0_WP, NULL);
 
-	gpio_request_one(GPIO_PORT17, GPIOF_OUT_INIT_LOW, NULL);  /* SDHI0_18/33_B */
-	gpio_request_one(GPIO_PORT74, GPIOF_OUT_INIT_HIGH, NULL); /* SDHI0_PON */
-	gpio_request_one(GPIO_PORT75, GPIOF_OUT_INIT_HIGH, NULL); /* SDSLOT1_PON */
+	gpio_request(GPIO_PORT17, NULL);	/* SDHI0_18/33_B */
+	gpio_request(GPIO_PORT74, NULL);	/* SDHI0_PON */
+	gpio_request(GPIO_PORT75, NULL);	/* SDSLOT1_PON */
+	gpio_direction_output(GPIO_PORT17, 0);
+	gpio_direction_output(GPIO_PORT74, 1);
+	gpio_direction_output(GPIO_PORT75, 1);
 
 	/* we can use GPIO_FN_IRQ31_PORT167 here for SDHI0 CD irq */
 
@@ -1099,10 +1133,12 @@ static void __init eva_init(void)
 	gpio_request(GPIO_FN_VIO_CKO,		NULL);
 
 	/* CON1/CON15 Camera */
-	gpio_request_one(GPIO_PORT173, GPIOF_OUT_INIT_LOW, NULL);  /* STANDBY */
-	gpio_request_one(GPIO_PORT172, GPIOF_OUT_INIT_HIGH, NULL); /* RST */
-	/* see mt9t111_power() */
-	gpio_request_one(GPIO_PORT158, GPIOF_OUT_INIT_LOW, NULL);  /* CAM_PON */
+	gpio_request(GPIO_PORT173, NULL); /* STANDBY */
+	gpio_request(GPIO_PORT172, NULL); /* RST */
+	gpio_request(GPIO_PORT158, NULL); /* CAM_PON */
+	gpio_direction_output(GPIO_PORT173, 0);
+	gpio_direction_output(GPIO_PORT172, 1);
+	gpio_direction_output(GPIO_PORT158, 0); /* see mt9t111_power() */
 
 	/* FSI-WM8978 */
 	gpio_request(GPIO_FN_FSIAIBT,		NULL);
@@ -1129,13 +1165,15 @@ static void __init eva_init(void)
 	 * DBGMD/LCDC0/FSIA MUX
 	 * DBGMD_SELECT_B should be set after setting PFC Function.
 	 */
-	gpio_request_one(GPIO_PORT176, GPIOF_OUT_INIT_HIGH, NULL);
+	gpio_request(GPIO_PORT176, NULL);
+	gpio_direction_output(GPIO_PORT176, 1);
 
 	/*
 	 * We can switch CON8/CON14 by SW1.5,
 	 * but it needs after DBGMD_SELECT_B
 	 */
-	gpio_request_one(GPIO_PORT6, GPIOF_IN, NULL);
+	gpio_request(GPIO_PORT6, NULL);
+	gpio_direction_input(GPIO_PORT6);
 	if (gpio_get_value(GPIO_PORT6)) {
 		/* CON14 enable */
 	} else {
@@ -1149,8 +1187,8 @@ static void __init eva_init(void)
 		gpio_request(GPIO_FN_SDHI1_CD,	NULL);
 		gpio_request(GPIO_FN_SDHI1_WP,	NULL);
 
-		/* SDSLOT2_PON */
-		gpio_request_one(GPIO_PORT16, GPIOF_OUT_INIT_HIGH, NULL);
+		gpio_request(GPIO_PORT16, NULL); /* SDSLOT2_PON */
+		gpio_direction_output(GPIO_PORT16, 1);
 
 		platform_device_register(&sdhi1_device);
 	}
@@ -1169,33 +1207,26 @@ static void __init eva_init(void)
 	platform_add_devices(eva_devices,
 			     ARRAY_SIZE(eva_devices));
 
+	eva_clock_init();
+
 	rmobile_add_device_to_domain("A4LC", &lcdc0_device);
 	rmobile_add_device_to_domain("A4LC", &hdmi_lcdc_device);
 	if (usb)
 		rmobile_add_device_to_domain("A3SP", usb);
-
-	r8a7740_pm_init();
 }
 
 static void __init eva_earlytimer_init(void)
 {
 	r8a7740_clock_init(MD_CK0 | MD_CK2);
 	shmobile_earlytimer_init();
-
-	/* the rate of extal1 clock must be set before late_time_init */
-	eva_clock_init();
 }
 
 static void __init eva_add_early_devices(void)
 {
 	r8a7740_add_early_devices();
-}
 
-#define RESCNT2 IOMEM(0xe6188020)
-static void eva_restart(char mode, const char *cmd)
-{
-	/* Do soft power on reset */
-	writel((1 << 31), RESCNT2);
+	/* override timer setup with board-specific code */
+	shmobile_timer.init = eva_earlytimer_init;
 }
 
 static const char *eva_boards_compat_dt[] __initdata = {
@@ -1210,7 +1241,6 @@ DT_MACHINE_START(ARMADILLO800EVA_DT, "armadillo800eva")
 	.handle_irq	= shmobile_handle_irq_intc,
 	.init_machine	= eva_init,
 	.init_late	= shmobile_init_late,
-	.init_time	= eva_earlytimer_init,
+	.timer		= &shmobile_timer,
 	.dt_compat	= eva_boards_compat_dt,
-	.restart	= eva_restart,
 MACHINE_END

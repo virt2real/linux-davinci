@@ -27,6 +27,7 @@
 #include <linux/io.h>
 
 #include <mach/hardware.h>
+#include <asm/hardware/vic.h>
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 
@@ -106,7 +107,8 @@ MACHINE_START(VERSATILE_PB, "ARM-Versatile PB")
 	.map_io		= versatile_map_io,
 	.init_early	= versatile_init_early,
 	.init_irq	= versatile_init_irq,
-	.init_time	= versatile_timer_init,
+	.handle_irq	= vic_handle_irq,
+	.timer		= &versatile_timer,
 	.init_machine	= versatile_pb_init,
 	.restart	= versatile_restart,
 MACHINE_END

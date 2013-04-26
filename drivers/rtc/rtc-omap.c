@@ -309,8 +309,7 @@ static struct platform_device_id omap_rtc_devtype[] = {
 	}, {
 		.name	= "da830-rtc",
 		.driver_data = OMAP_RTC_HAS_KICKER,
-	},
-	{},
+	}
 };
 MODULE_DEVICE_TABLE(platform, omap_rtc_devtype);
 

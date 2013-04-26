@@ -30,7 +30,7 @@
 #include <asm/cacheflush.h>
 #include <asm/a.out-core.h>
 
-static int load_aout_binary(struct linux_binprm *);
+static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
 static int load_aout_library(struct file*);
 
 #ifdef CONFIG_COREDUMP
@@ -201,9 +201,8 @@ static unsigned long __user *create_aout_tables(char __user *p, struct linux_bin
  * libraries.  There is no binary dependent code anywhere else.
  */
 
-static int load_aout_binary(struct linux_binprm * bprm)
+static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
-	struct pt_regs *regs = current_pt_regs();
 	struct exec ex;
 	unsigned long error;
 	unsigned long fd_offset;
@@ -214,7 +213,7 @@ static int load_aout_binary(struct linux_binprm * bprm)
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
 	     N_MAGIC(ex) != QMAGIC && N_MAGIC(ex) != NMAGIC) ||
 	    N_TRSIZE(ex) || N_DRSIZE(ex) ||
-	    i_size_read(file_inode(bprm->file)) < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
+	    i_size_read(bprm->file->f_path.dentry->d_inode) < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
 
@@ -367,7 +366,7 @@ static int load_aout_library(struct file *file)
 	int retval;
 	struct exec ex;
 
-	inode = file_inode(file);
+	inode = file->f_path.dentry->d_inode;
 
 	retval = -ENOEXEC;
 	error = kernel_read(file, 0, (char *) &ex, sizeof(ex));

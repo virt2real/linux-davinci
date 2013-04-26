@@ -21,6 +21,8 @@
 #include <linux/ktime.h>
 #include <linux/trace_clock.h>
 
+#include "trace.h"
+
 /*
  * trace_clock_local(): the simplest and least coherent tracing clock.
  *
@@ -42,7 +44,6 @@ u64 notrace trace_clock_local(void)
 
 	return clock;
 }
-EXPORT_SYMBOL_GPL(trace_clock_local);
 
 /*
  * trace_clock(): 'between' trace clock. Not completely serialized,
@@ -85,7 +86,7 @@ u64 notrace trace_clock_global(void)
 	local_irq_save(flags);
 
 	this_cpu = raw_smp_processor_id();
-	now = sched_clock_cpu(this_cpu);
+	now = cpu_clock(this_cpu);
 	/*
 	 * If in an NMI context then dont risk lockups and return the
 	 * cpu_clock() time:

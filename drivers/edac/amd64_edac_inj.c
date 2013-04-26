@@ -22,19 +22,20 @@ static ssize_t amd64_inject_section_store(struct device *dev,
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct amd64_pvt *pvt = mci->pvt_info;
 	unsigned long value;
-	int ret;
+	int ret = 0;
 
 	ret = strict_strtoul(data, 10, &value);
-	if (ret < 0)
-		return ret;
+	if (ret != -EINVAL) {
 
-	if (value > 3) {
-		amd64_warn("%s: invalid section 0x%lx\n", __func__, value);
-		return -EINVAL;
+		if (value > 3) {
+			amd64_warn("%s: invalid section 0x%lx\n", __func__, value);
+			return -EINVAL;
+		}
+
+		pvt->injection.section = (u32) value;
+		return count;
 	}
-
-	pvt->injection.section = (u32) value;
-	return count;
+	return ret;
 }
 
 static ssize_t amd64_inject_word_show(struct device *dev,
@@ -59,19 +60,20 @@ static ssize_t amd64_inject_word_store(struct device *dev,
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct amd64_pvt *pvt = mci->pvt_info;
 	unsigned long value;
-	int ret;
+	int ret = 0;
 
 	ret = strict_strtoul(data, 10, &value);
-	if (ret < 0)
-		return ret;
+	if (ret != -EINVAL) {
 
-	if (value > 8) {
-		amd64_warn("%s: invalid word 0x%lx\n", __func__, value);
-		return -EINVAL;
+		if (value > 8) {
+			amd64_warn("%s: invalid word 0x%lx\n", __func__, value);
+			return -EINVAL;
+		}
+
+		pvt->injection.word = (u32) value;
+		return count;
 	}
-
-	pvt->injection.word = (u32) value;
-	return count;
+	return ret;
 }
 
 static ssize_t amd64_inject_ecc_vector_show(struct device *dev,
@@ -95,19 +97,21 @@ static ssize_t amd64_inject_ecc_vector_store(struct device *dev,
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct amd64_pvt *pvt = mci->pvt_info;
 	unsigned long value;
-	int ret;
+	int ret = 0;
 
 	ret = strict_strtoul(data, 16, &value);
-	if (ret < 0)
-		return ret;
+	if (ret != -EINVAL) {
 
-	if (value & 0xFFFF0000) {
-		amd64_warn("%s: invalid EccVector: 0x%lx\n", __func__, value);
-		return -EINVAL;
+		if (value & 0xFFFF0000) {
+			amd64_warn("%s: invalid EccVector: 0x%lx\n",
+				   __func__, value);
+			return -EINVAL;
+		}
+
+		pvt->injection.bit_map = (u32) value;
+		return count;
 	}
-
-	pvt->injection.bit_map = (u32) value;
-	return count;
+	return ret;
 }
 
 /*
@@ -122,25 +126,28 @@ static ssize_t amd64_inject_read_store(struct device *dev,
 	struct amd64_pvt *pvt = mci->pvt_info;
 	unsigned long value;
 	u32 section, word_bits;
-	int ret;
+	int ret = 0;
 
 	ret = strict_strtoul(data, 10, &value);
-	if (ret < 0)
-		return ret;
+	if (ret != -EINVAL) {
 
-	/* Form value to choose 16-byte section of cacheline */
-	section = F10_NB_ARRAY_DRAM | SET_NB_ARRAY_ADDR(pvt->injection.section);
+		/* Form value to choose 16-byte section of cacheline */
+		section = F10_NB_ARRAY_DRAM_ECC |
+				SET_NB_ARRAY_ADDRESS(pvt->injection.section);
+		amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_ADDR, section);
 
-	amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_ADDR, section);
+		word_bits = SET_NB_DRAM_INJECTION_READ(pvt->injection.word,
+						pvt->injection.bit_map);
 
-	word_bits = SET_NB_DRAM_INJECTION_READ(pvt->injection);
+		/* Issue 'word' and 'bit' along with the READ request */
+		amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_DATA, word_bits);
 
-	/* Issue 'word' and 'bit' along with the READ request */
-	amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_DATA, word_bits);
+		edac_dbg(0, "section=0x%x word_bits=0x%x\n",
+			 section, word_bits);
 
-	edac_dbg(0, "section=0x%x word_bits=0x%x\n", section, word_bits);
-
-	return count;
+		return count;
+	}
+	return ret;
 }
 
 /*
@@ -153,43 +160,30 @@ static ssize_t amd64_inject_write_store(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 	struct amd64_pvt *pvt = mci->pvt_info;
-	u32 section, word_bits, tmp;
 	unsigned long value;
-	int ret;
+	u32 section, word_bits;
+	int ret = 0;
 
 	ret = strict_strtoul(data, 10, &value);
-	if (ret < 0)
-		return ret;
+	if (ret != -EINVAL) {
 
-	/* Form value to choose 16-byte section of cacheline */
-	section = F10_NB_ARRAY_DRAM | SET_NB_ARRAY_ADDR(pvt->injection.section);
+		/* Form value to choose 16-byte section of cacheline */
+		section = F10_NB_ARRAY_DRAM_ECC |
+				SET_NB_ARRAY_ADDRESS(pvt->injection.section);
+		amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_ADDR, section);
 
-	amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_ADDR, section);
+		word_bits = SET_NB_DRAM_INJECTION_WRITE(pvt->injection.word,
+						pvt->injection.bit_map);
 
-	word_bits = SET_NB_DRAM_INJECTION_WRITE(pvt->injection);
+		/* Issue 'word' and 'bit' along with the READ request */
+		amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_DATA, word_bits);
 
-	pr_notice_once("Don't forget to decrease MCE polling interval in\n"
-			"/sys/bus/machinecheck/devices/machinecheck<CPUNUM>/check_interval\n"
-			"so that you can get the error report faster.\n");
+		edac_dbg(0, "section=0x%x word_bits=0x%x\n",
+			 section, word_bits);
 
-	on_each_cpu(disable_caches, NULL, 1);
-
-	/* Issue 'word' and 'bit' along with the READ request */
-	amd64_write_pci_cfg(pvt->F3, F10_NB_ARRAY_DATA, word_bits);
-
- retry:
-	/* wait until injection happens */
-	amd64_read_pci_cfg(pvt->F3, F10_NB_ARRAY_DATA, &tmp);
-	if (tmp & F10_NB_ARR_ECC_WR_REQ) {
-		cpu_relax();
-		goto retry;
+		return count;
 	}
-
-	on_each_cpu(enable_caches, NULL, 1);
-
-	edac_dbg(0, "section=0x%x word_bits=0x%x\n", section, word_bits);
-
-	return count;
+	return ret;
 }
 
 /*

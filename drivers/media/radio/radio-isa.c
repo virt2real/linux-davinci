@@ -191,7 +191,7 @@ static bool radio_isa_valid_io(const struct radio_isa_driver *drv, int io)
 	return false;
 }
 
-static struct radio_isa_card *radio_isa_alloc(struct radio_isa_driver *drv,
+struct radio_isa_card *radio_isa_alloc(struct radio_isa_driver *drv,
 				struct device *pdev)
 {
 	struct v4l2_device *v4l2_dev;
@@ -207,9 +207,8 @@ static struct radio_isa_card *radio_isa_alloc(struct radio_isa_driver *drv,
 	return isa;
 }
 
-static int radio_isa_common_probe(struct radio_isa_card *isa,
-				  struct device *pdev,
-				  int radio_nr, unsigned region_size)
+int radio_isa_common_probe(struct radio_isa_card *isa, struct device *pdev,
+				int radio_nr, unsigned region_size)
 {
 	const struct radio_isa_driver *drv = isa->drv;
 	const struct radio_isa_ops *ops = drv->ops;
@@ -288,8 +287,7 @@ err_dev_reg:
 	return res;
 }
 
-static int radio_isa_common_remove(struct radio_isa_card *isa,
-				   unsigned region_size)
+int radio_isa_common_remove(struct radio_isa_card *isa, unsigned region_size)
 {
 	const struct radio_isa_ops *ops = isa->drv->ops;
 

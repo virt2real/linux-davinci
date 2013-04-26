@@ -81,34 +81,33 @@ static struct dgrp_proc_entry dgrp_mon_table[];
 static struct dgrp_proc_entry dgrp_ports_table[];
 static struct dgrp_proc_entry dgrp_dpa_table[];
 
-static ssize_t dgrp_config_proc_write(struct file *file,
-				      const char __user *buffer,
-				      size_t count, loff_t *pos);
+static ssize_t config_proc_write(struct file *file, const char __user *buffer,
+				 size_t count, loff_t *pos);
 
-static int dgrp_nodeinfo_proc_open(struct inode *inode, struct file *file);
-static int dgrp_info_proc_open(struct inode *inode, struct file *file);
-static int dgrp_config_proc_open(struct inode *inode, struct file *file);
+static int nodeinfo_proc_open(struct inode *inode, struct file *file);
+static int info_proc_open(struct inode *inode, struct file *file);
+static int config_proc_open(struct inode *inode, struct file *file);
 
 static struct file_operations config_proc_file_ops = {
 	.owner	 = THIS_MODULE,
-	.open	 = dgrp_config_proc_open,
+	.open	 = config_proc_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
 	.release = seq_release,
-	.write   = dgrp_config_proc_write,
+	.write   = config_proc_write
 };
 
 static struct file_operations info_proc_file_ops = {
 	.owner	 = THIS_MODULE,
-	.open	 = dgrp_info_proc_open,
+	.open	 = info_proc_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
-	.release = single_release,
+	.release = seq_release,
 };
 
 static struct file_operations nodeinfo_proc_file_ops = {
 	.owner	 = THIS_MODULE,
-	.open	 = dgrp_nodeinfo_proc_open,
+	.open	 = nodeinfo_proc_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
 	.release = seq_release,
@@ -182,13 +181,13 @@ static struct dgrp_proc_entry dgrp_dpa_table[] = {
 
 void dgrp_unregister_proc(void)
 {
+	unregister_proc_table(dgrp_table, dgrp_proc_dir_entry);
 	net_entry_pointer = NULL;
 	mon_entry_pointer = NULL;
 	dpa_entry_pointer = NULL;
 	ports_entry_pointer = NULL;
 
 	if (dgrp_proc_dir_entry) {
-		unregister_proc_table(dgrp_table, dgrp_proc_dir_entry);
 		remove_proc_entry(dgrp_proc_dir_entry->name,
 				  dgrp_proc_dir_entry->parent);
 		dgrp_proc_dir_entry = NULL;
@@ -231,8 +230,6 @@ static void register_proc_table(struct dgrp_proc_entry *table,
 	mode_t mode;
 
 	if (table == NULL)
-		return;
-	if (root == NULL)
 		return;
 
 	for (; table->id; table++) {
@@ -357,7 +354,7 @@ static int dgrp_gen_proc_open(struct inode *inode, struct file *file)
 	struct dgrp_proc_entry *entry;
 	int ret = 0;
 
-	de = (struct proc_dir_entry *) PDE(file_inode(file));
+	de = (struct proc_dir_entry *) PDE(file->f_dentry->d_inode);
 	if (!de || !de->data) {
 		ret = -ENXIO;
 		goto done;
@@ -387,7 +384,7 @@ static int dgrp_gen_proc_close(struct inode *inode, struct file *file)
 	struct proc_dir_entry *de;
 	struct dgrp_proc_entry *entry;
 
-	de = (struct proc_dir_entry *) PDE(file_inode(file));
+	de = (struct proc_dir_entry *) PDE(file->f_dentry->d_inode);
 	if (!de || !de->data)
 		goto done;
 
@@ -406,21 +403,21 @@ done:
 	return 0;
 }
 
-static void *dgrp_config_proc_start(struct seq_file *m, loff_t *pos)
+static void *config_proc_start(struct seq_file *m, loff_t *pos)
 {
 	return seq_list_start_head(&nd_struct_list, *pos);
 }
 
-static void *dgrp_config_proc_next(struct seq_file *p, void *v, loff_t *pos)
+static void *config_proc_next(struct seq_file *p, void *v, loff_t *pos)
 {
 	return seq_list_next(v, &nd_struct_list, pos);
 }
 
-static void dgrp_config_proc_stop(struct seq_file *m, void *v)
+static void config_proc_stop(struct seq_file *m, void *v)
 {
 }
 
-static int dgrp_config_proc_show(struct seq_file *m, void *v)
+static int config_proc_show(struct seq_file *m, void *v)
 {
 	struct nd_struct *nd;
 	char tmp_id[4];
@@ -446,13 +443,13 @@ static int dgrp_config_proc_show(struct seq_file *m, void *v)
 }
 
 static const struct seq_operations proc_config_ops = {
-	.start = dgrp_config_proc_start,
-	.next  = dgrp_config_proc_next,
-	.stop  = dgrp_config_proc_stop,
-	.show  = dgrp_config_proc_show,
+	.start = config_proc_start,
+	.next  = config_proc_next,
+	.stop  = config_proc_stop,
+	.show  = config_proc_show
 };
 
-static int dgrp_config_proc_open(struct inode *inode, struct file *file)
+static int config_proc_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &proc_config_ops);
 }
@@ -463,9 +460,8 @@ static int dgrp_config_proc_open(struct inode *inode, struct file *file)
  *  write) is treated as an independent request.  See the "parse"
  *  description for more details.
  */
-static ssize_t dgrp_config_proc_write(struct file *file,
-				      const char __user *buffer,
-				      size_t count, loff_t *pos)
+static ssize_t config_proc_write(struct file *file, const char __user *buffer,
+				 size_t count, loff_t *pos)
 {
 	ssize_t retval;
 	char *inbuf, *sp;
@@ -629,37 +625,39 @@ static int parse_write_config(char *buf)
 	return retval;
 }
 
-static int dgrp_info_proc_show(struct seq_file *m, void *v)
+static int info_proc_show(struct seq_file *m, void *v)
 {
 	seq_printf(m, "version: %s\n", DIGI_VERSION);
 	seq_puts(m, "register_with_sysfs: 1\n");
+	seq_printf(m, "rawreadok: 0x%08x\t(%d)\n",
+		   dgrp_rawreadok, dgrp_rawreadok);
 	seq_printf(m, "pollrate: 0x%08x\t(%d)\n",
 		   dgrp_poll_tick, dgrp_poll_tick);
 
 	return 0;
 }
 
-static int dgrp_info_proc_open(struct inode *inode, struct file *file)
+static int info_proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, dgrp_info_proc_show, NULL);
+	return single_open(file, info_proc_show, NULL);
 }
 
 
-static void *dgrp_nodeinfo_start(struct seq_file *m, loff_t *pos)
+static void *nodeinfo_start(struct seq_file *m, loff_t *pos)
 {
 	return seq_list_start_head(&nd_struct_list, *pos);
 }
 
-static void *dgrp_nodeinfo_next(struct seq_file *p, void *v, loff_t *pos)
+static void *nodeinfo_next(struct seq_file *p, void *v, loff_t *pos)
 {
 	return seq_list_next(v, &nd_struct_list, pos);
 }
 
-static void dgrp_nodeinfo_stop(struct seq_file *m, void *v)
+static void nodeinfo_stop(struct seq_file *m, void *v)
 {
 }
 
-static int dgrp_nodeinfo_show(struct seq_file *m, void *v)
+static int nodeinfo_show(struct seq_file *m, void *v)
 {
 	struct nd_struct *nd;
 	char hwver[8];
@@ -701,13 +699,13 @@ static int dgrp_nodeinfo_show(struct seq_file *m, void *v)
 
 
 static const struct seq_operations nodeinfo_ops = {
-	.start = dgrp_nodeinfo_start,
-	.next  = dgrp_nodeinfo_next,
-	.stop  = dgrp_nodeinfo_stop,
-	.show  = dgrp_nodeinfo_show,
+	.start = nodeinfo_start,
+	.next  = nodeinfo_next,
+	.stop  = nodeinfo_stop,
+	.show  = nodeinfo_show
 };
 
-static int dgrp_nodeinfo_proc_open(struct inode *inode, struct file *file)
+static int nodeinfo_proc_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &nodeinfo_ops);
 }
@@ -756,8 +754,6 @@ static int dgrp_add_id(long id)
 
 	return 0;
 
-	/* FIXME this guy should free the tty driver stored in nd and destroy
-	 * all channel ports */
 error_out:
 	kfree(nd);
 	return ret;
@@ -777,11 +773,14 @@ static int dgrp_remove_nd(struct nd_struct *nd)
 		dgrp_remove_node_class_sysfs_files(nd);
 	}
 
-	unregister_dgrp_device(nd->nd_mon_de);
+	if (nd->nd_mon_de)
+		unregister_dgrp_device(nd->nd_mon_de);
 
-	unregister_dgrp_device(nd->nd_ports_de);
+	if (nd->nd_ports_de)
+		unregister_dgrp_device(nd->nd_ports_de);
 
-	unregister_dgrp_device(nd->nd_dpa_de);
+	if (nd->nd_dpa_de)
+		unregister_dgrp_device(nd->nd_dpa_de);
 
 	dgrp_tty_uninit(nd);
 

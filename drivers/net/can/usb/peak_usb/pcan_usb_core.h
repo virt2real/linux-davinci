@@ -104,6 +104,7 @@ struct peak_usb_device {
 	struct can_priv can;
 	struct peak_usb_adapter *adapter;
 	unsigned int ctrl_idx;
+	int open_time;
 	u32 state;
 
 	struct sk_buff *echo_skb[PCAN_USB_MAX_TX_URBS];

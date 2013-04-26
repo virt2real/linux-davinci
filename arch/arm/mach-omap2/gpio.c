@@ -23,10 +23,9 @@
 #include <linux/of.h>
 #include <linux/platform_data/gpio-omap.h>
 
-#include "soc.h"
-#include "omap_hwmod.h"
-#include "omap_device.h"
-#include "omap-pm.h"
+#include <plat/omap_hwmod.h>
+#include <plat/omap_device.h>
+#include <plat/omap-pm.h>
 
 #include "powerdomain.h"
 
@@ -132,7 +131,8 @@ static int __init omap2_gpio_dev_init(struct omap_hwmod *oh, void *unused)
 	pwrdm = omap_hwmod_get_pwrdm(oh);
 	pdata->loses_context = pwrdm_can_ever_lose_context(pwrdm);
 
-	pdev = omap_device_build(name, id - 1, oh, pdata, sizeof(*pdata));
+	pdev = omap_device_build(name, id - 1, oh, pdata,
+				sizeof(*pdata),	NULL, 0, false);
 	kfree(pdata);
 
 	if (IS_ERR(pdev)) {
@@ -147,7 +147,7 @@ static int __init omap2_gpio_dev_init(struct omap_hwmod *oh, void *unused)
 /*
  * gpio_init needs to be done before
  * machine_init functions access gpio APIs.
- * Hence gpio_init is a omap_postcore_initcall.
+ * Hence gpio_init is a postcore_initcall.
  */
 static int __init omap2_gpio_init(void)
 {
@@ -157,4 +157,4 @@ static int __init omap2_gpio_init(void)
 
 	return omap_hwmod_for_each_by_class("gpio", omap2_gpio_dev_init, NULL);
 }
-omap_postcore_initcall(omap2_gpio_init);
+postcore_initcall(omap2_gpio_init);

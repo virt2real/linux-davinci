@@ -10,5 +10,6 @@ TODO:
 	- testing with as many devices as possible.
 
 Please send any patches for this driver to
-Rupesh Gujare <rupesh.gujare@atmel.com>
+Rupesh Gujare <rgujare@ozmodevices.com>
+Chris Kelly <ckelly@ozmodevices.com>
 and Greg Kroah-Hartman <gregkh@linuxfoundation.org>.

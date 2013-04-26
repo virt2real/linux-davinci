@@ -18,7 +18,7 @@ if VIRTUALIZATION
 
 config KVM
 	tristate "Kernel-based Virtual Machine (KVM) support"
-	depends on HAVE_KVM && MODULES
+	depends on HAVE_KVM && MODULES && EXPERIMENTAL
 	select PREEMPT_NOTIFIERS
 	select ANON_INODES
 	---help---

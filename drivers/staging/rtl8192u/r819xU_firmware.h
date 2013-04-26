@@ -24,3 +24,4 @@ typedef enum _opt_rst_type{
 }opt_rst_type_e;
 
 #endif
+

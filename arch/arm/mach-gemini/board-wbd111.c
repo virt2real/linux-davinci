@@ -80,6 +80,10 @@ static struct platform_device wbd111_leds_device = {
 	},
 };
 
+static struct sys_timer wbd111_timer = {
+	.init	= gemini_timer_init,
+};
+
 static struct mtd_partition wbd111_partitions[] = {
 	{
 		.name		= "RedBoot",
@@ -128,6 +132,6 @@ MACHINE_START(WBD111, "Wiliboard WBD-111")
 	.atag_offset	= 0x100,
 	.map_io		= gemini_map_io,
 	.init_irq	= gemini_init_irq,
-	.init_time	= gemini_timer_init,
+	.timer		= &wbd111_timer,
 	.init_machine	= wbd111_init,
 MACHINE_END

@@ -838,7 +838,8 @@ ppc4xx_edac_isr(int irq, void *dev_id)
  *
  * Returns a device type width enumeration.
  */
-static enum dev_type ppc4xx_edac_get_dtype(u32 mcopt1)
+static enum dev_type __devinit
+ppc4xx_edac_get_dtype(u32 mcopt1)
 {
 	switch (mcopt1 & SDRAM_MCOPT1_WDTH_MASK) {
 	case SDRAM_MCOPT1_WDTH_16:
@@ -861,7 +862,8 @@ static enum dev_type ppc4xx_edac_get_dtype(u32 mcopt1)
  *
  * Returns a memory type enumeration.
  */
-static enum mem_type ppc4xx_edac_get_mtype(u32 mcopt1)
+static enum mem_type __devinit
+ppc4xx_edac_get_mtype(u32 mcopt1)
 {
 	bool rden = ((mcopt1 & SDRAM_MCOPT1_RDEN_MASK) == SDRAM_MCOPT1_RDEN);
 
@@ -891,7 +893,8 @@ static enum mem_type ppc4xx_edac_get_mtype(u32 mcopt1)
  * Returns 0 if OK; otherwise, -EINVAL if the memory bank size
  * configuration cannot be determined.
  */
-static int ppc4xx_edac_init_csrows(struct mem_ctl_info *mci, u32 mcopt1)
+static int __devinit
+ppc4xx_edac_init_csrows(struct mem_ctl_info *mci, u32 mcopt1)
 {
 	const struct ppc4xx_edac_pdata *pdata = mci->pvt_info;
 	int status = 0;
@@ -1008,9 +1011,11 @@ static int ppc4xx_edac_init_csrows(struct mem_ctl_info *mci, u32 mcopt1)
  *
  * Returns 0 if OK; otherwise, < 0 on error.
  */
-static int ppc4xx_edac_mc_init(struct mem_ctl_info *mci,
-			       struct platform_device *op,
-			       const dcr_host_t *dcr_host, u32 mcopt1)
+static int __devinit
+ppc4xx_edac_mc_init(struct mem_ctl_info *mci,
+		    struct platform_device *op,
+		    const dcr_host_t *dcr_host,
+		    u32 mcopt1)
 {
 	int status = 0;
 	const u32 memcheck = (mcopt1 & SDRAM_MCOPT1_MCHK_MASK);
@@ -1100,8 +1105,8 @@ static int ppc4xx_edac_mc_init(struct mem_ctl_info *mci,
  * Returns 0 if OK; otherwise, -ENODEV if the interrupts could not be
  * mapped and assigned.
  */
-static int ppc4xx_edac_register_irq(struct platform_device *op,
-				    struct mem_ctl_info *mci)
+static int __devinit
+ppc4xx_edac_register_irq(struct platform_device *op, struct mem_ctl_info *mci)
 {
 	int status = 0;
 	int ded_irq, sec_irq;
@@ -1178,8 +1183,8 @@ static int ppc4xx_edac_register_irq(struct platform_device *op,
  * Returns 0 if the DCRs were successfully mapped; otherwise, < 0 on
  * error.
  */
-static int ppc4xx_edac_map_dcrs(const struct device_node *np,
-				dcr_host_t *dcr_host)
+static int __devinit
+ppc4xx_edac_map_dcrs(const struct device_node *np, dcr_host_t *dcr_host)
 {
 	unsigned int dcr_base, dcr_len;
 
@@ -1227,7 +1232,7 @@ static int ppc4xx_edac_map_dcrs(const struct device_node *np,
  * Returns 0 if the controller instance was successfully bound to the
  * driver; otherwise, < 0 on error.
  */
-static int ppc4xx_edac_probe(struct platform_device *op)
+static int __devinit ppc4xx_edac_probe(struct platform_device *op)
 {
 	int status = 0;
 	u32 mcopt1, memcheck;

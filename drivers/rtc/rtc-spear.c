@@ -351,7 +351,7 @@ static struct rtc_class_ops spear_rtc_ops = {
 	.alarm_irq_enable = spear_alarm_irq_enable,
 };
 
-static int spear_rtc_probe(struct platform_device *pdev)
+static int __devinit spear_rtc_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct spear_rtc_config *config;
@@ -363,39 +363,34 @@ static int spear_rtc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "no resource defined\n");
 		return -EBUSY;
 	}
+	if (!request_mem_region(res->start, resource_size(res), pdev->name)) {
+		dev_err(&pdev->dev, "rtc region already claimed\n");
+		return -EBUSY;
+	}
 
-	config = devm_kzalloc(&pdev->dev, sizeof(*config), GFP_KERNEL);
+	config = kzalloc(sizeof(*config), GFP_KERNEL);
 	if (!config) {
 		dev_err(&pdev->dev, "out of memory\n");
-		return -ENOMEM;
+		status = -ENOMEM;
+		goto err_release_region;
 	}
 
-	/* alarm irqs */
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		dev_err(&pdev->dev, "no update irq?\n");
-		return irq;
+	config->clk = clk_get(&pdev->dev, NULL);
+	if (IS_ERR(config->clk)) {
+		status = PTR_ERR(config->clk);
+		goto err_kfree;
 	}
 
-	status = devm_request_irq(&pdev->dev, irq, spear_rtc_irq, 0, pdev->name,
-			config);
-	if (status) {
-		dev_err(&pdev->dev, "Alarm interrupt IRQ%d already claimed\n",
-				irq);
-		return status;
-	}
-
-	config->ioaddr = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(config->ioaddr))
-		return PTR_ERR(config->ioaddr);
-
-	config->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(config->clk))
-		return PTR_ERR(config->clk);
-
-	status = clk_prepare_enable(config->clk);
+	status = clk_enable(config->clk);
 	if (status < 0)
-		return status;
+		goto err_clk_put;
+
+	config->ioaddr = ioremap(res->start, resource_size(res));
+	if (!config->ioaddr) {
+		dev_err(&pdev->dev, "ioremap fail\n");
+		status = -ENOMEM;
+		goto err_disable_clock;
+	}
 
 	spin_lock_init(&config->lock);
 	platform_set_drvdata(pdev, config);
@@ -406,31 +401,67 @@ static int spear_rtc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "can't register RTC device, err %ld\n",
 				PTR_ERR(config->rtc));
 		status = PTR_ERR(config->rtc);
-		goto err_disable_clock;
+		goto err_iounmap;
 	}
 
-	config->rtc->uie_unsupported = 1;
+	/* alarm irqs */
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0) {
+		dev_err(&pdev->dev, "no update irq?\n");
+		status = irq;
+		goto err_clear_platdata;
+	}
+
+	status = request_irq(irq, spear_rtc_irq, 0, pdev->name, config);
+	if (status) {
+		dev_err(&pdev->dev, "Alarm interrupt IRQ%d already \
+				claimed\n", irq);
+		goto err_clear_platdata;
+	}
 
 	if (!device_can_wakeup(&pdev->dev))
 		device_init_wakeup(&pdev->dev, 1);
 
 	return 0;
 
-err_disable_clock:
+err_clear_platdata:
 	platform_set_drvdata(pdev, NULL);
-	clk_disable_unprepare(config->clk);
+	rtc_device_unregister(config->rtc);
+err_iounmap:
+	iounmap(config->ioaddr);
+err_disable_clock:
+	clk_disable(config->clk);
+err_clk_put:
+	clk_put(config->clk);
+err_kfree:
+	kfree(config);
+err_release_region:
+	release_mem_region(res->start, resource_size(res));
 
 	return status;
 }
 
-static int spear_rtc_remove(struct platform_device *pdev)
+static int __devexit spear_rtc_remove(struct platform_device *pdev)
 {
 	struct spear_rtc_config *config = platform_get_drvdata(pdev);
+	int irq;
+	struct resource *res;
 
-	rtc_device_unregister(config->rtc);
+	/* leave rtc running, but disable irqs */
 	spear_rtc_disable_interrupt(config);
-	clk_disable_unprepare(config->clk);
 	device_init_wakeup(&pdev->dev, 0);
+	irq = platform_get_irq(pdev, 0);
+	if (irq)
+		free_irq(irq, pdev);
+	clk_disable(config->clk);
+	clk_put(config->clk);
+	iounmap(config->ioaddr);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (res)
+		release_mem_region(res->start, resource_size(res));
+	platform_set_drvdata(pdev, NULL);
+	rtc_device_unregister(config->rtc);
+	kfree(config);
 
 	return 0;
 }
@@ -497,7 +528,7 @@ MODULE_DEVICE_TABLE(of, spear_rtc_id_table);
 
 static struct platform_driver spear_rtc_driver = {
 	.probe = spear_rtc_probe,
-	.remove = spear_rtc_remove,
+	.remove = __devexit_p(spear_rtc_remove),
 	.suspend = spear_rtc_suspend,
 	.resume = spear_rtc_resume,
 	.shutdown = spear_rtc_shutdown,

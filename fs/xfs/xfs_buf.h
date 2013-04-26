@@ -100,7 +100,6 @@ typedef struct xfs_buftarg {
 struct xfs_buf;
 typedef void (*xfs_buf_iodone_t)(struct xfs_buf *);
 
-
 #define XB_PAGES	2
 
 struct xfs_buf_map {
@@ -110,11 +109,6 @@ struct xfs_buf_map {
 
 #define DEFINE_SINGLE_BUF_MAP(map, blkno, numblk) \
 	struct xfs_buf_map (map) = { .bm_bn = (blkno), .bm_len = (numblk) };
-
-struct xfs_buf_ops {
-	void (*verify_read)(struct xfs_buf *);
-	void (*verify_write)(struct xfs_buf *);
-};
 
 typedef struct xfs_buf {
 	/*
@@ -151,7 +145,7 @@ typedef struct xfs_buf {
 	struct page		**b_pages;	/* array of page pointers */
 	struct page		*b_page_array[XB_PAGES]; /* inline pages */
 	struct xfs_buf_map	*b_maps;	/* compound buffer map */
-	struct xfs_buf_map	__b_map;	/* inline compound buffer map */
+	struct xfs_buf_map	b_map;		/* inline compound buffer map */
 	int			b_map_count;
 	int			b_io_length;	/* IO size in BBs */
 	atomic_t		b_pin_count;	/* pin count */
@@ -159,12 +153,12 @@ typedef struct xfs_buf {
 	unsigned int		b_page_count;	/* size of page array */
 	unsigned int		b_offset;	/* page offset in first page */
 	unsigned short		b_error;	/* error code on I/O */
-	const struct xfs_buf_ops	*b_ops;
 
 #ifdef XFS_BUF_LOCK_TRACKING
 	int			b_last_holder;
 #endif
 } xfs_buf_t;
+
 
 /* Finding and Reading Buffers */
 struct xfs_buf *_xfs_buf_find(struct xfs_buftarg *target,
@@ -202,11 +196,9 @@ struct xfs_buf *xfs_buf_get_map(struct xfs_buftarg *target,
 			       xfs_buf_flags_t flags);
 struct xfs_buf *xfs_buf_read_map(struct xfs_buftarg *target,
 			       struct xfs_buf_map *map, int nmaps,
-			       xfs_buf_flags_t flags,
-			       const struct xfs_buf_ops *ops);
+			       xfs_buf_flags_t flags);
 void xfs_buf_readahead_map(struct xfs_buftarg *target,
-			       struct xfs_buf_map *map, int nmaps,
-			       const struct xfs_buf_ops *ops);
+			       struct xfs_buf_map *map, int nmaps);
 
 static inline struct xfs_buf *
 xfs_buf_get(
@@ -224,22 +216,20 @@ xfs_buf_read(
 	struct xfs_buftarg	*target,
 	xfs_daddr_t		blkno,
 	size_t			numblks,
-	xfs_buf_flags_t		flags,
-	const struct xfs_buf_ops *ops)
+	xfs_buf_flags_t		flags)
 {
 	DEFINE_SINGLE_BUF_MAP(map, blkno, numblks);
-	return xfs_buf_read_map(target, &map, 1, flags, ops);
+	return xfs_buf_read_map(target, &map, 1, flags);
 }
 
 static inline void
 xfs_buf_readahead(
 	struct xfs_buftarg	*target,
 	xfs_daddr_t		blkno,
-	size_t			numblks,
-	const struct xfs_buf_ops *ops)
+	size_t			numblks)
 {
 	DEFINE_SINGLE_BUF_MAP(map, blkno, numblks);
-	return xfs_buf_readahead_map(target, &map, 1, ops);
+	return xfs_buf_readahead_map(target, &map, 1);
 }
 
 struct xfs_buf *xfs_buf_get_empty(struct xfs_buftarg *target, size_t numblks);
@@ -249,8 +239,7 @@ int xfs_buf_associate_memory(struct xfs_buf *bp, void *mem, size_t length);
 struct xfs_buf *xfs_buf_get_uncached(struct xfs_buftarg *target, size_t numblks,
 				int flags);
 struct xfs_buf *xfs_buf_read_uncached(struct xfs_buftarg *target,
-				xfs_daddr_t daddr, size_t numblks, int flags,
-				const struct xfs_buf_ops *ops);
+				xfs_daddr_t daddr, size_t numblks, int flags);
 void xfs_buf_hold(struct xfs_buf *bp);
 
 /* Releasing Buffers */
@@ -330,8 +319,8 @@ void xfs_buf_stale(struct xfs_buf *bp);
  * In future, uncached buffers will pass the block number directly to the io
  * request function and hence these macros will go away at that point.
  */
-#define XFS_BUF_ADDR(bp)		((bp)->b_maps[0].bm_bn)
-#define XFS_BUF_SET_ADDR(bp, bno)	((bp)->b_maps[0].bm_bn = (xfs_daddr_t)(bno))
+#define XFS_BUF_ADDR(bp)		((bp)->b_map.bm_bn)
+#define XFS_BUF_SET_ADDR(bp, bno)	((bp)->b_map.bm_bn = (xfs_daddr_t)(bno))
 
 static inline void xfs_buf_set_ref(struct xfs_buf *bp, int lru_ref)
 {

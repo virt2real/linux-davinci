@@ -19,7 +19,6 @@
 #include "ozpd.h"
 #include "ozproto.h"
 #include "ozevent.h"
-#include "ozcdev.h"
 /*------------------------------------------------------------------------------
  */
 #define OZ_RD_BUF_SZ	256
@@ -44,7 +43,7 @@ struct oz_serial_ctx {
 /*------------------------------------------------------------------------------
  */
 static struct oz_cdev g_cdev;
-static struct class *g_oz_class;
+struct class *g_oz_class;
 /*------------------------------------------------------------------------------
  * Context: process and softirq
  */
@@ -71,7 +70,7 @@ static void oz_cdev_release_ctx(struct oz_serial_ctx *ctx)
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static int oz_cdev_open(struct inode *inode, struct file *filp)
+int oz_cdev_open(struct inode *inode, struct file *filp)
 {
 	struct oz_cdev *dev;
 	oz_trace("oz_cdev_open()\n");
@@ -83,7 +82,7 @@ static int oz_cdev_open(struct inode *inode, struct file *filp)
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static int oz_cdev_release(struct inode *inode, struct file *filp)
+int oz_cdev_release(struct inode *inode, struct file *filp)
 {
 	oz_trace("oz_cdev_release()\n");
 	return 0;
@@ -91,14 +90,14 @@ static int oz_cdev_release(struct inode *inode, struct file *filp)
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static ssize_t oz_cdev_read(struct file *filp, char __user *buf, size_t count,
+ssize_t oz_cdev_read(struct file *filp, char __user *buf, size_t count,
 		loff_t *fpos)
 {
 	int n;
 	int ix;
 
 	struct oz_pd *pd;
-	struct oz_serial_ctx *ctx;
+	struct oz_serial_ctx *ctx = 0;
 
 	spin_lock_bh(&g_cdev.lock);
 	pd = g_cdev.active_pd;
@@ -143,12 +142,12 @@ out2:
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static ssize_t oz_cdev_write(struct file *filp, const char __user *buf,
-		size_t count, loff_t *fpos)
+ssize_t oz_cdev_write(struct file *filp, const char __user *buf, size_t count,
+		loff_t *fpos)
 {
 	struct oz_pd *pd;
 	struct oz_elt_buf *eb;
-	struct oz_elt_info *ei;
+	struct oz_elt_info *ei = 0;
 	struct oz_elt *elt;
 	struct oz_app_hdr *app_hdr;
 	struct oz_serial_ctx *ctx;
@@ -183,7 +182,7 @@ static ssize_t oz_cdev_write(struct file *filp, const char __user *buf,
 			ctx->tx_seq_num = 1;
 		spin_lock(&eb->lock);
 		if (oz_queue_elt_info(eb, 0, 0, ei) == 0)
-			ei = NULL;
+			ei = 0;
 		spin_unlock(&eb->lock);
 	}
 	spin_unlock_bh(&pd->app_lock[OZ_APPID_USB-1]);
@@ -200,7 +199,7 @@ out:
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static int oz_set_active_pd(const u8 *addr)
+static int oz_set_active_pd(u8 *addr)
 {
 	int rc = 0;
 	struct oz_pd *pd;
@@ -218,7 +217,7 @@ static int oz_set_active_pd(const u8 *addr)
 		if (is_zero_ether_addr(addr)) {
 			spin_lock_bh(&g_cdev.lock);
 			pd = g_cdev.active_pd;
-			g_cdev.active_pd = NULL;
+			g_cdev.active_pd = 0;
 			memset(g_cdev.active_addr, 0,
 				sizeof(g_cdev.active_addr));
 			spin_unlock_bh(&g_cdev.lock);
@@ -233,8 +232,7 @@ static int oz_set_active_pd(const u8 *addr)
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static long oz_cdev_ioctl(struct file *filp, unsigned int cmd,
-			  unsigned long arg)
+long oz_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int rc = 0;
 	if (_IOC_TYPE(cmd) != OZ_IOCTL_MAGIC)
@@ -298,7 +296,7 @@ static long oz_cdev_ioctl(struct file *filp, unsigned int cmd,
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static unsigned int oz_cdev_poll(struct file *filp, poll_table *wait)
+unsigned int oz_cdev_poll(struct file *filp, poll_table *wait)
 {
 	unsigned int ret = 0;
 	struct oz_cdev *dev = filp->private_data;
@@ -319,7 +317,7 @@ static unsigned int oz_cdev_poll(struct file *filp, poll_table *wait)
 }
 /*------------------------------------------------------------------------------
  */
-static const struct file_operations oz_fops = {
+const struct file_operations oz_fops = {
 	.owner =	THIS_MODULE,
 	.open =		oz_cdev_open,
 	.release =	oz_cdev_release,
@@ -387,7 +385,7 @@ int oz_cdev_deregister(void)
  */
 int oz_cdev_init(void)
 {
-	oz_event_log(OZ_EVT_SERVICE, 1, OZ_APPID_SERIAL, NULL, 0);
+	oz_event_log(OZ_EVT_SERVICE, 1, OZ_APPID_SERIAL, 0, 0);
 	oz_app_enable(OZ_APPID_SERIAL, 1);
 	return 0;
 }
@@ -396,7 +394,7 @@ int oz_cdev_init(void)
  */
 void oz_cdev_term(void)
 {
-	oz_event_log(OZ_EVT_SERVICE, 2, OZ_APPID_SERIAL, NULL, 0);
+	oz_event_log(OZ_EVT_SERVICE, 2, OZ_APPID_SERIAL, 0, 0);
 	oz_app_enable(OZ_APPID_SERIAL, 0);
 }
 /*------------------------------------------------------------------------------
@@ -405,8 +403,8 @@ void oz_cdev_term(void)
 int oz_cdev_start(struct oz_pd *pd, int resume)
 {
 	struct oz_serial_ctx *ctx;
-	struct oz_serial_ctx *old_ctx;
-	oz_event_log(OZ_EVT_SERVICE, 3, OZ_APPID_SERIAL, NULL, resume);
+	struct oz_serial_ctx *old_ctx = 0;
+	oz_event_log(OZ_EVT_SERVICE, 3, OZ_APPID_SERIAL, 0, resume);
 	if (resume) {
 		oz_trace("Serial service resumed.\n");
 		return 0;
@@ -442,22 +440,22 @@ int oz_cdev_start(struct oz_pd *pd, int resume)
 void oz_cdev_stop(struct oz_pd *pd, int pause)
 {
 	struct oz_serial_ctx *ctx;
-	oz_event_log(OZ_EVT_SERVICE, 4, OZ_APPID_SERIAL, NULL, pause);
+	oz_event_log(OZ_EVT_SERVICE, 4, OZ_APPID_SERIAL, 0, pause);
 	if (pause) {
 		oz_trace("Serial service paused.\n");
 		return;
 	}
 	spin_lock_bh(&pd->app_lock[OZ_APPID_SERIAL-1]);
 	ctx = (struct oz_serial_ctx *)pd->app_ctx[OZ_APPID_SERIAL-1];
-	pd->app_ctx[OZ_APPID_SERIAL-1] = NULL;
+	pd->app_ctx[OZ_APPID_SERIAL-1] = 0;
 	spin_unlock_bh(&pd->app_lock[OZ_APPID_SERIAL-1]);
 	if (ctx)
 		oz_cdev_release_ctx(ctx);
 	spin_lock(&g_cdev.lock);
 	if (pd == g_cdev.active_pd)
-		g_cdev.active_pd = NULL;
+		g_cdev.active_pd = 0;
 	else
-		pd = NULL;
+		pd = 0;
 	spin_unlock(&g_cdev.lock);
 	if (pd) {
 		oz_pd_put(pd);
@@ -524,4 +522,10 @@ void oz_cdev_rx(struct oz_pd *pd, struct oz_elt *elt)
 	wake_up(&g_cdev.rdq);
 out:
 	oz_cdev_release_ctx(ctx);
+}
+/*------------------------------------------------------------------------------
+ * Context: softirq
+ */
+void oz_cdev_heartbeat(struct oz_pd *pd)
+{
 }

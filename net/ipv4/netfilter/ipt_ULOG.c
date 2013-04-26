@@ -88,8 +88,10 @@ static void ulog_send(unsigned int nlgroupnum)
 {
 	ulog_buff_t *ub = &ulog_buffers[nlgroupnum];
 
-	pr_debug("ulog_send: timer is deleting\n");
-	del_timer(&ub->timer);
+	if (timer_pending(&ub->timer)) {
+		pr_debug("ulog_send: timer was pending, deleting\n");
+		del_timer(&ub->timer);
+	}
 
 	if (!ub->skb) {
 		pr_debug("ulog_send: nothing to send\n");
@@ -424,8 +426,10 @@ static void __exit ulog_tg_exit(void)
 	/* remove pending timers and free allocated skb's */
 	for (i = 0; i < ULOG_MAXNLGROUPS; i++) {
 		ub = &ulog_buffers[i];
-		pr_debug("timer is deleting\n");
-		del_timer(&ub->timer);
+		if (timer_pending(&ub->timer)) {
+			pr_debug("timer was pending, deleting\n");
+			del_timer(&ub->timer);
+		}
 
 		if (ub->skb) {
 			kfree_skb(ub->skb);

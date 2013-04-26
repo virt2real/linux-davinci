@@ -16,6 +16,8 @@ struct rx_header {
 #define PAR_STATUS	1
 #define PAR_CONTROL 2
 
+enum chip_type { RTL8002, RTL8012 };
+
 #define Ctrl_LNibRead	0x08	/* LP_PSELECP */
 #define Ctrl_HNibRead	0
 #define Ctrl_LNibWrite	0x08	/* LP_PSELECP */

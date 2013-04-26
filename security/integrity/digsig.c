@@ -44,14 +44,5 @@ int integrity_digsig_verify(const unsigned int id, const char *sig, int siglen,
 		}
 	}
 
-	switch (sig[0]) {
-	case 1:
-		return digsig_verify(keyring[id], sig, siglen,
-				     digest, digestlen);
-	case 2:
-		return asymmetric_verify(keyring[id], sig, siglen,
-					 digest, digestlen);
-	}
-
-	return -EOPNOTSUPP;
+	return digsig_verify(keyring[id], sig, siglen, digest, digestlen);
 }

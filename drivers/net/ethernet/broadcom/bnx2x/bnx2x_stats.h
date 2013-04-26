@@ -1,6 +1,6 @@
 /* bnx2x_stats.h: Broadcom Everest network driver.
  *
- * Copyright (c) 2007-2013 Broadcom Corporation
+ * Copyright (c) 2007-2012 Broadcom Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -203,7 +203,6 @@ struct bnx2x_eth_stats {
 	/* Recovery */
 	u32 recoverable_error;
 	u32 unrecoverable_error;
-	u32 driver_filtered_tx_pkt;
 	/* src: Clear-on-Read register; Will not survive PMF Migration */
 	u32 eee_tx_lpi;
 };
@@ -265,7 +264,6 @@ struct bnx2x_eth_q_stats {
 	u32 total_tpa_aggregated_frames_lo;
 	u32 total_tpa_bytes_hi;
 	u32 total_tpa_bytes_lo;
-	u32 driver_filtered_tx_pkt;
 };
 
 struct bnx2x_eth_stats_old {
@@ -317,7 +315,6 @@ struct bnx2x_eth_q_stats_old {
 	u32 rx_err_discard_pkt_old;
 	u32 rx_skb_alloc_failed_old;
 	u32 hw_csum_err_old;
-	u32 driver_filtered_tx_pkt_old;
 };
 
 struct bnx2x_net_stats_old {
@@ -421,19 +418,16 @@ struct bnx2x_fw_port_stats_old {
 			      new->s); \
 	} while (0)
 
-#define UPDATE_EXTEND_TSTAT_X(s, t, size) \
+#define UPDATE_EXTEND_TSTAT(s, t) \
 	do { \
-		diff = le##size##_to_cpu(tclient->s) - \
-		       le##size##_to_cpu(old_tclient->s); \
+		diff = le32_to_cpu(tclient->s) - le32_to_cpu(old_tclient->s); \
 		old_tclient->s = tclient->s; \
 		ADD_EXTEND_64(qstats->t##_hi, qstats->t##_lo, diff); \
 	} while (0)
 
-#define UPDATE_EXTEND_TSTAT(s, t) UPDATE_EXTEND_TSTAT_X(s, t, 32)
-
-#define UPDATE_EXTEND_E_TSTAT(s, t, size) \
+#define UPDATE_EXTEND_E_TSTAT(s, t) \
 	do { \
-		UPDATE_EXTEND_TSTAT_X(s, t, size); \
+		UPDATE_EXTEND_TSTAT(s, t); \
 		ADD_EXTEND_64(estats->t##_hi, estats->t##_lo, diff); \
 	} while (0)
 
@@ -459,9 +453,8 @@ struct bnx2x_fw_port_stats_old {
 
 #define UPDATE_QSTAT(s, t) \
 	do { \
+		qstats->t##_hi = qstats_old->t##_hi + le32_to_cpu(s.hi); \
 		qstats->t##_lo = qstats_old->t##_lo + le32_to_cpu(s.lo); \
-		qstats->t##_hi = qstats_old->t##_hi + le32_to_cpu(s.hi) \
-			+ ((qstats->t##_lo < qstats_old->t##_lo) ? 1 : 0); \
 	} while (0)
 
 #define UPDATE_QSTAT_OLD(f) \

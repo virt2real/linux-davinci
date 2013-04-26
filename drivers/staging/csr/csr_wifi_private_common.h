@@ -11,6 +11,10 @@
 #ifndef CSR_WIFI_PRIVATE_COMMON_H__
 #define CSR_WIFI_PRIVATE_COMMON_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief maximum number of STAs allowed to be connected
  *
@@ -76,6 +80,10 @@ typedef u8 CsrWifiInterfaceMode;
 #define  CSR_WIFI_MODE_AMP                              ((CsrWifiInterfaceMode) 0x05)
 #define  CSR_WIFI_MODE_WPS_ENROLLEE                     ((CsrWifiInterfaceMode) 0x06)
 #define  CSR_WIFI_MODE_IBSS                             ((CsrWifiInterfaceMode) 0x07)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

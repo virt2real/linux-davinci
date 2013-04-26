@@ -39,8 +39,7 @@ struct samsung_dma_config {
 };
 
 struct samsung_dma_ops {
-	unsigned (*request)(enum dma_ch ch, struct samsung_dma_req *param,
-				struct device *dev, char *ch_name);
+	unsigned (*request)(enum dma_ch ch, struct samsung_dma_req *param);
 	int (*release)(unsigned ch, void *param);
 	int (*config)(unsigned ch, struct samsung_dma_config *param);
 	int (*prepare)(unsigned ch, struct samsung_dma_prep *param);

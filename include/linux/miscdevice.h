@@ -34,7 +34,6 @@
 #define MWAVE_MINOR		219	/* ACP/Mwave Modem */
 #define MPT_MINOR		220
 #define MPT2SAS_MINOR		221
-#define MPT3SAS_MINOR		222
 #define UINPUT_MINOR		223
 #define MISC_MCELOG_MINOR	227
 #define HPET_MINOR		228

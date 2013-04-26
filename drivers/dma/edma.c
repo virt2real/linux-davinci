@@ -24,7 +24,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
-#include <linux/platform_data/edma.h>
+#include <mach/edma.h>
 
 #include "dmaengine.h"
 #include "virt-dma.h"
@@ -69,7 +69,9 @@ struct edma_chan {
 	int				ch_num;
 	bool				alloced;
 	int				slot[EDMA_MAX_SLOTS];
-	struct dma_slave_config		cfg;
+	dma_addr_t			addr;
+	int				addr_width;
+	int				maxburst;
 };
 
 struct edma_cc {
@@ -176,14 +178,29 @@ static int edma_terminate_all(struct edma_chan *echan)
 	return 0;
 }
 
+
 static int edma_slave_config(struct edma_chan *echan,
-	struct dma_slave_config *cfg)
+	struct dma_slave_config *config)
 {
-	if (cfg->src_addr_width == DMA_SLAVE_BUSWIDTH_8_BYTES ||
-	    cfg->dst_addr_width == DMA_SLAVE_BUSWIDTH_8_BYTES)
+	if ((config->src_addr_width > DMA_SLAVE_BUSWIDTH_4_BYTES) ||
+	    (config->dst_addr_width > DMA_SLAVE_BUSWIDTH_4_BYTES))
 		return -EINVAL;
 
-	memcpy(&echan->cfg, cfg, sizeof(echan->cfg));
+	if (config->direction == DMA_MEM_TO_DEV) {
+		if (config->dst_addr)
+			echan->addr = config->dst_addr;
+		if (config->dst_addr_width)
+			echan->addr_width = config->dst_addr_width;
+		if (config->dst_maxburst)
+			echan->maxburst = config->dst_maxburst;
+	} else if (config->direction == DMA_DEV_TO_MEM) {
+		if (config->src_addr)
+			echan->addr = config->src_addr;
+		if (config->src_addr_width)
+			echan->addr_width = config->src_addr_width;
+		if (config->src_maxburst)
+			echan->maxburst = config->src_maxburst;
+	}
 
 	return 0;
 }
@@ -218,9 +235,6 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 	struct edma_chan *echan = to_edma_chan(chan);
 	struct device *dev = chan->device->dev;
 	struct edma_desc *edesc;
-	dma_addr_t dev_addr;
-	enum dma_slave_buswidth dev_width;
-	u32 burst;
 	struct scatterlist *sg;
 	int i;
 	int acnt, bcnt, ccnt, src, dst, cidx;
@@ -229,20 +243,7 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 	if (unlikely(!echan || !sgl || !sg_len))
 		return NULL;
 
-	if (direction == DMA_DEV_TO_MEM) {
-		dev_addr = echan->cfg.src_addr;
-		dev_width = echan->cfg.src_addr_width;
-		burst = echan->cfg.src_maxburst;
-	} else if (direction == DMA_MEM_TO_DEV) {
-		dev_addr = echan->cfg.dst_addr;
-		dev_width = echan->cfg.dst_addr_width;
-		burst = echan->cfg.dst_maxburst;
-	} else {
-		dev_err(dev, "%s: bad direction?\n", __func__);
-		return NULL;
-	}
-
-	if (dev_width == DMA_SLAVE_BUSWIDTH_UNDEFINED) {
+	if (echan->addr_width == DMA_SLAVE_BUSWIDTH_UNDEFINED) {
 		dev_err(dev, "Undefined slave buswidth\n");
 		return NULL;
 	}
@@ -274,14 +275,14 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 			}
 		}
 
-		acnt = dev_width;
+		acnt = echan->addr_width;
 
 		/*
 		 * If the maxburst is equal to the fifo width, use
 		 * A-synced transfers. This allows for large contiguous
 		 * buffer transfers using only one PaRAM set.
 		 */
-		if (burst == 1) {
+		if (echan->maxburst == 1) {
 			edesc->absync = false;
 			ccnt = sg_dma_len(sg) / acnt / (SZ_64K - 1);
 			bcnt = sg_dma_len(sg) / acnt - ccnt * (SZ_64K - 1);
@@ -301,7 +302,7 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 		 */
 		} else {
 			edesc->absync = true;
-			bcnt = burst;
+			bcnt = echan->maxburst;
 			ccnt = sg_dma_len(sg) / (acnt * bcnt);
 			if (ccnt > (SZ_64K - 1)) {
 				dev_err(dev, "Exceeded max SG segment size\n");
@@ -312,13 +313,13 @@ static struct dma_async_tx_descriptor *edma_prep_slave_sg(
 
 		if (direction == DMA_MEM_TO_DEV) {
 			src = sg_dma_address(sg);
-			dst = dev_addr;
+			dst = echan->addr;
 			src_bidx = acnt;
 			src_cidx = cidx;
 			dst_bidx = 0;
 			dst_cidx = 0;
 		} else {
-			src = dev_addr;
+			src = echan->addr;
 			dst = sg_dma_address(sg);
 			src_bidx = 0;
 			src_cidx = 0;
@@ -544,7 +545,7 @@ static void edma_dma_init(struct edma_cc *ecc, struct dma_device *dma,
 	INIT_LIST_HEAD(&dma->channels);
 }
 
-static int edma_probe(struct platform_device *pdev)
+static int __devinit edma_probe(struct platform_device *pdev)
 {
 	struct edma_cc *ecc;
 	int ret;
@@ -584,7 +585,7 @@ err_reg1:
 	return ret;
 }
 
-static int edma_remove(struct platform_device *pdev)
+static int __devexit edma_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct edma_cc *ecc = dev_get_drvdata(dev);
@@ -597,7 +598,7 @@ static int edma_remove(struct platform_device *pdev)
 
 static struct platform_driver edma_driver = {
 	.probe		= edma_probe,
-	.remove		= edma_remove,
+	.remove		= __devexit_p(edma_remove),
 	.driver = {
 		.name = "edma-dma-engine",
 		.owner = THIS_MODULE,
@@ -620,11 +621,13 @@ static struct platform_device *pdev0, *pdev1;
 static const struct platform_device_info edma_dev_info0 = {
 	.name = "edma-dma-engine",
 	.id = 0,
+	.dma_mask = DMA_BIT_MASK(32),
 };
 
 static const struct platform_device_info edma_dev_info1 = {
 	.name = "edma-dma-engine",
 	.id = 1,
+	.dma_mask = DMA_BIT_MASK(32),
 };
 
 static int edma_init(void)
@@ -638,8 +641,6 @@ static int edma_init(void)
 			ret = PTR_ERR(pdev0);
 			goto out;
 		}
-		pdev0->dev.dma_mask = &pdev0->dev.coherent_dma_mask;
-		pdev0->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 	}
 
 	if (EDMA_CTLRS == 2) {
@@ -649,8 +650,6 @@ static int edma_init(void)
 			platform_device_unregister(pdev0);
 			ret = PTR_ERR(pdev1);
 		}
-		pdev1->dev.dma_mask = &pdev1->dev.coherent_dma_mask;
-		pdev1->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 	}
 
 out:

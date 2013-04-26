@@ -526,7 +526,7 @@ static int __init davinci_rtc_probe(struct platform_device *pdev)
 	rtcss_write(davinci_rtc, 0, PRTCSS_RTC_CTRL);
 	rtcss_write(davinci_rtc, 0, PRTCSS_RTC_CCTRL);
 
-	ret = devm_request_irq(dev, davinci_rtc->irq, davinci_rtc_interrupt,
+	ret = request_irq(davinci_rtc->irq, davinci_rtc_interrupt,
 			  0, "davinci_rtc", davinci_rtc);
 	if (ret < 0) {
 		dev_err(dev, "unable to register davinci RTC interrupt\n");
@@ -550,13 +550,15 @@ err_dev_unreg:
 	return ret;
 }
 
-static int davinci_rtc_remove(struct platform_device *pdev)
+static int __devexit davinci_rtc_remove(struct platform_device *pdev)
 {
 	struct davinci_rtc *davinci_rtc = platform_get_drvdata(pdev);
 
 	device_init_wakeup(&pdev->dev, 0);
 
 	rtcif_write(davinci_rtc, 0, PRTCIF_INTEN);
+
+	free_irq(davinci_rtc->irq, davinci_rtc);
 
 	rtc_device_unregister(davinci_rtc->rtc);
 
@@ -567,7 +569,7 @@ static int davinci_rtc_remove(struct platform_device *pdev)
 
 static struct platform_driver davinci_rtc_driver = {
 	.probe		= davinci_rtc_probe,
-	.remove		= davinci_rtc_remove,
+	.remove		= __devexit_p(davinci_rtc_remove),
 	.driver		= {
 		.name = "rtc_davinci",
 		.owner = THIS_MODULE,

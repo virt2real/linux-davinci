@@ -14,10 +14,10 @@
  */
 
 #include <linux/err.h>
+#include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_gpio.h>
 #include <linux/pinctrl/machine.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
@@ -28,26 +28,14 @@
 
 #define DRIVER_NAME "spear-pinmux"
 
-static void muxregs_endisable(struct spear_pmx *pmx,
-		struct spear_muxreg *muxregs, u8 count, bool enable)
+static inline u32 pmx_readl(struct spear_pmx *pmx, u32 reg)
 {
-	struct spear_muxreg *muxreg;
-	u32 val, temp, j;
+	return readl_relaxed(pmx->vbase + reg);
+}
 
-	for (j = 0; j < count; j++) {
-		muxreg = &muxregs[j];
-
-		val = pmx_readl(pmx, muxreg->reg);
-		val &= ~muxreg->mask;
-
-		if (enable)
-			temp = muxreg->val;
-		else
-			temp = ~muxreg->val;
-
-		val |= muxreg->mask & temp;
-		pmx_writel(pmx, val, muxreg->reg);
-	}
+static inline void pmx_writel(struct spear_pmx *pmx, u32 val, u32 reg)
+{
+	writel_relaxed(val, pmx->vbase + reg);
 }
 
 static int set_mode(struct spear_pmx *pmx, int mode)
@@ -82,17 +70,7 @@ static int set_mode(struct spear_pmx *pmx, int mode)
 	return 0;
 }
 
-void pmx_init_gpio_pingroup_addr(struct spear_gpio_pingroup *gpio_pingroup,
-				 unsigned count, u16 reg)
-{
-	int i, j;
-
-	for (i = 0; i < count; i++)
-		for (j = 0; j < gpio_pingroup[i].nmuxregs; j++)
-			gpio_pingroup[i].muxregs[j].reg = reg;
-}
-
-void pmx_init_addr(struct spear_pinctrl_machdata *machdata, u16 reg)
+void __devinit pmx_init_addr(struct spear_pinctrl_machdata *machdata, u16 reg)
 {
 	struct spear_pingroup *pgroup;
 	struct spear_modemux *modemux;
@@ -143,10 +121,9 @@ static void spear_pinctrl_pin_dbg_show(struct pinctrl_dev *pctldev,
 	seq_printf(s, " " DRIVER_NAME);
 }
 
-static int spear_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
-					struct device_node *np_config,
-					struct pinctrl_map **map,
-					unsigned *num_maps)
+int spear_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
+				 struct device_node *np_config,
+				 struct pinctrl_map **map, unsigned *num_maps)
 {
 	struct spear_pmx *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct device_node *np;
@@ -191,9 +168,8 @@ static int spear_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-static void spear_pinctrl_dt_free_map(struct pinctrl_dev *pctldev,
-				      struct pinctrl_map *map,
-				      unsigned num_maps)
+void spear_pinctrl_dt_free_map(struct pinctrl_dev *pctldev,
+		struct pinctrl_map *map, unsigned num_maps)
 {
 	kfree(map);
 }
@@ -240,7 +216,9 @@ static int spear_pinctrl_endisable(struct pinctrl_dev *pctldev,
 	struct spear_pmx *pmx = pinctrl_dev_get_drvdata(pctldev);
 	const struct spear_pingroup *pgroup;
 	const struct spear_modemux *modemux;
-	int i;
+	struct spear_muxreg *muxreg;
+	u32 val, temp;
+	int i, j;
 	bool found = false;
 
 	pgroup = pmx->machdata->groups[group];
@@ -255,8 +233,20 @@ static int spear_pinctrl_endisable(struct pinctrl_dev *pctldev,
 		}
 
 		found = true;
-		muxregs_endisable(pmx, modemux->muxregs, modemux->nmuxregs,
-				enable);
+		for (j = 0; j < modemux->nmuxregs; j++) {
+			muxreg = &modemux->muxregs[j];
+
+			val = pmx_readl(pmx, muxreg->reg);
+			val &= ~muxreg->mask;
+
+			if (enable)
+				temp = muxreg->val;
+			else
+				temp = ~muxreg->val;
+
+			val |= temp;
+			pmx_writel(pmx, val, muxreg->reg);
+		}
 	}
 
 	if (!found) {
@@ -280,74 +270,12 @@ static void spear_pinctrl_disable(struct pinctrl_dev *pctldev,
 	spear_pinctrl_endisable(pctldev, function, group, false);
 }
 
-/* gpio with pinmux */
-static struct spear_gpio_pingroup *get_gpio_pingroup(struct spear_pmx *pmx,
-		unsigned pin)
-{
-	struct spear_gpio_pingroup *gpio_pingroup;
-	int i, j;
-
-	if (!pmx->machdata->gpio_pingroups)
-		return NULL;
-
-	for (i = 0; i < pmx->machdata->ngpio_pingroups; i++) {
-		gpio_pingroup = &pmx->machdata->gpio_pingroups[i];
-
-		for (j = 0; j < gpio_pingroup->npins; j++) {
-			if (gpio_pingroup->pins[j] == pin)
-				return gpio_pingroup;
-		}
-	}
-
-	return NULL;
-}
-
-static int gpio_request_endisable(struct pinctrl_dev *pctldev,
-		struct pinctrl_gpio_range *range, unsigned offset, bool enable)
-{
-	struct spear_pmx *pmx = pinctrl_dev_get_drvdata(pctldev);
-	struct spear_pinctrl_machdata *machdata = pmx->machdata;
-	struct spear_gpio_pingroup *gpio_pingroup;
-
-	/*
-	 * Some SoC have configuration options applicable to group of pins,
-	 * rather than a single pin.
-	 */
-	gpio_pingroup = get_gpio_pingroup(pmx, offset);
-	if (gpio_pingroup)
-		muxregs_endisable(pmx, gpio_pingroup->muxregs,
-				gpio_pingroup->nmuxregs, enable);
-
-	/*
-	 * SoC may need some extra configurations, or configurations for single
-	 * pin
-	 */
-	if (machdata->gpio_request_endisable)
-		machdata->gpio_request_endisable(pmx, offset, enable);
-
-	return 0;
-}
-
-static int gpio_request_enable(struct pinctrl_dev *pctldev,
-		struct pinctrl_gpio_range *range, unsigned offset)
-{
-	return gpio_request_endisable(pctldev, range, offset, true);
-}
-
-static void gpio_disable_free(struct pinctrl_dev *pctldev,
-		struct pinctrl_gpio_range *range, unsigned offset)
-{
-	gpio_request_endisable(pctldev, range, offset, false);
-}
-
 static struct pinmux_ops spear_pinmux_ops = {
 	.get_functions_count = spear_pinctrl_get_funcs_count,
 	.get_function_name = spear_pinctrl_get_func_name,
 	.get_function_groups = spear_pinctrl_get_func_groups,
 	.enable = spear_pinctrl_enable,
 	.disable = spear_pinctrl_disable,
-	.gpio_request_enable = gpio_request_enable,
-	.gpio_disable_free = gpio_disable_free,
 };
 
 static struct pinctrl_desc spear_pinctrl_desc = {
@@ -357,8 +285,8 @@ static struct pinctrl_desc spear_pinctrl_desc = {
 	.owner = THIS_MODULE,
 };
 
-int spear_pinctrl_probe(struct platform_device *pdev,
-			struct spear_pinctrl_machdata *machdata)
+int __devinit spear_pinctrl_probe(struct platform_device *pdev,
+		struct spear_pinctrl_machdata *machdata)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct resource *res;
@@ -416,7 +344,7 @@ int spear_pinctrl_probe(struct platform_device *pdev,
 	return 0;
 }
 
-int spear_pinctrl_remove(struct platform_device *pdev)
+int __devexit spear_pinctrl_remove(struct platform_device *pdev)
 {
 	struct spear_pmx *pmx = platform_get_drvdata(pdev);
 

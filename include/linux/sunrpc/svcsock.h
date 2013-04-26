@@ -26,27 +26,10 @@ struct svc_sock {
 	void			(*sk_owspace)(struct sock *);
 
 	/* private TCP part */
-	/* On-the-wire fragment header: */
-	__be32			sk_reclen;
-	/* As we receive a record, this includes the length received so
-	 * far (including the fragment header): */
-	u32			sk_tcplen;
-	/* Total length of the data (not including fragment headers)
-	 * received so far in the fragments making up this rpc: */
-	u32			sk_datalen;
-
+	u32			sk_reclen;	/* length of record */
+	u32			sk_tcplen;	/* current read length */
 	struct page *		sk_pages[RPCSVC_MAXPAGES];	/* received data */
 };
-
-static inline u32 svc_sock_reclen(struct svc_sock *svsk)
-{
-	return ntohl(svsk->sk_reclen) & RPC_FRAGMENT_SIZE_MASK;
-}
-
-static inline u32 svc_sock_final_rec(struct svc_sock *svsk)
-{
-	return ntohl(svsk->sk_reclen) & RPC_LAST_STREAM_FRAGMENT;
-}
 
 /*
  * Function prototypes.

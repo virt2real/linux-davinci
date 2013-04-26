@@ -194,10 +194,11 @@ isurf_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic) {
 }
 
 #ifdef __ISAPNP__
-static struct pnp_card *pnp_c = NULL;
+static struct pnp_card *pnp_c __devinitdata = NULL;
 #endif
 
-int setup_isurf(struct IsdnCard *card)
+int __devinit
+setup_isurf(struct IsdnCard *card)
 {
 	int ver;
 	struct IsdnCardState *cs = card->cs;

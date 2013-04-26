@@ -208,6 +208,13 @@ static int ip_local_deliver_finish(struct sk_buff *skb)
 		if (ipprot != NULL) {
 			int ret;
 
+			if (!net_eq(net, &init_net) && !ipprot->netns_ok) {
+				net_info_ratelimited("%s: proto %d isn't netns-ready\n",
+						     __func__, protocol);
+				kfree_skb(skb);
+				goto out;
+			}
+
 			if (!ipprot->no_policy) {
 				if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 					kfree_skb(skb);
@@ -228,11 +235,9 @@ static int ip_local_deliver_finish(struct sk_buff *skb)
 					icmp_send(skb, ICMP_DEST_UNREACH,
 						  ICMP_PROT_UNREACH, 0);
 				}
-				kfree_skb(skb);
-			} else {
+			} else
 				IP_INC_STATS_BH(net, IPSTATS_MIB_INDELIVERS);
-				consume_skb(skb);
-			}
+			kfree_skb(skb);
 		}
 	}
  out:

@@ -14,6 +14,10 @@
 #include <linux/types.h>
 #include "csr_result.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* MAC address */
 typedef struct
 {
@@ -96,6 +100,10 @@ typedef struct
 #define CSR_WIFI_RESULT_P2P_NOA_CONFIG_CONFLICT   ((CsrResult) 0x000C)
 
 #define CSR_WIFI_VERSION	"5.1.0.0"
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

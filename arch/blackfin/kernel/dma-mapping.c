@@ -13,7 +13,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/scatterlist.h>
 #include <linux/export.h>
-#include <linux/bitmap.h>
 
 static spinlock_t dma_page_lock;
 static unsigned long *dma_page;
@@ -47,17 +46,24 @@ static inline unsigned int get_pages(size_t size)
 static unsigned long __alloc_dma_pages(unsigned int pages)
 {
 	unsigned long ret = 0, flags;
-	unsigned long start;
+	int i, count = 0;
 
 	if (dma_initialized == 0)
 		dma_alloc_init(_ramend - DMA_UNCACHED_REGION, _ramend);
 
 	spin_lock_irqsave(&dma_page_lock, flags);
 
-	start = bitmap_find_next_zero_area(dma_page, dma_pages, 0, pages, 0);
-	if (start < dma_pages) {
-		ret = dma_base + (start << PAGE_SHIFT);
-		bitmap_set(dma_page, start, pages);
+	for (i = 0; i < dma_pages;) {
+		if (test_bit(i++, dma_page) == 0) {
+			if (++count == pages) {
+				while (count--)
+					__set_bit(--i, dma_page);
+
+				ret = dma_base + (i << PAGE_SHIFT);
+				break;
+			}
+		} else
+			count = 0;
 	}
 	spin_unlock_irqrestore(&dma_page_lock, flags);
 	return ret;
@@ -67,6 +73,7 @@ static void __free_dma_pages(unsigned long addr, unsigned int pages)
 {
 	unsigned long page = (addr - dma_base) >> PAGE_SHIFT;
 	unsigned long flags;
+	int i;
 
 	if ((page + pages) > dma_pages) {
 		printk(KERN_ERR "%s: freeing outside range.\n", __func__);
@@ -74,7 +81,9 @@ static void __free_dma_pages(unsigned long addr, unsigned int pages)
 	}
 
 	spin_lock_irqsave(&dma_page_lock, flags);
-	bitmap_clear(dma_page, page, pages);
+	for (i = page; i < page + pages; i++)
+		__clear_bit(i, dma_page);
+
 	spin_unlock_irqrestore(&dma_page_lock, flags);
 }
 

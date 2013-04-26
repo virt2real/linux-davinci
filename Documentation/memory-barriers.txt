@@ -251,13 +251,12 @@ And there are a number of things that _must_ or _must_not_ be assumed:
 
      And for:
 
-	*A = X; *(A + 4) = Y;
+	*A = X; Y = *A;
 
-     we may get any of:
+     we may get either of:
 
-	STORE *A = X; STORE *(A + 4) = Y;
-	STORE *(A + 4) = Y; STORE *A = X;
-	STORE {*A, *(A + 4) } = {X, Y};
+	STORE *A = X; Y = LOAD *A;
+	STORE *A = Y = X;
 
 
 =========================
@@ -1685,7 +1684,6 @@ explicit lock operations, described later).  These include:
 
 	xchg();
 	cmpxchg();
-	atomic_xchg();
 	atomic_cmpxchg();
 	atomic_inc_return();
 	atomic_dec_return();

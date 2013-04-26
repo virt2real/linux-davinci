@@ -202,7 +202,7 @@ static struct mfd_cell jz4740_adc_cells[] = {
 	},
 };
 
-static int jz4740_adc_probe(struct platform_device *pdev)
+static int __devinit jz4740_adc_probe(struct platform_device *pdev)
 {
 	struct irq_chip_generic *gc;
 	struct irq_chip_type *ct;
@@ -211,7 +211,7 @@ static int jz4740_adc_probe(struct platform_device *pdev)
 	int ret;
 	int irq_base;
 
-	adc = devm_kzalloc(&pdev->dev, sizeof(*adc), GFP_KERNEL);
+	adc = kmalloc(sizeof(*adc), GFP_KERNEL);
 	if (!adc) {
 		dev_err(&pdev->dev, "Failed to allocate driver structure\n");
 		return -ENOMEM;
@@ -221,27 +221,30 @@ static int jz4740_adc_probe(struct platform_device *pdev)
 	if (adc->irq < 0) {
 		ret = adc->irq;
 		dev_err(&pdev->dev, "Failed to get platform irq: %d\n", ret);
-		return ret;
+		goto err_free;
 	}
 
 	irq_base = platform_get_irq(pdev, 1);
 	if (irq_base < 0) {
-		dev_err(&pdev->dev, "Failed to get irq base: %d\n", irq_base);
-		return irq_base;
+		ret = irq_base;
+		dev_err(&pdev->dev, "Failed to get irq base: %d\n", ret);
+		goto err_free;
 	}
 
 	mem_base = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem_base) {
+		ret = -ENOENT;
 		dev_err(&pdev->dev, "Failed to get platform mmio resource\n");
-		return -ENOENT;
+		goto err_free;
 	}
 
 	/* Only request the shared registers for the MFD driver */
 	adc->mem = request_mem_region(mem_base->start, JZ_REG_ADC_STATUS,
 					pdev->name);
 	if (!adc->mem) {
+		ret = -EBUSY;
 		dev_err(&pdev->dev, "Failed to request mmio memory region\n");
-		return -EBUSY;
+		goto err_free;
 	}
 
 	adc->base = ioremap_nocache(adc->mem->start, resource_size(adc->mem));
@@ -298,10 +301,13 @@ err_iounmap:
 	iounmap(adc->base);
 err_release_mem_region:
 	release_mem_region(adc->mem->start, resource_size(adc->mem));
+err_free:
+	kfree(adc);
+
 	return ret;
 }
 
-static int jz4740_adc_remove(struct platform_device *pdev)
+static int __devexit jz4740_adc_remove(struct platform_device *pdev)
 {
 	struct jz4740_adc *adc = platform_get_drvdata(pdev);
 
@@ -319,12 +325,14 @@ static int jz4740_adc_remove(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, NULL);
 
+	kfree(adc);
+
 	return 0;
 }
 
 static struct platform_driver jz4740_adc_driver = {
 	.probe	= jz4740_adc_probe,
-	.remove = jz4740_adc_remove,
+	.remove = __devexit_p(jz4740_adc_remove),
 	.driver = {
 		.name = "jz4740-adc",
 		.owner = THIS_MODULE,

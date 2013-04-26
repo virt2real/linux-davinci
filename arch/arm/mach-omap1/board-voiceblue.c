@@ -34,7 +34,7 @@
 #include <mach/board-voiceblue.h>
 #include <mach/flash.h>
 #include <mach/mux.h>
-#include <mach/tc.h>
+#include <plat/tc.h>
 
 #include <mach/hardware.h>
 #include <mach/usb.h>
@@ -286,9 +286,10 @@ MACHINE_START(VOICEBLUE, "VoiceBlue OMAP5910")
 	.atag_offset	= 0x100,
 	.map_io		= omap15xx_map_io,
 	.init_early     = omap1_init_early,
+	.reserve	= omap_reserve,
 	.init_irq	= omap1_init_irq,
 	.init_machine	= voiceblue_init,
 	.init_late	= omap1_init_late,
-	.init_time	= omap1_timer_init,
+	.timer		= &omap1_timer,
 	.restart	= voiceblue_restart,
 MACHINE_END

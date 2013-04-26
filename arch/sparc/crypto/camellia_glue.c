@@ -98,7 +98,6 @@ static int __ecb_crypt(struct blkcipher_desc *desc,
 
 	blkcipher_walk_init(&walk, dst, src, nbytes);
 	err = blkcipher_walk_virt(desc, &walk);
-	desc->flags &= ~CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	if (encrypt)
 		key = &ctx->encrypt_key[0];
@@ -161,7 +160,6 @@ static int cbc_encrypt(struct blkcipher_desc *desc,
 
 	blkcipher_walk_init(&walk, dst, src, nbytes);
 	err = blkcipher_walk_virt(desc, &walk);
-	desc->flags &= ~CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	key = &ctx->encrypt_key[0];
 	camellia_sparc64_load_keys(key, ctx->key_len);
@@ -200,7 +198,6 @@ static int cbc_decrypt(struct blkcipher_desc *desc,
 
 	blkcipher_walk_init(&walk, dst, src, nbytes);
 	err = blkcipher_walk_virt(desc, &walk);
-	desc->flags &= ~CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	key = &ctx->decrypt_key[0];
 	camellia_sparc64_load_keys(key, ctx->key_len);
@@ -323,5 +320,3 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Camellia Cipher Algorithm, sparc64 camellia opcode accelerated");
 
 MODULE_ALIAS("aes");
-
-#include "crop_devid.c"

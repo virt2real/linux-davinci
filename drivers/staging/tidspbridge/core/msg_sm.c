@@ -198,7 +198,8 @@ out_err:
  */
 void bridge_msg_delete(struct msg_mgr *hmsg_mgr)
 {
-	delete_msg_mgr(hmsg_mgr);
+	if (hmsg_mgr)
+		delete_msg_mgr(hmsg_mgr);
 }
 
 /*

@@ -229,7 +229,7 @@ static void pxa_ata_dma_irq(int dma, void *port)
 		complete(&pd->dma_done);
 }
 
-static int pxa_ata_probe(struct platform_device *pdev)
+static int __devinit pxa_ata_probe(struct platform_device *pdev)
 {
 	struct ata_host *host;
 	struct ata_port *ap;
@@ -369,7 +369,7 @@ static int pxa_ata_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int pxa_ata_remove(struct platform_device *pdev)
+static int __devexit pxa_ata_remove(struct platform_device *pdev)
 {
 	struct ata_host *host = dev_get_drvdata(&pdev->dev);
 	struct pata_pxa_data *data = host->ports[0]->private_data;
@@ -383,7 +383,7 @@ static int pxa_ata_remove(struct platform_device *pdev)
 
 static struct platform_driver pxa_ata_driver = {
 	.probe		= pxa_ata_probe,
-	.remove		= pxa_ata_remove,
+	.remove		= __devexit_p(pxa_ata_remove),
 	.driver		= {
 		.name		= DRV_NAME,
 		.owner		= THIS_MODULE,

@@ -282,7 +282,7 @@ static const struct wf_control_ops wf_fcu_fan_pwm_ops = {
 	.owner		= THIS_MODULE,
 };
 
-static void wf_fcu_get_pump_minmax(struct wf_fcu_fan *fan)
+static void __devinit wf_fcu_get_pump_minmax(struct wf_fcu_fan *fan)
 {
 	const struct mpu_data *mpu = wf_get_mpu(0);
 	u16 pump_min = 0, pump_max = 0xffff;
@@ -317,7 +317,7 @@ static void wf_fcu_get_pump_minmax(struct wf_fcu_fan *fan)
 	    fan->ctrl.name, pump_min, pump_max);
 }
 
-static void wf_fcu_get_rpmfan_minmax(struct wf_fcu_fan *fan)
+static void __devinit wf_fcu_get_rpmfan_minmax(struct wf_fcu_fan *fan)
 {
 	struct wf_fcu_priv *pv = fan->fcu_priv;
 	const struct mpu_data *mpu0 = wf_get_mpu(0);
@@ -359,8 +359,9 @@ static void wf_fcu_get_rpmfan_minmax(struct wf_fcu_fan *fan)
 	    fan->ctrl.name, fan->min, fan->max);
 }
 
-static void wf_fcu_add_fan(struct wf_fcu_priv *pv, const char *name,
-			   int type, int id)
+static void __devinit wf_fcu_add_fan(struct wf_fcu_priv *pv,
+				     const char *name,
+				     int type, int id)
 {
 	struct wf_fcu_fan *fan;
 
@@ -398,7 +399,7 @@ static void wf_fcu_add_fan(struct wf_fcu_priv *pv, const char *name,
 	kref_get(&pv->ref);
 }
 
-static void wf_fcu_lookup_fans(struct wf_fcu_priv *pv)
+static void __devinit wf_fcu_lookup_fans(struct wf_fcu_priv *pv)
 {
 	/* Translation of device-tree location properties to
 	 * windfarm fan names
@@ -480,7 +481,7 @@ static void wf_fcu_lookup_fans(struct wf_fcu_priv *pv)
 	}
 }
 
-static void wf_fcu_default_fans(struct wf_fcu_priv *pv)
+static void __devinit wf_fcu_default_fans(struct wf_fcu_priv *pv)
 {
 	/* We only support the default fans for PowerMac7,2 */
 	if (!of_machine_is_compatible("PowerMac7,2"))
@@ -495,7 +496,7 @@ static void wf_fcu_default_fans(struct wf_fcu_priv *pv)
 	wf_fcu_add_fan(pv, "cpu-rear-fan-1",	FCU_FAN_RPM, 6);
 }
 
-static int wf_fcu_init_chip(struct wf_fcu_priv *pv)
+static int __devinit wf_fcu_init_chip(struct wf_fcu_priv *pv)
 {
 	unsigned char buf = 0xff;
 	int rc;
@@ -517,8 +518,8 @@ static int wf_fcu_init_chip(struct wf_fcu_priv *pv)
 	return 0;
 }
 
-static int wf_fcu_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int __devinit wf_fcu_probe(struct i2c_client *client,
+				  const struct i2c_device_id *id)
 {
 	struct wf_fcu_priv *pv;
 
@@ -563,7 +564,7 @@ static int wf_fcu_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int wf_fcu_remove(struct i2c_client *client)
+static int __devexit wf_fcu_remove(struct i2c_client *client)
 {
 	struct wf_fcu_priv *pv = dev_get_drvdata(&client->dev);
 	struct wf_fcu_fan *fan;
@@ -592,7 +593,19 @@ static struct i2c_driver wf_fcu_driver = {
 	.id_table	= wf_fcu_id,
 };
 
-module_i2c_driver(wf_fcu_driver);
+static int __init wf_fcu_init(void)
+{
+	return i2c_add_driver(&wf_fcu_driver);
+}
+
+static void __exit wf_fcu_exit(void)
+{
+	i2c_del_driver(&wf_fcu_driver);
+}
+
+
+module_init(wf_fcu_init);
+module_exit(wf_fcu_exit);
 
 MODULE_AUTHOR("Benjamin Herrenschmidt <benh@kernel.crashing.org>");
 MODULE_DESCRIPTION("FCU control objects for PowerMacs thermal control");

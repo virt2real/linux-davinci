@@ -31,7 +31,6 @@
  *   Copyright (C) 2006 Tower Technologies
  */
 
-#include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -823,7 +822,8 @@ static int ep93xx_pata_softreset(struct ata_link *al, unsigned int *classes,
 	rc = ep93xx_pata_bus_softreset(ap, devmask, deadline);
 	/* if link is ocuppied, -ENODEV too is an error */
 	if (rc && (rc != -ENODEV || sata_scr_valid(al))) {
-		ata_link_err(al, "SRST failed (errno=%d)\n", rc);
+		ata_link_printk(al, KERN_ERR, "SRST failed (errno=%d)\n",
+				rc);
 		return rc;
 	}
 
@@ -857,7 +857,8 @@ static void ep93xx_pata_drain_fifo(struct ata_queued_cmd *qc)
 
 	/* Can become DEBUG later */
 	if (count)
-		ata_port_dbg(ap, "drained %d bytes to clear DRQ.\n", count);
+		ata_port_printk(ap, KERN_DEBUG,
+				"drained %d bytes to clear DRQ.\n", count);
 
 }
 
@@ -911,7 +912,7 @@ static struct ata_port_operations ep93xx_pata_port_ops = {
 	.port_start		= ep93xx_pata_port_start,
 };
 
-static int ep93xx_pata_probe(struct platform_device *pdev)
+static int __devinit ep93xx_pata_probe(struct platform_device *pdev)
 {
 	struct ep93xx_pata_data *drv_data;
 	struct ata_host *host;
@@ -938,9 +939,9 @@ static int ep93xx_pata_probe(struct platform_device *pdev)
 		goto err_rel_gpio;
 	}
 
-	ide_base = devm_ioremap_resource(&pdev->dev, mem_res);
-	if (IS_ERR(ide_base)) {
-		err = PTR_ERR(ide_base);
+	ide_base = devm_request_and_ioremap(&pdev->dev, mem_res);
+	if (!ide_base) {
+		err = -ENXIO;
 		goto err_rel_gpio;
 	}
 
@@ -1012,7 +1013,7 @@ err_rel_gpio:
 	return err;
 }
 
-static int ep93xx_pata_remove(struct platform_device *pdev)
+static int __devexit ep93xx_pata_remove(struct platform_device *pdev)
 {
 	struct ata_host *host = platform_get_drvdata(pdev);
 	struct ep93xx_pata_data *drv_data = host->private_data;
@@ -1030,7 +1031,7 @@ static struct platform_driver ep93xx_pata_platform_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe = ep93xx_pata_probe,
-	.remove = ep93xx_pata_remove,
+	.remove = __devexit_p(ep93xx_pata_remove),
 };
 
 module_platform_driver(ep93xx_pata_platform_driver);

@@ -320,6 +320,7 @@ int trace_selftest_startup_dynamic_tracing(struct tracer *trace,
 					   int (*func)(void))
 {
 	int save_ftrace_enabled = ftrace_enabled;
+	int save_tracer_enabled = tracer_enabled;
 	unsigned long count;
 	char *func_name;
 	int ret;
@@ -330,6 +331,7 @@ int trace_selftest_startup_dynamic_tracing(struct tracer *trace,
 
 	/* enable tracing, and record the filter function */
 	ftrace_enabled = 1;
+	tracer_enabled = 1;
 
 	/* passed in by parameter to fool gcc from optimizing */
 	func();
@@ -393,6 +395,7 @@ int trace_selftest_startup_dynamic_tracing(struct tracer *trace,
 
  out:
 	ftrace_enabled = save_ftrace_enabled;
+	tracer_enabled = save_tracer_enabled;
 
 	/* Enable tracing on all functions again */
 	ftrace_set_global_filter(NULL, 0, 1);
@@ -415,8 +418,7 @@ static void trace_selftest_test_recursion_func(unsigned long ip,
 	 * The ftrace infrastructure should provide the recursion
 	 * protection. If not, this will crash the kernel!
 	 */
-	if (trace_selftest_recursion_cnt++ > 10)
-		return;
+	trace_selftest_recursion_cnt++;
 	DYN_FTRACE_TEST_NAME();
 }
 
@@ -450,9 +452,11 @@ static int
 trace_selftest_function_recursion(void)
 {
 	int save_ftrace_enabled = ftrace_enabled;
+	int save_tracer_enabled = tracer_enabled;
 	char *func_name;
 	int len;
 	int ret;
+	int cnt;
 
 	/* The previous test PASSED */
 	pr_cont("PASSED\n");
@@ -461,6 +465,7 @@ trace_selftest_function_recursion(void)
 
 	/* enable tracing, and record the filter function */
 	ftrace_enabled = 1;
+	tracer_enabled = 1;
 
 	/* Handle PPC64 '.' name */
 	func_name = "*" __stringify(DYN_FTRACE_TEST_NAME);
@@ -510,16 +515,26 @@ trace_selftest_function_recursion(void)
 
 	unregister_ftrace_function(&test_recsafe_probe);
 
+	/*
+	 * If arch supports all ftrace features, and no other task
+	 * was on the list, we should be fine.
+	 */
+	if (!ftrace_nr_registered_ops() && !FTRACE_FORCE_LIST_FUNC)
+		cnt = 2; /* Should have recursed */
+	else
+		cnt = 1;
+
 	ret = -1;
-	if (trace_selftest_recursion_cnt != 2) {
-		pr_cont("*callback not called expected 2 times (%d)* ",
-			trace_selftest_recursion_cnt);
+	if (trace_selftest_recursion_cnt != cnt) {
+		pr_cont("*callback not called expected %d times (%d)* ",
+			cnt, trace_selftest_recursion_cnt);
 		goto out;
 	}
 
 	ret = 0;
 out:
 	ftrace_enabled = save_ftrace_enabled;
+	tracer_enabled = save_tracer_enabled;
 
 	return ret;
 }
@@ -554,12 +569,13 @@ static int
 trace_selftest_function_regs(void)
 {
 	int save_ftrace_enabled = ftrace_enabled;
+	int save_tracer_enabled = tracer_enabled;
 	char *func_name;
 	int len;
 	int ret;
 	int supported = 0;
 
-#ifdef CONFIG_DYNAMIC_FTRACE_WITH_REGS
+#ifdef ARCH_SUPPORTS_FTRACE_SAVE_REGS
 	supported = 1;
 #endif
 
@@ -570,6 +586,7 @@ trace_selftest_function_regs(void)
 
 	/* enable tracing, and record the filter function */
 	ftrace_enabled = 1;
+	tracer_enabled = 1;
 
 	/* Handle PPC64 '.' name */
 	func_name = "*" __stringify(DYN_FTRACE_TEST_NAME);
@@ -631,6 +648,7 @@ trace_selftest_function_regs(void)
 	ret = 0;
 out:
 	ftrace_enabled = save_ftrace_enabled;
+	tracer_enabled = save_tracer_enabled;
 
 	return ret;
 }
@@ -644,6 +662,7 @@ int
 trace_selftest_startup_function(struct tracer *trace, struct trace_array *tr)
 {
 	int save_ftrace_enabled = ftrace_enabled;
+	int save_tracer_enabled = tracer_enabled;
 	unsigned long count;
 	int ret;
 
@@ -652,6 +671,7 @@ trace_selftest_startup_function(struct tracer *trace, struct trace_array *tr)
 
 	/* start the tracing */
 	ftrace_enabled = 1;
+	tracer_enabled = 1;
 
 	ret = tracer_init(trace, tr);
 	if (ret) {
@@ -688,6 +708,7 @@ trace_selftest_startup_function(struct tracer *trace, struct trace_array *tr)
 	ret = trace_selftest_function_regs();
  out:
 	ftrace_enabled = save_ftrace_enabled;
+	tracer_enabled = save_tracer_enabled;
 
 	/* kill ftrace totally if we failed */
 	if (ret)
@@ -1085,7 +1106,6 @@ trace_selftest_startup_wakeup(struct tracer *trace, struct trace_array *tr)
 	tracing_stop();
 	/* check both trace buffers */
 	ret = trace_test_buffer(tr, NULL);
-	printk("ret = %d\n", ret);
 	if (!ret)
 		ret = trace_test_buffer(&max_tr, &count);
 

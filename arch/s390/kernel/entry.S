@@ -231,12 +231,12 @@ sysc_work:
 	jo	sysc_mcck_pending
 	tm	__TI_flags+3(%r12),_TIF_NEED_RESCHED
 	jo	sysc_reschedule
-	tm	__TI_flags+3(%r12),_TIF_PER_TRAP
-	jo	sysc_singlestep
 	tm	__TI_flags+3(%r12),_TIF_SIGPENDING
 	jo	sysc_sigpending
 	tm	__TI_flags+3(%r12),_TIF_NOTIFY_RESUME
 	jo	sysc_notify_resume
+	tm	__TI_flags+3(%r12),_TIF_PER_TRAP
+	jo	sysc_singlestep
 	j	sysc_return		# beware of critical section cleanup
 
 #
@@ -259,6 +259,7 @@ sysc_mcck_pending:
 # _TIF_SIGPENDING is set, call do_signal
 #
 sysc_sigpending:
+	ni	__TI_flags+3(%r12),255-_TIF_PER_TRAP # clear TIF_PER_TRAP
 	lr	%r2,%r11		# pass pointer to pt_regs
 	l	%r1,BASED(.Ldo_signal)
 	basr	%r14,%r1		# call do_signal
@@ -285,7 +286,7 @@ sysc_notify_resume:
 # _TIF_PER_TRAP is set, call do_per_trap
 #
 sysc_singlestep:
-	ni	__TI_flags+3(%r12),255-_TIF_PER_TRAP
+	ni	__TI_flags+3(%r12),255-(_TIF_SYSCALL | _TIF_PER_TRAP)
 	lr	%r2,%r11		# pass pointer to pt_regs
 	l	%r1,BASED(.Ldo_per_trap)
 	la	%r14,BASED(sysc_return)
@@ -329,18 +330,40 @@ ENTRY(ret_from_fork)
 	la	%r11,STACK_FRAME_OVERHEAD(%r15)
 	l	%r12,__LC_THREAD_INFO
 	l	%r13,__LC_SVC_NEW_PSW+4
+	tm	__PT_PSW+1(%r11),0x01	# forking a kernel thread ?
+	je	1f
 	l	%r1,BASED(.Lschedule_tail)
 	basr	%r14,%r1		# call schedule_tail
 	TRACE_IRQS_ON
 	ssm	__LC_SVC_NEW_PSW	# reenable interrupts
-	tm	__PT_PSW+1(%r11),0x01	# forking a kernel thread ?
-	jne	sysc_tracenogo
-	# it's a kernel thread
-	lm	%r9,%r10,__PT_R9(%r11)	# load gprs
+	j	sysc_tracenogo
+
+1:	# it's a kernel thread
+	st	%r15,__PT_R15(%r11)	# store stack pointer for new kthread
+	l	%r1,BASED(.Lschedule_tail)
+	basr	%r14,%r1		# call schedule_tail
+	TRACE_IRQS_ON
+	ssm	__LC_SVC_NEW_PSW	# reenable interrupts
+	lm	%r9,%r11,__PT_R9(%r11)	# load gprs
 ENTRY(kernel_thread_starter)
 	la	%r2,0(%r10)
 	basr	%r14,%r9
-	j	sysc_tracenogo
+	la	%r2,0
+	br	%r11			# do_exit
+
+#
+# kernel_execve function needs to deal with pt_regs that is not
+# at the usual place
+#
+ENTRY(ret_from_kernel_execve)
+	ssm	__LC_PGM_NEW_PSW	# disable I/O and ext. interrupts
+	lr	%r15,%r2
+	lr	%r11,%r2
+	ahi	%r15,-STACK_FRAME_OVERHEAD
+	xc	__SF_BACKCHAIN(4,%r15),__SF_BACKCHAIN(%r15)
+	l	%r12,__LC_THREAD_INFO
+	ssm	__LC_SVC_NEW_PSW	# reenable interrupts
+	j	sysc_return
 
 /*
  * Program check handler routine
@@ -636,8 +659,7 @@ ENTRY(mcck_int_handler)
 	UPDATE_VTIME %r14,%r15,__LC_MCCK_ENTER_TIMER
 mcck_skip:
 	SWITCH_ASYNC __LC_GPREGS_SAVE_AREA+32,__LC_PANIC_STACK,PAGE_SHIFT
-	stm	%r0,%r7,__PT_R0(%r11)
-	mvc	__PT_R8(32,%r11),__LC_GPREGS_SAVE_AREA+32
+	mvc	__PT_R0(64,%r11),__LC_GPREGS_SAVE_AREA
 	stm	%r8,%r9,__PT_PSW(%r11)
 	xc	__SF_BACKCHAIN(4,%r15),__SF_BACKCHAIN(%r15)
 	l	%r1,BASED(.Ldo_machine_check)

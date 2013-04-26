@@ -2567,7 +2567,8 @@ bed:
 						   err);
 
 			/* If watchdog is still activated, kill it! */
-			del_timer(&(self->watchdog));
+			if(timer_pending(&(self->watchdog)))
+				del_timer(&(self->watchdog));
 
 			IRDA_DEBUG(1, "%s(), ...waking up !\n", __func__);
 
@@ -2583,10 +2584,8 @@ bed:
 				    NULL, NULL, NULL);
 
 		/* Check if the we got some results */
-		if (!self->cachedaddr) {
-			err = -EAGAIN;		/* Didn't find any devices */
-			goto out;
-		}
+		if (!self->cachedaddr)
+			return -EAGAIN;		/* Didn't find any devices */
 		daddr = self->cachedaddr;
 		/* Cleanup */
 		self->cachedaddr = 0;

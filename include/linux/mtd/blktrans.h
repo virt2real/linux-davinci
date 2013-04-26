@@ -23,7 +23,6 @@
 #include <linux/mutex.h>
 #include <linux/kref.h>
 #include <linux/sysfs.h>
-#include <linux/workqueue.h>
 
 struct hd_geometry;
 struct mtd_info;
@@ -44,8 +43,7 @@ struct mtd_blktrans_dev {
 	struct kref ref;
 	struct gendisk *disk;
 	struct attribute_group *disk_attributes;
-	struct workqueue_struct *wq;
-	struct work_struct work;
+	struct task_struct *thread;
 	struct request_queue *rq;
 	spinlock_t queue_lock;
 	void *priv;

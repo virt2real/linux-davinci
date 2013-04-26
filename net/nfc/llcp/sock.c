@@ -205,8 +205,8 @@ static int llcp_sock_listen(struct socket *sock, int backlog)
 
 	lock_sock(sk);
 
-	if ((sock->type != SOCK_SEQPACKET && sock->type != SOCK_STREAM) ||
-	    sk->sk_state != LLCP_BOUND) {
+	if ((sock->type != SOCK_SEQPACKET && sock->type != SOCK_STREAM)
+	    || sk->sk_state != LLCP_BOUND) {
 		ret = -EBADFD;
 		goto error;
 	}
@@ -270,17 +270,13 @@ struct sock *nfc_llcp_accept_dequeue(struct sock *parent,
 		}
 
 		if (sk->sk_state == LLCP_CONNECTED || !newsock) {
-			list_del_init(&lsk->accept_queue);
-			sock_put(sk);
-
+			nfc_llcp_accept_unlink(sk);
 			if (newsock)
 				sock_graft(sk, newsock);
 
 			release_sock(sk);
 
 			pr_debug("Returning sk state %d\n", sk->sk_state);
-
-			sk_acceptq_removed(parent);
 
 			return sk;
 		}
@@ -466,6 +462,8 @@ static int llcp_sock_release(struct socket *sock)
 			nfc_llcp_accept_unlink(accept_sk);
 
 			release_sock(accept_sk);
+
+			sock_orphan(accept_sk);
 		}
 	}
 
@@ -610,21 +608,6 @@ static int llcp_sock_sendmsg(struct kiocb *iocb, struct socket *sock,
 
 	lock_sock(sk);
 
-	if (sk->sk_type == SOCK_DGRAM) {
-		struct sockaddr_nfc_llcp *addr =
-			(struct sockaddr_nfc_llcp *)msg->msg_name;
-
-		if (msg->msg_namelen < sizeof(*addr)) {
-			release_sock(sk);
-			return -EINVAL;
-		}
-
-		release_sock(sk);
-
-		return nfc_llcp_send_ui_frame(llcp_sock, addr->dsap, addr->ssap,
-					      msg, len);
-	}
-
 	if (sk->sk_state != LLCP_CONNECTED) {
 		release_sock(sk);
 		return -ENOTCONN;
@@ -674,36 +657,17 @@ static int llcp_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	copied = min_t(unsigned int, rlen, len);
 
 	cskb = skb;
-	if (skb_copy_datagram_iovec(cskb, 0, msg->msg_iov, copied)) {
+	if (memcpy_toiovec(msg->msg_iov, cskb->data, copied)) {
 		if (!(flags & MSG_PEEK))
 			skb_queue_head(&sk->sk_receive_queue, skb);
 		return -EFAULT;
-	}
-
-	sock_recv_timestamp(msg, sk, skb);
-
-	if (sk->sk_type == SOCK_DGRAM && msg->msg_name) {
-		struct nfc_llcp_ui_cb *ui_cb = nfc_llcp_ui_skb_cb(skb);
-		struct sockaddr_nfc_llcp *sockaddr =
-			(struct sockaddr_nfc_llcp *) msg->msg_name;
-
-		msg->msg_namelen = sizeof(struct sockaddr_nfc_llcp);
-
-		pr_debug("Datagram socket %d %d\n", ui_cb->dsap, ui_cb->ssap);
-
-		sockaddr->sa_family = AF_NFC;
-		sockaddr->nfc_protocol = NFC_PROTO_NFC_DEP;
-		sockaddr->dsap = ui_cb->dsap;
-		sockaddr->ssap = ui_cb->ssap;
 	}
 
 	/* Mark read part of skb as used */
 	if (!(flags & MSG_PEEK)) {
 
 		/* SOCK_STREAM: re-queue skb if it contains unreceived data */
-		if (sk->sk_type == SOCK_STREAM ||
-		    sk->sk_type == SOCK_DGRAM ||
-		    sk->sk_type == SOCK_RAW) {
+		if (sk->sk_type == SOCK_STREAM || sk->sk_type == SOCK_RAW) {
 			skb_pull(skb, copied);
 			if (skb->len) {
 				skb_queue_head(&sk->sk_receive_queue, skb);
@@ -810,6 +774,7 @@ struct sock *nfc_llcp_sock_alloc(struct socket *sock, int type, gfp_t gfp)
 	llcp_sock->reserved_ssap = LLCP_SAP_MAX;
 	skb_queue_head_init(&llcp_sock->tx_queue);
 	skb_queue_head_init(&llcp_sock->tx_pending_queue);
+	skb_queue_head_init(&llcp_sock->tx_backlog_queue);
 	INIT_LIST_HEAD(&llcp_sock->accept_queue);
 
 	if (sock != NULL)
@@ -824,6 +789,7 @@ void nfc_llcp_sock_free(struct nfc_llcp_sock *sock)
 
 	skb_queue_purge(&sock->tx_queue);
 	skb_queue_purge(&sock->tx_pending_queue);
+	skb_queue_purge(&sock->tx_backlog_queue);
 
 	list_del_init(&sock->accept_queue);
 

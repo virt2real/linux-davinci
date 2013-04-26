@@ -77,6 +77,8 @@ struct ackqueue_entry {
 };
 
 struct capiminor {
+	struct kref kref;
+
 	unsigned int      minor;
 
 	struct capi20_appl	*ap;
@@ -188,20 +190,7 @@ static void capiminor_del_all_ack(struct capiminor *mp)
 
 /* -------- struct capiminor ---------------------------------------- */
 
-static void capiminor_destroy(struct tty_port *port)
-{
-	struct capiminor *mp = container_of(port, struct capiminor, port);
-
-	kfree_skb(mp->outskb);
-	skb_queue_purge(&mp->inqueue);
-	skb_queue_purge(&mp->outqueue);
-	capiminor_del_all_ack(mp);
-	kfree(mp);
-}
-
-static const struct tty_port_operations capiminor_port_ops = {
-	.destruct = capiminor_destroy,
-};
+static const struct tty_port_operations capiminor_port_ops; /* we have none */
 
 static struct capiminor *capiminor_alloc(struct capi20_appl *ap, u32 ncci)
 {
@@ -214,6 +203,8 @@ static struct capiminor *capiminor_alloc(struct capi20_appl *ap, u32 ncci)
 		printk(KERN_ERR "capi: can't alloc capiminor\n");
 		return NULL;
 	}
+
+	kref_init(&mp->kref);
 
 	mp->ap = ap;
 	mp->ncci = ncci;
@@ -256,8 +247,19 @@ err_out2:
 	spin_unlock(&capiminors_lock);
 
 err_out1:
-	tty_port_put(&mp->port);
+	kfree(mp);
 	return NULL;
+}
+
+static void capiminor_destroy(struct kref *kref)
+{
+	struct capiminor *mp = container_of(kref, struct capiminor, kref);
+
+	kfree_skb(mp->outskb);
+	skb_queue_purge(&mp->inqueue);
+	skb_queue_purge(&mp->outqueue);
+	capiminor_del_all_ack(mp);
+	kfree(mp);
 }
 
 static struct capiminor *capiminor_get(unsigned int minor)
@@ -267,7 +269,7 @@ static struct capiminor *capiminor_get(unsigned int minor)
 	spin_lock(&capiminors_lock);
 	mp = capiminors[minor];
 	if (mp)
-		tty_port_get(&mp->port);
+		kref_get(&mp->kref);
 	spin_unlock(&capiminors_lock);
 
 	return mp;
@@ -275,7 +277,7 @@ static struct capiminor *capiminor_get(unsigned int minor)
 
 static inline void capiminor_put(struct capiminor *mp)
 {
-	tty_port_put(&mp->port);
+	kref_put(&mp->kref, capiminor_destroy);
 }
 
 static void capiminor_free(struct capiminor *mp)

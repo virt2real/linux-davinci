@@ -444,7 +444,8 @@ static void sd_update_bus_speed_mode(struct mmc_card *card)
 	 * If the host doesn't support any of the UHS-I modes, fallback on
 	 * default speed.
 	 */
-	if (!mmc_host_uhs(card->host)) {
+	if (!(card->host->caps & (MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 |
+	    MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_SDR104 | MMC_CAP_UHS_DDR50))) {
 		card->sd_bus_speed = 0;
 		return;
 	}
@@ -712,14 +713,6 @@ int mmc_sd_get_cid(struct mmc_host *host, u32 ocr, u32 *cid, u32 *rocr)
 {
 	int err;
 	u32 max_current;
-	int retries = 10;
-
-try_again:
-	if (!retries) {
-		ocr &= ~SD_OCR_S18R;
-		pr_warning("%s: Skipping voltage switch\n",
-			mmc_hostname(host));
-	}
 
 	/*
 	 * Since we're changing the OCR value, we seem to
@@ -741,10 +734,10 @@ try_again:
 
 	/*
 	 * If the host supports one of UHS-I modes, request the card
-	 * to switch to 1.8V signaling level. If the card has failed
-	 * repeatedly to switch however, skip this.
+	 * to switch to 1.8V signaling level.
 	 */
-	if (retries && mmc_host_uhs(host))
+	if (host->caps & (MMC_CAP_UHS_SDR12 | MMC_CAP_UHS_SDR25 |
+	    MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_SDR104 | MMC_CAP_UHS_DDR50))
 		ocr |= SD_OCR_S18R;
 
 	/*
@@ -755,6 +748,7 @@ try_again:
 	if (max_current > 150)
 		ocr |= SD_OCR_XPC;
 
+try_again:
 	err = mmc_send_app_op_cond(host, ocr, rocr);
 	if (err)
 		return err;
@@ -765,12 +759,9 @@ try_again:
 	 */
 	if (!mmc_host_is_spi(host) && rocr &&
 	   ((*rocr & 0x41000000) == 0x41000000)) {
-		err = mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_180);
-		if (err == -EAGAIN) {
-			retries--;
-			goto try_again;
-		} else if (err) {
-			retries = 0;
+		err = mmc_set_signal_voltage(host, MMC_SIGNAL_VOLTAGE_180, true);
+		if (err) {
+			ocr &= ~SD_OCR_S18R;
 			goto try_again;
 		}
 	}
@@ -969,6 +960,16 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 
 		/* Card is an ultra-high-speed card */
 		mmc_card_set_uhs(card);
+
+		/*
+		 * Since initialization is now complete, enable preset
+		 * value registers for UHS-I cards.
+		 */
+		if (host->ops->enable_preset_value) {
+			mmc_host_clk_hold(card->host);
+			host->ops->enable_preset_value(host, true);
+			mmc_host_clk_release(card->host);
+		}
 	} else {
 		/*
 		 * Attempt to change to high-speed (if supported)
@@ -1146,6 +1147,13 @@ int mmc_attach_sd(struct mmc_host *host)
 
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
+
+	/* Disable preset value enable if already set since last time */
+	if (host->ops->enable_preset_value) {
+		mmc_host_clk_hold(host);
+		host->ops->enable_preset_value(host, false);
+		mmc_host_clk_release(host);
+	}
 
 	err = mmc_send_app_op_cond(host, 0, &ocr);
 	if (err)

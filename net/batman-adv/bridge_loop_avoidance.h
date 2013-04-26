@@ -1,4 +1,4 @@
-/* Copyright (C) 2011-2013 B.A.T.M.A.N. contributors:
+/* Copyright (C) 2011-2012 B.A.T.M.A.N. contributors:
  *
  * Simon Wunderlich
  *
@@ -31,7 +31,8 @@ int batadv_bla_backbone_table_seq_print_text(struct seq_file *seq,
 					     void *offset);
 int batadv_bla_is_backbone_gw_orig(struct batadv_priv *bat_priv, uint8_t *orig);
 int batadv_bla_check_bcast_duplist(struct batadv_priv *bat_priv,
-				   struct sk_buff *skb);
+				   struct batadv_bcast_packet *bcast_packet,
+				   int hdr_size);
 void batadv_bla_update_orig_address(struct batadv_priv *bat_priv,
 				    struct batadv_hard_iface *primary_if,
 				    struct batadv_hard_iface *oldif);
@@ -80,7 +81,8 @@ static inline int batadv_bla_is_backbone_gw_orig(struct batadv_priv *bat_priv,
 
 static inline int
 batadv_bla_check_bcast_duplist(struct batadv_priv *bat_priv,
-			       struct sk_buff *skb)
+			       struct batadv_bcast_packet *bcast_packet,
+			       int hdr_size)
 {
 	return 0;
 }

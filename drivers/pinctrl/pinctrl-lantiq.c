@@ -46,8 +46,8 @@ static int ltq_get_group_pins(struct pinctrl_dev *pctrldev,
 	return 0;
 }
 
-static void ltq_pinctrl_dt_free_map(struct pinctrl_dev *pctldev,
-				    struct pinctrl_map *map, unsigned num_maps)
+void ltq_pinctrl_dt_free_map(struct pinctrl_dev *pctldev,
+				struct pinctrl_map *map, unsigned num_maps)
 {
 	int i;
 
@@ -64,13 +64,11 @@ static void ltq_pinctrl_pin_dbg_show(struct pinctrl_dev *pctldev,
 	seq_printf(s, " %s", dev_name(pctldev->dev));
 }
 
-static void ltq_pinctrl_dt_subnode_to_map(struct pinctrl_dev *pctldev,
+static int ltq_pinctrl_dt_subnode_to_map(struct pinctrl_dev *pctldev,
 				struct device_node *np,
 				struct pinctrl_map **map)
 {
 	struct ltq_pinmux_info *info = pinctrl_dev_get_drvdata(pctldev);
-	struct property *pins = of_find_property(np, "lantiq,pins", NULL);
-	struct property *groups = of_find_property(np, "lantiq,groups", NULL);
 	unsigned long configs[3];
 	unsigned num_configs = 0;
 	struct property *prop;
@@ -78,20 +76,8 @@ static void ltq_pinctrl_dt_subnode_to_map(struct pinctrl_dev *pctldev,
 	const char *function;
 	int ret, i;
 
-	if (!pins && !groups) {
-		dev_err(pctldev->dev, "%s defines neither pins nor groups\n",
-			np->name);
-		return;
-	}
-
-	if (pins && groups) {
-		dev_err(pctldev->dev, "%s defines both pins and groups\n",
-			np->name);
-		return;
-	}
-
 	ret = of_property_read_string(np, "lantiq,function", &function);
-	if (groups && !ret) {
+	if (!ret) {
 		of_property_for_each_string(np, "lantiq,groups", prop, group) {
 			(*map)->type = PIN_MAP_TYPE_MUX_GROUP;
 			(*map)->name = function;
@@ -99,6 +85,11 @@ static void ltq_pinctrl_dt_subnode_to_map(struct pinctrl_dev *pctldev,
 			(*map)->data.mux.function = function;
 			(*map)++;
 		}
+		if (of_find_property(np, "lantiq,pins", NULL))
+			dev_err(pctldev->dev,
+				"%s mixes pins and groups settings\n",
+				np->name);
+		return 0;
 	}
 
 	for (i = 0; i < info->num_params; i++) {
@@ -112,7 +103,7 @@ static void ltq_pinctrl_dt_subnode_to_map(struct pinctrl_dev *pctldev,
 	}
 
 	if (!num_configs)
-		return;
+		return -EINVAL;
 
 	of_property_for_each_string(np, "lantiq,pins", prop, pin) {
 		(*map)->data.configs.configs = kmemdup(configs,
@@ -124,16 +115,7 @@ static void ltq_pinctrl_dt_subnode_to_map(struct pinctrl_dev *pctldev,
 		(*map)->data.configs.num_configs = num_configs;
 		(*map)++;
 	}
-	of_property_for_each_string(np, "lantiq,groups", prop, group) {
-		(*map)->data.configs.configs = kmemdup(configs,
-					num_configs * sizeof(unsigned long),
-					GFP_KERNEL);
-		(*map)->type = PIN_MAP_TYPE_CONFIGS_GROUP;
-		(*map)->name = group;
-		(*map)->data.configs.group_or_pin = group;
-		(*map)->data.configs.num_configs = num_configs;
-		(*map)++;
-	}
+	return 0;
 }
 
 static int ltq_pinctrl_dt_subnode_size(struct device_node *np)
@@ -146,26 +128,30 @@ static int ltq_pinctrl_dt_subnode_size(struct device_node *np)
 	return ret;
 }
 
-static int ltq_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
-				      struct device_node *np_config,
-				      struct pinctrl_map **map,
-				      unsigned *num_maps)
+int ltq_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
+				struct device_node *np_config,
+				struct pinctrl_map **map,
+				unsigned *num_maps)
 {
 	struct pinctrl_map *tmp;
 	struct device_node *np;
-	int max_maps = 0;
+	int ret;
 
+	*num_maps = 0;
 	for_each_child_of_node(np_config, np)
-		max_maps += ltq_pinctrl_dt_subnode_size(np);
-	*map = kzalloc(max_maps * sizeof(struct pinctrl_map) * 2, GFP_KERNEL);
+		*num_maps += ltq_pinctrl_dt_subnode_size(np);
+	*map = kzalloc(*num_maps * sizeof(struct pinctrl_map), GFP_KERNEL);
 	if (!*map)
 		return -ENOMEM;
 	tmp = *map;
 
-	for_each_child_of_node(np_config, np)
-		ltq_pinctrl_dt_subnode_to_map(pctldev, np, &tmp);
-	*num_maps = ((int)(tmp - *map));
-
+	for_each_child_of_node(np_config, np) {
+		ret = ltq_pinctrl_dt_subnode_to_map(pctldev, np, &tmp);
+		if (ret < 0) {
+			ltq_pinctrl_dt_free_map(pctldev, *map, *num_maps);
+			return ret;
+		}
+	}
 	return 0;
 }
 
@@ -289,12 +275,22 @@ static int ltq_pmx_enable(struct pinctrl_dev *pctrldev,
 	return 0;
 }
 
+static void ltq_pmx_disable(struct pinctrl_dev *pctrldev,
+				unsigned func,
+				unsigned group)
+{
+	/*
+	 * Nothing to do here. However, pinconf_check_ops() requires this
+	 * callback to be defined.
+	 */
+}
+
 static int ltq_pmx_gpio_request_enable(struct pinctrl_dev *pctrldev,
 				struct pinctrl_gpio_range *range,
 				unsigned pin)
 {
 	struct ltq_pinmux_info *info = pinctrl_dev_get_drvdata(pctrldev);
-	int mfp = match_mfp(info, pin);
+	int mfp = match_mfp(info, pin + (range->id * 32));
 	int pin_func;
 
 	if (mfp < 0) {
@@ -316,6 +312,7 @@ static struct pinmux_ops ltq_pmx_ops = {
 	.get_function_name	= ltq_pmx_func_name,
 	.get_function_groups	= ltq_pmx_get_groups,
 	.enable			= ltq_pmx_enable,
+	.disable		= ltq_pmx_disable,
 	.gpio_request_enable	= ltq_pmx_gpio_request_enable,
 };
 

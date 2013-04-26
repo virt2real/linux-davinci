@@ -30,8 +30,6 @@
 
 #include "internal.h"
 
-#define null_terminated(x)	(strnlen(x, sizeof(x)) < sizeof(x))
-
 static DEFINE_MUTEX(crypto_cfg_mutex);
 
 /* The crypto netlink socket */
@@ -77,7 +75,7 @@ static int crypto_report_cipher(struct sk_buff *skb, struct crypto_alg *alg)
 {
 	struct crypto_report_cipher rcipher;
 
-	strncpy(rcipher.type, "cipher", sizeof(rcipher.type));
+	snprintf(rcipher.type, CRYPTO_MAX_ALG_NAME, "%s", "cipher");
 
 	rcipher.blocksize = alg->cra_blocksize;
 	rcipher.min_keysize = alg->cra_cipher.cia_min_keysize;
@@ -96,7 +94,8 @@ static int crypto_report_comp(struct sk_buff *skb, struct crypto_alg *alg)
 {
 	struct crypto_report_comp rcomp;
 
-	strncpy(rcomp.type, "compression", sizeof(rcomp.type));
+	snprintf(rcomp.type, CRYPTO_MAX_ALG_NAME, "%s", "compression");
+
 	if (nla_put(skb, CRYPTOCFGA_REPORT_COMPRESS,
 		    sizeof(struct crypto_report_comp), &rcomp))
 		goto nla_put_failure;
@@ -109,14 +108,12 @@ nla_put_failure:
 static int crypto_report_one(struct crypto_alg *alg,
 			     struct crypto_user_alg *ualg, struct sk_buff *skb)
 {
-	strncpy(ualg->cru_name, alg->cra_name, sizeof(ualg->cru_name));
-	strncpy(ualg->cru_driver_name, alg->cra_driver_name,
-		sizeof(ualg->cru_driver_name));
-	strncpy(ualg->cru_module_name, module_name(alg->cra_module),
-		sizeof(ualg->cru_module_name));
+	memcpy(&ualg->cru_name, &alg->cra_name, sizeof(ualg->cru_name));
+	memcpy(&ualg->cru_driver_name, &alg->cra_driver_name,
+	       sizeof(ualg->cru_driver_name));
+	memcpy(&ualg->cru_module_name, module_name(alg->cra_module),
+	       CRYPTO_MAX_ALG_NAME);
 
-	ualg->cru_type = 0;
-	ualg->cru_mask = 0;
 	ualg->cru_flags = alg->cra_flags;
 	ualg->cru_refcnt = atomic_read(&alg->cra_refcnt);
 
@@ -125,7 +122,8 @@ static int crypto_report_one(struct crypto_alg *alg,
 	if (alg->cra_flags & CRYPTO_ALG_LARVAL) {
 		struct crypto_report_larval rl;
 
-		strncpy(rl.type, "larval", sizeof(rl.type));
+		snprintf(rl.type, CRYPTO_MAX_ALG_NAME, "%s", "larval");
+
 		if (nla_put(skb, CRYPTOCFGA_REPORT_LARVAL,
 			    sizeof(struct crypto_report_larval), &rl))
 			goto nla_put_failure;
@@ -198,10 +196,7 @@ static int crypto_report(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 	struct crypto_dump_info info;
 	int err;
 
-	if (!null_terminated(p->cru_name) || !null_terminated(p->cru_driver_name))
-		return -EINVAL;
-
-	if (!p->cru_driver_name[0])
+	if (!p->cru_driver_name)
 		return -EINVAL;
 
 	alg = crypto_alg_match(p, 1);
@@ -265,9 +260,6 @@ static int crypto_update_alg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct nlattr *priority = attrs[CRYPTOCFGA_PRIORITY_VAL];
 	LIST_HEAD(list);
 
-	if (!null_terminated(p->cru_name) || !null_terminated(p->cru_driver_name))
-		return -EINVAL;
-
 	if (priority && !strlen(p->cru_driver_name))
 		return -EINVAL;
 
@@ -294,9 +286,6 @@ static int crypto_del_alg(struct sk_buff *skb, struct nlmsghdr *nlh,
 {
 	struct crypto_alg *alg;
 	struct crypto_user_alg *p = nlmsg_data(nlh);
-
-	if (!null_terminated(p->cru_name) || !null_terminated(p->cru_driver_name))
-		return -EINVAL;
 
 	alg = crypto_alg_match(p, 1);
 	if (!alg)
@@ -378,9 +367,6 @@ static int crypto_add_alg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct crypto_alg *alg;
 	struct crypto_user_alg *p = nlmsg_data(nlh);
 	struct nlattr *priority = attrs[CRYPTOCFGA_PRIORITY_VAL];
-
-	if (!null_terminated(p->cru_name) || !null_terminated(p->cru_driver_name))
-		return -EINVAL;
 
 	if (strlen(p->cru_driver_name))
 		exact = 1;

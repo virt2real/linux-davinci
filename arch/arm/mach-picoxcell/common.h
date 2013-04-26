@@ -12,6 +12,6 @@
 
 #include <asm/mach/time.h>
 
-extern void dw_apb_timer_init(void);
+extern struct sys_timer dw_apb_timer;
 
 #endif /* __PICOXCELL_COMMON_H__ */

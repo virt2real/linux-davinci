@@ -217,6 +217,7 @@ int dm_table_create(struct dm_table **result, fmode_t mode,
 
 	if (alloc_targets(t, num_targets)) {
 		kfree(t);
+		t = NULL;
 		return -ENOMEM;
 	}
 
@@ -822,8 +823,8 @@ int dm_table_add_target(struct dm_table *t, const char *type,
 
 	t->highs[t->num_targets++] = tgt->begin + tgt->len - 1;
 
-	if (!tgt->num_discard_bios && tgt->discards_supported)
-		DMWARN("%s: %s: ignoring discards_supported because num_discard_bios is zero.",
+	if (!tgt->num_discard_requests && tgt->discards_supported)
+		DMWARN("%s: %s: ignoring discards_supported because num_discard_requests is zero.",
 		       dm_device_name(t->md), type);
 
 	return 0;
@@ -966,22 +967,13 @@ bool dm_table_request_based(struct dm_table *t)
 int dm_table_alloc_md_mempools(struct dm_table *t)
 {
 	unsigned type = dm_table_get_type(t);
-	unsigned per_bio_data_size = 0;
-	struct dm_target *tgt;
-	unsigned i;
 
 	if (unlikely(type == DM_TYPE_NONE)) {
 		DMWARN("no table type is set, can't allocate mempools");
 		return -EINVAL;
 	}
 
-	if (type == DM_TYPE_BIO_BASED)
-		for (i = 0; i < t->num_targets; i++) {
-			tgt = t->targets + i;
-			per_bio_data_size = max(per_bio_data_size, tgt->per_bio_data_size);
-		}
-
-	t->mempools = dm_alloc_md_mempools(type, t->integrity_supported, per_bio_data_size);
+	t->mempools = dm_alloc_md_mempools(type, t->integrity_supported);
 	if (!t->mempools)
 		return -ENOMEM;
 
@@ -1359,7 +1351,7 @@ static bool dm_table_supports_flush(struct dm_table *t, unsigned flush)
 	while (i < dm_table_get_num_targets(t)) {
 		ti = dm_table_get_target(t, i++);
 
-		if (!ti->num_flush_bios)
+		if (!ti->num_flush_requests)
 			continue;
 
 		if (ti->flush_supported)
@@ -1422,33 +1414,6 @@ static bool dm_table_all_devices_attribute(struct dm_table *t,
 	return 1;
 }
 
-static int device_not_write_same_capable(struct dm_target *ti, struct dm_dev *dev,
-					 sector_t start, sector_t len, void *data)
-{
-	struct request_queue *q = bdev_get_queue(dev->bdev);
-
-	return q && !q->limits.max_write_same_sectors;
-}
-
-static bool dm_table_supports_write_same(struct dm_table *t)
-{
-	struct dm_target *ti;
-	unsigned i = 0;
-
-	while (i < dm_table_get_num_targets(t)) {
-		ti = dm_table_get_target(t, i++);
-
-		if (!ti->num_write_same_bios)
-			return false;
-
-		if (!ti->type->iterate_devices ||
-		    !ti->type->iterate_devices(ti, device_not_write_same_capable, NULL))
-			return false;
-	}
-
-	return true;
-}
-
 void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 			       struct queue_limits *limits)
 {
@@ -1479,9 +1444,6 @@ void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 		queue_flag_set_unlocked(QUEUE_FLAG_NONROT, q);
 	else
 		queue_flag_clear_unlocked(QUEUE_FLAG_NONROT, q);
-
-	if (!dm_table_supports_write_same(t))
-		q->limits.max_write_same_sectors = 0;
 
 	dm_table_set_integrity(t);
 
@@ -1656,7 +1618,7 @@ bool dm_table_supports_discards(struct dm_table *t)
 	while (i < dm_table_get_num_targets(t)) {
 		ti = dm_table_get_target(t, i++);
 
-		if (!ti->num_discard_bios)
+		if (!ti->num_discard_requests)
 			continue;
 
 		if (ti->discards_supported)

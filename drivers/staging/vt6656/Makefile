@@ -20,6 +20,7 @@ vt6656_stage-y +=	main_usb.o \
 			rc4.o \
 			tether.o \
 			tcrc.o \
+			ioctl.o \
 			hostap.o \
 			wpa.o \
 			key.o \

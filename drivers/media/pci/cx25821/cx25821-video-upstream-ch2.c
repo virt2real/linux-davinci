@@ -123,11 +123,10 @@ static __le32 *cx25821_risc_field_upstream_ch2(struct cx25821_dev *dev,
 	return rp;
 }
 
-static int cx25821_risc_buffer_upstream_ch2(struct cx25821_dev *dev,
-					    struct pci_dev *pci,
-					    unsigned int top_offset,
-					    unsigned int bpl,
-					    unsigned int lines)
+int cx25821_risc_buffer_upstream_ch2(struct cx25821_dev *dev,
+				     struct pci_dev *pci,
+				     unsigned int top_offset, unsigned int bpl,
+				     unsigned int lines)
 {
 	__le32 *rp;
 	int fifo_enable = 0;
@@ -256,8 +255,7 @@ void cx25821_free_mem_upstream_ch2(struct cx25821_dev *dev)
 	}
 }
 
-static int cx25821_get_frame_ch2(struct cx25821_dev *dev,
-				 struct sram_channel *sram_ch)
+int cx25821_get_frame_ch2(struct cx25821_dev *dev, struct sram_channel *sram_ch)
 {
 	struct file *myfile;
 	int frame_index_temp = dev->_frame_index_ch2;
@@ -362,8 +360,7 @@ static void cx25821_vidups_handler_ch2(struct work_struct *work)
 			_channel2_upstream_select].sram_channels);
 }
 
-static int cx25821_openfile_ch2(struct cx25821_dev *dev,
-				struct sram_channel *sram_ch)
+int cx25821_openfile_ch2(struct cx25821_dev *dev, struct sram_channel *sram_ch)
 {
 	struct file *myfile;
 	int i = 0, j = 0;
@@ -510,9 +507,8 @@ error:
 	return ret;
 }
 
-static int cx25821_video_upstream_irq_ch2(struct cx25821_dev *dev,
-					  int chan_num,
-					  u32 status)
+int cx25821_video_upstream_irq_ch2(struct cx25821_dev *dev, int chan_num,
+				   u32 status)
 {
 	u32 int_msk_tmp;
 	struct sram_channel *channel = dev->channels[chan_num].sram_channels;
@@ -651,8 +647,8 @@ static void cx25821_set_pixelengine_ch2(struct cx25821_dev *dev,
 	cx_write(ch->vid_cdt_size, VID_CDT_SIZE >> 3);
 }
 
-static int cx25821_start_video_dma_upstream_ch2(struct cx25821_dev *dev,
-						struct sram_channel *sram_ch)
+int cx25821_start_video_dma_upstream_ch2(struct cx25821_dev *dev,
+					 struct sram_channel *sram_ch)
 {
 	u32 tmp = 0;
 	int err = 0;
@@ -708,9 +704,11 @@ int cx25821_vidupstream_init_ch2(struct cx25821_dev *dev, int channel_select,
 {
 	struct sram_channel *sram_ch;
 	u32 tmp;
+	int retval = 0;
 	int err = 0;
 	int data_frame_size = 0;
 	int risc_buffer_size = 0;
+	int str_length = 0;
 
 	if (dev->_is_running_ch2) {
 		pr_info("Video Channel is still running so return!\n");
@@ -746,16 +744,20 @@ int cx25821_vidupstream_init_ch2(struct cx25821_dev *dev, int channel_select,
 	risc_buffer_size = dev->_isNTSC_ch2 ?
 		NTSC_RISC_BUF_SIZE : PAL_RISC_BUF_SIZE;
 
-	if (dev->input_filename_ch2)
-		dev->_filename_ch2 = kstrdup(dev->input_filename_ch2,
-								GFP_KERNEL);
-	else
-		dev->_filename_ch2 = kstrdup(dev->_defaultname_ch2,
-								GFP_KERNEL);
+	if (dev->input_filename_ch2) {
+		str_length = strlen(dev->input_filename_ch2);
+		dev->_filename_ch2 = kmemdup(dev->input_filename_ch2,
+					     str_length + 1, GFP_KERNEL);
 
-	if (!dev->_filename_ch2) {
-		err = -ENOENT;
-		goto error;
+		if (!dev->_filename_ch2)
+			goto error;
+	} else {
+		str_length = strlen(dev->_defaultname_ch2);
+		dev->_filename_ch2 = kmemdup(dev->_defaultname_ch2,
+					     str_length + 1, GFP_KERNEL);
+
+		if (!dev->_filename_ch2)
+			goto error;
 	}
 
 	/* Default if filename is empty string */
@@ -771,7 +773,7 @@ int cx25821_vidupstream_init_ch2(struct cx25821_dev *dev, int channel_select,
 		}
 	}
 
-	err = cx25821_sram_channel_setup_upstream(dev, sram_ch,
+	retval = cx25821_sram_channel_setup_upstream(dev, sram_ch,
 						dev->_line_size_ch2, 0);
 
 	/* setup fifo + format */
@@ -781,9 +783,9 @@ int cx25821_vidupstream_init_ch2(struct cx25821_dev *dev, int channel_select,
 	dev->upstream_databuf_size_ch2 = data_frame_size * 2;
 
 	/* Allocating buffers and prepare RISC program */
-	err = cx25821_upstream_buffer_prepare_ch2(dev, sram_ch,
+	retval = cx25821_upstream_buffer_prepare_ch2(dev, sram_ch,
 						dev->_line_size_ch2);
-	if (err < 0) {
+	if (retval < 0) {
 		pr_err("%s: Failed to set up Video upstream buffers!\n",
 		       dev->name);
 		goto error;

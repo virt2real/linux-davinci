@@ -32,13 +32,11 @@ usage() {
 	echo "  -m    only merge the fragments, do not execute the make command"
 	echo "  -n    use allnoconfig instead of alldefconfig"
 	echo "  -r    list redundant entries when merging fragments"
-	echo "  -O    dir to put generated output files"
 }
 
 MAKE=true
 ALLTARGET=alldefconfig
 WARNREDUN=false
-OUTPUT=.
 
 while true; do
 	case $1 in
@@ -59,16 +57,6 @@ while true; do
 	"-r")
 		WARNREDUN=true
 		shift
-		continue
-		;;
-	"-O")
-		if [ -d $2 ];then
-			OUTPUT=$(echo $2 | sed 's/\/*$//')
-		else
-			echo "output directory $2 does not exist" 1>&2
-			exit 1
-		fi
-		shift 2
 		continue
 		;;
 	*)
@@ -112,9 +100,9 @@ for MERGE_FILE in $MERGE_LIST ; do
 done
 
 if [ "$MAKE" = "false" ]; then
-	cp $TMP_FILE $OUTPUT/.config
+	cp $TMP_FILE .config
 	echo "#"
-	echo "# merged configuration written to $OUTPUT/.config (needs make)"
+	echo "# merged configuration written to .config (needs make)"
 	echo "#"
 	clean_up
 	exit
@@ -123,14 +111,14 @@ fi
 # Use the merged file as the starting point for:
 # alldefconfig: Fills in any missing symbols with Kconfig default
 # allnoconfig: Fills in any missing symbols with # CONFIG_* is not set
-make KCONFIG_ALLCONFIG=$TMP_FILE O=$OUTPUT $ALLTARGET
+make KCONFIG_ALLCONFIG=$TMP_FILE $ALLTARGET
 
 
 # Check all specified config values took (might have missed-dependency issues)
 for CFG in $(sed -n "$SED_CONFIG_EXP" $TMP_FILE); do
 
 	REQUESTED_VAL=$(grep -w -e "$CFG" $TMP_FILE)
-	ACTUAL_VAL=$(grep -w -e "$CFG" $OUTPUT/.config)
+	ACTUAL_VAL=$(grep -w -e "$CFG" .config)
 	if [ "x$REQUESTED_VAL" != "x$ACTUAL_VAL" ] ; then
 		echo "Value requested for $CFG not in final .config"
 		echo "Requested value:  $REQUESTED_VAL"

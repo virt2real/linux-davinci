@@ -277,7 +277,7 @@ static inline int IN_FROM_REG(int reg, int nominal, int res)
 
 static inline int IN_TO_REG(int val, int nominal)
 {
-	return clamp_val((val * 192 + nominal / 2) / nominal, 0, 255);
+	return SENSORS_LIMIT((val * 192 + nominal / 2) / nominal, 0, 255);
 }
 
 /*
@@ -293,7 +293,8 @@ static inline int TEMP_FROM_REG(int reg, int res)
 
 static inline int TEMP_TO_REG(int val)
 {
-	return clamp_val((val < 0 ? val - 500 : val + 500) / 1000, -128, 127);
+	return SENSORS_LIMIT((val < 0 ? val - 500 : val + 500) / 1000,
+			     -128, 127);
 }
 
 /* Temperature range */
@@ -331,7 +332,7 @@ static inline int TEMP_HYST_FROM_REG(int reg, int ix)
 
 static inline int TEMP_HYST_TO_REG(int val, int ix, int reg)
 {
-	int hyst = clamp_val((val + 500) / 1000, 0, 15);
+	int hyst = SENSORS_LIMIT((val + 500) / 1000, 0, 15);
 
 	return (ix == 1) ? (reg & 0xf0) | hyst : (reg & 0x0f) | (hyst << 4);
 }
@@ -348,10 +349,10 @@ static inline int FAN_FROM_REG(int reg, int tpc)
 static inline int FAN_TO_REG(int val, int tpc)
 {
 	if (tpc) {
-		return clamp_val(val / tpc, 0, 0xffff);
+		return SENSORS_LIMIT(val / tpc, 0, 0xffff);
 	} else {
 		return (val <= 0) ? 0xffff :
-			clamp_val(90000 * 60 / val, 0, 0xfffe);
+			SENSORS_LIMIT(90000 * 60 / val, 0, 0xfffe);
 	}
 }
 
@@ -1281,7 +1282,7 @@ static ssize_t set_pwm(struct device *dev, struct device_attribute *attr,
 	mutex_lock(&data->update_lock);
 	switch (fn) {
 	case SYS_PWM:
-		data->pwm[ix] = clamp_val(val, 0, 255);
+		data->pwm[ix] = SENSORS_LIMIT(val, 0, 255);
 		dme1737_write(data, DME1737_REG_PWM(ix), data->pwm[ix]);
 		break;
 	case SYS_PWM_FREQ:
@@ -1449,7 +1450,7 @@ static ssize_t set_pwm(struct device *dev, struct device_attribute *attr,
 		break;
 	case SYS_PWM_AUTO_POINT1_PWM:
 		/* Only valid for pwm[1-3] */
-		data->pwm_min[ix] = clamp_val(val, 0, 255);
+		data->pwm_min[ix] = SENSORS_LIMIT(val, 0, 255);
 		dme1737_write(data, DME1737_REG_PWM_MIN(ix),
 			      data->pwm_min[ix]);
 		break;
@@ -2629,7 +2630,7 @@ exit:
 	return err;
 }
 
-static int dme1737_isa_probe(struct platform_device *pdev)
+static int __devinit dme1737_isa_probe(struct platform_device *pdev)
 {
 	u8 company, device;
 	struct resource *res;
@@ -2717,7 +2718,7 @@ exit_remove_files:
 	return err;
 }
 
-static int dme1737_isa_remove(struct platform_device *pdev)
+static int __devexit dme1737_isa_remove(struct platform_device *pdev)
 {
 	struct dme1737_data *data = platform_get_drvdata(pdev);
 
@@ -2733,7 +2734,7 @@ static struct platform_driver dme1737_isa_driver = {
 		.name = "dme1737",
 	},
 	.probe = dme1737_isa_probe,
-	.remove = dme1737_isa_remove,
+	.remove = __devexit_p(dme1737_isa_remove),
 };
 
 /* ---------------------------------------------------------------------

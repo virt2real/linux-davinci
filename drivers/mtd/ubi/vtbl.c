@@ -858,7 +858,7 @@ out_free:
  */
 static void self_vtbl_check(const struct ubi_device *ubi)
 {
-	if (!ubi_dbg_chk_gen(ubi))
+	if (!ubi->dbg->chk_gen)
 		return;
 
 	if (vtbl_check(ubi, ubi->vtbl)) {

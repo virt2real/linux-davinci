@@ -732,7 +732,7 @@ static inline void spitz_lcd_init(void) {}
 #endif
 
 /******************************************************************************
- * NAND Flash
+ * Framebuffer
  ******************************************************************************/
 #if defined(CONFIG_MTD_NAND_SHARPSL) || defined(CONFIG_MTD_NAND_SHARPSL_MODULE)
 static struct mtd_partition spitz_nand_partitions[] = {
@@ -858,7 +858,7 @@ static inline void spitz_nor_init(void) {}
 #endif
 
 /******************************************************************************
- * I2C devices
+ * GPIO expander
  ******************************************************************************/
 #if defined(CONFIG_I2C_PXA) || defined(CONFIG_I2C_PXA_MODULE)
 static struct pca953x_platform_data akita_pca953x_pdata = {
@@ -986,7 +986,7 @@ MACHINE_START(SPITZ, "SHARP Spitz")
 	.init_irq	= pxa27x_init_irq,
 	.handle_irq	= pxa27x_handle_irq,
 	.init_machine	= spitz_init,
-	.init_time	= pxa_timer_init,
+	.timer		= &pxa_timer,
 	.restart	= spitz_restart,
 MACHINE_END
 #endif
@@ -1000,7 +1000,7 @@ MACHINE_START(BORZOI, "SHARP Borzoi")
 	.init_irq	= pxa27x_init_irq,
 	.handle_irq	= pxa27x_handle_irq,
 	.init_machine	= spitz_init,
-	.init_time	= pxa_timer_init,
+	.timer		= &pxa_timer,
 	.restart	= spitz_restart,
 MACHINE_END
 #endif
@@ -1014,7 +1014,7 @@ MACHINE_START(AKITA, "SHARP Akita")
 	.init_irq	= pxa27x_init_irq,
 	.handle_irq	= pxa27x_handle_irq,
 	.init_machine	= spitz_init,
-	.init_time	= pxa_timer_init,
+	.timer		= &pxa_timer,
 	.restart	= spitz_restart,
 MACHINE_END
 #endif

@@ -42,6 +42,7 @@
 #include <asm/mach/irq.h>
 #include <asm/mach/map.h>
 
+#include <asm/hardware/gic.h>
 
 #include <mach/platform.h>
 #include <mach/irqs.h>

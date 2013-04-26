@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/gfp.h>
+#include <linux/version.h>
 #include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
@@ -151,6 +152,7 @@ CsrSdioRead8(CsrSdioFunction *function, u32 address, u8 *data)
     _sdio_release_host(func);
 
     if (err) {
+        func_exit_r(err);
         return ConvertSdioToCsrSdioResult(err);
     }
 
@@ -168,6 +170,7 @@ CsrSdioWrite8(CsrSdioFunction *function, u32 address, u8 data)
     _sdio_release_host(func);
 
     if (err) {
+        func_exit_r(err);
         return ConvertSdioToCsrSdioResult(err);
     }
 
@@ -243,6 +246,7 @@ CsrSdioF0Read8(CsrSdioFunction *function, u32 address, u8 *data)
     _sdio_release_host(func);
 
     if (err) {
+        func_exit_r(err);
         return ConvertSdioToCsrSdioResult(err);
     }
 
@@ -264,6 +268,7 @@ CsrSdioF0Write8(CsrSdioFunction *function, u32 address, u8 data)
     _sdio_release_host(func);
 
     if (err) {
+        func_exit_r(err);
         return ConvertSdioToCsrSdioResult(err);
     }
 
@@ -282,6 +287,7 @@ CsrSdioRead(CsrSdioFunction *function, u32 address, void *data, u32 length)
     _sdio_release_host(func);
 
     if (err) {
+        func_exit_r(err);
         return ConvertSdioToCsrSdioResult(err);
     }
 
@@ -299,6 +305,7 @@ CsrSdioWrite(CsrSdioFunction *function, u32 address, const void *data, u32 lengt
     _sdio_release_host(func);
 
     if (err) {
+        func_exit_r(err);
         return ConvertSdioToCsrSdioResult(err);
     }
 
@@ -473,6 +480,7 @@ CsrSdioInterruptEnable(CsrSdioFunction *function)
 #endif
     _sdio_release_host(func);
 
+    func_exit();
     if (err) {
         printk(KERN_ERR "unifi: %s: error %d writing IENx\n", __FUNCTION__, err);
         return ConvertSdioToCsrSdioResult(err);
@@ -499,6 +507,7 @@ CsrSdioInterruptDisable(CsrSdioFunction *function)
 #endif
     _sdio_release_host(func);
 
+    func_exit();
     if (err) {
         printk(KERN_ERR "unifi: %s: error %d writing IENx\n", __FUNCTION__, err);
         return ConvertSdioToCsrSdioResult(err);
@@ -532,6 +541,8 @@ CsrSdioFunctionEnable(CsrSdioFunction *function)
     struct sdio_func *func = (struct sdio_func *)function->priv;
     int err;
 
+    func_enter();
+
     /* Enable UniFi function 1 (the 802.11 part). */
     _sdio_claim_host(func);
     err = sdio_enable_func(func);
@@ -540,6 +551,7 @@ CsrSdioFunctionEnable(CsrSdioFunction *function)
         unifi_error(NULL, "Failed to enable SDIO function %d\n", func->num);
     }
 
+    func_exit();
     return ConvertSdioToCsrSdioResult(err);
 } /* CsrSdioFunctionEnable() */
 
@@ -563,6 +575,8 @@ CsrSdioFunctionDisable(CsrSdioFunction *function)
     struct sdio_func *func = (struct sdio_func *)function->priv;
     int err;
 
+    func_enter();
+
     /* Disable UniFi function 1 (the 802.11 part). */
     _sdio_claim_host(func);
     err = sdio_disable_func(func);
@@ -571,6 +585,7 @@ CsrSdioFunctionDisable(CsrSdioFunction *function)
         unifi_error(NULL, "Failed to disable SDIO function %d\n", func->num);
     }
 
+    func_exit();
     return ConvertSdioToCsrSdioResult(err);
 } /* CsrSdioFunctionDisable() */
 
@@ -1019,6 +1034,8 @@ uf_glue_sdio_probe(struct sdio_func *func,
     int instance;
     CsrSdioFunction *sdio_ctx;
 
+    func_enter();
+
     /* First of all claim the SDIO driver */
     sdio_claim_host(func);
 
@@ -1086,6 +1103,7 @@ uf_glue_sdio_probe(struct sdio_func *func,
     wake_lock(&unifi_sdio_wake_lock);
 #endif
 
+    func_exit();
     return 0;
 } /* uf_glue_sdio_probe() */
 
@@ -1113,6 +1131,8 @@ uf_glue_sdio_remove(struct sdio_func *func)
         return;
     }
 
+    func_enter();
+
     unifi_info(NULL, "UniFi card removed\n");
 
     /* Clean up the SDIO function driver */
@@ -1127,6 +1147,8 @@ uf_glue_sdio_remove(struct sdio_func *func)
 #endif
 
     kfree(sdio_ctx);
+
+    func_exit();
 
 } /* uf_glue_sdio_remove */
 
@@ -1161,8 +1183,11 @@ MODULE_DEVICE_TABLE(sdio, unifi_ids);
 static int
 uf_glue_sdio_suspend(struct device *dev)
 {
+    func_enter();
+
     unifi_trace(NULL, UDBG1, "uf_glue_sdio_suspend");
 
+    func_exit();
     return 0;
 } /* uf_glue_sdio_suspend */
 
@@ -1183,6 +1208,8 @@ uf_glue_sdio_suspend(struct device *dev)
 static int
 uf_glue_sdio_resume(struct device *dev)
 {
+    func_enter();
+
     unifi_trace(NULL, UDBG1, "uf_glue_sdio_resume");
 
 #ifdef ANDROID_BUILD
@@ -1190,6 +1217,7 @@ uf_glue_sdio_resume(struct device *dev)
     wake_lock(&unifi_sdio_wake_lock);
 #endif
 
+    func_exit();
     return 0;
 
 } /* uf_glue_sdio_resume */

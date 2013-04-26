@@ -552,8 +552,7 @@ static void lguest_write_cr3(unsigned long cr3)
 	current_cr3 = cr3;
 
 	/* These two page tables are simple, linear, and used during boot */
-	if (cr3 != __pa_symbol(swapper_pg_dir) &&
-	    cr3 != __pa_symbol(initial_page_table))
+	if (cr3 != __pa(swapper_pg_dir) && cr3 != __pa(initial_page_table))
 		cr3_changed = true;
 }
 
@@ -1413,7 +1412,7 @@ __init void lguest_init(void)
 
 	/* We don't have features.  We have puppies!  Puppies! */
 #ifdef CONFIG_X86_MCE
-	mca_cfg.disabled = true;
+	mce_disabled = 1;
 #endif
 #ifdef CONFIG_ACPI
 	acpi_disabled = 1;

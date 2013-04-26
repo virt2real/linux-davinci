@@ -55,10 +55,10 @@ config RT61PCI
 
 config RT2800PCI
 	tristate "Ralink rt27xx/rt28xx/rt30xx (PCI/PCIe/PCMCIA) support"
-	depends on PCI || SOC_RT288X || SOC_RT305X
+	depends on PCI || RALINK_RT288X || RALINK_RT305X
 	select RT2800_LIB
 	select RT2X00_LIB_PCI if PCI
-	select RT2X00_LIB_SOC if SOC_RT288X || SOC_RT305X
+	select RT2X00_LIB_SOC if RALINK_RT288X || RALINK_RT305X
 	select RT2X00_LIB_FIRMWARE
 	select RT2X00_LIB_CRYPTO
 	select CRC_CCITT
@@ -82,6 +82,7 @@ config RT2800PCI_RT33XX
 
 config RT2800PCI_RT35XX
 	bool "rt2800pci - Include support for rt35xx devices (EXPERIMENTAL)"
+	depends on EXPERIMENTAL
 	default y
 	---help---
 	  This adds support for rt35xx wireless chipset family to the
@@ -91,6 +92,7 @@ config RT2800PCI_RT35XX
 
 config RT2800PCI_RT53XX
        bool "rt2800pci - Include support for rt53xx devices (EXPERIMENTAL)"
+       depends on EXPERIMENTAL
        default y
        ---help---
          This adds support for rt53xx wireless chipset family to the
@@ -99,6 +101,7 @@ config RT2800PCI_RT53XX
 
 config RT2800PCI_RT3290
        bool "rt2800pci - Include support for rt3290 devices (EXPERIMENTAL)"
+       depends on EXPERIMENTAL
        default y
        ---help---
          This adds support for rt3290 wireless chipset family to the
@@ -156,6 +159,7 @@ config RT2800USB_RT33XX
 
 config RT2800USB_RT35XX
 	bool "rt2800usb - Include support for rt35xx devices (EXPERIMENTAL)"
+	depends on EXPERIMENTAL
 	default y
 	---help---
 	  This adds support for rt35xx wireless chipset family to the
@@ -164,6 +168,7 @@ config RT2800USB_RT35XX
 
 config RT2800USB_RT53XX
        bool "rt2800usb - Include support for rt53xx devices (EXPERIMENTAL)"
+       depends on EXPERIMENTAL
        ---help---
          This adds support for rt53xx wireless chipset family to the
          rt2800usb driver.

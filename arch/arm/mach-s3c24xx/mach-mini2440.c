@@ -40,6 +40,7 @@
 #include <plat/regs-serial.h>
 #include <mach/regs-gpio.h>
 #include <linux/platform_data/leds-s3c24xx.h>
+#include <mach/regs-mem.h>
 #include <mach/regs-lcd.h>
 #include <mach/irqs.h>
 #include <linux/platform_data/mtd-nand-s3c2410.h>
@@ -518,6 +519,7 @@ static struct platform_device *mini2440_devices[] __initdata = {
 	&s3c_device_iis,
 	&uda1340_codec,
 	&mini2440_audio,
+	&samsung_asoc_dma,
 };
 
 static void __init mini2440_map_io(void)
@@ -687,6 +689,6 @@ MACHINE_START(MINI2440, "MINI2440")
 	.map_io		= mini2440_map_io,
 	.init_machine	= mini2440_init,
 	.init_irq	= s3c24xx_init_irq,
-	.init_time	= s3c24xx_timer_init,
+	.timer		= &s3c24xx_timer,
 	.restart	= s3c244x_restart,
 MACHINE_END

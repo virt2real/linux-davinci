@@ -138,12 +138,13 @@ auth_domain_lookup(char *name, struct auth_domain *new)
 {
 	struct auth_domain *hp;
 	struct hlist_head *head;
+	struct hlist_node *np;
 
 	head = &auth_domain_table[hash_str(name, DN_HASHBITS)];
 
 	spin_lock(&auth_domain_lock);
 
-	hlist_for_each_entry(hp, head, hash) {
+	hlist_for_each_entry(hp, np, head, hash) {
 		if (strcmp(hp->name, name)==0) {
 			kref_get(&hp->ref);
 			spin_unlock(&auth_domain_lock);

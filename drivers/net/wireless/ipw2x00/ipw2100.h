@@ -577,7 +577,8 @@ struct ipw2100_priv {
 	struct delayed_work wx_event_work;
 	struct delayed_work hang_check;
 	struct delayed_work rf_kill;
-	struct delayed_work scan_event;
+	struct work_struct scan_event_now;
+	struct delayed_work scan_event_later;
 
 	int user_requested_scan;
 
@@ -1044,7 +1045,7 @@ typedef enum _ORDINAL_TABLE_1 {	// NS - means Not Supported by FW
 	IPW_ORD_POWER_MGMT_MODE,	// Power mode - 0=CAM, 1=PSP
 	IPW_ORD_POWER_MGMT_INDEX,	//NS //
 	IPW_ORD_COUNTRY_CODE,	// IEEE country code as recv'd from beacon
-	IPW_ORD_COUNTRY_CHANNELS,	// channels supported by country
+	IPW_ORD_COUNTRY_CHANNELS,	// channels suported by country
 // IPW_ORD_COUNTRY_CHANNELS:
 // For 11b the lower 2-byte are used for channels from 1-14
 //   and the higher 2-byte are not used.

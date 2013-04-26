@@ -542,7 +542,6 @@ static void sctp_do_8_2_transport_strike(sctp_cmd_seq_t *commands,
 	 */
 	if (!is_hb || transport->hb_sent) {
 		transport->rto = min((transport->rto * 2), transport->asoc->rto_max);
-		sctp_max_rto(asoc, transport);
 	}
 }
 
@@ -578,7 +577,7 @@ static void sctp_cmd_assoc_failed(sctp_cmd_seq_t *commands,
 				  unsigned int error)
 {
 	struct sctp_ulpevent *event;
-	struct sctp_chunk *abort;
+
 	/* Cancel any partial delivery in progress. */
 	sctp_ulpq_abort_pd(&asoc->ulpq, GFP_ATOMIC);
 
@@ -593,13 +592,6 @@ static void sctp_cmd_assoc_failed(sctp_cmd_seq_t *commands,
 	if (event)
 		sctp_add_cmd_sf(commands, SCTP_CMD_EVENT_ULP,
 				SCTP_ULPEVENT(event));
-
-	if (asoc->overall_error_count >= asoc->max_retrans) {
-		abort = sctp_make_violation_max_retrans(asoc, chunk);
-		if (abort)
-			sctp_add_cmd_sf(commands, SCTP_CMD_REPLY,
-					SCTP_CHUNK(abort));
-	}
 
 	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_STATE,
 			SCTP_STATE(SCTP_STATE_CLOSED));
@@ -674,8 +666,10 @@ static void sctp_cmd_t3_rtx_timers_stop(sctp_cmd_seq_t *cmds,
 
 	list_for_each_entry(t, &asoc->peer.transport_addr_list,
 			transports) {
-		if (del_timer(&t->T3_rtx_timer))
+		if (timer_pending(&t->T3_rtx_timer) &&
+		    del_timer(&t->T3_rtx_timer)) {
 			sctp_transport_put(t);
+		}
 	}
 }
 
@@ -1274,14 +1268,14 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 				sctp_outq_uncork(&asoc->outqueue);
 				local_cork = 0;
 			}
-			asoc = cmd->obj.asoc;
+			asoc = cmd->obj.ptr;
 			/* Register with the endpoint.  */
 			sctp_endpoint_add_asoc(ep, asoc);
 			sctp_hash_established(asoc);
 			break;
 
 		case SCTP_CMD_UPDATE_ASSOC:
-		       sctp_assoc_update(asoc, cmd->obj.asoc);
+		       sctp_assoc_update(asoc, cmd->obj.ptr);
 		       break;
 
 		case SCTP_CMD_PURGE_OUTQUEUE:
@@ -1321,7 +1315,7 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 			break;
 
 		case SCTP_CMD_PROCESS_FWDTSN:
-			sctp_cmd_process_fwdtsn(&asoc->ulpq, cmd->obj.chunk);
+			sctp_cmd_process_fwdtsn(&asoc->ulpq, cmd->obj.ptr);
 			break;
 
 		case SCTP_CMD_GEN_SACK:
@@ -1337,7 +1331,7 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 		case SCTP_CMD_PROCESS_SACK:
 			/* Process an inbound SACK.  */
 			error = sctp_cmd_process_sack(commands, asoc,
-						      cmd->obj.chunk);
+						      cmd->obj.ptr);
 			break;
 
 		case SCTP_CMD_GEN_INIT_ACK:
@@ -1358,15 +1352,15 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 			 * layer which will bail.
 			 */
 			error = sctp_cmd_process_init(commands, asoc, chunk,
-						      cmd->obj.init, gfp);
+						      cmd->obj.ptr, gfp);
 			break;
 
 		case SCTP_CMD_GEN_COOKIE_ECHO:
 			/* Generate a COOKIE ECHO chunk.  */
 			new_obj = sctp_make_cookie_echo(asoc, chunk);
 			if (!new_obj) {
-				if (cmd->obj.chunk)
-					sctp_chunk_free(cmd->obj.chunk);
+				if (cmd->obj.ptr)
+					sctp_chunk_free(cmd->obj.ptr);
 				goto nomem;
 			}
 			sctp_add_cmd_sf(commands, SCTP_CMD_REPLY,
@@ -1375,9 +1369,9 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 			/* If there is an ERROR chunk to be sent along with
 			 * the COOKIE_ECHO, send it, too.
 			 */
-			if (cmd->obj.chunk)
+			if (cmd->obj.ptr)
 				sctp_add_cmd_sf(commands, SCTP_CMD_REPLY,
-						SCTP_CHUNK(cmd->obj.chunk));
+						SCTP_CHUNK(cmd->obj.ptr));
 
 			if (new_obj->transport) {
 				new_obj->transport->init_sent_count++;
@@ -1423,18 +1417,18 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 		case SCTP_CMD_CHUNK_ULP:
 			/* Send a chunk to the sockets layer.  */
 			SCTP_DEBUG_PRINTK("sm_sideff: %s %p, %s %p.\n",
-					  "chunk_up:", cmd->obj.chunk,
+					  "chunk_up:", cmd->obj.ptr,
 					  "ulpq:", &asoc->ulpq);
-			sctp_ulpq_tail_data(&asoc->ulpq, cmd->obj.chunk,
+			sctp_ulpq_tail_data(&asoc->ulpq, cmd->obj.ptr,
 					    GFP_ATOMIC);
 			break;
 
 		case SCTP_CMD_EVENT_ULP:
 			/* Send a notification to the sockets layer.  */
 			SCTP_DEBUG_PRINTK("sm_sideff: %s %p, %s %p.\n",
-					  "event_up:",cmd->obj.ulpevent,
+					  "event_up:",cmd->obj.ptr,
 					  "ulpq:",&asoc->ulpq);
-			sctp_ulpq_tail_event(&asoc->ulpq, cmd->obj.ulpevent);
+			sctp_ulpq_tail_event(&asoc->ulpq, cmd->obj.ptr);
 			break;
 
 		case SCTP_CMD_REPLY:
@@ -1444,12 +1438,12 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 				local_cork = 1;
 			}
 			/* Send a chunk to our peer.  */
-			error = sctp_outq_tail(&asoc->outqueue, cmd->obj.chunk);
+			error = sctp_outq_tail(&asoc->outqueue, cmd->obj.ptr);
 			break;
 
 		case SCTP_CMD_SEND_PKT:
 			/* Send a full packet to our peer.  */
-			packet = cmd->obj.packet;
+			packet = cmd->obj.ptr;
 			sctp_packet_transmit(packet);
 			sctp_ootb_pkt_free(packet);
 			break;
@@ -1486,7 +1480,7 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 			break;
 
 		case SCTP_CMD_SETUP_T2:
-			sctp_cmd_setup_t2(commands, asoc, cmd->obj.chunk);
+			sctp_cmd_setup_t2(commands, asoc, cmd->obj.ptr);
 			break;
 
 		case SCTP_CMD_TIMER_START_ONCE:
@@ -1515,12 +1509,12 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 
 		case SCTP_CMD_TIMER_STOP:
 			timer = &asoc->timers[cmd->obj.to];
-			if (del_timer(timer))
+			if (timer_pending(timer) && del_timer(timer))
 				sctp_association_put(asoc);
 			break;
 
 		case SCTP_CMD_INIT_CHOOSE_TRANSPORT:
-			chunk = cmd->obj.chunk;
+			chunk = cmd->obj.ptr;
 			t = sctp_assoc_choose_alter_transport(asoc,
 						asoc->init_last_sent_to);
 			asoc->init_last_sent_to = t;
@@ -1671,16 +1665,17 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 			break;
 
 		case SCTP_CMD_PART_DELIVER:
-			sctp_ulpq_partial_delivery(&asoc->ulpq, GFP_ATOMIC);
+			sctp_ulpq_partial_delivery(&asoc->ulpq, cmd->obj.ptr,
+						   GFP_ATOMIC);
 			break;
 
 		case SCTP_CMD_RENEGE:
-			sctp_ulpq_renege(&asoc->ulpq, cmd->obj.chunk,
+			sctp_ulpq_renege(&asoc->ulpq, cmd->obj.ptr,
 					 GFP_ATOMIC);
 			break;
 
 		case SCTP_CMD_SETUP_T4:
-			sctp_cmd_setup_t4(commands, asoc, cmd->obj.chunk);
+			sctp_cmd_setup_t4(commands, asoc, cmd->obj.ptr);
 			break;
 
 		case SCTP_CMD_PROCESS_OPERR:
@@ -1739,8 +1734,8 @@ static int sctp_cmd_interpreter(sctp_event_t event_type,
 			break;
 
 		default:
-			pr_warn("Impossible command: %u\n",
-				cmd->verb);
+			pr_warn("Impossible command: %u, %p\n",
+				cmd->verb, cmd->obj.ptr);
 			break;
 		}
 

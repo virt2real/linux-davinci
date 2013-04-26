@@ -28,8 +28,6 @@
  * Authors:
  *    Keith Whitwell <keith@tungstengraphics.com>
  *    Michel D�zer <michel@daenzer.net>
- *
- * ------------------------ This file is DEPRECATED! -------------------------
  */
 
 #include <drm/drmP.h>

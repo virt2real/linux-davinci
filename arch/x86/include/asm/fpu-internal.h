@@ -26,10 +26,9 @@
 #ifdef CONFIG_X86_64
 # include <asm/sigcontext32.h>
 # include <asm/user32.h>
-struct ksignal;
-int ia32_setup_rt_frame(int sig, struct ksignal *ksig,
+int ia32_setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 			compat_sigset_t *set, struct pt_regs *regs);
-int ia32_setup_frame(int sig, struct ksignal *ksig,
+int ia32_setup_frame(int sig, struct k_sigaction *ka,
 		     compat_sigset_t *set, struct pt_regs *regs);
 #else
 # define user_i387_ia32_struct	user_i387_struct
@@ -400,17 +399,14 @@ static inline void drop_init_fpu(struct task_struct *tsk)
 typedef struct { int preload; } fpu_switch_t;
 
 /*
- * Must be run with preemption disabled: this clears the fpu_owner_task,
- * on this CPU.
+ * FIXME! We could do a totally lazy restore, but we need to
+ * add a per-cpu "this was the task that last touched the FPU
+ * on this CPU" variable, and the task needs to have a "I last
+ * touched the FPU on this CPU" and check them.
  *
- * This will disable any lazy FPU state restore of the current FPU state,
- * but if the current thread owns the FPU, it will still be saved by.
+ * We don't do that yet, so "fpu_lazy_restore()" always returns
+ * false, but some day..
  */
-static inline void __cpu_disable_lazy_restore(unsigned int cpu)
-{
-	per_cpu(fpu_owner_task, cpu) = NULL;
-}
-
 static inline int fpu_lazy_restore(struct task_struct *new, unsigned int cpu)
 {
 	return new == this_cpu_read_stable(fpu_owner_task) &&

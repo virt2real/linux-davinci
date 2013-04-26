@@ -41,9 +41,7 @@ Updated: Sat, 25 Jan 2003 13:24:40 -0800
 #define DEBUG 1
 #define DEBUG_FLAGS
 
-#include <linux/pci.h>
 #include <linux/interrupt.h>
-
 #include "../comedidev.h"
 
 #include "comedi_fc.h"
@@ -114,11 +112,12 @@ struct ni6527_private {
 	unsigned int filter_enable;
 };
 
+#define devpriv ((struct ni6527_private *)dev->private)
+
 static int ni6527_di_insn_config(struct comedi_device *dev,
 				 struct comedi_subdevice *s,
 				 struct comedi_insn *insn, unsigned int *data)
 {
-	struct ni6527_private *devpriv = dev->private;
 	int chan = CR_CHAN(insn->chanspec);
 	unsigned int interval;
 
@@ -165,8 +164,6 @@ static int ni6527_di_insn_bits(struct comedi_device *dev,
 			       struct comedi_subdevice *s,
 			       struct comedi_insn *insn, unsigned int *data)
 {
-	struct ni6527_private *devpriv = dev->private;
-
 	data[1] = readb(devpriv->mite->daq_io_addr + Port_Register(0));
 	data[1] |= readb(devpriv->mite->daq_io_addr + Port_Register(1)) << 8;
 	data[1] |= readb(devpriv->mite->daq_io_addr + Port_Register(2)) << 16;
@@ -178,8 +175,6 @@ static int ni6527_do_insn_bits(struct comedi_device *dev,
 			       struct comedi_subdevice *s,
 			       struct comedi_insn *insn, unsigned int *data)
 {
-	struct ni6527_private *devpriv = dev->private;
-
 	if (data[0]) {
 		s->state &= ~data[0];
 		s->state |= (data[0] & data[1]);
@@ -207,7 +202,6 @@ static int ni6527_do_insn_bits(struct comedi_device *dev,
 static irqreturn_t ni6527_interrupt(int irq, void *d)
 {
 	struct comedi_device *dev = d;
-	struct ni6527_private *devpriv = dev->private;
 	struct comedi_subdevice *s = &dev->subdevices[2];
 	unsigned int status;
 
@@ -249,13 +243,29 @@ static int ni6527_intr_cmdtest(struct comedi_device *dev,
 	if (err)
 		return 2;
 
-	/* Step 3: check if arguments are trivially valid */
+	/* step 3: make sure arguments are trivially compatible */
 
-	err |= cfc_check_trigger_arg_is(&cmd->start_arg, 0);
-	err |= cfc_check_trigger_arg_is(&cmd->scan_begin_arg, 0);
-	err |= cfc_check_trigger_arg_is(&cmd->convert_arg, 0);
-	err |= cfc_check_trigger_arg_is(&cmd->scan_end_arg, 1);
-	err |= cfc_check_trigger_arg_is(&cmd->stop_arg, 0);
+	if (cmd->start_arg != 0) {
+		cmd->start_arg = 0;
+		err++;
+	}
+	if (cmd->scan_begin_arg != 0) {
+		cmd->scan_begin_arg = 0;
+		err++;
+	}
+	if (cmd->convert_arg != 0) {
+		cmd->convert_arg = 0;
+		err++;
+	}
+
+	if (cmd->scan_end_arg != 1) {
+		cmd->scan_end_arg = 1;
+		err++;
+	}
+	if (cmd->stop_arg != 0) {
+		cmd->stop_arg = 0;
+		err++;
+	}
 
 	if (err)
 		return 3;
@@ -271,7 +281,6 @@ static int ni6527_intr_cmdtest(struct comedi_device *dev,
 static int ni6527_intr_cmd(struct comedi_device *dev,
 			   struct comedi_subdevice *s)
 {
-	struct ni6527_private *devpriv = dev->private;
 	/* struct comedi_cmd *cmd = &s->async->cmd; */
 
 	writeb(ClrEdge | ClrOverflow,
@@ -286,8 +295,6 @@ static int ni6527_intr_cmd(struct comedi_device *dev,
 static int ni6527_intr_cancel(struct comedi_device *dev,
 			      struct comedi_subdevice *s)
 {
-	struct ni6527_private *devpriv = dev->private;
-
 	writeb(0x00, devpriv->mite->daq_io_addr + Master_Interrupt_Control);
 
 	return 0;
@@ -305,8 +312,6 @@ static int ni6527_intr_insn_config(struct comedi_device *dev,
 				   struct comedi_subdevice *s,
 				   struct comedi_insn *insn, unsigned int *data)
 {
-	struct ni6527_private *devpriv = dev->private;
-
 	if (insn->n < 1)
 		return -EINVAL;
 	if (data[0] != INSN_CONFIG_CHANGE_NOTIFY)
@@ -343,18 +348,15 @@ ni6527_find_boardinfo(struct pci_dev *pcidev)
 	return NULL;
 }
 
-static int ni6527_auto_attach(struct comedi_device *dev,
-					unsigned long context_unused)
+static int __devinit ni6527_attach_pci(struct comedi_device *dev,
+				       struct pci_dev *pcidev)
 {
-	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
-	struct ni6527_private *devpriv;
 	struct comedi_subdevice *s;
 	int ret;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(struct ni6527_private));
+	if (ret < 0)
+		return ret;
 
 	dev->board_ptr = ni6527_find_boardinfo(pcidev);
 	if (!dev->board_ptr)
@@ -428,8 +430,6 @@ static int ni6527_auto_attach(struct comedi_device *dev,
 
 static void ni6527_detach(struct comedi_device *dev)
 {
-	struct ni6527_private *devpriv = dev->private;
-
 	if (devpriv && devpriv->mite && devpriv->mite->daq_io_addr)
 		writeb(0x00,
 		       devpriv->mite->daq_io_addr + Master_Interrupt_Control);
@@ -444,21 +444,26 @@ static void ni6527_detach(struct comedi_device *dev)
 static struct comedi_driver ni6527_driver = {
 	.driver_name = DRIVER_NAME,
 	.module = THIS_MODULE,
-	.auto_attach = ni6527_auto_attach,
+	.attach_pci = ni6527_attach_pci,
 	.detach = ni6527_detach,
 };
 
-static int ni6527_pci_probe(struct pci_dev *dev,
+static int __devinit ni6527_pci_probe(struct pci_dev *dev,
 				      const struct pci_device_id *ent)
 {
 	return comedi_pci_auto_config(dev, &ni6527_driver);
+}
+
+static void __devexit ni6527_pci_remove(struct pci_dev *dev)
+{
+	comedi_pci_auto_unconfig(dev);
 }
 
 static struct pci_driver ni6527_pci_driver = {
 	.name = DRIVER_NAME,
 	.id_table = ni6527_pci_table,
 	.probe = ni6527_pci_probe,
-	.remove		= comedi_pci_auto_unconfig,
+	.remove = __devexit_p(ni6527_pci_remove)
 };
 module_comedi_pci_driver(ni6527_driver, ni6527_pci_driver);
 

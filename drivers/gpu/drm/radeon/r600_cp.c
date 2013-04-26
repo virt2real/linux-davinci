@@ -24,8 +24,6 @@
  * Authors:
  *     Dave Airlie <airlied@redhat.com>
  *     Alex Deucher <alexander.deucher@amd.com>
- *
- * ------------------------ This file is DEPRECATED! -------------------------
  */
 
 #include <linux/module.h>
@@ -723,7 +721,12 @@ static u32 r600_get_tile_pipe_to_backend_map(u32 num_tile_pipes,
 
 static int r600_count_pipe_bits(uint32_t val)
 {
-	return hweight32(val);
+	int i, ret = 0;
+	for (i = 0; i < 32; i++) {
+		ret += val & 1;
+		val >>= 1;
+	}
+	return ret;
 }
 
 static void r600_gfx_init(struct drm_device *dev,

@@ -256,6 +256,7 @@ static int rawsock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	return rc ? : copied;
 }
 
+
 static const struct proto_ops rawsock_ops = {
 	.family         = PF_NFC,
 	.owner          = THIS_MODULE,

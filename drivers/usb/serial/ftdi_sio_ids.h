@@ -147,11 +147,6 @@
 #define XSENS_CONVERTER_6_PID	0xD38E
 #define XSENS_CONVERTER_7_PID	0xD38F
 
-/**
- * Zolix (www.zolix.com.cb) product ids
- */
-#define FTDI_OMNI1509			0xD491	/* Omni1509 embedded USB-serial */
-
 /*
  * NDI (www.ndigital.com) product ids
  */
@@ -209,7 +204,7 @@
 
 /*
  * ELV USB devices submitted by Christian Abt of ELV (www.elv.de).
- * Almost all of these devices use FTDI's vendor ID (0x0403).
+ * All of these devices use FTDI's vendor ID (0x0403).
  * Further IDs taken from ELV Windows .inf file.
  *
  * The previously included PID for the UO 100 module was incorrect.
@@ -217,8 +212,6 @@
  *
  * Armin Laeuger originally sent the PID for the UM 100 module.
  */
-#define FTDI_ELV_VID	0x1B1F	/* ELV AG */
-#define FTDI_ELV_WS300_PID	0xC006	/* eQ3 WS 300 PC II */
 #define FTDI_ELV_USR_PID	0xE000	/* ELV Universal-Sound-Recorder */
 #define FTDI_ELV_MSM1_PID	0xE001	/* ELV Mini-Sound-Modul */
 #define FTDI_ELV_KL100_PID	0xE002	/* ELV Kfz-Leistungsmesser KL 100 */
@@ -584,13 +577,6 @@
 #define CONTEC_COM1USBH_PID	0x8311	/* COM-1(USB)H */
 
 /*
- * Mitsubishi Electric Corp. (http://www.meau.com)
- * Submitted by Konstantin Holoborodko
- */
-#define MITSUBISHI_VID		0x06D3
-#define MITSUBISHI_FXUSB_PID	0x0284 /* USB/RS422 converters: FX-USB-AW/-BD */
-
-/*
  * Definitions for B&B Electronics products.
  */
 #define BANDB_VID		0x0856	/* B&B Electronics Vendor ID */
@@ -765,12 +751,6 @@
  */
 #define TTI_VID			0x103E	/* Vendor Id */
 #define TTI_QL355P_PID		0x03E8	/* TTi QL355P power supply */
-
-/*
- * Newport Cooperation (www.newport.com)
- */
-#define NEWPORT_VID			0x104D
-#define NEWPORT_AGILIS_PID		0x3000
 
 /* Interbiometrics USB I/O Board */
 /* Developed for Interbiometrics by Rudolf Gugler */
@@ -1273,9 +1253,3 @@
  * ATI command output: Cinterion MC55i
  */
 #define FTDI_CINTERION_MC55I_PID	0xA951
-
-/*
- * Product: Comet Caller ID decoder
- * Manufacturer: Crucible Technologies
- */
-#define FTDI_CT_COMET_PID	0x8e08

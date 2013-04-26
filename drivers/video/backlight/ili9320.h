@@ -63,7 +63,7 @@ extern int ili9320_write(struct ili9320 *ili,
 			 unsigned int reg, unsigned int value);
 
 extern int ili9320_write_regs(struct ili9320 *ili,
-			      const struct ili9320_reg *values,
+			      struct ili9320_reg *values,
 			      int nr_values);
 
 /* Device probe */

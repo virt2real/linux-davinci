@@ -68,17 +68,33 @@ static int          msglevel                =MSG_LEVEL_INFO;
 //static int          msglevel                =MSG_LEVEL_DEBUG;
 /*---------------------  Static Functions  --------------------------*/
 
-static void s_vProbeChannel(struct vnt_private *);
-
-static struct vnt_tx_mgmt *s_MgrMakeProbeRequest(struct vnt_private *,
-	struct vnt_manager *pMgmt, u8 *pScanBSSID, PWLAN_IE_SSID pSSID,
-	PWLAN_IE_SUPP_RATES pCurrRates, PWLAN_IE_SUPP_RATES pCurrExtSuppRates);
-
-
-static int s_bCommandComplete(struct vnt_private *);
+static
+void
+s_vProbeChannel(
+     PSDevice pDevice
+    );
 
 
-static int s_bClearBSSID_SCAN(struct vnt_private *);
+static
+PSTxMgmtPacket
+s_MgrMakeProbeRequest(
+     PSDevice pDevice,
+     PSMgmtObject pMgmt,
+     PBYTE pScanBSSID,
+     PWLAN_IE_SSID pSSID,
+     PWLAN_IE_SUPP_RATES pCurrRates,
+     PWLAN_IE_SUPP_RATES pCurrExtSuppRates
+    );
+
+
+static
+BOOL
+s_bCommandComplete (
+    PSDevice pDevice
+    );
+
+
+static BOOL s_bClearBSSID_SCAN(void *hDeviceContext);
 
 /*---------------------  Export Variables  --------------------------*/
 
@@ -98,10 +114,13 @@ static int s_bClearBSSID_SCAN(struct vnt_private *);
  *
  */
 
-static void vAdHocBeaconStop(struct vnt_private *pDevice)
+static
+void
+vAdHocBeaconStop(PSDevice  pDevice)
 {
-	struct vnt_manager *pMgmt = &pDevice->vnt_mgmt;
-	int bStop;
+
+    PSMgmtObject    pMgmt = &(pDevice->sMgmtObj);
+    BOOL            bStop;
 
     /*
      * temporarily stop Beacon packet for AdHoc Server
@@ -114,18 +133,18 @@ static void vAdHocBeaconStop(struct vnt_private *pDevice)
      *      or
      *      (3.2) AdHoc channel is in A mode
      */
-    bStop = false;
+    bStop = FALSE;
     if ((pMgmt->eCurrMode == WMAC_MODE_IBSS_STA) &&
     (pMgmt->eCurrState >= WMAC_STATE_STARTED))
     {
         if ((pMgmt->uIBSSChannel <=  CB_MAX_CHANNEL_24G) &&
              (pMgmt->uScanChannel > CB_MAX_CHANNEL_24G))
         {
-            bStop = true;
+            bStop = TRUE;
         }
         if (pMgmt->uIBSSChannel >  CB_MAX_CHANNEL_24G)
         {
-            bStop = true;
+            bStop = TRUE;
         }
     }
 
@@ -152,9 +171,11 @@ static void vAdHocBeaconStop(struct vnt_private *pDevice)
  * Return Value: none
  *
  */
-static void vAdHocBeaconRestart(struct vnt_private *pDevice)
+static
+void
+vAdHocBeaconRestart(PSDevice pDevice)
 {
-	struct vnt_manager *pMgmt = &pDevice->vnt_mgmt;
+    PSMgmtObject    pMgmt = &(pDevice->sMgmtObj);
 
     /*
      * Restart Beacon packet for AdHoc Server
@@ -183,22 +204,22 @@ static void vAdHocBeaconRestart(struct vnt_private *pDevice)
  *
 -*/
 
-static void s_vProbeChannel(struct vnt_private *pDevice)
+static
+void
+s_vProbeChannel(
+     PSDevice pDevice
+    )
 {
-	struct vnt_manager *pMgmt = &pDevice->vnt_mgmt;
-	struct vnt_tx_mgmt *pTxPacket;
-	u8 abyCurrSuppRatesG[] = {WLAN_EID_SUPP_RATES,
-			8, 0x02, 0x04, 0x0B, 0x16, 0x24, 0x30, 0x48, 0x6C};
-			/* 1M,   2M,   5M,   11M,  18M,  24M,  36M,  54M*/
-	u8 abyCurrExtSuppRatesG[] = {WLAN_EID_EXTSUPP_RATES,
-			4, 0x0C, 0x12, 0x18, 0x60};
-			/* 6M,   9M,   12M,  48M*/
-	u8 abyCurrSuppRatesA[] = {WLAN_EID_SUPP_RATES,
-			8, 0x0C, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6C};
-	u8 abyCurrSuppRatesB[] = {WLAN_EID_SUPP_RATES,
-			4, 0x02, 0x04, 0x0B, 0x16};
-	u8 *pbyRate;
-	int ii;
+                                                     //1M,   2M,   5M,   11M,  18M,  24M,  36M,  54M
+    BYTE abyCurrSuppRatesG[] = {WLAN_EID_SUPP_RATES, 8, 0x02, 0x04, 0x0B, 0x16, 0x24, 0x30, 0x48, 0x6C};
+    BYTE abyCurrExtSuppRatesG[] = {WLAN_EID_EXTSUPP_RATES, 4, 0x0C, 0x12, 0x18, 0x60};
+                                                           //6M,   9M,   12M,  48M
+    BYTE abyCurrSuppRatesA[] = {WLAN_EID_SUPP_RATES, 8, 0x0C, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6C};
+    BYTE abyCurrSuppRatesB[] = {WLAN_EID_SUPP_RATES, 4, 0x02, 0x04, 0x0B, 0x16};
+    PBYTE           pbyRate;
+    PSTxMgmtPacket  pTxPacket;
+    PSMgmtObject    pMgmt = &(pDevice->sMgmtObj);
+    unsigned int            ii;
 
 
     if (pDevice->byBBType == BB_TYPE_11A) {
@@ -247,19 +268,24 @@ static void s_vProbeChannel(struct vnt_private *pDevice)
 -*/
 
 
-struct vnt_tx_mgmt *s_MgrMakeProbeRequest(struct vnt_private *pDevice,
-	struct vnt_manager *pMgmt, u8 *pScanBSSID, PWLAN_IE_SSID pSSID,
-	PWLAN_IE_SUPP_RATES pCurrRates, PWLAN_IE_SUPP_RATES pCurrExtSuppRates)
+PSTxMgmtPacket
+s_MgrMakeProbeRequest(
+     PSDevice pDevice,
+     PSMgmtObject pMgmt,
+     PBYTE pScanBSSID,
+     PWLAN_IE_SSID pSSID,
+     PWLAN_IE_SUPP_RATES pCurrRates,
+     PWLAN_IE_SUPP_RATES pCurrExtSuppRates
+
+    )
 {
-	struct vnt_tx_mgmt *pTxPacket = NULL;
-	WLAN_FR_PROBEREQ sFrame;
+    PSTxMgmtPacket      pTxPacket = NULL;
+    WLAN_FR_PROBEREQ    sFrame;
 
 
-	pTxPacket = (struct vnt_tx_mgmt *)pMgmt->pbyMgmtPacketPool;
-	memset(pTxPacket, 0, sizeof(struct vnt_tx_mgmt)
-		+ WLAN_PROBEREQ_FR_MAXLEN);
-	pTxPacket->p80211Header = (PUWLAN_80211HDR)((u8 *)pTxPacket
-		+ sizeof(struct vnt_tx_mgmt));
+    pTxPacket = (PSTxMgmtPacket)pMgmt->pbyMgmtPacketPool;
+    memset(pTxPacket, 0, sizeof(STxMgmtPacket) + WLAN_PROBEREQ_FR_MAXLEN);
+    pTxPacket->p80211Header = (PUWLAN_80211HDR)((PBYTE)pTxPacket + sizeof(STxMgmtPacket));
     sFrame.pBuf = (PBYTE)pTxPacket->p80211Header;
     sFrame.len = WLAN_PROBEREQ_FR_MAXLEN;
     vMgrEncodeProbeRequest(&sFrame);
@@ -290,36 +316,35 @@ struct vnt_tx_mgmt *s_MgrMakeProbeRequest(struct vnt_private *pDevice,
     return pTxPacket;
 }
 
-void vCommandTimerWait(struct vnt_private *pDevice, unsigned long MSecond)
+void vCommandTimerWait(void *hDeviceContext, unsigned int MSecond)
 {
+    PSDevice        pDevice = (PSDevice)hDeviceContext;
 
-	init_timer(&pDevice->sTimerCommand);
-
-	pDevice->sTimerCommand.data = (unsigned long)pDevice;
-	pDevice->sTimerCommand.function = (TimerFunction)vRunCommand;
-	pDevice->sTimerCommand.expires = RUN_AT((MSecond * HZ) / 1000);
-
-	add_timer(&pDevice->sTimerCommand);
-
-	return;
+    init_timer(&pDevice->sTimerCommand);
+    pDevice->sTimerCommand.data = (unsigned long)pDevice;
+    pDevice->sTimerCommand.function = (TimerFunction)vRunCommand;
+    // RUN_AT :1 msec ~= (HZ/1024)
+    pDevice->sTimerCommand.expires = (unsigned int)RUN_AT((MSecond * HZ) >> 10);
+    add_timer(&pDevice->sTimerCommand);
+    return;
 }
 
-void vRunCommand(struct vnt_private *pDevice)
+void vRunCommand(void *hDeviceContext)
 {
-	struct vnt_manager *pMgmt = &pDevice->vnt_mgmt;
-	PWLAN_IE_SSID pItemSSID;
-	PWLAN_IE_SSID pItemSSIDCurr;
-	CMD_STATUS Status;
-	struct sk_buff  *skb;
-	union iwreq_data wrqu;
-	int ii;
-	u8 byMask[8] = {1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80};
-	u8 byData;
+    PSDevice        pDevice = (PSDevice)hDeviceContext;
+    PSMgmtObject    pMgmt = &(pDevice->sMgmtObj);
+    PWLAN_IE_SSID   pItemSSID;
+    PWLAN_IE_SSID   pItemSSIDCurr;
+    CMD_STATUS      Status;
+    unsigned int            ii;
+    BYTE            byMask[8] = {1, 2, 4, 8, 0x10, 0x20, 0x40, 0x80};
+    struct sk_buff  *skb;
+    BYTE            byData;
 
 
     if (pDevice->dwDiagRefCount != 0)
         return;
-    if (pDevice->bCmdRunning != true)
+    if (pDevice->bCmdRunning != TRUE)
         return;
 
     spin_lock_irq(&pDevice->lock);
@@ -329,7 +354,7 @@ void vRunCommand(struct vnt_private *pDevice)
         case WLAN_CMD_SCAN_START:
 
 		pDevice->byReAssocCount = 0;
-            if (pDevice->bRadioOff == true) {
+            if (pDevice->bRadioOff == TRUE) {
                 s_bCommandComplete(pDevice);
                 spin_unlock_irq(&pDevice->lock);
                 return;
@@ -357,7 +382,7 @@ void vRunCommand(struct vnt_private *pDevice)
                 if (pDevice->bUpdateBBVGA) {
                     BBvSetShortSlotTime(pDevice);
                     BBvSetVGAGainOffset(pDevice, pDevice->byBBVGACurrent);
-                    BBvUpdatePreEDThreshold(pDevice, false);
+                    BBvUpdatePreEDThreshold(pDevice, FALSE);
                 }
                 // Set channel back
                 vAdHocBeaconRestart(pDevice);
@@ -369,7 +394,7 @@ void vRunCommand(struct vnt_private *pDevice)
                     pDevice->byRxMode |= RCR_BSSID;
                 }
                 DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO "Scanning, set back to channel: [%d]\n", pMgmt->uCurrChannel);
-                pDevice->bStopDataPkt = false;
+                pDevice->bStopDataPkt = FALSE;
                 s_bCommandComplete(pDevice);
                 spin_unlock_irq(&pDevice->lock);
                 return;
@@ -395,7 +420,7 @@ void vRunCommand(struct vnt_private *pDevice)
 		       pDevice->bLinkPass); */
                     pMgmt->eScanState = WMAC_IS_SCANNING;
                     pDevice->byScanBBType = pDevice->byBBType;  //lucas
-                    pDevice->bStopDataPkt = true;
+                    pDevice->bStopDataPkt = TRUE;
                     // Turn off RCR_BSSID filter every time
                     MACvRegBitsOff(pDevice, MAC_REG_RCR, RCR_BSSID);
                     pDevice->byRxMode &= ~RCR_BSSID;
@@ -419,7 +444,7 @@ void vRunCommand(struct vnt_private *pDevice)
                 if (pDevice->bUpdateBBVGA) {
                     BBvSetShortSlotTime(pDevice);
                     BBvSetVGAGainOffset(pDevice, pDevice->abyBBVGA[0]);
-                    BBvUpdatePreEDThreshold(pDevice, true);
+                    BBvUpdatePreEDThreshold(pDevice, TRUE);
                 }
                 pMgmt->uScanChannel++;
 
@@ -433,7 +458,7 @@ void vRunCommand(struct vnt_private *pDevice)
                     pDevice->eCommandState = WLAN_CMD_SCAN_END;
 
                 }
-                if ((pMgmt->b11hEnable == false) ||
+                if ((pMgmt->b11hEnable == FALSE) ||
                     (pMgmt->uScanChannel < CB_MAX_CHANNEL_24G)) {
                     s_vProbeChannel(pDevice);
                     spin_unlock_irq(&pDevice->lock);
@@ -460,7 +485,7 @@ void vRunCommand(struct vnt_private *pDevice)
             if (pDevice->bUpdateBBVGA) {
                 BBvSetShortSlotTime(pDevice);
                 BBvSetVGAGainOffset(pDevice, pDevice->byBBVGACurrent);
-                BBvUpdatePreEDThreshold(pDevice, false);
+                BBvUpdatePreEDThreshold(pDevice, FALSE);
             }
 
             // Set channel back
@@ -474,13 +499,18 @@ void vRunCommand(struct vnt_private *pDevice)
             }
             DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO "Scanning, set back to channel: [%d]\n", pMgmt->uCurrChannel);
             pMgmt->eScanState = WMAC_NO_SCANNING;
-            pDevice->bStopDataPkt = false;
+            pDevice->bStopDataPkt = FALSE;
 
-		/*send scan event to wpa_Supplicant*/
-		PRINT_K("wireless_send_event--->SIOCGIWSCAN(scan done)\n");
-		memset(&wrqu, 0, sizeof(wrqu));
-		wireless_send_event(pDevice->dev, SIOCGIWSCAN, &wrqu, NULL);
-
+#ifdef WPA_SUPPLICANT_DRIVER_WEXT_SUPPORT
+	if(pMgmt->eScanType == WMAC_SCAN_PASSIVE)
+		{
+			//send scan event to wpa_Supplicant
+				union iwreq_data wrqu;
+				PRINT_K("wireless_send_event--->SIOCGIWSCAN(scan done)\n");
+				memset(&wrqu, 0, sizeof(wrqu));
+				wireless_send_event(pDevice->dev, SIOCGIWSCAN, &wrqu, NULL);
+			}
+#endif
             s_bCommandComplete(pDevice);
             break;
 
@@ -493,12 +523,14 @@ void vRunCommand(struct vnt_private *pDevice)
                 return;
             } else {
 
-		      pDevice->bwextstep0 = false;
-                        pDevice->bwextstep1 = false;
-                        pDevice->bwextstep2 = false;
-                        pDevice->bwextstep3 = false;
-		   pDevice->bWPASuppWextEnabled = false;
-                   pDevice->fWPA_Authened = false;
+          #ifdef WPA_SUPPLICANT_DRIVER_WEXT_SUPPORT
+		      pDevice->bwextstep0 = FALSE;
+                        pDevice->bwextstep1 = FALSE;
+                        pDevice->bwextstep2 = FALSE;
+                        pDevice->bwextstep3 = FALSE;
+		   pDevice->bWPASuppWextEnabled = FALSE;
+	 #endif
+                   pDevice->fWPA_Authened = FALSE;
 
                 DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"Send Disassociation Packet..\n");
                 // reason = 8 : disassoc because sta has left
@@ -507,18 +539,18 @@ void vRunCommand(struct vnt_private *pDevice)
 				     pMgmt->abyCurrBSSID,
 				     (8),
 				     &Status);
-                pDevice->bLinkPass = false;
+                pDevice->bLinkPass = FALSE;
                 ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_SLOW);
                 // unlock command busy
                 pItemSSID = (PWLAN_IE_SSID)pMgmt->abyCurrSSID;
                 pItemSSID->len = 0;
                 memset(pItemSSID->abySSID, 0, WLAN_SSID_MAXLEN);
                 pMgmt->eCurrState = WMAC_STATE_IDLE;
-                pMgmt->sNodeDBTable[0].bActive = false;
-//                pDevice->bBeaconBufReady = false;
+                pMgmt->sNodeDBTable[0].bActive = FALSE;
+//                pDevice->bBeaconBufReady = FALSE;
             }
             netif_stop_queue(pDevice->dev);
-            if (pDevice->bNeedRadioOFF == true)
+            if (pDevice->bNeedRadioOFF == TRUE)
                 CARDbRadioPowerOff(pDevice);
             s_bCommandComplete(pDevice);
             break;
@@ -527,7 +559,7 @@ void vRunCommand(struct vnt_private *pDevice)
         case WLAN_CMD_SSID_START:
 
 		pDevice->byReAssocCount = 0;
-            if (pDevice->bRadioOff == true) {
+            if (pDevice->bRadioOff == TRUE) {
                 s_bCommandComplete(pDevice);
                 spin_unlock_irq(&pDevice->lock);
                 return;
@@ -560,7 +592,7 @@ void vRunCommand(struct vnt_private *pDevice)
                     }
                 }
                 netif_stop_queue(pDevice->dev);
-                pDevice->bLinkPass = false;
+                pDevice->bLinkPass = FALSE;
                 ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_SLOW);
             }
             // set initial state
@@ -597,9 +629,9 @@ void vRunCommand(struct vnt_private *pDevice)
                     if (netif_queue_stopped(pDevice->dev)){
                         netif_wake_queue(pDevice->dev);
                     }
-                    pDevice->bLinkPass = true;
+                    pDevice->bLinkPass = TRUE;
                     ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_INTER);
-                    pMgmt->sNodeDBTable[0].bActive = true;
+                    pMgmt->sNodeDBTable[0].bActive = TRUE;
                     pMgmt->sNodeDBTable[0].uInActiveCount = 0;
                 }
                 else {
@@ -630,7 +662,7 @@ void vRunCommand(struct vnt_private *pDevice)
                     BSSvAddMulticastNode(pDevice);
                     s_bClearBSSID_SCAN(pDevice);
 /*
-                    pDevice->bLinkPass = true;
+                    pDevice->bLinkPass = TRUE;
                     ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_INTER);
                     if (netif_queue_stopped(pDevice->dev)){
                         netif_wake_queue(pDevice->dev);
@@ -640,7 +672,8 @@ void vRunCommand(struct vnt_private *pDevice)
                 }
                 else {
                     DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO "Disconnect SSID none\n");
-                    // if(pDevice->bWPASuppWextEnabled == true)
+                     #ifdef WPA_SUPPLICANT_DRIVER_WEXT_SUPPORT
+                    // if(pDevice->bWPASuppWextEnabled == TRUE)
                         {
                   	union iwreq_data  wrqu;
                   	memset(&wrqu, 0, sizeof (wrqu));
@@ -648,6 +681,7 @@ void vRunCommand(struct vnt_private *pDevice)
                   	PRINT_K("wireless_send_event--->SIOCGIWAP(disassociated:vMgrJoinBSSBegin Fail !!)\n");
                   	wireless_send_event(pDevice->dev, SIOCGIWAP, &wrqu, NULL);
                        }
+                    #endif
                 }
             }
             s_bCommandComplete(pDevice);
@@ -698,7 +732,7 @@ void vRunCommand(struct vnt_private *pDevice)
 */
                 pDevice->byLinkWaitCount = 0;
                 pDevice->byReAssocCount = 0;
-                pDevice->bLinkPass = true;
+                pDevice->bLinkPass = TRUE;
                 ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_INTER);
                 s_bClearBSSID_SCAN(pDevice);
 
@@ -706,20 +740,20 @@ void vRunCommand(struct vnt_private *pDevice)
                     netif_wake_queue(pDevice->dev);
                 }
 
-		 if(pDevice->IsTxDataTrigger != false)   {    //TxDataTimer is not triggered at the first time
+		 if(pDevice->IsTxDataTrigger != FALSE)   {    //TxDataTimer is not triggered at the first time
                      // printk("Re-initial TxDataTimer****\n");
 		    del_timer(&pDevice->sTimerTxData);
                       init_timer(&pDevice->sTimerTxData);
 			pDevice->sTimerTxData.data = (unsigned long) pDevice;
                       pDevice->sTimerTxData.function = (TimerFunction)BSSvSecondTxData;
                       pDevice->sTimerTxData.expires = RUN_AT(10*HZ);      //10s callback
-                      pDevice->fTxDataInSleep = false;
+                      pDevice->fTxDataInSleep = FALSE;
                       pDevice->nTxDataTimeCout = 0;
 		 }
 		 else {
 		   // printk("mike:-->First time trigger TimerTxData InSleep\n");
 		 }
-		pDevice->IsTxDataTrigger = true;
+		pDevice->IsTxDataTrigger = TRUE;
                 add_timer(&pDevice->sTimerTxData);
 
             }
@@ -745,15 +779,15 @@ void vRunCommand(struct vnt_private *pDevice)
                 del_timer(&pMgmt->sTimerSecondCallback);
                 pMgmt->eCurrState = WMAC_STATE_IDLE;
                 pMgmt->eCurrMode = WMAC_MODE_STANDBY;
-                pDevice->bLinkPass = false;
+                pDevice->bLinkPass = FALSE;
                 ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_SLOW);
-                if (pDevice->bEnableHostWEP == true)
+                if (pDevice->bEnableHostWEP == TRUE)
                     BSSvClearNodeDBTable(pDevice, 1);
                 else
                     BSSvClearNodeDBTable(pDevice, 0);
                 pDevice->uAssocCount = 0;
                 pMgmt->eCurrState = WMAC_STATE_IDLE;
-                pDevice->bFixRate = false;
+                pDevice->bFixRate = FALSE;
 
 		vMgrCreateOwnIBSS((void *) pDevice, &Status);
 		if (Status != CMD_STATUS_SUCCESS) {
@@ -768,7 +802,7 @@ void vRunCommand(struct vnt_private *pDevice)
                 if (netif_queue_stopped(pDevice->dev)){
                     netif_wake_queue(pDevice->dev);
                 }
-                pDevice->bLinkPass = true;
+                pDevice->bLinkPass = TRUE;
                 ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_INTER);
                 add_timer(&pMgmt->sTimerSecondCallback);
             }
@@ -781,10 +815,10 @@ void vRunCommand(struct vnt_private *pDevice)
                 while ((skb = skb_dequeue(&pMgmt->sNodeDBTable[0].sTxPSQueue)) != NULL) {
                     if (skb_queue_empty(&pMgmt->sNodeDBTable[0].sTxPSQueue)) {
                         pMgmt->abyPSTxMap[0] &= ~byMask[0];
-                        pDevice->bMoreData = false;
+                        pDevice->bMoreData = FALSE;
                     }
                     else {
-                        pDevice->bMoreData = true;
+                        pDevice->bMoreData = TRUE;
                     }
 
                     if (nsDMA_tx_packet(pDevice, TYPE_AC0DMA, skb) != 0) {
@@ -806,10 +840,10 @@ void vRunCommand(struct vnt_private *pDevice)
                             // clear tx map
                             pMgmt->abyPSTxMap[pMgmt->sNodeDBTable[ii].wAID >> 3] &=
                                     ~byMask[pMgmt->sNodeDBTable[ii].wAID & 7];
-                            pDevice->bMoreData = false;
+                            pDevice->bMoreData = FALSE;
                         }
                         else {
-                            pDevice->bMoreData = true;
+                            pDevice->bMoreData = TRUE;
                         }
 
                         if (nsDMA_tx_packet(pDevice, TYPE_AC0DMA, skb) != 0) {
@@ -828,7 +862,7 @@ void vRunCommand(struct vnt_private *pDevice)
                                     ~byMask[pMgmt->sNodeDBTable[ii].wAID & 7];
                         DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO "Index=%d PS queue clear \n", ii);
                     }
-                    pMgmt->sNodeDBTable[ii].bRxPSPoll = false;
+                    pMgmt->sNodeDBTable[ii].bRxPSPoll = FALSE;
                 }
             }
 
@@ -838,7 +872,7 @@ void vRunCommand(struct vnt_private *pDevice)
         case WLAN_CMD_RADIO_START:
 
             DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"eCommandState == WLAN_CMD_RADIO_START\n");
-       //     if (pDevice->bRadioCmd == true)
+       //     if (pDevice->bRadioCmd == TRUE)
        //         CARDbRadioPowerOn(pDevice);
        //     else
        //         CARDbRadioPowerOff(pDevice);
@@ -866,31 +900,32 @@ void vRunCommand(struct vnt_private *pDevice)
 	       pDevice->cbFreeCmdQueue = CMD_Q_SIZE;
                 pDevice->uCmdDequeueIdx = 0;
                 pDevice->uCmdEnqueueIdx = 0;
-                //0415pDevice->bCmdRunning = false;
-                pDevice->bCmdClear = true;
-                pDevice->bStopTx0Pkt = false;
-                pDevice->bStopDataPkt = true;
+                //0415pDevice->bCmdRunning = FALSE;
+                pDevice->bCmdClear = TRUE;
+                pDevice->bStopTx0Pkt = FALSE;
+                pDevice->bStopDataPkt = TRUE;
 
                 pDevice->byKeyIndex = 0;
-                pDevice->bTransmitKey = false;
+                pDevice->bTransmitKey = FALSE;
 	    spin_unlock_irq(&pDevice->lock);
 	    KeyvInitTable(pDevice,&pDevice->sKey);
 	    spin_lock_irq(&pDevice->lock);
 	       pMgmt->byCSSPK = KEY_CTL_NONE;
                 pMgmt->byCSSGK = KEY_CTL_NONE;
 
-	  if (pDevice->bLinkPass == true) {
+	  if (pDevice->bLinkPass == TRUE) {
                 // reason = 8 : disassoc because sta has left
 		vMgrDisassocBeginSta((void *) pDevice,
 				     pMgmt,
 				     pMgmt->abyCurrBSSID,
 				     (8),
 				     &Status);
-                       pDevice->bLinkPass = false;
+                       pDevice->bLinkPass = FALSE;
                 // unlock command busy
                         pMgmt->eCurrState = WMAC_STATE_IDLE;
-                        pMgmt->sNodeDBTable[0].bActive = false;
-                    // if(pDevice->bWPASuppWextEnabled == true)
+                        pMgmt->sNodeDBTable[0].bActive = FALSE;
+                     #ifdef WPA_SUPPLICANT_DRIVER_WEXT_SUPPORT
+                    // if(pDevice->bWPASuppWextEnabled == TRUE)
                         {
                   	union iwreq_data  wrqu;
                   	memset(&wrqu, 0, sizeof (wrqu));
@@ -898,12 +933,15 @@ void vRunCommand(struct vnt_private *pDevice)
                   	PRINT_K("wireless_send_event--->SIOCGIWAP(disassociated)\n");
                   	wireless_send_event(pDevice->dev, SIOCGIWAP, &wrqu, NULL);
                        }
+                    #endif
 	  	}
-	               pDevice->bwextstep0 = false;
-                        pDevice->bwextstep1 = false;
-                        pDevice->bwextstep2 = false;
-                        pDevice->bwextstep3 = false;
-		      pDevice->bWPASuppWextEnabled = false;
+	       #ifdef WPA_SUPPLICANT_DRIVER_WEXT_SUPPORT
+	               pDevice->bwextstep0 = FALSE;
+                        pDevice->bwextstep1 = FALSE;
+                        pDevice->bwextstep2 = FALSE;
+                        pDevice->bwextstep3 = FALSE;
+		      pDevice->bWPASuppWextEnabled = FALSE;
+		#endif
 	                  //clear current SSID
                   pItemSSID = (PWLAN_IE_SSID)pMgmt->abyCurrSSID;
                   pItemSSID->len = 0;
@@ -917,10 +955,10 @@ void vRunCommand(struct vnt_private *pDevice)
 	    CARDbRadioPowerOff(pDevice);
              MACvRegBitsOn(pDevice,MAC_REG_GPIOCTL1,GPIO3_INTMD);
 	    ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_OFF);
-	    pDevice->bHWRadioOff = true;
+	    pDevice->bHWRadioOff = TRUE;
         } else {
             DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO" WLAN_CMD_RADIO_START_ON........................\n");
-            pDevice->bHWRadioOff = false;
+            pDevice->bHWRadioOff = FALSE;
                 CARDbRadioPowerOn(pDevice);
             MACvRegBitsOff(pDevice,MAC_REG_GPIOCTL1,GPIO3_INTMD);
             ControlvMaskByte(pDevice,MESSAGE_REQUEST_MACREG,MAC_REG_PAPEDELAY,LEDSTS_STS,LEDSTS_ON);
@@ -933,11 +971,11 @@ void vRunCommand(struct vnt_private *pDevice)
 
         case WLAN_CMD_CHANGE_BBSENSITIVITY_START:
 
-            pDevice->bStopDataPkt = true;
+            pDevice->bStopDataPkt = TRUE;
             pDevice->byBBVGACurrent = pDevice->byBBVGANew;
             BBvSetVGAGainOffset(pDevice, pDevice->byBBVGACurrent);
             DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"Change sensitivity pDevice->byBBVGACurrent = %x\n", pDevice->byBBVGACurrent);
-            pDevice->bStopDataPkt = false;
+            pDevice->bStopDataPkt = FALSE;
             s_bCommandComplete(pDevice);
             break;
 
@@ -962,13 +1000,13 @@ void vRunCommand(struct vnt_private *pDevice)
             DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"Change from Antenna%d to", (int)pDevice->dwRxAntennaSel);
             if ( pDevice->dwRxAntennaSel == 0) {
                 pDevice->dwRxAntennaSel=1;
-                if (pDevice->bTxRxAntInv == true)
+                if (pDevice->bTxRxAntInv == TRUE)
                     BBvSetAntennaMode(pDevice, ANT_RXA);
                 else
                     BBvSetAntennaMode(pDevice, ANT_RXB);
             } else {
                 pDevice->dwRxAntennaSel=0;
-                if (pDevice->bTxRxAntInv == true)
+                if (pDevice->bTxRxAntInv == TRUE)
                     BBvSetAntennaMode(pDevice, ANT_RXB);
                 else
                     BBvSetAntennaMode(pDevice, ANT_RXA);
@@ -999,9 +1037,9 @@ void vRunCommand(struct vnt_private *pDevice)
 
         case WLAN_CMD_11H_CHSW_START:
             CARDbSetMediaChannel(pDevice, pDevice->byNewChannel);
-            pDevice->bChannelSwitch = false;
+            pDevice->bChannelSwitch = FALSE;
             pMgmt->uCurrChannel = pDevice->byNewChannel;
-            pDevice->bStopDataPkt = false;
+            pDevice->bStopDataPkt = FALSE;
             s_bCommandComplete(pDevice);
             break;
 
@@ -1015,19 +1053,24 @@ void vRunCommand(struct vnt_private *pDevice)
 }
 
 
-static int s_bCommandComplete(struct vnt_private *pDevice)
+static
+BOOL
+s_bCommandComplete (
+    PSDevice pDevice
+    )
 {
-	struct vnt_manager *pMgmt = &pDevice->vnt_mgmt;
-	PWLAN_IE_SSID pSSID;
-	int bRadioCmd = false;
-	int bForceSCAN = true;
+    PWLAN_IE_SSID pSSID;
+    BOOL          bRadioCmd = FALSE;
+    //WORD          wDeAuthenReason = 0;
+    BOOL          bForceSCAN = TRUE;
+    PSMgmtObject  pMgmt = &(pDevice->sMgmtObj);
 
 
     pDevice->eCommandState = WLAN_CMD_IDLE;
     if (pDevice->cbFreeCmdQueue == CMD_Q_SIZE) {
         //Command Queue Empty
-        pDevice->bCmdRunning = false;
-        return true;
+        pDevice->bCmdRunning = FALSE;
+        return TRUE;
     }
     else {
         pDevice->eCommand = pDevice->eCmdQueue[pDevice->uCmdDequeueIdx].eCmd;
@@ -1036,7 +1079,7 @@ static int s_bCommandComplete(struct vnt_private *pDevice)
         bForceSCAN = pDevice->eCmdQueue[pDevice->uCmdDequeueIdx].bForceSCAN;
         ADD_ONE_WITH_WRAP_AROUND(pDevice->uCmdDequeueIdx, CMD_Q_SIZE);
         pDevice->cbFreeCmdQueue++;
-        pDevice->bCmdRunning = true;
+        pDevice->bCmdRunning = TRUE;
         switch ( pDevice->eCommand ) {
             case WLAN_CMD_BSSID_SCAN:
                 DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"eCommandState= WLAN_CMD_BSSID_SCAN\n");
@@ -1048,7 +1091,7 @@ static int s_bCommandComplete(struct vnt_private *pDevice)
                     memset(pMgmt->abyScanSSID, 0, WLAN_IEHDR_LEN + WLAN_SSID_MAXLEN + 1);
                 }
 /*
-                if ((bForceSCAN == false) && (pDevice->bLinkPass == true)) {
+                if ((bForceSCAN == FALSE) && (pDevice->bLinkPass == TRUE)) {
                     if ((pSSID->len == ((PWLAN_IE_SSID)pMgmt->abyCurrSSID)->len) &&
                         ( !memcmp(pSSID->abySSID, ((PWLAN_IE_SSID)pMgmt->abyCurrSSID)->abySSID, pSSID->len))) {
                         pDevice->eCommandState = WLAN_CMD_IDLE;
@@ -1113,26 +1156,29 @@ static int s_bCommandComplete(struct vnt_private *pDevice)
                 break;
 
         }
-	vCommandTimerWait(pDevice, 0);
+	vCommandTimerWait((void *) pDevice, 0);
     }
 
-    return true;
+    return TRUE;
 }
 
-int bScheduleCommand(struct vnt_private *pDevice,
-		CMD_CODE eCommand, u8 *pbyItem0)
+BOOL bScheduleCommand(void *hDeviceContext,
+		      CMD_CODE eCommand,
+		      PBYTE pbyItem0)
 {
+    PSDevice        pDevice = (PSDevice)hDeviceContext;
+
 
     if (pDevice->cbFreeCmdQueue == 0) {
-        return (false);
+        return (FALSE);
     }
     pDevice->eCmdQueue[pDevice->uCmdEnqueueIdx].eCmd = eCommand;
-    pDevice->eCmdQueue[pDevice->uCmdEnqueueIdx].bForceSCAN = true;
+    pDevice->eCmdQueue[pDevice->uCmdEnqueueIdx].bForceSCAN = TRUE;
     memset(pDevice->eCmdQueue[pDevice->uCmdEnqueueIdx].abyCmdDesireSSID, 0 , WLAN_IEHDR_LEN + WLAN_SSID_MAXLEN + 1);
     if (pbyItem0 != NULL) {
         switch (eCommand) {
             case WLAN_CMD_BSSID_SCAN:
-                pDevice->eCmdQueue[pDevice->uCmdEnqueueIdx].bForceSCAN = false;
+                pDevice->eCmdQueue[pDevice->uCmdEnqueueIdx].bForceSCAN = FALSE;
                 memcpy(pDevice->eCmdQueue[pDevice->uCmdEnqueueIdx].abyCmdDesireSSID,
                          pbyItem0, WLAN_IEHDR_LEN + WLAN_SSID_MAXLEN + 1);
                 break;
@@ -1163,12 +1209,12 @@ int bScheduleCommand(struct vnt_private *pDevice,
     ADD_ONE_WITH_WRAP_AROUND(pDevice->uCmdEnqueueIdx, CMD_Q_SIZE);
     pDevice->cbFreeCmdQueue--;
 
-    if (pDevice->bCmdRunning == false) {
+    if (pDevice->bCmdRunning == FALSE) {
         s_bCommandComplete(pDevice);
     }
     else {
     }
-    return (true);
+    return (TRUE);
 
 }
 
@@ -1183,13 +1229,14 @@ int bScheduleCommand(struct vnt_private *pDevice,
  *  Out:
  *      none
  *
- * Return Value: true if success; otherwise false
+ * Return Value: TRUE if success; otherwise FALSE
  *
  */
-static int s_bClearBSSID_SCAN(struct vnt_private *pDevice)
+static BOOL s_bClearBSSID_SCAN(void *hDeviceContext)
 {
-	unsigned int uCmdDequeueIdx = pDevice->uCmdDequeueIdx;
-	unsigned int ii;
+    PSDevice        pDevice = (PSDevice)hDeviceContext;
+    unsigned int            uCmdDequeueIdx = pDevice->uCmdDequeueIdx;
+    unsigned int            ii;
 
     if ((pDevice->cbFreeCmdQueue < CMD_Q_SIZE) && (uCmdDequeueIdx != pDevice->uCmdEnqueueIdx)) {
         for (ii = 0; ii < (CMD_Q_SIZE - pDevice->cbFreeCmdQueue); ii ++) {
@@ -1200,13 +1247,14 @@ static int s_bClearBSSID_SCAN(struct vnt_private *pDevice)
                 break;
         }
     }
-    return true;
+    return TRUE;
 }
 
 
 //mike add:reset command timer
-void vResetCommandTimer(struct vnt_private *pDevice)
+void vResetCommandTimer(void *hDeviceContext)
 {
+	PSDevice pDevice = (PSDevice)hDeviceContext;
 
 	//delete timer
 	del_timer(&pDevice->sTimerCommand);
@@ -1219,13 +1267,14 @@ void vResetCommandTimer(struct vnt_private *pDevice)
 	pDevice->uCmdDequeueIdx = 0;
 	pDevice->uCmdEnqueueIdx = 0;
 	pDevice->eCommandState = WLAN_CMD_IDLE;
-	pDevice->bCmdRunning = false;
-	pDevice->bCmdClear = false;
+	pDevice->bCmdRunning = FALSE;
+	pDevice->bCmdClear = FALSE;
 }
 
-void BSSvSecondTxData(struct vnt_private *pDevice)
+void BSSvSecondTxData(void *hDeviceContext)
 {
-	struct vnt_manager *pMgmt = &pDevice->vnt_mgmt;
+	PSDevice pDevice = (PSDevice)hDeviceContext;
+	PSMgmtObject pMgmt = &(pDevice->sMgmtObj);
 
 	pDevice->nTxDataTimeCout++;
 
@@ -1239,13 +1288,13 @@ void BSSvSecondTxData(struct vnt_private *pDevice)
 
 	spin_lock_irq(&pDevice->lock);
 	//is wap_supplicant running successful OR only open && sharekey mode!
-	if (((pDevice->bLinkPass == true) &&
+	if (((pDevice->bLinkPass == TRUE) &&
 		(pMgmt->eAuthenMode < WMAC_AUTH_WPA)) ||  //open && sharekey linking
-		(pDevice->fWPA_Authened == true)) {   //wpa linking
+		(pDevice->fWPA_Authened == TRUE)) {   //wpa linking
 		//   printk("mike:%s-->InSleep Tx Data Procedure\n",__FUNCTION__);
-		pDevice->fTxDataInSleep = true;
+		pDevice->fTxDataInSleep = TRUE;
 		PSbSendNullPacket(pDevice);      //send null packet
-		pDevice->fTxDataInSleep = false;
+		pDevice->fTxDataInSleep = FALSE;
 	}
 	spin_unlock_irq(&pDevice->lock);
 

@@ -39,8 +39,6 @@ extern void debug_dma_map_page(struct device *dev, struct page *page,
 			       int direction, dma_addr_t dma_addr,
 			       bool map_single);
 
-extern void debug_dma_mapping_error(struct device *dev, dma_addr_t dma_addr);
-
 extern void debug_dma_unmap_page(struct device *dev, dma_addr_t addr,
 				 size_t size, int direction, bool map_single);
 
@@ -104,11 +102,6 @@ static inline void debug_dma_map_page(struct device *dev, struct page *page,
 				      size_t offset, size_t size,
 				      int direction, dma_addr_t dma_addr,
 				      bool map_single)
-{
-}
-
-static inline void debug_dma_mapping_error(struct device *dev,
-					  dma_addr_t dma_addr)
 {
 }
 

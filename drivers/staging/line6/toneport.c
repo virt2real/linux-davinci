@@ -87,10 +87,12 @@ static struct line6_pcm_properties toneport_pcm_properties = {
 static int led_red = 0x00;
 static int led_green = 0x26;
 
-static const struct {
+struct ToneportSourceInfo {
 	const char *name;
 	int code;
-} toneport_source_info[] = {
+};
+
+static const struct ToneportSourceInfo toneport_source_info[] = {
 	{"Microphone", 0x0a01},
 	{"Line", 0x0801},
 	{"Instrument", 0x0b01},
@@ -125,11 +127,13 @@ static ssize_t toneport_set_led_red(struct device *dev,
 				    const char *buf, size_t count)
 {
 	int retval;
+	long value;
 
-	retval = kstrtoint(buf, 10, &led_red);
+	retval = strict_strtol(buf, 10, &value);
 	if (retval)
 		return retval;
 
+	led_red = value;
 	toneport_update_led(dev);
 	return count;
 }
@@ -139,11 +143,13 @@ static ssize_t toneport_set_led_green(struct device *dev,
 				      const char *buf, size_t count)
 {
 	int retval;
+	long value;
 
-	retval = kstrtoint(buf, 10, &led_green);
+	retval = strict_strtol(buf, 10, &value);
 	if (retval)
 		return retval;
 
+	led_green = value;
 	toneport_update_led(dev);
 	return count;
 }

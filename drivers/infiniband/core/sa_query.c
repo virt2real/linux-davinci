@@ -611,21 +611,19 @@ static void init_mad(struct ib_sa_mad *mad, struct ib_mad_agent *agent)
 
 static int send_mad(struct ib_sa_query *query, int timeout_ms, gfp_t gfp_mask)
 {
-	bool preload = gfp_mask & __GFP_WAIT;
 	unsigned long flags;
 	int ret, id;
 
-	if (preload)
-		idr_preload(gfp_mask);
+retry:
+	if (!idr_pre_get(&query_idr, gfp_mask))
+		return -ENOMEM;
 	spin_lock_irqsave(&idr_lock, flags);
-
-	id = idr_alloc(&query_idr, query, 0, 0, GFP_NOWAIT);
-
+	ret = idr_get_new(&query_idr, query, &id);
 	spin_unlock_irqrestore(&idr_lock, flags);
-	if (preload)
-		idr_preload_end();
-	if (id < 0)
-		return id;
+	if (ret == -EAGAIN)
+		goto retry;
+	if (ret)
+		return ret;
 
 	query->mad_buf->timeout_ms  = timeout_ms;
 	query->mad_buf->context[0] = query;

@@ -48,6 +48,7 @@ static void symbol_int_callback(struct urb *urb)
 	unsigned char *data = urb->transfer_buffer;
 	struct usb_serial_port *port = priv->port;
 	int status = urb->status;
+	struct tty_struct *tty;
 	int result;
 	int data_length;
 
@@ -81,8 +82,12 @@ static void symbol_int_callback(struct urb *urb)
 		 * we pretty much just ignore the size and send everything
 		 * else to the tty layer.
 		 */
-		tty_insert_flip_string(&port->port, &data[1], data_length);
-		tty_flip_buffer_push(&port->port);
+		tty = tty_port_tty_get(&port->port);
+		if (tty) {
+			tty_insert_flip_string(tty, &data[1], data_length);
+			tty_flip_buffer_push(tty);
+			tty_kref_put(tty);
+		}
 	} else {
 		dev_dbg(&priv->udev->dev,
 			"Improper amount of data received from the device, "

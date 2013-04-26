@@ -137,7 +137,7 @@ struct parport_operations parport_gsc_ops =
 /*
  * Checks for port existence, all ports support SPP MODE
  */
-static int parport_SPP_supported(struct parport *pb)
+static int __devinit parport_SPP_supported(struct parport *pb)
 {
 	unsigned char r, w;
 
@@ -201,7 +201,7 @@ static int parport_SPP_supported(struct parport *pb)
  * be misdetected here is rather academic. 
  */
 
-static int parport_PS2_supported(struct parport *pb)
+static int __devinit parport_PS2_supported(struct parport *pb)
 {
 	int ok = 0;
   
@@ -232,9 +232,10 @@ static int parport_PS2_supported(struct parport *pb)
 
 /* --- Initialisation code -------------------------------- */
 
-struct parport *parport_gsc_probe_port(unsigned long base,
-				       unsigned long base_hi, int irq,
-				       int dma, struct pci_dev *dev)
+struct parport *__devinit parport_gsc_probe_port (unsigned long base,
+						 unsigned long base_hi,
+						 int irq, int dma,
+						 struct pci_dev *dev)
 {
 	struct parport_gsc_private *priv;
 	struct parport_operations *ops;
@@ -344,9 +345,9 @@ struct parport *parport_gsc_probe_port(unsigned long base,
 
 #define PARPORT_GSC_OFFSET 0x800
 
-static int parport_count;
+static int __devinitdata parport_count;
 
-static int parport_init_chip(struct parisc_device *dev)
+static int __devinit parport_init_chip(struct parisc_device *dev)
 {
 	struct parport *p;
 	unsigned long port;
@@ -381,7 +382,7 @@ static int parport_init_chip(struct parisc_device *dev)
 	return 0;
 }
 
-static int parport_remove_chip(struct parisc_device *dev)
+static int __devexit parport_remove_chip(struct parisc_device *dev)
 {
 	struct parport *p = dev_get_drvdata(&dev->dev);
 	if (p) {
@@ -414,15 +415,15 @@ static struct parisc_driver parport_driver = {
 	.name		= "Parallel",
 	.id_table	= parport_tbl,
 	.probe		= parport_init_chip,
-	.remove		= parport_remove_chip,
+	.remove		= __devexit_p(parport_remove_chip),
 };
 
-int parport_gsc_init(void)
+int __devinit parport_gsc_init(void)
 {
 	return register_parisc_driver(&parport_driver);
 }
 
-static void parport_gsc_exit(void)
+static void __devexit parport_gsc_exit(void)
 {
 	unregister_parisc_driver(&parport_driver);
 }

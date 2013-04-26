@@ -14,7 +14,6 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/delay.h>
-#include <linux/clk.h>
 #include <linux/gfp.h>
 #include <linux/module.h>
 
@@ -42,7 +41,6 @@ struct rtc_plat_data {
 	struct rtc_device *rtc;
 	void __iomem *ioaddr;
 	int		irq;
-	struct clk	*clk;
 };
 
 static int mv_rtc_set_time(struct device *dev, struct rtc_time *tm)
@@ -217,13 +215,12 @@ static const struct rtc_class_ops mv_rtc_alarm_ops = {
 	.alarm_irq_enable = mv_rtc_alarm_irq_enable,
 };
 
-static int mv_rtc_probe(struct platform_device *pdev)
+static int __devinit mv_rtc_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct rtc_plat_data *pdata;
 	resource_size_t size;
 	u32 rtc_time;
-	int ret = 0;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
@@ -242,17 +239,11 @@ static int mv_rtc_probe(struct platform_device *pdev)
 	if (!pdata->ioaddr)
 		return -ENOMEM;
 
-	pdata->clk = devm_clk_get(&pdev->dev, NULL);
-	/* Not all SoCs require a clock.*/
-	if (!IS_ERR(pdata->clk))
-		clk_prepare_enable(pdata->clk);
-
 	/* make sure the 24 hours mode is enabled */
 	rtc_time = readl(pdata->ioaddr + RTC_TIME_REG_OFFS);
 	if (rtc_time & RTC_HOURS_12H_MODE) {
 		dev_err(&pdev->dev, "24 Hours mode not supported.\n");
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	/* make sure it is actually functional */
@@ -261,8 +252,7 @@ static int mv_rtc_probe(struct platform_device *pdev)
 		rtc_time = readl(pdata->ioaddr + RTC_TIME_REG_OFFS);
 		if (rtc_time == 0x01000000) {
 			dev_err(&pdev->dev, "internal RTC not ticking\n");
-			ret = -ENODEV;
-			goto out;
+			return -ENODEV;
 		}
 	}
 
@@ -278,10 +268,8 @@ static int mv_rtc_probe(struct platform_device *pdev)
 	} else
 		pdata->rtc = rtc_device_register(pdev->name, &pdev->dev,
 						 &mv_rtc_ops, THIS_MODULE);
-	if (IS_ERR(pdata->rtc)) {
-		ret = PTR_ERR(pdata->rtc);
-		goto out;
-	}
+	if (IS_ERR(pdata->rtc))
+		return PTR_ERR(pdata->rtc);
 
 	if (pdata->irq >= 0) {
 		writel(0, pdata->ioaddr + RTC_ALARM_INTERRUPT_MASK_REG_OFFS);
@@ -294,11 +282,6 @@ static int mv_rtc_probe(struct platform_device *pdev)
 	}
 
 	return 0;
-out:
-	if (!IS_ERR(pdata->clk))
-		clk_disable_unprepare(pdata->clk);
-
-	return ret;
 }
 
 static int __exit mv_rtc_remove(struct platform_device *pdev)
@@ -309,9 +292,6 @@ static int __exit mv_rtc_remove(struct platform_device *pdev)
 		device_init_wakeup(&pdev->dev, 0);
 
 	rtc_device_unregister(pdata->rtc);
-	if (!IS_ERR(pdata->clk))
-		clk_disable_unprepare(pdata->clk);
-
 	return 0;
 }
 

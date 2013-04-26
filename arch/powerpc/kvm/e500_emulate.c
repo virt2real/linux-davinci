@@ -89,7 +89,6 @@ int kvmppc_core_emulate_op(struct kvm_run *run, struct kvm_vcpu *vcpu,
 	int ra = get_ra(inst);
 	int rb = get_rb(inst);
 	int rt = get_rt(inst);
-	gva_t ea;
 
 	switch (get_op(inst)) {
 	case 31:
@@ -114,20 +113,15 @@ int kvmppc_core_emulate_op(struct kvm_run *run, struct kvm_vcpu *vcpu,
 			break;
 
 		case XOP_TLBSX:
-			ea = kvmppc_get_ea_indexed(vcpu, ra, rb);
-			emulated = kvmppc_e500_emul_tlbsx(vcpu, ea);
+			emulated = kvmppc_e500_emul_tlbsx(vcpu,rb);
 			break;
 
-		case XOP_TLBILX: {
-			int type = rt & 0x3;
-			ea = kvmppc_get_ea_indexed(vcpu, ra, rb);
-			emulated = kvmppc_e500_emul_tlbilx(vcpu, type, ea);
+		case XOP_TLBILX:
+			emulated = kvmppc_e500_emul_tlbilx(vcpu, rt, ra, rb);
 			break;
-		}
 
 		case XOP_TLBIVAX:
-			ea = kvmppc_get_ea_indexed(vcpu, ra, rb);
-			emulated = kvmppc_e500_emul_tlbivax(vcpu, ea);
+			emulated = kvmppc_e500_emul_tlbivax(vcpu, ra, rb);
 			break;
 
 		default:

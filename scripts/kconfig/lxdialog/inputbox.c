@@ -45,8 +45,7 @@ int dialog_inputbox(const char *title, const char *prompt, int height, int width
                     const char *init)
 {
 	int i, x, y, box_y, box_x, box_width;
-	int input_x = 0, key = 0, button = -1;
-	int show_x, len, pos;
+	int input_x = 0, scroll = 0, key = 0, button = -1;
 	char *instr = dialog_input_result;
 	WINDOW *dialog;
 
@@ -98,17 +97,14 @@ do_resize:
 	wmove(dialog, box_y, box_x);
 	wattrset(dialog, dlg.inputbox.atr);
 
-	len = strlen(instr);
-	pos = len;
+	input_x = strlen(instr);
 
-	if (len >= box_width) {
-		show_x = len - box_width + 1;
+	if (input_x >= box_width) {
+		scroll = input_x - box_width + 1;
 		input_x = box_width - 1;
 		for (i = 0; i < box_width - 1; i++)
-			waddch(dialog, instr[show_x + i]);
+			waddch(dialog, instr[scroll + i]);
 	} else {
-		show_x = 0;
-		input_x = len;
 		waddstr(dialog, instr);
 	}
 
@@ -125,104 +121,45 @@ do_resize:
 			case KEY_UP:
 			case KEY_DOWN:
 				break;
+			case KEY_LEFT:
+				continue;
+			case KEY_RIGHT:
+				continue;
 			case KEY_BACKSPACE:
 			case 127:
-				if (pos) {
+				if (input_x || scroll) {
 					wattrset(dialog, dlg.inputbox.atr);
-					if (input_x == 0) {
-						show_x--;
+					if (!input_x) {
+						scroll = scroll < box_width - 1 ? 0 : scroll - (box_width - 1);
+						wmove(dialog, box_y, box_x);
+						for (i = 0; i < box_width; i++)
+							waddch(dialog,
+							       instr[scroll + input_x + i] ?
+							       instr[scroll + input_x + i] : ' ');
+						input_x = strlen(instr) - scroll;
 					} else
 						input_x--;
-
-					if (pos < len) {
-						for (i = pos - 1; i < len; i++) {
-							instr[i] = instr[i+1];
-						}
-					}
-
-					pos--;
-					len--;
-					instr[len] = '\0';
-					wmove(dialog, box_y, box_x);
-					for (i = 0; i < box_width; i++) {
-						if (!instr[show_x + i]) {
-							waddch(dialog, ' ');
-							break;
-						}
-						waddch(dialog, instr[show_x + i]);
-					}
+					instr[scroll + input_x] = '\0';
+					mvwaddch(dialog, box_y, input_x + box_x, ' ');
 					wmove(dialog, box_y, input_x + box_x);
 					wrefresh(dialog);
 				}
 				continue;
-			case KEY_LEFT:
-				if (pos > 0) {
-					if (input_x > 0) {
-						wmove(dialog, box_y, --input_x + box_x);
-					} else if (input_x == 0) {
-						show_x--;
-						wmove(dialog, box_y, box_x);
-						for (i = 0; i < box_width; i++) {
-							if (!instr[show_x + i]) {
-								waddch(dialog, ' ');
-								break;
-							}
-							waddch(dialog, instr[show_x + i]);
-						}
-						wmove(dialog, box_y, box_x);
-					}
-					pos--;
-				}
-				continue;
-			case KEY_RIGHT:
-				if (pos < len) {
-					if (input_x < box_width - 1) {
-						wmove(dialog, box_y, ++input_x + box_x);
-					} else if (input_x == box_width - 1) {
-						show_x++;
-						wmove(dialog, box_y, box_x);
-						for (i = 0; i < box_width; i++) {
-							if (!instr[show_x + i]) {
-								waddch(dialog, ' ');
-								break;
-							}
-							waddch(dialog, instr[show_x + i]);
-						}
-						wmove(dialog, box_y, input_x + box_x);
-					}
-					pos++;
-				}
-				continue;
 			default:
 				if (key < 0x100 && isprint(key)) {
-					if (len < MAX_LEN) {
+					if (scroll + input_x < MAX_LEN) {
 						wattrset(dialog, dlg.inputbox.atr);
-						if (pos < len) {
-							for (i = len; i > pos; i--)
-								instr[i] = instr[i-1];
-							instr[pos] = key;
-						} else {
-							instr[len] = key;
-						}
-						pos++;
-						len++;
-						instr[len] = '\0';
-
+						instr[scroll + input_x] = key;
+						instr[scroll + input_x + 1] = '\0';
 						if (input_x == box_width - 1) {
-							show_x++;
+							scroll++;
+							wmove(dialog, box_y, box_x);
+							for (i = 0; i < box_width - 1; i++)
+								waddch(dialog, instr [scroll + i]);
 						} else {
-							input_x++;
+							wmove(dialog, box_y, input_x++ + box_x);
+							waddch(dialog, key);
 						}
-
-						wmove(dialog, box_y, box_x);
-						for (i = 0; i < box_width; i++) {
-							if (!instr[show_x + i]) {
-								waddch(dialog, ' ');
-								break;
-							}
-							waddch(dialog, instr[show_x + i]);
-						}
-						wmove(dialog, box_y, input_x + box_x);
 						wrefresh(dialog);
 					} else
 						flash();	/* Alarm user about overflow */

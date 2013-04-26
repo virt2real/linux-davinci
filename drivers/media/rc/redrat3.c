@@ -195,6 +195,9 @@ struct redrat3_dev {
 	dma_addr_t dma_in;
 	dma_addr_t dma_out;
 
+	/* locks this structure */
+	struct mutex lock;
+
 	/* rx signal timeout timer */
 	struct timer_list rx_timeout;
 	u32 hw_timeout;
@@ -919,7 +922,8 @@ static int redrat3_transmit_ir(struct rc_dev *rcdev, unsigned *txbuf,
 		return -EAGAIN;
 	}
 
-	count = min_t(unsigned, count, RR3_MAX_SIG_SIZE - RR3_TX_TRAILER_LEN);
+	if (count > (RR3_DRIVER_MAXLENS * 2))
+		return -EINVAL;
 
 	/* rr3 will disable rc detector on transmit */
 	rr3->det_enabled = false;
@@ -932,22 +936,24 @@ static int redrat3_transmit_ir(struct rc_dev *rcdev, unsigned *txbuf,
 	}
 
 	for (i = 0; i < count; i++) {
-		cur_sample_len = redrat3_us_to_len(txbuf[i]);
 		for (lencheck = 0; lencheck < curlencheck; lencheck++) {
+			cur_sample_len = redrat3_us_to_len(txbuf[i]);
 			if (sample_lens[lencheck] == cur_sample_len)
 				break;
 		}
 		if (lencheck == curlencheck) {
+			cur_sample_len = redrat3_us_to_len(txbuf[i]);
 			rr3_dbg(dev, "txbuf[%d]=%u, pos %d, enc %u\n",
 				i, txbuf[i], curlencheck, cur_sample_len);
-			if (curlencheck < RR3_DRIVER_MAXLENS) {
+			if (curlencheck < 255) {
 				/* now convert the value to a proper
 				 * rr3 value.. */
 				sample_lens[curlencheck] = cur_sample_len;
 				curlencheck++;
 			} else {
-				count = i - 1;
-				break;
+				dev_err(dev, "signal too long\n");
+				ret = -EINVAL;
+				goto out;
 			}
 		}
 	}
@@ -1076,12 +1082,11 @@ static struct rc_dev *redrat3_init_rc_dev(struct redrat3_dev *rr3)
 	rc->dev.parent = dev;
 	rc->priv = rr3;
 	rc->driver_type = RC_DRIVER_IR_RAW;
-	rc->allowed_protos = RC_BIT_ALL;
+	rc->allowed_protos = RC_TYPE_ALL;
 	rc->timeout = US_TO_NS(2750);
 	rc->tx_ir = redrat3_transmit_ir;
 	rc->s_tx_carrier = redrat3_set_tx_carrier;
 	rc->driver_name = DRIVER_NAME;
-	rc->rx_resolution = US_TO_NS(2);
 	rc->map_name = RC_MAP_HAUPPAUGE;
 
 	ret = rc_register_device(rc);
@@ -1097,8 +1102,8 @@ out:
 	return NULL;
 }
 
-static int redrat3_dev_probe(struct usb_interface *intf,
-			     const struct usb_device_id *id)
+static int __devinit redrat3_dev_probe(struct usb_interface *intf,
+				       const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct device *dev = &intf->dev;
@@ -1197,6 +1202,7 @@ static int redrat3_dev_probe(struct usb_interface *intf,
 			  rr3->bulk_out_buf, ep_out->wMaxPacketSize,
 			  (usb_complete_t)redrat3_write_bulk_callback, rr3);
 
+	mutex_init(&rr3->lock);
 	rr3->udev = udev;
 
 	redrat3_reset(rr3);
@@ -1235,7 +1241,7 @@ no_endpoints:
 	return retval;
 }
 
-static void redrat3_dev_disconnect(struct usb_interface *intf)
+static void __devexit redrat3_dev_disconnect(struct usb_interface *intf)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct redrat3_dev *rr3 = usb_get_intfdata(intf);
@@ -1275,7 +1281,7 @@ static int redrat3_dev_resume(struct usb_interface *intf)
 static struct usb_driver redrat3_dev_driver = {
 	.name		= DRIVER_NAME,
 	.probe		= redrat3_dev_probe,
-	.disconnect	= redrat3_dev_disconnect,
+	.disconnect	= __devexit_p(redrat3_dev_disconnect),
 	.suspend	= redrat3_dev_suspend,
 	.resume		= redrat3_dev_resume,
 	.reset_resume	= redrat3_dev_resume,

@@ -245,9 +245,10 @@ static int doDevConfig(struct comedi_device *dev, struct comedi_devconfig *it)
 				return 0;
 			}
 			bdev = kmalloc(sizeof(*bdev), GFP_KERNEL);
-			if (!bdev)
+			if (!bdev) {
+				dev_err(dev->class_dev, "Out of memory\n");
 				return 0;
-
+			}
 			bdev->dev = d;
 			bdev->minor = minor;
 			bdev->subdev = sdev;
@@ -303,10 +304,10 @@ static int bonding_attach(struct comedi_device *dev,
 	struct comedi_subdevice *s;
 	int ret;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(*devpriv));
+	if (ret)
+		return ret;
+	devpriv = dev->private;
 
 	/*
 	 * Setup our bonding from config params.. sets up our private struct..

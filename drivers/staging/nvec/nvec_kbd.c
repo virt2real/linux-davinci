@@ -21,14 +21,10 @@
 #include "nvec-keytable.h"
 #include "nvec.h"
 
-enum kbd_subcmds {
-	CNFG_WAKE = 3,
-	CNFG_WAKE_KEY_REPORTING,
-	SET_LEDS = 0xed,
-	ENABLE_KBD = 0xf4,
-	DISABLE_KBD,
-};
+#define ACK_KBD_EVENT {'\x05', '\xed', '\x01'}
 
+static const char led_on[3] = "\x05\xed\x07";
+static const char led_off[3] = "\x05\xed\x00";
 static unsigned char keycodes[ARRAY_SIZE(code_tab_102us)
 			      + ARRAY_SIZE(extcode_tab_us102)];
 
@@ -43,15 +39,12 @@ static struct nvec_keys keys_dev;
 
 static void nvec_kbd_toggle_led(void)
 {
-	char buf[] = { NVEC_KBD, SET_LEDS, 0 };
-
 	keys_dev.caps_lock = !keys_dev.caps_lock;
 
 	if (keys_dev.caps_lock)
-		/* should be BIT(0) only, firmware bug? */
-		buf[2] = BIT(0) | BIT(1) | BIT(2);
-
-	nvec_write_async(keys_dev.nvec, buf, sizeof(buf));
+		nvec_write_async(keys_dev.nvec, led_on, sizeof(led_on));
+	else
+		nvec_write_async(keys_dev.nvec, led_off, sizeof(led_off));
 }
 
 static int nvec_keys_notifier(struct notifier_block *nb,
@@ -89,8 +82,8 @@ static int nvec_keys_notifier(struct notifier_block *nb,
 static int nvec_kbd_event(struct input_dev *dev, unsigned int type,
 			  unsigned int code, int value)
 {
+	unsigned char buf[] = ACK_KBD_EVENT;
 	struct nvec_chip *nvec = keys_dev.nvec;
-	char buf[] = { NVEC_KBD, SET_LEDS, 0 };
 
 	if (type == EV_REP)
 		return 0;
@@ -107,16 +100,11 @@ static int nvec_kbd_event(struct input_dev *dev, unsigned int type,
 	return 0;
 }
 
-static int nvec_kbd_probe(struct platform_device *pdev)
+static int __devinit nvec_kbd_probe(struct platform_device *pdev)
 {
 	struct nvec_chip *nvec = dev_get_drvdata(pdev->dev.parent);
 	int i, j, err;
 	struct input_dev *idev;
-	char	clear_leds[] = { NVEC_KBD, SET_LEDS, 0 },
-		enable_kbd[] = { NVEC_KBD, ENABLE_KBD },
-		cnfg_wake[] = { NVEC_KBD, CNFG_WAKE, true, true },
-		cnfg_wake_key_reporting[] = { NVEC_KBD, CNFG_WAKE_KEY_REPORTING,
-						true };
 
 	j = 0;
 
@@ -150,15 +138,19 @@ static int nvec_kbd_probe(struct platform_device *pdev)
 	nvec_register_notifier(nvec, &keys_dev.notifier, 0);
 
 	/* Enable keyboard */
-	nvec_write_async(nvec, enable_kbd, 2);
+	nvec_write_async(nvec, "\x05\xf4", 2);
 
-	/* configures wake on special keys */
-	nvec_write_async(nvec, cnfg_wake, 4);
-	/* enable wake key reporting */
-	nvec_write_async(nvec, cnfg_wake_key_reporting, 3);
+	/* keyboard reset? */
+	nvec_write_async(nvec, "\x05\x03\x01\x01", 4);
+	nvec_write_async(nvec, "\x05\x04\x01", 3);
+	nvec_write_async(nvec, "\x06\x01\xff\x03", 4);
+/*	FIXME
+	wait until keyboard reset is finished
+	or until we have a sync write */
+	mdelay(1000);
 
 	/* Disable caps lock LED */
-	nvec_write_async(nvec, clear_leds, sizeof(clear_leds));
+	nvec_write_async(nvec, led_off, sizeof(led_off));
 
 	return 0;
 
@@ -167,7 +159,7 @@ fail:
 	return err;
 }
 
-static int nvec_kbd_remove(struct platform_device *pdev)
+static int __devexit nvec_kbd_remove(struct platform_device *pdev)
 {
 	input_unregister_device(keys_dev.input);
 	input_free_device(keys_dev.input);
@@ -177,7 +169,7 @@ static int nvec_kbd_remove(struct platform_device *pdev)
 
 static struct platform_driver nvec_kbd_driver = {
 	.probe  = nvec_kbd_probe,
-	.remove = nvec_kbd_remove,
+	.remove = __devexit_p(nvec_kbd_remove),
 	.driver = {
 		.name = "nvec-kbd",
 		.owner = THIS_MODULE,

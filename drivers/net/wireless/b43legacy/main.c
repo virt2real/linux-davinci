@@ -1513,17 +1513,9 @@ static void b43legacy_print_fw_helptext(struct b43legacy_wl *wl)
 		     "and download the correct firmware (version 3).\n");
 }
 
-static void b43legacy_fw_cb(const struct firmware *firmware, void *context)
-{
-	struct b43legacy_wldev *dev = context;
-
-	dev->fwp = firmware;
-	complete(&dev->fw_load_complete);
-}
-
 static int do_request_fw(struct b43legacy_wldev *dev,
 			 const char *name,
-			 const struct firmware **fw, bool async)
+			 const struct firmware **fw)
 {
 	char path[sizeof(modparam_fwpostfix) + 32];
 	struct b43legacy_fw_header *hdr;
@@ -1536,24 +1528,7 @@ static int do_request_fw(struct b43legacy_wldev *dev,
 	snprintf(path, ARRAY_SIZE(path),
 		 "b43legacy%s/%s.fw",
 		 modparam_fwpostfix, name);
-	b43legacyinfo(dev->wl, "Loading firmware %s\n", path);
-	if (async) {
-		init_completion(&dev->fw_load_complete);
-		err = request_firmware_nowait(THIS_MODULE, 1, path,
-					      dev->dev->dev, GFP_KERNEL,
-					      dev, b43legacy_fw_cb);
-		if (err) {
-			b43legacyerr(dev->wl, "Unable to load firmware\n");
-			return err;
-		}
-		/* stall here until fw ready */
-		wait_for_completion(&dev->fw_load_complete);
-		if (!dev->fwp)
-			err = -EINVAL;
-		*fw = dev->fwp;
-	} else {
-		err = request_firmware(fw, path, dev->dev->dev);
-	}
+	err = request_firmware(fw, path, dev->dev->dev);
 	if (err) {
 		b43legacyerr(dev->wl, "Firmware file \"%s\" not found "
 		       "or load failed.\n", path);
@@ -1605,7 +1580,7 @@ static void b43legacy_request_firmware(struct work_struct *work)
 			filename = "ucode4";
 		else
 			filename = "ucode5";
-		err = do_request_fw(dev, filename, &fw->ucode, true);
+		err = do_request_fw(dev, filename, &fw->ucode);
 		if (err)
 			goto err_load;
 	}
@@ -1614,7 +1589,7 @@ static void b43legacy_request_firmware(struct work_struct *work)
 			filename = "pcm4";
 		else
 			filename = "pcm5";
-		err = do_request_fw(dev, filename, &fw->pcm, false);
+		err = do_request_fw(dev, filename, &fw->pcm);
 		if (err)
 			goto err_load;
 	}
@@ -1632,7 +1607,7 @@ static void b43legacy_request_firmware(struct work_struct *work)
 		default:
 			goto err_no_initvals;
 		}
-		err = do_request_fw(dev, filename, &fw->initvals, false);
+		err = do_request_fw(dev, filename, &fw->initvals);
 		if (err)
 			goto err_load;
 	}
@@ -1652,7 +1627,7 @@ static void b43legacy_request_firmware(struct work_struct *work)
 		default:
 			goto err_no_initvals;
 		}
-		err = do_request_fw(dev, filename, &fw->initvals_band, false);
+		err = do_request_fw(dev, filename, &fw->initvals_band);
 		if (err)
 			goto err_load;
 	}

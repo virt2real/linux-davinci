@@ -78,14 +78,14 @@ xfs_swapext(
 		goto out_put_tmp_file;
 	}
 
-	if (IS_SWAPFILE(file_inode(f.file)) ||
-	    IS_SWAPFILE(file_inode(tmp.file))) {
+	if (IS_SWAPFILE(f.file->f_path.dentry->d_inode) ||
+	    IS_SWAPFILE(tmp.file->f_path.dentry->d_inode)) {
 		error = XFS_ERROR(EINVAL);
 		goto out_put_tmp_file;
 	}
 
-	ip = XFS_I(file_inode(f.file));
-	tip = XFS_I(file_inode(tmp.file));
+	ip = XFS_I(f.file->f_path.dentry->d_inode);
+	tip = XFS_I(tmp.file->f_path.dentry->d_inode);
 
 	if (ip->i_mount != tip->i_mount) {
 		error = XFS_ERROR(EINVAL);
@@ -246,10 +246,12 @@ xfs_swap_extents(
 		goto out_unlock;
 	}
 
-	error = -filemap_write_and_wait(VFS_I(tip)->i_mapping);
-	if (error)
-		goto out_unlock;
-	truncate_pagecache_range(VFS_I(tip), 0, -1);
+	if (VN_CACHED(VFS_I(tip)) != 0) {
+		error = xfs_flushinval_pages(tip, 0, -1,
+				FI_REMAPF_LOCKED);
+		if (error)
+			goto out_unlock;
+	}
 
 	/* Verify O_DIRECT for ftmp */
 	if (VN_CACHED(VFS_I(tip)) != 0) {
@@ -313,7 +315,8 @@ xfs_swap_extents(
 	 * are safe.  We don't really care if non-io related
 	 * fields change.
 	 */
-	truncate_pagecache_range(VFS_I(ip), 0, -1);
+
+	xfs_tosspages(ip, 0, -1, FI_REMAPF);
 
 	tp = xfs_trans_alloc(mp, XFS_TRANS_SWAPEXT);
 	if ((error = xfs_trans_reserve(tp, 0,

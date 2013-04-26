@@ -205,12 +205,7 @@ static int xhci_alloc_segments_for_ring(struct xhci_hcd *xhci,
 
 		next = xhci_segment_alloc(xhci, cycle_state, flags);
 		if (!next) {
-			prev = *first;
-			while (prev) {
-				next = prev->next;
-				xhci_segment_free(xhci, prev);
-				prev = next;
-			}
+			xhci_free_segments_for_ring(xhci, *first);
 			return -ENOMEM;
 		}
 		xhci_link_segments(xhci, prev, next, type);
@@ -263,7 +258,7 @@ static struct xhci_ring *xhci_ring_alloc(struct xhci_hcd *xhci,
 	return ring;
 
 fail:
-	kfree(ring);
+	xhci_ring_free(xhci, ring);
 	return NULL;
 }
 
@@ -1022,24 +1017,44 @@ void xhci_copy_ep0_dequeue_into_input_ctx(struct xhci_hcd *xhci,
  * is attached to (or the roothub port its ancestor hub is attached to).  All we
  * know is the index of that port under either the USB 2.0 or the USB 3.0
  * roothub, but that doesn't give us the real index into the HW port status
- * registers. Call xhci_find_raw_port_number() to get real index.
+ * registers.  Scan through the xHCI roothub port array, looking for the Nth
+ * entry of the correct port speed.  Return the port number of that entry.
  */
 static u32 xhci_find_real_port_number(struct xhci_hcd *xhci,
 		struct usb_device *udev)
 {
 	struct usb_device *top_dev;
-	struct usb_hcd *hcd;
-
-	if (udev->speed == USB_SPEED_SUPER)
-		hcd = xhci->shared_hcd;
-	else
-		hcd = xhci->main_hcd;
+	unsigned int num_similar_speed_ports;
+	unsigned int faked_port_num;
+	int i;
 
 	for (top_dev = udev; top_dev->parent && top_dev->parent->parent;
 			top_dev = top_dev->parent)
 		/* Found device below root hub */;
+	faked_port_num = top_dev->portnum;
+	for (i = 0, num_similar_speed_ports = 0;
+			i < HCS_MAX_PORTS(xhci->hcs_params1); i++) {
+		u8 port_speed = xhci->port_array[i];
 
-	return	xhci_find_raw_port_number(hcd, top_dev->portnum);
+		/*
+		 * Skip ports that don't have known speeds, or have duplicate
+		 * Extended Capabilities port speed entries.
+		 */
+		if (port_speed == 0 || port_speed == DUPLICATE_ENTRY)
+			continue;
+
+		/*
+		 * USB 3.0 ports are always under a USB 3.0 hub.  USB 2.0 and
+		 * 1.1 ports are under the USB 2.0 hub.  If the port speed
+		 * matches the device speed, it's a similar speed port.
+		 */
+		if ((port_speed == 0x03) == (udev->speed == USB_SPEED_SUPER))
+			num_similar_speed_ports++;
+		if (num_similar_speed_ports == faked_port_num)
+			/* Roothub ports are numbered from 1 to N */
+			return i+1;
+	}
+	return 0;
 }
 
 /* Setup an xHCI virtual device for a Set Address command */
@@ -1230,8 +1245,6 @@ static unsigned int xhci_microframes_to_exponent(struct usb_device *udev,
 static unsigned int xhci_parse_microframe_interval(struct usb_device *udev,
 		struct usb_host_endpoint *ep)
 {
-	if (ep->desc.bInterval == 0)
-		return 0;
 	return xhci_microframes_to_exponent(udev, ep,
 			ep->desc.bInterval, 0, 15);
 }

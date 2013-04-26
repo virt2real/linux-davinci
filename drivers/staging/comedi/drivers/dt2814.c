@@ -68,6 +68,8 @@ struct dt2814_private {
 	int curadchan;
 };
 
+#define devpriv ((struct dt2814_private *)dev->private)
+
 #define DT2814_TIMEOUT 10
 #define DT2814_MAX_SPEED 100000	/* Arbitrary 10 khz limit */
 
@@ -149,20 +151,36 @@ static int dt2814_ai_cmdtest(struct comedi_device *dev,
 	if (err)
 		return 2;
 
-	/* Step 3: check if arguments are trivially valid */
+	/* step 3: make sure arguments are trivially compatible */
 
-	err |= cfc_check_trigger_arg_is(&cmd->start_arg, 0);
-
-	err |= cfc_check_trigger_arg_max(&cmd->scan_begin_arg, 1000000000);
-	err |= cfc_check_trigger_arg_min(&cmd->scan_begin_arg,
-					 DT2814_MAX_SPEED);
-
-	err |= cfc_check_trigger_arg_is(&cmd->scan_end_arg, cmd->chanlist_len);
-
-	if (cmd->stop_src == TRIG_COUNT)
-		err |= cfc_check_trigger_arg_min(&cmd->stop_arg, 2);
-	else	/* TRIG_NONE */
-		err |= cfc_check_trigger_arg_is(&cmd->stop_arg, 0);
+	if (cmd->start_arg != 0) {
+		cmd->start_arg = 0;
+		err++;
+	}
+	if (cmd->scan_begin_arg > 1000000000) {
+		cmd->scan_begin_arg = 1000000000;
+		err++;
+	}
+	if (cmd->scan_begin_arg < DT2814_MAX_SPEED) {
+		cmd->scan_begin_arg = DT2814_MAX_SPEED;
+		err++;
+	}
+	if (cmd->scan_end_arg != cmd->chanlist_len) {
+		cmd->scan_end_arg = cmd->chanlist_len;
+		err++;
+	}
+	if (cmd->stop_src == TRIG_COUNT) {
+		if (cmd->stop_arg < 2) {
+			cmd->stop_arg = 2;
+			err++;
+		}
+	} else {
+		/* TRIG_NONE */
+		if (cmd->stop_arg != 0) {
+			cmd->stop_arg = 0;
+			err++;
+		}
+	}
 
 	if (err)
 		return 3;
@@ -182,7 +200,6 @@ static int dt2814_ai_cmdtest(struct comedi_device *dev,
 
 static int dt2814_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 {
-	struct dt2814_private *devpriv = dev->private;
 	struct comedi_cmd *cmd = &s->async->cmd;
 	int chan;
 	int trigvar;
@@ -204,7 +221,6 @@ static irqreturn_t dt2814_interrupt(int irq, void *d)
 {
 	int lo, hi;
 	struct comedi_device *dev = d;
-	struct dt2814_private *devpriv = dev->private;
 	struct comedi_subdevice *s;
 	int data;
 
@@ -242,7 +258,6 @@ static irqreturn_t dt2814_interrupt(int irq, void *d)
 
 static int dt2814_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 {
-	struct dt2814_private *devpriv;
 	int i, irq;
 	int ret;
 	struct comedi_subdevice *s;
@@ -309,10 +324,9 @@ static int dt2814_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 	if (ret)
 		return ret;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(struct dt2814_private));
+	if (ret < 0)
+		return ret;
 
 	s = &dev->subdevices[0];
 	dev->read_subdev = s;

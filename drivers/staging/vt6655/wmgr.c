@@ -2068,7 +2068,7 @@ if(ChannelExceedZoneType(pDevice,byCurrChannel)==true)
 
         if (pBSSList != NULL) {
 
-            // Compare PHY parameter setting
+            // Compare PHY paramater setting
             if (pMgmt->wCurrCapInfo != pBSSList->wCapInfo) {
                 bUpdatePhyParameter = true;
                 pMgmt->wCurrCapInfo = pBSSList->wCapInfo;

@@ -209,8 +209,9 @@ enum tpacpi_hkey_event_t {
 	TP_HKEY_EV_ALARM_SENSOR_XHOT	= 0x6022, /* sensor critically hot */
 	TP_HKEY_EV_THM_TABLE_CHANGED	= 0x6030, /* thermal table changed */
 
-	/* AC-related events */
-	TP_HKEY_EV_AC_CHANGED		= 0x6040, /* AC status changed */
+	TP_HKEY_EV_UNK_6040		= 0x6040, /* Related to AC change?
+						     some sort of APM hint,
+						     W520 */
 
 	/* Misc */
 	TP_HKEY_EV_RFKILL_CHANGED	= 0x7000, /* rfkill switch changed */
@@ -851,7 +852,7 @@ static ssize_t dispatch_proc_write(struct file *file,
 			const char __user *userbuf,
 			size_t count, loff_t *pos)
 {
-	struct ibm_struct *ibm = PDE(file_inode(file))->data;
+	struct ibm_struct *ibm = PDE(file->f_path.dentry->d_inode)->data;
 	char *kernbuf;
 	int ret;
 
@@ -3628,12 +3629,6 @@ static bool hotkey_notify_6xxx(const u32 hkey,
 			 "a sensor reports something is extremely hot!\n");
 		/* recommended action: immediate sleep/hibernate */
 		break;
-	case TP_HKEY_EV_AC_CHANGED:
-		/* X120e, X121e, X220, X220i, X220t, X230, T420, T420s, W520:
-		 * AC status changed; can be triggered by plugging or
-		 * unplugging AC adapter, docking or undocking. */
-
-		/* fallthrough */
 
 	case TP_HKEY_EV_KEY_NUMLOCK:
 	case TP_HKEY_EV_KEY_FN:
@@ -4882,7 +4877,8 @@ static int __init light_init(struct ibm_init_struct *iibm)
 static void light_exit(void)
 {
 	led_classdev_unregister(&tpacpi_led_thinklight.led_classdev);
-	flush_workqueue(tpacpi_wq);
+	if (work_pending(&tpacpi_led_thinklight.work))
+		flush_workqueue(tpacpi_wq);
 }
 
 static int light_read(struct seq_file *m)
@@ -6736,7 +6732,7 @@ static int volume_alsa_mute_put(struct snd_kcontrol *kcontrol,
 	return volume_alsa_set_mute(!ucontrol->value.integer.value[0]);
 }
 
-static struct snd_kcontrol_new volume_alsa_control_vol = {
+static struct snd_kcontrol_new volume_alsa_control_vol __devinitdata = {
 	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
 	.name = "Console Playback Volume",
 	.index = 0,
@@ -6745,7 +6741,7 @@ static struct snd_kcontrol_new volume_alsa_control_vol = {
 	.get = volume_alsa_vol_get,
 };
 
-static struct snd_kcontrol_new volume_alsa_control_mute = {
+static struct snd_kcontrol_new volume_alsa_control_mute __devinitdata = {
 	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
 	.name = "Console Playback Switch",
 	.index = 0,
@@ -8579,8 +8575,7 @@ static bool __pure __init tpacpi_is_valid_fw_id(const char* const s,
 	return s && strlen(s) >= 8 &&
 		tpacpi_is_fw_digit(s[0]) &&
 		tpacpi_is_fw_digit(s[1]) &&
-		s[2] == t &&
-		(s[3] == 'T' || s[3] == 'N') &&
+		s[2] == t && s[3] == 'T' &&
 		tpacpi_is_fw_digit(s[4]) &&
 		tpacpi_is_fw_digit(s[5]);
 }
@@ -8613,8 +8608,7 @@ static int __must_check __init get_thinkpad_model_data(
 		return -ENOMEM;
 
 	/* Really ancient ThinkPad 240X will fail this, which is fine */
-	if (!(tpacpi_is_valid_fw_id(tp->bios_version_str, 'E') ||
-	      tpacpi_is_valid_fw_id(tp->bios_version_str, 'C')))
+	if (!tpacpi_is_valid_fw_id(tp->bios_version_str, 'E'))
 		return 0;
 
 	tp->bios_model = tp->bios_version_str[0]

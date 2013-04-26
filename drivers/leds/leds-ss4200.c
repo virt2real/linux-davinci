@@ -63,7 +63,8 @@ MODULE_LICENSE("GPL");
 /*
  * PCI ID of the Intel ICH7 LPC Device within which the GPIO block lives.
  */
-static DEFINE_PCI_DEVICE_TABLE(ich7_lpc_pci_id) = {
+static const struct pci_device_id ich7_lpc_pci_id[] =
+{
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH7_0) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH7_1) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH7_30) },
@@ -262,7 +263,7 @@ static int nasgpio_led_set_blink(struct led_classdev *led_cdev,
  * already taken care of this, but we will do so in a non destructive manner
  * so that we have what we need whether the BIOS did it or not.
  */
-static int ich7_gpio_init(struct device *dev)
+static int __devinit ich7_gpio_init(struct device *dev)
 {
 	int i;
 	u32 config_data = 0;
@@ -341,7 +342,7 @@ static void ich7_lpc_cleanup(struct device *dev)
  * so we can retrive the required operational information and prepare the GPIO.
  */
 static struct pci_dev *nas_gpio_pci_dev;
-static int ich7_lpc_probe(struct pci_dev *dev,
+static int __devinit ich7_lpc_probe(struct pci_dev *dev,
 				    const struct pci_device_id *id)
 {
 	int status;
@@ -458,7 +459,7 @@ static ssize_t nas_led_blink_store(struct device *dev,
 	struct led_classdev *led = dev_get_drvdata(dev);
 	unsigned long blink_state;
 
-	ret = kstrtoul(buf, 10, &blink_state);
+	ret = strict_strtoul(buf, 10, &blink_state);
 	if (ret)
 		return ret;
 

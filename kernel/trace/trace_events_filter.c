@@ -1000,9 +1000,9 @@ static int init_pred(struct filter_parse_state *ps,
 		}
 	} else {
 		if (field->is_signed)
-			ret = kstrtoll(pred->regex.pattern, 0, &val);
+			ret = strict_strtoll(pred->regex.pattern, 0, &val);
 		else
-			ret = kstrtoull(pred->regex.pattern, 0, &val);
+			ret = strict_strtoull(pred->regex.pattern, 0, &val);
 		if (ret) {
 			parse_error(ps, FILT_ERR_ILLEGAL_INTVAL, 0);
 			return -EINVAL;

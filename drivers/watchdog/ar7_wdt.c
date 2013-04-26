@@ -274,7 +274,7 @@ static struct miscdevice ar7_wdt_miscdev = {
 	.fops		= &ar7_wdt_fops,
 };
 
-static int ar7_wdt_probe(struct platform_device *pdev)
+static int __devinit ar7_wdt_probe(struct platform_device *pdev)
 {
 	int rc;
 
@@ -285,9 +285,11 @@ static int ar7_wdt_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	ar7_wdt = devm_ioremap_resource(&pdev->dev, ar7_regs_wdt);
-	if (IS_ERR(ar7_wdt))
-		return PTR_ERR(ar7_wdt);
+	ar7_wdt = devm_request_and_ioremap(&pdev->dev, ar7_regs_wdt);
+	if (!ar7_wdt) {
+		pr_err("could not ioremap registers\n");
+		return -ENXIO;
+	}
 
 	vbus_clk = clk_get(NULL, "vbus");
 	if (IS_ERR(vbus_clk)) {
@@ -312,7 +314,7 @@ out:
 	return rc;
 }
 
-static int ar7_wdt_remove(struct platform_device *pdev)
+static int __devexit ar7_wdt_remove(struct platform_device *pdev)
 {
 	misc_deregister(&ar7_wdt_miscdev);
 	clk_put(vbus_clk);
@@ -328,7 +330,7 @@ static void ar7_wdt_shutdown(struct platform_device *pdev)
 
 static struct platform_driver ar7_wdt_driver = {
 	.probe = ar7_wdt_probe,
-	.remove = ar7_wdt_remove,
+	.remove = __devexit_p(ar7_wdt_remove),
 	.shutdown = ar7_wdt_shutdown,
 	.driver = {
 		.owner = THIS_MODULE,

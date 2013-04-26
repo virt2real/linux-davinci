@@ -98,7 +98,7 @@ void use_tsc_delay(void)
 	delay_fn = delay_tsc;
 }
 
-int read_current_timer(unsigned long *timer_val)
+int __devinit read_current_timer(unsigned long *timer_val)
 {
 	if (delay_fn == delay_tsc) {
 		rdtscll(*timer_val);

@@ -1,3 +1,4 @@
+
 /******************************************************************************
  *
  * Module Name: exmutex - ASL Mutex Acquire/Release functions
@@ -5,7 +6,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2013, Intel Corp.
+ * Copyright (C) 2000 - 2012, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -304,7 +305,7 @@ acpi_status acpi_ex_release_mutex_object(union acpi_operand_object *obj_desc)
 	ACPI_FUNCTION_TRACE(ex_release_mutex_object);
 
 	if (obj_desc->mutex.acquisition_depth == 0) {
-		return_ACPI_STATUS(AE_NOT_ACQUIRED);
+		return (AE_NOT_ACQUIRED);
 	}
 
 	/* Match multiple Acquires with multiple Releases */
@@ -377,8 +378,7 @@ acpi_ex_release_mutex(union acpi_operand_object *obj_desc,
 		return_ACPI_STATUS(AE_AML_MUTEX_NOT_ACQUIRED);
 	}
 
-	/* Must have a valid thread ID */
-
+	/* Must have a valid thread. */
 	if (!walk_state->thread) {
 		ACPI_ERROR((AE_INFO,
 			    "Cannot release Mutex [%4.4s], null thread info",
@@ -462,7 +462,7 @@ void acpi_ex_release_all_mutexes(struct acpi_thread_state *thread)
 	union acpi_operand_object *next = thread->acquired_mutex_list;
 	union acpi_operand_object *obj_desc;
 
-	ACPI_FUNCTION_NAME(ex_release_all_mutexes);
+	ACPI_FUNCTION_ENTRY();
 
 	/* Traverse the list of owned mutexes, releasing each one */
 
@@ -473,10 +473,6 @@ void acpi_ex_release_all_mutexes(struct acpi_thread_state *thread)
 		obj_desc->mutex.prev = NULL;
 		obj_desc->mutex.next = NULL;
 		obj_desc->mutex.acquisition_depth = 0;
-
-		ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
-				  "Force-releasing held mutex: %p\n",
-				  obj_desc));
 
 		/* Release the mutex, special case for Global Lock */
 

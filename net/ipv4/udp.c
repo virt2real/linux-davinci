@@ -139,7 +139,6 @@ static int udp_lib_lport_inuse(struct net *net, __u16 num,
 {
 	struct sock *sk2;
 	struct hlist_nulls_node *node;
-	kuid_t uid = sock_i_uid(sk);
 
 	sk_nulls_for_each(sk2, node, &hslot->head)
 		if (net_eq(sock_net(sk2), net) &&
@@ -148,8 +147,6 @@ static int udp_lib_lport_inuse(struct net *net, __u16 num,
 		    (!sk2->sk_reuse || !sk->sk_reuse) &&
 		    (!sk2->sk_bound_dev_if || !sk->sk_bound_dev_if ||
 		     sk2->sk_bound_dev_if == sk->sk_bound_dev_if) &&
-		    (!sk2->sk_reuseport || !sk->sk_reuseport ||
-		      !uid_eq(uid, sock_i_uid(sk2))) &&
 		    (*saddr_comp)(sk, sk2)) {
 			if (bitmap)
 				__set_bit(udp_sk(sk2)->udp_port_hash >> log,
@@ -172,7 +169,6 @@ static int udp_lib_lport_inuse2(struct net *net, __u16 num,
 {
 	struct sock *sk2;
 	struct hlist_nulls_node *node;
-	kuid_t uid = sock_i_uid(sk);
 	int res = 0;
 
 	spin_lock(&hslot2->lock);
@@ -183,8 +179,6 @@ static int udp_lib_lport_inuse2(struct net *net, __u16 num,
 		    (!sk2->sk_reuse || !sk->sk_reuse) &&
 		    (!sk2->sk_bound_dev_if || !sk->sk_bound_dev_if ||
 		     sk2->sk_bound_dev_if == sk->sk_bound_dev_if) &&
-		    (!sk2->sk_reuseport || !sk->sk_reuseport ||
-		      !uid_eq(uid, sock_i_uid(sk2))) &&
 		    (*saddr_comp)(sk, sk2)) {
 			res = 1;
 			break;
@@ -343,26 +337,26 @@ static inline int compute_score(struct sock *sk, struct net *net, __be32 saddr,
 			!ipv6_only_sock(sk)) {
 		struct inet_sock *inet = inet_sk(sk);
 
-		score = (sk->sk_family == PF_INET ? 2 : 1);
+		score = (sk->sk_family == PF_INET ? 1 : 0);
 		if (inet->inet_rcv_saddr) {
 			if (inet->inet_rcv_saddr != daddr)
 				return -1;
-			score += 4;
+			score += 2;
 		}
 		if (inet->inet_daddr) {
 			if (inet->inet_daddr != saddr)
 				return -1;
-			score += 4;
+			score += 2;
 		}
 		if (inet->inet_dport) {
 			if (inet->inet_dport != sport)
 				return -1;
-			score += 4;
+			score += 2;
 		}
 		if (sk->sk_bound_dev_if) {
 			if (sk->sk_bound_dev_if != dif)
 				return -1;
-			score += 4;
+			score += 2;
 		}
 	}
 	return score;
@@ -371,6 +365,7 @@ static inline int compute_score(struct sock *sk, struct net *net, __be32 saddr,
 /*
  * In this second variant, we check (daddr, dport) matches (inet_rcv_sadd, inet_num)
  */
+#define SCORE2_MAX (1 + 2 + 2 + 2)
 static inline int compute_score2(struct sock *sk, struct net *net,
 				 __be32 saddr, __be16 sport,
 				 __be32 daddr, unsigned int hnum, int dif)
@@ -385,21 +380,21 @@ static inline int compute_score2(struct sock *sk, struct net *net,
 		if (inet->inet_num != hnum)
 			return -1;
 
-		score = (sk->sk_family == PF_INET ? 2 : 1);
+		score = (sk->sk_family == PF_INET ? 1 : 0);
 		if (inet->inet_daddr) {
 			if (inet->inet_daddr != saddr)
 				return -1;
-			score += 4;
+			score += 2;
 		}
 		if (inet->inet_dport) {
 			if (inet->inet_dport != sport)
 				return -1;
-			score += 4;
+			score += 2;
 		}
 		if (sk->sk_bound_dev_if) {
 			if (sk->sk_bound_dev_if != dif)
 				return -1;
-			score += 4;
+			score += 2;
 		}
 	}
 	return score;
@@ -414,29 +409,19 @@ static struct sock *udp4_lib_lookup2(struct net *net,
 {
 	struct sock *sk, *result;
 	struct hlist_nulls_node *node;
-	int score, badness, matches = 0, reuseport = 0;
-	u32 hash = 0;
+	int score, badness;
 
 begin:
 	result = NULL;
-	badness = 0;
+	badness = -1;
 	udp_portaddr_for_each_entry_rcu(sk, node, &hslot2->head) {
 		score = compute_score2(sk, net, saddr, sport,
 				      daddr, hnum, dif);
 		if (score > badness) {
 			result = sk;
 			badness = score;
-			reuseport = sk->sk_reuseport;
-			if (reuseport) {
-				hash = inet_ehashfn(net, daddr, hnum,
-						    saddr, htons(sport));
-				matches = 1;
-			}
-		} else if (score == badness && reuseport) {
-			matches++;
-			if (((u64)hash * matches) >> 32 == 0)
-				result = sk;
-			hash = next_pseudo_random32(hash);
+			if (score == SCORE2_MAX)
+				goto exact_match;
 		}
 	}
 	/*
@@ -446,7 +431,9 @@ begin:
 	 */
 	if (get_nulls_value(node) != slot2)
 		goto begin;
+
 	if (result) {
+exact_match:
 		if (unlikely(!atomic_inc_not_zero_hint(&result->sk_refcnt, 2)))
 			result = NULL;
 		else if (unlikely(compute_score2(result, net, saddr, sport,
@@ -470,8 +457,7 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr,
 	unsigned short hnum = ntohs(dport);
 	unsigned int hash2, slot2, slot = udp_hashfn(net, hnum, udptable->mask);
 	struct udp_hslot *hslot2, *hslot = &udptable->hash[slot];
-	int score, badness, matches = 0, reuseport = 0;
-	u32 hash = 0;
+	int score, badness;
 
 	rcu_read_lock();
 	if (hslot->count > 10) {
@@ -500,24 +486,13 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr,
 	}
 begin:
 	result = NULL;
-	badness = 0;
+	badness = -1;
 	sk_nulls_for_each_rcu(sk, node, &hslot->head) {
 		score = compute_score(sk, net, saddr, hnum, sport,
 				      daddr, dport, dif);
 		if (score > badness) {
 			result = sk;
 			badness = score;
-			reuseport = sk->sk_reuseport;
-			if (reuseport) {
-				hash = inet_ehashfn(net, daddr, hnum,
-						    saddr, htons(sport));
-				matches = 1;
-			}
-		} else if (score == badness && reuseport) {
-			matches++;
-			if (((u64)hash * matches) >> 32 == 0)
-				result = sk;
-			hash = next_pseudo_random32(hash);
 		}
 	}
 	/*
@@ -996,7 +971,7 @@ back_from_confirm:
 				  sizeof(struct udphdr), &ipc, &rt,
 				  msg->msg_flags);
 		err = PTR_ERR(skb);
-		if (!IS_ERR_OR_NULL(skb))
+		if (skb && !IS_ERR(skb))
 			err = udp_send_skb(skb, fl4);
 		goto out;
 	}
@@ -1762,16 +1737,9 @@ int udp_rcv(struct sk_buff *skb)
 
 void udp_destroy_sock(struct sock *sk)
 {
-	struct udp_sock *up = udp_sk(sk);
 	bool slow = lock_sock_fast(sk);
 	udp_flush_pending_frames(sk);
 	unlock_sock_fast(sk, slow);
-	if (static_key_false(&udp_encap_needed) && up->encap_type) {
-		void (*encap_destroy)(struct sock *sk);
-		encap_destroy = ACCESS_ONCE(up->encap_destroy);
-		if (encap_destroy)
-			encap_destroy(sk);
-	}
 }
 
 /*
@@ -1984,7 +1952,6 @@ struct proto udp_prot = {
 	.recvmsg	   = udp_recvmsg,
 	.sendpage	   = udp_sendpage,
 	.backlog_rcv	   = __udp_queue_rcv_skb,
-	.release_cb	   = ip4_datagram_release_cb,
 	.hash		   = udp_lib_hash,
 	.unhash		   = udp_lib_unhash,
 	.rehash		   = udp_v4_rehash,
@@ -2129,7 +2096,7 @@ EXPORT_SYMBOL(udp_proc_register);
 
 void udp_proc_unregister(struct net *net, struct udp_seq_afinfo *afinfo)
 {
-	remove_proc_entry(afinfo->name, net->proc_net);
+	proc_net_remove(net, afinfo->name);
 }
 EXPORT_SYMBOL(udp_proc_unregister);
 
@@ -2312,8 +2279,7 @@ struct sk_buff *udp4_ufo_fragment(struct sk_buff *skb,
 		/* Packet is from an untrusted source, reset gso_segs. */
 		int type = skb_shinfo(skb)->gso_type;
 
-		if (unlikely(type & ~(SKB_GSO_UDP | SKB_GSO_DODGY |
-				      SKB_GSO_GRE) ||
+		if (unlikely(type & ~(SKB_GSO_UDP | SKB_GSO_DODGY) ||
 			     !(type & (SKB_GSO_UDP))))
 			goto out;
 

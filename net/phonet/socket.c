@@ -76,6 +76,7 @@ static struct hlist_head *pn_hash_list(u16 obj)
  */
 struct sock *pn_find_sock_by_sa(struct net *net, const struct sockaddr_pn *spn)
 {
+	struct hlist_node *node;
 	struct sock *sknode;
 	struct sock *rval = NULL;
 	u16 obj = pn_sockaddr_get_object(spn);
@@ -83,7 +84,7 @@ struct sock *pn_find_sock_by_sa(struct net *net, const struct sockaddr_pn *spn)
 	struct hlist_head *hlist = pn_hash_list(obj);
 
 	rcu_read_lock();
-	sk_for_each_rcu(sknode, hlist) {
+	sk_for_each_rcu(sknode, node, hlist) {
 		struct pn_sock *pn = pn_sk(sknode);
 		BUG_ON(!pn->sobject); /* unbound socket */
 
@@ -119,9 +120,10 @@ void pn_deliver_sock_broadcast(struct net *net, struct sk_buff *skb)
 
 	rcu_read_lock();
 	for (h = 0; h < PN_HASHSIZE; h++) {
+		struct hlist_node *node;
 		struct sock *sknode;
 
-		sk_for_each(sknode, hlist) {
+		sk_for_each(sknode, node, hlist) {
 			struct sk_buff *clone;
 
 			if (!net_eq(sock_net(sknode), net))
@@ -541,11 +543,12 @@ static struct sock *pn_sock_get_idx(struct seq_file *seq, loff_t pos)
 {
 	struct net *net = seq_file_net(seq);
 	struct hlist_head *hlist = pnsocks.hlist;
+	struct hlist_node *node;
 	struct sock *sknode;
 	unsigned int h;
 
 	for (h = 0; h < PN_HASHSIZE; h++) {
-		sk_for_each_rcu(sknode, hlist) {
+		sk_for_each_rcu(sknode, node, hlist) {
 			if (!net_eq(net, sock_net(sknode)))
 				continue;
 			if (!pos)

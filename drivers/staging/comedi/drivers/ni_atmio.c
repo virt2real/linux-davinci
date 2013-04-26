@@ -284,6 +284,8 @@ struct ni_private {
 
 };
 
+#define devpriv ((struct ni_private *)dev->private)
+
 /* How we access registers */
 
 #define ni_writel(a, b)		(outl((a), (b)+dev->iobase))
@@ -301,7 +303,6 @@ struct ni_private {
 
 static void ni_atmio_win_out(struct comedi_device *dev, uint16_t data, int addr)
 {
-	struct ni_private *devpriv = dev->private;
 	unsigned long flags;
 
 	spin_lock_irqsave(&devpriv->window_lock, flags);
@@ -316,7 +317,6 @@ static void ni_atmio_win_out(struct comedi_device *dev, uint16_t data, int addr)
 
 static uint16_t ni_atmio_win_in(struct comedi_device *dev, int addr)
 {
-	struct ni_private *devpriv = dev->private;
 	unsigned long flags;
 	uint16_t ret;
 
@@ -406,17 +406,16 @@ static int ni_getboardtype(struct comedi_device *dev)
 static int ni_atmio_attach(struct comedi_device *dev,
 			   struct comedi_devconfig *it)
 {
-	struct ni_private *devpriv;
 	struct pnp_dev *isapnp_dev;
 	int ret;
 	unsigned long iobase;
 	int board;
 	unsigned int irq;
 
+	/* allocate private area */
 	ret = ni_alloc_private(dev);
-	if (ret)
+	if (ret < 0)
 		return ret;
-	devpriv = dev->private;
 
 	devpriv->stc_writew = &ni_atmio_win_out;
 	devpriv->stc_readw = &ni_atmio_win_in;
@@ -500,8 +499,6 @@ static int ni_atmio_attach(struct comedi_device *dev,
 
 static void ni_atmio_detach(struct comedi_device *dev)
 {
-	struct ni_private *devpriv = dev->private;
-
 	mio_common_detach(dev);
 	if (dev->iobase)
 		release_region(dev->iobase, NI_SIZE);

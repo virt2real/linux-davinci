@@ -48,7 +48,7 @@ void menu_add_entry(struct symbol *sym)
 {
 	struct menu *menu;
 
-	menu = xmalloc(sizeof(*menu));
+	menu = malloc(sizeof(*menu));
 	memset(menu, 0, sizeof(*menu));
 	menu->sym = sym;
 	menu->parent = current_menu;
@@ -508,7 +508,7 @@ const char *menu_get_help(struct menu *menu)
 }
 
 static void get_prompt_str(struct gstr *r, struct property *prop,
-			   struct list_head *head)
+			   struct jk_head *head)
 {
 	int i, j;
 	struct menu *submenu[8], *menu, *location = NULL;
@@ -531,7 +531,7 @@ static void get_prompt_str(struct gstr *r, struct property *prop,
 			location = menu;
 	}
 	if (head && location) {
-		jump = xmalloc(sizeof(struct jump_key));
+		jump = malloc(sizeof(struct jump_key));
 
 		if (menu_is_visible(prop->menu)) {
 			/*
@@ -544,13 +544,12 @@ static void get_prompt_str(struct gstr *r, struct property *prop,
 		} else
 			jump->target = location;
 
-		if (list_empty(head))
+		if (CIRCLEQ_EMPTY(head))
 			jump->index = 0;
 		else
-			jump->index = list_entry(head->prev, struct jump_key,
-						 entries)->index + 1;
+			jump->index = CIRCLEQ_LAST(head)->index + 1;
 
-		list_add_tail(&jump->entries, head);
+		CIRCLEQ_INSERT_TAIL(head, jump, entries);
 	}
 
 	if (i > 0) {
@@ -574,8 +573,7 @@ static void get_prompt_str(struct gstr *r, struct property *prop,
 /*
  * head is optional and may be NULL
  */
-void get_symbol_str(struct gstr *r, struct symbol *sym,
-		    struct list_head *head)
+void get_symbol_str(struct gstr *r, struct symbol *sym, struct jk_head *head)
 {
 	bool hit;
 	struct property *prop;
@@ -614,7 +612,7 @@ void get_symbol_str(struct gstr *r, struct symbol *sym,
 	str_append(r, "\n\n");
 }
 
-struct gstr get_relations_str(struct symbol **sym_arr, struct list_head *head)
+struct gstr get_relations_str(struct symbol **sym_arr, struct jk_head *head)
 {
 	struct symbol *sym;
 	struct gstr res = str_new();

@@ -9,8 +9,6 @@
 
 #define LPM_ANYPATH 0xff
 #define __MAX_CSSID 0
-#define __MAX_SUBCHANNEL 65535
-#define __MAX_SSID 3
 
 #include <asm/scsw.h>
 

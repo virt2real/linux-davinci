@@ -30,7 +30,7 @@ if PM_DEVFREQ
 comment "DEVFREQ Governors"
 
 config DEVFREQ_GOV_SIMPLE_ONDEMAND
-	tristate "Simple Ondemand"
+	bool "Simple Ondemand"
 	help
 	  Chooses frequency based on the recent load on the device. Works
 	  similar as ONDEMAND governor of CPUFREQ does. A device with
@@ -39,7 +39,7 @@ config DEVFREQ_GOV_SIMPLE_ONDEMAND
 	  values to the governor with data field at devfreq_add_device().
 
 config DEVFREQ_GOV_PERFORMANCE
-	tristate "Performance"
+	bool "Performance"
 	help
 	  Sets the frequency at the maximum available frequency.
 	  This governor always returns UINT_MAX as frequency so that
@@ -47,7 +47,7 @@ config DEVFREQ_GOV_PERFORMANCE
 	  at any time.
 
 config DEVFREQ_GOV_POWERSAVE
-	tristate "Powersave"
+	bool "Powersave"
 	help
 	  Sets the frequency at the minimum available frequency.
 	  This governor always returns 0 as frequency so that
@@ -55,7 +55,7 @@ config DEVFREQ_GOV_POWERSAVE
 	  at any time.
 
 config DEVFREQ_GOV_USERSPACE
-	tristate "Userspace"
+	bool "Userspace"
 	help
 	  Sets the frequency at the user specified one.
 	  This governor returns the user configured frequency if there

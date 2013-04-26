@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include "ext4_jbd2.h"
 #include "ext4.h"
-#include "ext4_extents.h"
 
 /**
  * get_ext_path - Find an extent path for designated logical block number.
@@ -32,18 +31,16 @@
  */
 static inline int
 get_ext_path(struct inode *inode, ext4_lblk_t lblock,
-		struct ext4_ext_path **orig_path)
+		struct ext4_ext_path **path)
 {
 	int ret = 0;
-	struct ext4_ext_path *path;
 
-	path = ext4_ext_find_extent(inode, lblock, *orig_path);
-	if (IS_ERR(path))
-		ret = PTR_ERR(path);
-	else if (path[ext_depth(inode)].p_ext == NULL)
+	*path = ext4_ext_find_extent(inode, lblock, *path);
+	if (IS_ERR(*path)) {
+		ret = PTR_ERR(*path);
+		*path = NULL;
+	} else if ((*path)[ext_depth(inode)].p_ext == NULL)
 		ret = -ENODATA;
-	else
-		*orig_path = path;
 
 	return ret;
 }
@@ -613,25 +610,24 @@ mext_check_coverage(struct inode *inode, ext4_lblk_t from, ext4_lblk_t count,
 {
 	struct ext4_ext_path *path = NULL;
 	struct ext4_extent *ext;
-	int ret = 0;
 	ext4_lblk_t last = from + count;
 	while (from < last) {
 		*err = get_ext_path(inode, from, &path);
 		if (*err)
-			goto out;
+			return 0;
 		ext = path[ext_depth(inode)].p_ext;
-		if (uninit != ext4_ext_is_uninitialized(ext))
-			goto out;
+		if (!ext) {
+			ext4_ext_drop_refs(path);
+			return 0;
+		}
+		if (uninit != ext4_ext_is_uninitialized(ext)) {
+			ext4_ext_drop_refs(path);
+			return 0;
+		}
 		from += ext4_ext_get_actual_len(ext);
 		ext4_ext_drop_refs(path);
 	}
-	ret = 1;
-out:
-	if (path) {
-		ext4_ext_drop_refs(path);
-		kfree(path);
-	}
-	return ret;
+	return 1;
 }
 
 /**
@@ -669,14 +665,6 @@ mext_replace_branches(handle_t *handle, struct inode *orig_inode,
 	int replaced_count = 0;
 	int dext_alen;
 
-	*err = ext4_es_remove_extent(orig_inode, from, count);
-	if (*err)
-		goto out;
-
-	*err = ext4_es_remove_extent(donor_inode, from, count);
-	if (*err)
-		goto out;
-
 	/* Get the original extent for the block "orig_off" */
 	*err = get_ext_path(orig_inode, orig_off, &orig_path);
 	if (*err)
@@ -692,8 +680,6 @@ mext_replace_branches(handle_t *handle, struct inode *orig_inode,
 
 	depth = ext_depth(donor_inode);
 	dext = donor_path[depth].p_ext;
-	if (unlikely(!dext))
-		goto missing_donor_extent;
 	tmp_dext = *dext;
 
 	*err = mext_calc_swap_extents(&tmp_dext, &tmp_oext, orig_off,
@@ -704,8 +690,7 @@ mext_replace_branches(handle_t *handle, struct inode *orig_inode,
 	/* Loop for the donor extents */
 	while (1) {
 		/* The extent for donor must be found. */
-		if (unlikely(!dext)) {
-		missing_donor_extent:
+		if (!dext) {
 			EXT4_ERROR_INODE(donor_inode,
 				   "The extent for donor must be found");
 			*err = -EIO;
@@ -774,6 +759,9 @@ out:
 		ext4_ext_drop_refs(donor_path);
 		kfree(donor_path);
 	}
+
+	ext4_ext_invalidate_cache(orig_inode);
+	ext4_ext_invalidate_cache(donor_inode);
 
 	return replaced_count;
 }
@@ -911,7 +899,7 @@ move_extent_per_page(struct file *o_filp, struct inode *donor_inode,
 		  pgoff_t orig_page_offset, int data_offset_in_page,
 		  int block_len_in_page, int uninit, int *err)
 {
-	struct inode *orig_inode = file_inode(o_filp);
+	struct inode *orig_inode = o_filp->f_dentry->d_inode;
 	struct page *pagep[2] = {NULL, NULL};
 	handle_t *handle;
 	ext4_lblk_t orig_blk_offset;
@@ -931,7 +919,7 @@ move_extent_per_page(struct file *o_filp, struct inode *donor_inode,
 again:
 	*err = 0;
 	jblocks = ext4_writepage_trans_blocks(orig_inode) * 2;
-	handle = ext4_journal_start(orig_inode, EXT4_HT_MOVE_EXTENTS, jblocks);
+	handle = ext4_journal_start(orig_inode, jblocks);
 	if (IS_ERR(handle)) {
 		*err = PTR_ERR(handle);
 		return 0;
@@ -1290,8 +1278,8 @@ ext4_move_extents(struct file *o_filp, struct file *d_filp,
 		 __u64 orig_start, __u64 donor_start, __u64 len,
 		 __u64 *moved_len)
 {
-	struct inode *orig_inode = file_inode(o_filp);
-	struct inode *donor_inode = file_inode(d_filp);
+	struct inode *orig_inode = o_filp->f_dentry->d_inode;
+	struct inode *donor_inode = d_filp->f_dentry->d_inode;
 	struct ext4_ext_path *orig_path = NULL, *holecheck_path = NULL;
 	struct ext4_extent *ext_prev, *ext_cur, *ext_dummy;
 	ext4_lblk_t block_start = orig_start;

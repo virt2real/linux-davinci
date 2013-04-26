@@ -458,7 +458,7 @@ static ssize_t xenbus_file_write(struct file *filp,
 		goto out;
 
 	/* Can't write a xenbus message larger we can buffer */
-	if (len > sizeof(u->u.buffer) - u->len) {
+	if ((len + u->len) > sizeof(u->u.buffer)) {
 		/* On error, dump existing buffer */
 		u->len = 0;
 		rc = -EINVAL;

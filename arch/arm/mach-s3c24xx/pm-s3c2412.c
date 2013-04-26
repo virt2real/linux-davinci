@@ -21,18 +21,18 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 
+#include <mach/hardware.h>
 #include <asm/cacheflush.h>
 #include <asm/irq.h>
 
-#include <mach/hardware.h>
+#include <mach/regs-power.h>
 #include <mach/regs-gpio.h>
+#include <mach/regs-dsc.h>
 
 #include <plat/cpu.h>
 #include <plat/pm.h>
-#include <plat/s3c2412.h>
 
-#include "regs-dsc.h"
-#include "s3c2412-power.h"
+#include <plat/s3c2412.h>
 
 extern void s3c2412_sleep_enter(void);
 
@@ -48,8 +48,7 @@ static int s3c2412_cpu_suspend(unsigned long arg)
 
 	s3c2412_sleep_enter();
 
-	pr_info("Failed to suspend the system\n");
-	return 1; /* Aborting suspend */
+	panic("sleep resumed to originator?");
 }
 
 static void s3c2412_pm_prepare(void)

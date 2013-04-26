@@ -13,7 +13,6 @@
 #include <linux/spinlock.h>
 #include <linux/export.h>
 #include <linux/sched.h>
-#include <linux/sched/rt.h>
 #include <linux/timer.h>
 
 #include "rtmutex_common.h"

@@ -227,19 +227,19 @@ static void pmz_interrupt_control(struct uart_pmac_port *uap, int enable)
 	write_zsreg(uap, R1, uap->curregs[1]);
 }
 
-static bool pmz_receive_chars(struct uart_pmac_port *uap)
+static struct tty_struct *pmz_receive_chars(struct uart_pmac_port *uap)
 {
-	struct tty_port *port;
+	struct tty_struct *tty = NULL;
 	unsigned char ch, r1, drop, error, flag;
 	int loops = 0;
 
 	/* Sanity check, make sure the old bug is no longer happening */
-	if (uap->port.state == NULL) {
+	if (uap->port.state == NULL || uap->port.state->port.tty == NULL) {
 		WARN_ON(1);
 		(void)read_zsdata(uap);
-		return false;
+		return NULL;
 	}
-	port = &uap->port.state->port;
+	tty = uap->port.state->port.tty;
 
 	while (1) {
 		error = 0;
@@ -309,10 +309,10 @@ static bool pmz_receive_chars(struct uart_pmac_port *uap)
 
 		if (uap->port.ignore_status_mask == 0xff ||
 		    (r1 & uap->port.ignore_status_mask) == 0) {
-			tty_insert_flip_char(port, ch, flag);
+			tty_insert_flip_char(tty, ch, flag);
 		}
 		if (r1 & Rx_OVR)
-			tty_insert_flip_char(port, 0, TTY_OVERRUN);
+			tty_insert_flip_char(tty, 0, TTY_OVERRUN);
 	next_char:
 		/* We can get stuck in an infinite loop getting char 0 when the
 		 * line is in a wrong HW state, we break that here.
@@ -328,11 +328,11 @@ static bool pmz_receive_chars(struct uart_pmac_port *uap)
 			break;
 	}
 
-	return true;
+	return tty;
  flood:
 	pmz_interrupt_control(uap, 0);
 	pmz_error("pmz: rx irq flood !\n");
-	return true;
+	return tty;
 }
 
 static void pmz_status_handle(struct uart_pmac_port *uap)
@@ -453,7 +453,7 @@ static irqreturn_t pmz_interrupt(int irq, void *dev_id)
 	struct uart_pmac_port *uap_a;
 	struct uart_pmac_port *uap_b;
 	int rc = IRQ_NONE;
-	bool push;
+	struct tty_struct *tty;
 	u8 r3;
 
 	uap_a = pmz_get_port_A(uap);
@@ -466,7 +466,7 @@ static irqreturn_t pmz_interrupt(int irq, void *dev_id)
 	pmz_debug("irq, r3: %x\n", r3);
 #endif
 	/* Channel A */
-	push = false;
+	tty = NULL;
 	if (r3 & (CHAEXT | CHATxIP | CHARxIP)) {
 		if (!ZS_IS_OPEN(uap_a)) {
 			pmz_debug("ChanA interrupt while not open !\n");
@@ -477,21 +477,21 @@ static irqreturn_t pmz_interrupt(int irq, void *dev_id)
 		if (r3 & CHAEXT)
 			pmz_status_handle(uap_a);
 		if (r3 & CHARxIP)
-			push = pmz_receive_chars(uap_a);
+			tty = pmz_receive_chars(uap_a);
 		if (r3 & CHATxIP)
 			pmz_transmit_chars(uap_a);
 		rc = IRQ_HANDLED;
 	}
  skip_a:
 	spin_unlock(&uap_a->port.lock);
-	if (push)
-		tty_flip_buffer_push(&uap->port.state->port);
+	if (tty != NULL)
+		tty_flip_buffer_push(tty);
 
 	if (!uap_b)
 		goto out;
 
 	spin_lock(&uap_b->port.lock);
-	push = false;
+	tty = NULL;
 	if (r3 & (CHBEXT | CHBTxIP | CHBRxIP)) {
 		if (!ZS_IS_OPEN(uap_b)) {
 			pmz_debug("ChanB interrupt while not open !\n");
@@ -502,15 +502,15 @@ static irqreturn_t pmz_interrupt(int irq, void *dev_id)
 		if (r3 & CHBEXT)
 			pmz_status_handle(uap_b);
 		if (r3 & CHBRxIP)
-			push = pmz_receive_chars(uap_b);
+			tty = pmz_receive_chars(uap_b);
 		if (r3 & CHBTxIP)
 			pmz_transmit_chars(uap_b);
 		rc = IRQ_HANDLED;
 	}
  skip_b:
 	spin_unlock(&uap_b->port.lock);
-	if (push)
-		tty_flip_buffer_push(&uap->port.state->port);
+	if (tty != NULL)
+		tty_flip_buffer_push(tty);
 
  out:
 	return rc;

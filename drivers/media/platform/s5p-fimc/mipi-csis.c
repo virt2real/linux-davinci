@@ -187,7 +187,7 @@ struct csis_state {
 	const struct csis_pix_format *csis_fmt;
 	struct v4l2_mbus_framefmt format;
 
-	spinlock_t slock;
+	struct spinlock slock;
 	struct csis_pktbuf pkt_buf;
 	struct s5pcsis_event events[S5PCSIS_NUM_EVENTS];
 };
@@ -220,18 +220,6 @@ static const struct csis_pix_format s5pcsis_formats[] = {
 		.code = V4L2_MBUS_FMT_S5C_UYVY_JPEG_1X8,
 		.fmt_reg = S5PCSIS_CFG_FMT_USER(1),
 		.data_alignment = 32,
-	}, {
-		.code = V4L2_MBUS_FMT_SGRBG8_1X8,
-		.fmt_reg = S5PCSIS_CFG_FMT_RAW8,
-		.data_alignment = 24,
-	}, {
-		.code = V4L2_MBUS_FMT_SGRBG10_1X10,
-		.fmt_reg = S5PCSIS_CFG_FMT_RAW10,
-		.data_alignment = 24,
-	}, {
-		.code = V4L2_MBUS_FMT_SGRBG12_1X12,
-		.fmt_reg = S5PCSIS_CFG_FMT_RAW12,
-		.data_alignment = 24,
 	}
 };
 
@@ -273,8 +261,7 @@ static void s5pcsis_reset(struct csis_state *state)
 
 static void s5pcsis_system_enable(struct csis_state *state, int on)
 {
-	struct s5p_platform_mipi_csis *pdata = state->pdev->dev.platform_data;
-	u32 val, mask;
+	u32 val;
 
 	val = s5pcsis_read(state, S5PCSIS_CTRL);
 	if (on)
@@ -284,11 +271,10 @@ static void s5pcsis_system_enable(struct csis_state *state, int on)
 	s5pcsis_write(state, S5PCSIS_CTRL, val);
 
 	val = s5pcsis_read(state, S5PCSIS_DPHYCTRL);
-	val &= ~S5PCSIS_DPHYCTRL_ENABLE;
-	if (on) {
-		mask = (1 << (pdata->lanes + 1)) - 1;
-		val |= (mask & S5PCSIS_DPHYCTRL_ENABLE);
-	}
+	if (on)
+		val |= S5PCSIS_DPHYCTRL_ENABLE;
+	else
+		val &= ~S5PCSIS_DPHYCTRL_ENABLE;
 	s5pcsis_write(state, S5PCSIS_DPHYCTRL, val);
 }
 
@@ -352,11 +338,11 @@ static void s5pcsis_clk_put(struct csis_state *state)
 	int i;
 
 	for (i = 0; i < NUM_CSIS_CLOCKS; i++) {
-		if (IS_ERR(state->clock[i]))
+		if (IS_ERR_OR_NULL(state->clock[i]))
 			continue;
 		clk_unprepare(state->clock[i]);
 		clk_put(state->clock[i]);
-		state->clock[i] = ERR_PTR(-EINVAL);
+		state->clock[i] = NULL;
 	}
 }
 
@@ -365,19 +351,14 @@ static int s5pcsis_clk_get(struct csis_state *state)
 	struct device *dev = &state->pdev->dev;
 	int i, ret;
 
-	for (i = 0; i < NUM_CSIS_CLOCKS; i++)
-		state->clock[i] = ERR_PTR(-EINVAL);
-
 	for (i = 0; i < NUM_CSIS_CLOCKS; i++) {
 		state->clock[i] = clk_get(dev, csi_clock_name[i]);
-		if (IS_ERR(state->clock[i])) {
-			ret = PTR_ERR(state->clock[i]);
+		if (IS_ERR(state->clock[i]))
 			goto err;
-		}
 		ret = clk_prepare(state->clock[i]);
 		if (ret < 0) {
 			clk_put(state->clock[i]);
-			state->clock[i] = ERR_PTR(-EINVAL);
+			state->clock[i] = NULL;
 			goto err;
 		}
 	}
@@ -385,31 +366,7 @@ static int s5pcsis_clk_get(struct csis_state *state)
 err:
 	s5pcsis_clk_put(state);
 	dev_err(dev, "failed to get clock: %s\n", csi_clock_name[i]);
-	return ret;
-}
-
-static void dump_regs(struct csis_state *state, const char *label)
-{
-	struct {
-		u32 offset;
-		const char * const name;
-	} registers[] = {
-		{ 0x00, "CTRL" },
-		{ 0x04, "DPHYCTRL" },
-		{ 0x08, "CONFIG" },
-		{ 0x0c, "DPHYSTS" },
-		{ 0x10, "INTMSK" },
-		{ 0x2c, "RESOL" },
-		{ 0x38, "SDW_CONFIG" },
-	};
-	u32 i;
-
-	v4l2_info(&state->sd, "--- %s ---\n", label);
-
-	for (i = 0; i < ARRAY_SIZE(registers); i++) {
-		u32 cfg = s5pcsis_read(state, registers[i].offset);
-		v4l2_info(&state->sd, "%10s: 0x%08x\n", registers[i].name, cfg);
-	}
+	return -ENXIO;
 }
 
 static void s5pcsis_start_stream(struct csis_state *state)
@@ -444,12 +401,12 @@ static void s5pcsis_log_counters(struct csis_state *state, bool non_errors)
 
 	spin_lock_irqsave(&state->slock, flags);
 
-	for (i--; i >= 0; i--) {
-		if (state->events[i].counter > 0 || debug)
+	for (i--; i >= 0; i--)
+		if (state->events[i].counter >= 0)
 			v4l2_info(&state->sd, "%s events: %d\n",
 				  state->events[i].name,
 				  state->events[i].counter);
-	}
+
 	spin_unlock_irqrestore(&state->slock, flags);
 }
 
@@ -612,11 +569,7 @@ static int s5pcsis_log_status(struct v4l2_subdev *sd)
 {
 	struct csis_state *state = sd_to_csis_state(sd);
 
-	mutex_lock(&state->lock);
 	s5pcsis_log_counters(state, true);
-	if (debug && (state->flags & ST_POWERED))
-		dump_regs(state, __func__);
-	mutex_unlock(&state->lock);
 	return 0;
 }
 
@@ -701,7 +654,7 @@ static irqreturn_t s5pcsis_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int s5pcsis_probe(struct platform_device *pdev)
+static int __devinit s5pcsis_probe(struct platform_device *pdev)
 {
 	struct s5p_platform_mipi_csis *pdata;
 	struct resource *mem_res;
@@ -733,9 +686,11 @@ static int s5pcsis_probe(struct platform_device *pdev)
 	}
 
 	mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	state->regs = devm_ioremap_resource(&pdev->dev, mem_res);
-	if (IS_ERR(state->regs))
-		return PTR_ERR(state->regs);
+	state->regs = devm_request_and_ioremap(&pdev->dev, mem_res);
+	if (state->regs == NULL) {
+		dev_err(&pdev->dev, "Failed to request and remap io memory\n");
+		return -ENXIO;
+	}
 
 	state->irq = platform_get_irq(pdev, 0);
 	if (state->irq < 0) {
@@ -746,32 +701,26 @@ static int s5pcsis_probe(struct platform_device *pdev)
 	for (i = 0; i < CSIS_NUM_SUPPLIES; i++)
 		state->supplies[i].supply = csis_supply_name[i];
 
-	ret = devm_regulator_bulk_get(&pdev->dev, CSIS_NUM_SUPPLIES,
+	ret = regulator_bulk_get(&pdev->dev, CSIS_NUM_SUPPLIES,
 				 state->supplies);
 	if (ret)
 		return ret;
 
 	ret = s5pcsis_clk_get(state);
-	if (ret < 0)
-		return ret;
+	if (ret)
+		goto e_clkput;
 
+	clk_enable(state->clock[CSIS_CLK_MUX]);
 	if (pdata->clk_rate)
-		ret = clk_set_rate(state->clock[CSIS_CLK_MUX],
-				   pdata->clk_rate);
+		clk_set_rate(state->clock[CSIS_CLK_MUX], pdata->clk_rate);
 	else
 		dev_WARN(&pdev->dev, "No clock frequency specified!\n");
-	if (ret < 0)
-		goto e_clkput;
-
-	ret = clk_enable(state->clock[CSIS_CLK_MUX]);
-	if (ret < 0)
-		goto e_clkput;
 
 	ret = devm_request_irq(&pdev->dev, state->irq, s5pcsis_irq_handler,
 			       0, dev_name(&pdev->dev), state);
 	if (ret) {
 		dev_err(&pdev->dev, "Interrupt request failed\n");
-		goto e_clkdis;
+		goto e_regput;
 	}
 
 	v4l2_subdev_init(&state->sd, &s5pcsis_subdev_ops);
@@ -789,7 +738,7 @@ static int s5pcsis_probe(struct platform_device *pdev)
 	ret = media_entity_init(&state->sd.entity,
 				CSIS_PADS_NUM, state->pads, 0);
 	if (ret < 0)
-		goto e_clkdis;
+		goto e_clkput;
 
 	/* This allows to retrieve the platform device id by the host driver */
 	v4l2_set_subdevdata(&state->sd, pdev);
@@ -802,9 +751,10 @@ static int s5pcsis_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 	return 0;
 
-e_clkdis:
-	clk_disable(state->clock[CSIS_CLK_MUX]);
+e_regput:
+	regulator_bulk_free(CSIS_NUM_SUPPLIES, state->supplies);
 e_clkput:
+	clk_disable(state->clock[CSIS_CLK_MUX]);
 	s5pcsis_clk_put(state);
 	return ret;
 }
@@ -901,7 +851,7 @@ static int s5pcsis_runtime_resume(struct device *dev)
 }
 #endif
 
-static int s5pcsis_remove(struct platform_device *pdev)
+static int __devexit s5pcsis_remove(struct platform_device *pdev)
 {
 	struct v4l2_subdev *sd = platform_get_drvdata(pdev);
 	struct csis_state *state = sd_to_csis_state(sd);
@@ -911,6 +861,7 @@ static int s5pcsis_remove(struct platform_device *pdev)
 	clk_disable(state->clock[CSIS_CLK_MUX]);
 	pm_runtime_set_suspended(&pdev->dev);
 	s5pcsis_clk_put(state);
+	regulator_bulk_free(CSIS_NUM_SUPPLIES, state->supplies);
 
 	media_entity_cleanup(&state->sd.entity);
 
@@ -925,7 +876,7 @@ static const struct dev_pm_ops s5pcsis_pm_ops = {
 
 static struct platform_driver s5pcsis_driver = {
 	.probe		= s5pcsis_probe,
-	.remove		= s5pcsis_remove,
+	.remove		= __devexit_p(s5pcsis_remove),
 	.driver		= {
 		.name	= CSIS_DRIVER_NAME,
 		.owner	= THIS_MODULE,

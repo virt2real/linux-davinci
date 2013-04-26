@@ -116,6 +116,7 @@ void tipc_handler_stop(void)
 		return;
 
 	handler_enabled = 0;
+	tasklet_disable(&tipc_tasklet);
 	tasklet_kill(&tipc_tasklet);
 
 	spin_lock_bh(&qitem_lock);

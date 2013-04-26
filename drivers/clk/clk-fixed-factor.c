@@ -28,11 +28,8 @@ static unsigned long clk_factor_recalc_rate(struct clk_hw *hw,
 		unsigned long parent_rate)
 {
 	struct clk_fixed_factor *fix = to_clk_fixed_factor(hw);
-	unsigned long long int rate;
 
-	rate = (unsigned long long int)parent_rate * fix->mult;
-	do_div(rate, fix->div);
-	return (unsigned long)rate;
+	return parent_rate * fix->mult / fix->div;
 }
 
 static long clk_factor_round_rate(struct clk_hw *hw, unsigned long rate,

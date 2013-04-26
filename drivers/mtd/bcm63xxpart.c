@@ -37,7 +37,8 @@
 
 #define BCM63XX_EXTENDED_SIZE	0xBFC00000	/* Extended flash address */
 
-#define BCM63XX_CFE_BLOCK_SIZE	0x10000		/* always at least 64KiB */
+#define BCM63XX_MIN_CFE_SIZE	0x10000		/* always at least 64KiB */
+#define BCM63XX_MIN_NVRAM_SIZE	0x10000		/* always at least 64KiB */
 
 #define BCM63XX_CFE_MAGIC_OFFSET 0x4e0
 
@@ -78,7 +79,7 @@ static int bcm63xx_parse_cfe_partitions(struct mtd_info *master,
 	unsigned int rootfsaddr, kerneladdr, spareaddr;
 	unsigned int rootfslen, kernellen, sparelen, totallen;
 	unsigned int cfelen, nvramlen;
-	unsigned int cfe_erasesize;
+	int namelen = 0;
 	int i;
 	u32 computed_crc;
 	bool rootfs_first = false;
@@ -86,11 +87,8 @@ static int bcm63xx_parse_cfe_partitions(struct mtd_info *master,
 	if (bcm63xx_detect_cfe(master))
 		return -EINVAL;
 
-	cfe_erasesize = max_t(uint32_t, master->erasesize,
-			      BCM63XX_CFE_BLOCK_SIZE);
-
-	cfelen = cfe_erasesize;
-	nvramlen = cfe_erasesize;
+	cfelen = max_t(uint32_t, master->erasesize, BCM63XX_MIN_CFE_SIZE);
+	nvramlen = max_t(uint32_t, master->erasesize, BCM63XX_MIN_NVRAM_SIZE);
 
 	/* Allocate memory for buffer */
 	buf = vmalloc(sizeof(struct bcm_tag));
@@ -123,6 +121,7 @@ static int bcm63xx_parse_cfe_partitions(struct mtd_info *master,
 		kerneladdr = kerneladdr - BCM63XX_EXTENDED_SIZE;
 		rootfsaddr = rootfsaddr - BCM63XX_EXTENDED_SIZE;
 		spareaddr = roundup(totallen, master->erasesize) + cfelen;
+		sparelen = master->size - spareaddr - nvramlen;
 
 		if (rootfsaddr < kerneladdr) {
 			/* default Broadcom layout */
@@ -140,15 +139,19 @@ static int bcm63xx_parse_cfe_partitions(struct mtd_info *master,
 		rootfslen = 0;
 		rootfsaddr = 0;
 		spareaddr = cfelen;
+		sparelen = master->size - cfelen - nvramlen;
 	}
-	sparelen = master->size - spareaddr - nvramlen;
 
 	/* Determine number of partitions */
-	if (rootfslen > 0)
+	namelen = 8;
+	if (rootfslen > 0) {
 		nrparts++;
-
-	if (kernellen > 0)
+		namelen += 6;
+	}
+	if (kernellen > 0) {
 		nrparts++;
+		namelen += 6;
+	}
 
 	/* Ask kernel for more memory */
 	parts = kzalloc(sizeof(*parts) * nrparts + 10 * nrparts, GFP_KERNEL);
@@ -190,16 +193,17 @@ static int bcm63xx_parse_cfe_partitions(struct mtd_info *master,
 	parts[curpart].name = "nvram";
 	parts[curpart].offset = master->size - nvramlen;
 	parts[curpart].size = nvramlen;
-	curpart++;
 
 	/* Global partition "linux" to make easy firmware upgrade */
+	curpart++;
 	parts[curpart].name = "linux";
 	parts[curpart].offset = cfelen;
 	parts[curpart].size = master->size - cfelen - nvramlen;
 
 	for (i = 0; i < nrparts; i++)
-		pr_info("Partition %d is %s offset %llx and length %llx\n", i,
-			parts[i].name, parts[i].offset,	parts[i].size);
+		pr_info("Partition %d is %s offset %lx and length %lx\n", i,
+			parts[i].name, (long unsigned int)(parts[i].offset),
+			(long unsigned int)(parts[i].size));
 
 	pr_info("Spare partition is offset %x and length %x\n",	spareaddr,
 		sparelen);

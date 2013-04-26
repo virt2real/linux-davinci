@@ -64,10 +64,11 @@ static int hw_queue_ctor(struct hw_queue *queue, const u32 nr_of_pages,
 	}
 
 	queue->queue_length = nr_of_pages * pagesize;
-	queue->queue_pages = kmalloc_array(nr_of_pages, sizeof(void *),
-					   GFP_KERNEL);
-	if (!queue->queue_pages)
+	queue->queue_pages = kmalloc(nr_of_pages * sizeof(void *), GFP_KERNEL);
+	if (!queue->queue_pages) {
+		pr_err("no mem for queue_pages\n");
 		return -ENOMEM;
+	}
 
 	/*
 	 * allocate pages for queue:
@@ -128,8 +129,10 @@ struct ehea_cq *ehea_create_cq(struct ehea_adapter *adapter,
 	void *vpage;
 
 	cq = kzalloc(sizeof(*cq), GFP_KERNEL);
-	if (!cq)
+	if (!cq) {
+		pr_err("no mem for cq\n");
 		goto out_nomem;
+	}
 
 	cq->attr.max_nr_of_cqes = nr_of_cqe;
 	cq->attr.cq_token = cq_token;
@@ -254,8 +257,10 @@ struct ehea_eq *ehea_create_eq(struct ehea_adapter *adapter,
 	struct ehea_eq *eq;
 
 	eq = kzalloc(sizeof(*eq), GFP_KERNEL);
-	if (!eq)
+	if (!eq) {
+		pr_err("no mem for eq\n");
 		return NULL;
+	}
 
 	eq->adapter = adapter;
 	eq->attr.type = type;
@@ -423,8 +428,10 @@ struct ehea_qp *ehea_create_qp(struct ehea_adapter *adapter,
 
 
 	qp = kzalloc(sizeof(*qp), GFP_KERNEL);
-	if (!qp)
+	if (!qp) {
+		pr_err("no mem for qp\n");
 		return NULL;
+	}
 
 	qp->adapter = adapter;
 

@@ -370,6 +370,10 @@ static enum dev_type i82975x_dram_type(void __iomem *mch_window, int rank)
 static void i82975x_init_csrows(struct mem_ctl_info *mci,
 		struct pci_dev *pdev, void __iomem *mch_window)
 {
+	static const char *labels[4] = {
+							"DIMM A1", "DIMM A2",
+							"DIMM B1", "DIMM B2"
+						};
 	struct csrow_info *csrow;
 	unsigned long last_cumul_size;
 	u8 value;
@@ -419,10 +423,9 @@ static void i82975x_init_csrows(struct mem_ctl_info *mci,
 			dimm = mci->csrows[index]->channels[chan]->dimm;
 
 			dimm->nr_pages = nr_pages / csrow->nr_channels;
-
-			snprintf(csrow->channels[chan]->dimm->label, EDAC_MC_LABEL_LEN, "DIMM %c%d",
-				 (chan == 0) ? 'A' : 'B',
-				 index);
+			strncpy(csrow->channels[chan]->dimm->label,
+					labels[(index >> 1) + (chan * 2)],
+					EDAC_MC_LABEL_LEN);
 			dimm->grain = 1 << 7;	/* 128Byte cache-line resolution */
 			dimm->dtype = i82975x_dram_type(mch_window, index);
 			dimm->mtype = MEM_DDR2; /* I82975x supports only DDR2 */
@@ -592,8 +595,8 @@ fail0:
 }
 
 /* returns count (>= 0), or negative on error */
-static int i82975x_init_one(struct pci_dev *pdev,
-			    const struct pci_device_id *ent)
+static int __devinit i82975x_init_one(struct pci_dev *pdev,
+		const struct pci_device_id *ent)
 {
 	int rc;
 
@@ -610,7 +613,7 @@ static int i82975x_init_one(struct pci_dev *pdev,
 	return rc;
 }
 
-static void i82975x_remove_one(struct pci_dev *pdev)
+static void __devexit i82975x_remove_one(struct pci_dev *pdev)
 {
 	struct mem_ctl_info *mci;
 	struct i82975x_pvt *pvt;
@@ -643,7 +646,7 @@ MODULE_DEVICE_TABLE(pci, i82975x_pci_tbl);
 static struct pci_driver i82975x_driver = {
 	.name = EDAC_MOD_STR,
 	.probe = i82975x_init_one,
-	.remove = i82975x_remove_one,
+	.remove = __devexit_p(i82975x_remove_one),
 	.id_table = i82975x_pci_tbl,
 };
 

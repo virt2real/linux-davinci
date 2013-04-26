@@ -24,12 +24,15 @@
 #include <linux/serial_core.h>
 #include <linux/types.h>
 
+#include <asm/hardware/vic.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
 #include <mach/map.h>
 #include <mach/regs-gpio.h>
+#include <mach/regs-modem.h>
+#include <mach/regs-srom.h>
 
 #include <plat/adc.h>
 #include <plat/cpu.h>
@@ -43,8 +46,6 @@
 #include <video/samsung_fimd.h>
 
 #include "common.h"
-#include "regs-modem.h"
-#include "regs-srom.h"
 
 #define UCON S3C2410_UCON_DEFAULT
 #define ULCON (S3C2410_LCON_CS8 | S3C2410_LCON_PNONE | S3C2410_LCON_STOPB)
@@ -351,9 +352,10 @@ MACHINE_START(MINI6410, "MINI6410")
 	/* Maintainer: Darius Augulis <augulis.darius@gmail.com> */
 	.atag_offset	= 0x100,
 	.init_irq	= s3c6410_init_irq,
+	.handle_irq	= vic_handle_irq,
 	.map_io		= mini6410_map_io,
 	.init_machine	= mini6410_machine_init,
 	.init_late	= s3c64xx_init_late,
-	.init_time	= s3c24xx_timer_init,
+	.timer		= &s3c24xx_timer,
 	.restart	= s3c64xx_restart,
 MACHINE_END

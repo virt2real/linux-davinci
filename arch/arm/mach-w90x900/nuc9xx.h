@@ -15,9 +15,10 @@
  *
  */
 struct map_desc;
+struct sys_timer;
 
 /* core initialisation functions */
 
 extern void nuc900_init_irq(void);
-extern void nuc900_timer_init(void);
+extern struct sys_timer nuc900_timer;
 extern void nuc9xx_restart(char, const char *);

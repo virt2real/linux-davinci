@@ -69,7 +69,7 @@
 /* --------------------------------------------------------------------- */
 
 
-static char *mode_option = NULL;
+static char *mode_option __devinitdata = NULL;
 
 #ifdef MODULE
 
@@ -1664,7 +1664,7 @@ static struct fb_ops savagefb_ops = {
 
 /* --------------------------------------------------------------------- */
 
-static struct fb_var_screeninfo savagefb_var800x600x8 = {
+static struct fb_var_screeninfo __devinitdata savagefb_var800x600x8 = {
 	.accel_flags =	FB_ACCELF_TEXT,
 	.xres =		800,
 	.yres =		600,
@@ -1715,7 +1715,7 @@ static void savage_disable_mmio(struct savagefb_par *par)
 }
 
 
-static int savage_map_mmio(struct fb_info *info)
+static int __devinit savage_map_mmio(struct fb_info *info)
 {
 	struct savagefb_par *par = info->par;
 	DBG("savage_map_mmio");
@@ -1761,7 +1761,8 @@ static void savage_unmap_mmio(struct fb_info *info)
 	}
 }
 
-static int savage_map_video(struct fb_info *info, int video_len)
+static int __devinit savage_map_video(struct fb_info *info,
+				      int video_len)
 {
 	struct savagefb_par *par = info->par;
 	int resource;
@@ -2051,8 +2052,9 @@ static int savage_init_hw(struct savagefb_par *par)
 	return videoRambytes;
 }
 
-static int savage_init_fb_info(struct fb_info *info, struct pci_dev *dev,
-			       const struct pci_device_id *id)
+static int __devinit savage_init_fb_info(struct fb_info *info,
+					 struct pci_dev *dev,
+					 const struct pci_device_id *id)
 {
 	struct savagefb_par *par = info->par;
 	int err = 0;
@@ -2176,7 +2178,8 @@ static int savage_init_fb_info(struct fb_info *info, struct pci_dev *dev,
 
 /* --------------------------------------------------------------------- */
 
-static int savagefb_probe(struct pci_dev *dev, const struct pci_device_id *id)
+static int __devinit savagefb_probe(struct pci_dev* dev,
+				    const struct pci_device_id* id)
 {
 	struct fb_info *info;
 	struct savagefb_par *par;
@@ -2337,7 +2340,7 @@ static int savagefb_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	return err;
 }
 
-static void savagefb_remove(struct pci_dev *dev)
+static void __devexit savagefb_remove(struct pci_dev *dev)
 {
 	struct fb_info *info = pci_get_drvdata(dev);
 
@@ -2446,7 +2449,7 @@ static int savagefb_resume(struct pci_dev* dev)
 }
 
 
-static struct pci_device_id savagefb_devices[] = {
+static struct pci_device_id savagefb_devices[] __devinitdata = {
 	{PCI_VENDOR_ID_S3, PCI_CHIP_SUPSAV_MX128,
 	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, FB_ACCEL_SUPERSAVAGE},
 
@@ -2527,7 +2530,7 @@ static struct pci_driver savagefb_driver = {
 	.probe =    savagefb_probe,
 	.suspend =  savagefb_suspend,
 	.resume =   savagefb_resume,
-	.remove =   savagefb_remove,
+	.remove =   __devexit_p(savagefb_remove)
 };
 
 /* **************************** exit-time only **************************** */

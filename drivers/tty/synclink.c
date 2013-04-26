@@ -291,7 +291,8 @@ struct mgsl_struct {
 	bool lcr_mem_requested;
 
 	u32 misc_ctrl_value;
-	char *flag_buf;
+	char flag_buf[MAX_ASYNC_BUFFER_SIZE];
+	char char_buf[MAX_ASYNC_BUFFER_SIZE];	
 	bool drop_rts_on_tx_done;
 
 	bool loopmode_insert_requested;
@@ -897,7 +898,7 @@ static struct pci_driver synclink_pci_driver = {
 	.name		= "synclink",
 	.id_table	= synclink_pci_tbl,
 	.probe		= synclink_init_one,
-	.remove		= synclink_remove_one,
+	.remove		= __devexit_p(synclink_remove_one),
 };
 
 static struct tty_driver *serial_driver;
@@ -1439,6 +1440,7 @@ static void mgsl_isr_receive_data( struct mgsl_struct *info )
 	u16 status;
 	int work = 0;
 	unsigned char DataByte;
+ 	struct tty_struct *tty = info->port.tty;
  	struct	mgsl_icount *icount = &info->icount;
 	
 	if ( debug_level >= DEBUG_LEVEL_ISR )	
@@ -1500,19 +1502,19 @@ static void mgsl_isr_receive_data( struct mgsl_struct *info )
 			if (status & RXSTATUS_BREAK_RECEIVED) {
 				flag = TTY_BREAK;
 				if (info->port.flags & ASYNC_SAK)
-					do_SAK(info->port.tty);
+					do_SAK(tty);
 			} else if (status & RXSTATUS_PARITY_ERROR)
 				flag = TTY_PARITY;
 			else if (status & RXSTATUS_FRAMING_ERROR)
 				flag = TTY_FRAME;
 		}	/* end of if (error) */
-		tty_insert_flip_char(&info->port, DataByte, flag);
+		tty_insert_flip_char(tty, DataByte, flag);
 		if (status & RXSTATUS_OVERRUN) {
 			/* Overrun is special, since it's
 			 * reported immediately, and doesn't
 			 * affect the current character
 			 */
-			work += tty_insert_flip_char(&info->port, 0, TTY_OVERRUN);
+			work += tty_insert_flip_char(tty, 0, TTY_OVERRUN);
 		}
 	}
 
@@ -1523,7 +1525,7 @@ static void mgsl_isr_receive_data( struct mgsl_struct *info )
 	}
 			
 	if(work)
-		tty_flip_buffer_push(&info->port);
+		tty_flip_buffer_push(tty);
 }
 
 /* mgsl_isr_misc()
@@ -1850,7 +1852,7 @@ static void shutdown(struct mgsl_struct * info)
 	usc_OutReg(info, PCR, (u16)((usc_InReg(info, PCR) | BIT13) | BIT12));
 
 	if (!info->port.tty || info->port.tty->termios.c_cflag & HUPCL) {
-		info->serial_signals &= ~(SerialSignal_RTS | SerialSignal_DTR);
+ 		info->serial_signals &= ~(SerialSignal_DTR + SerialSignal_RTS);
 		usc_set_serial_signals(info);
 	}
 
@@ -1915,12 +1917,12 @@ static void mgsl_change_params(struct mgsl_struct *info)
 			 
 	cflag = info->port.tty->termios.c_cflag;
 
-	/* if B0 rate (hangup) specified then negate RTS and DTR */
-	/* otherwise assert RTS and DTR */
+	/* if B0 rate (hangup) specified then negate DTR and RTS */
+	/* otherwise assert DTR and RTS */
  	if (cflag & CBAUD)
-		info->serial_signals |= SerialSignal_RTS | SerialSignal_DTR;
+		info->serial_signals |= SerialSignal_RTS + SerialSignal_DTR;
 	else
-		info->serial_signals &= ~(SerialSignal_RTS | SerialSignal_DTR);
+		info->serial_signals &= ~(SerialSignal_RTS + SerialSignal_DTR);
 	
 	/* byte size and parity */
 	
@@ -3044,7 +3046,7 @@ static void mgsl_set_termios(struct tty_struct *tty, struct ktermios *old_termio
 	/* Handle transition to B0 status */
 	if (old_termios->c_cflag & CBAUD &&
 	    !(tty->termios.c_cflag & CBAUD)) {
-		info->serial_signals &= ~(SerialSignal_RTS | SerialSignal_DTR);
+		info->serial_signals &= ~(SerialSignal_RTS + SerialSignal_DTR);
 		spin_lock_irqsave(&info->irq_spinlock,flags);
 	 	usc_set_serial_signals(info);
 		spin_unlock_irqrestore(&info->irq_spinlock,flags);
@@ -3243,9 +3245,9 @@ static void dtr_rts(struct tty_port *port, int on)
 
 	spin_lock_irqsave(&info->irq_spinlock,flags);
 	if (on)
-		info->serial_signals |= SerialSignal_RTS | SerialSignal_DTR;
+		info->serial_signals |= SerialSignal_RTS + SerialSignal_DTR;
 	else
-		info->serial_signals &= ~(SerialSignal_RTS | SerialSignal_DTR);
+		info->serial_signals &= ~(SerialSignal_RTS + SerialSignal_DTR);
  	usc_set_serial_signals(info);
 	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 }
@@ -3414,7 +3416,7 @@ static int mgsl_open(struct tty_struct *tty, struct file * filp)
 		goto cleanup;
 	}
 	
-	info->port.low_latency = (info->port.flags & ASYNC_LOW_LATENCY) ? 1 : 0;
+	info->port.tty->low_latency = (info->port.flags & ASYNC_LOW_LATENCY) ? 1 : 0;
 
 	spin_lock_irqsave(&info->netlock, flags);
 	if (info->netcount) {
@@ -3896,13 +3898,7 @@ static int mgsl_alloc_intermediate_rxbuffer_memory(struct mgsl_struct *info)
 	info->intermediate_rxbuffer = kmalloc(info->max_frame_size, GFP_KERNEL | GFP_DMA);
 	if ( info->intermediate_rxbuffer == NULL )
 		return -ENOMEM;
-	/* unused flag buffer to satisfy receive_buf calling interface */
-	info->flag_buf = kzalloc(info->max_frame_size, GFP_KERNEL);
-	if (!info->flag_buf) {
-		kfree(info->intermediate_rxbuffer);
-		info->intermediate_rxbuffer = NULL;
-		return -ENOMEM;
-	}
+
 	return 0;
 
 }	/* end of mgsl_alloc_intermediate_rxbuffer_memory() */
@@ -3921,8 +3917,6 @@ static void mgsl_free_intermediate_rxbuffer_memory(struct mgsl_struct *info)
 {
 	kfree(info->intermediate_rxbuffer);
 	info->intermediate_rxbuffer = NULL;
-	kfree(info->flag_buf);
-	info->flag_buf = NULL;
 
 }	/* end of mgsl_free_intermediate_rxbuffer_memory() */
 
@@ -4431,7 +4425,6 @@ static void synclink_cleanup(void)
 		mgsl_release_resources(info);
 		tmp = info;
 		info = info->next_device;
-		tty_port_destroy(&tmp->port);
 		kfree(tmp);
 	}
 	
@@ -6239,8 +6232,8 @@ static void usc_get_serial_signals( struct mgsl_struct *info )
 {
 	u16 status;
 
-	/* clear all serial signals except RTS and DTR */
-	info->serial_signals &= SerialSignal_RTS | SerialSignal_DTR;
+	/* clear all serial signals except DTR and RTS */
+	info->serial_signals &= SerialSignal_DTR + SerialSignal_RTS;
 
 	/* Read the Misc Interrupt status Register (MISR) to get */
 	/* the V24 status signals. */
@@ -6265,7 +6258,7 @@ static void usc_get_serial_signals( struct mgsl_struct *info )
 
 /* usc_set_serial_signals()
  *
- *	Set the state of RTS and DTR based on contents of
+ *	Set the state of DTR and RTS based on contents of
  *	serial_signals member of device extension.
  *	
  * Arguments:		info	pointer to device instance data
@@ -7779,8 +7772,8 @@ static int hdlcdev_open(struct net_device *dev)
 		return rc;
 	}
 
-	/* assert RTS and DTR, apply hardware settings */
-	info->serial_signals |= SerialSignal_RTS | SerialSignal_DTR;
+	/* assert DTR and RTS, apply hardware settings */
+	info->serial_signals |= SerialSignal_RTS + SerialSignal_DTR;
 	mgsl_program_hw(info);
 
 	/* enable network layer transmit */
@@ -8071,7 +8064,7 @@ static void hdlcdev_exit(struct mgsl_struct *info)
 #endif /* CONFIG_HDLC */
 
 
-static int synclink_init_one (struct pci_dev *dev,
+static int __devinit synclink_init_one (struct pci_dev *dev,
 					const struct pci_device_id *ent)
 {
 	struct mgsl_struct *info;
@@ -8123,7 +8116,7 @@ static int synclink_init_one (struct pci_dev *dev,
 	return 0;
 }
 
-static void synclink_remove_one (struct pci_dev *dev)
+static void __devexit synclink_remove_one (struct pci_dev *dev)
 {
 }
 

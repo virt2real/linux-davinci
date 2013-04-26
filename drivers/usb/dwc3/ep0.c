@@ -891,8 +891,7 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 				DWC3_TRBCTL_CONTROL_DATA);
 	} else if (!IS_ALIGNED(req->request.length, dep->endpoint.maxpacket)
 			&& (dep->number == 0)) {
-		u32	transfer_size;
-		u32	maxpacket;
+		u32		transfer_size;
 
 		ret = usb_gadget_map_request(&dwc->gadget, &req->request,
 				dep->number);
@@ -903,8 +902,8 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 
 		WARN_ON(req->request.length > DWC3_EP0_BOUNCE_SIZE);
 
-		maxpacket = dep->endpoint.maxpacket;
-		transfer_size = roundup(req->request.length, maxpacket);
+		transfer_size = roundup(req->request.length,
+				(u32) dep->endpoint.maxpacket);
 
 		dwc->ep0_bounced = true;
 

@@ -43,7 +43,7 @@
 #include <asm/mach/arch.h>
 
 #include <mach/omap7xx.h>
-#include "mmc.h"
+#include <plat/mmc.h>
 
 #include <mach/irqs.h>
 #include <mach/usb.h>
@@ -600,9 +600,10 @@ MACHINE_START(HERALD, "HTC Herald")
 	.atag_offset    = 0x100,
 	.map_io         = htcherald_map_io,
 	.init_early     = omap1_init_early,
+	.reserve	= omap_reserve,
 	.init_irq       = omap1_init_irq,
 	.init_machine   = htcherald_init,
 	.init_late	= omap1_init_late,
-	.init_time	= omap1_timer_init,
+	.timer          = &omap1_timer,
 	.restart	= omap1_restart,
 MACHINE_END

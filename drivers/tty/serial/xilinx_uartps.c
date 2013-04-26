@@ -17,7 +17,6 @@
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/console.h>
-#include <linux/clk.h>
 #include <linux/irq.h>
 #include <linux/io.h>
 #include <linux/of.h>
@@ -148,10 +147,14 @@
 static irqreturn_t xuartps_isr(int irq, void *dev_id)
 {
 	struct uart_port *port = (struct uart_port *)dev_id;
+	struct tty_struct *tty;
 	unsigned long flags;
 	unsigned int isrstatus, numbytes;
 	unsigned int data;
 	char status = TTY_NORMAL;
+
+	/* Get the tty which could be NULL so don't assume it's valid */
+	tty = tty_port_tty_get(&port->state->port);
 
 	spin_lock_irqsave(&port->lock, flags);
 
@@ -184,11 +187,14 @@ static irqreturn_t xuartps_isr(int irq, void *dev_id)
 			} else if (isrstatus & XUARTPS_IXR_OVERRUN)
 				port->icount.overrun++;
 
-			uart_insert_char(port, isrstatus, XUARTPS_IXR_OVERRUN,
-					data, status);
+			if (tty)
+				uart_insert_char(port, isrstatus,
+						XUARTPS_IXR_OVERRUN, data,
+						status);
 		}
 		spin_unlock(&port->lock);
-		tty_flip_buffer_push(&port->state->port);
+		if (tty)
+			tty_flip_buffer_push(tty);
 		spin_lock(&port->lock);
 	}
 
@@ -231,6 +237,7 @@ static irqreturn_t xuartps_isr(int irq, void *dev_id)
 
 	/* be sure to release the lock and tty before leaving */
 	spin_unlock_irqrestore(&port->lock, flags);
+	tty_kref_put(tty);
 
 	return IRQ_HANDLED;
 }
@@ -578,8 +585,6 @@ static int xuartps_startup(struct uart_port *port)
 	/* Receive Timeout register is enabled with value of 10 */
 	xuartps_writel(10, XUARTPS_RXTOUT_OFFSET);
 
-	/* Clear out any pending interrupts before enabling them */
-	xuartps_writel(xuartps_readl(XUARTPS_ISR_OFFSET), XUARTPS_ISR_OFFSET);
 
 	/* Set the Interrupt Registers with desired interrupts */
 	xuartps_writel(XUARTPS_IXR_TXEMPTY | XUARTPS_IXR_PARITY |
@@ -934,23 +939,25 @@ static struct uart_driver xuartps_uart_driver = {
  *
  * Returns 0 on success, negative error otherwise
  **/
-static int xuartps_probe(struct platform_device *pdev)
+static int __devinit xuartps_probe(struct platform_device *pdev)
 {
 	int rc;
 	struct uart_port *port;
 	struct resource *res, *res2;
-	struct clk *clk;
+	int clk = 0;
 
-	clk = of_clk_get(pdev->dev.of_node, 0);
-	if (IS_ERR(clk)) {
+#ifdef CONFIG_OF
+	const unsigned int *prop;
+
+	prop = of_get_property(pdev->dev.of_node, "clock", NULL);
+	if (prop)
+		clk = be32_to_cpup(prop);
+#else
+	clk = *((unsigned int *)(pdev->dev.platform_data));
+#endif
+	if (!clk) {
 		dev_err(&pdev->dev, "no clock specified\n");
-		return PTR_ERR(clk);
-	}
-
-	rc = clk_prepare_enable(clk);
-	if (rc) {
-		dev_err(&pdev->dev, "could not enable clock\n");
-		return -EBUSY;
+		return -ENODEV;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -975,8 +982,7 @@ static int xuartps_probe(struct platform_device *pdev)
 		port->mapbase = res->start;
 		port->irq = res2->start;
 		port->dev = &pdev->dev;
-		port->uartclk = clk_get_rate(clk);
-		port->private_data = clk;
+		port->uartclk = clk;
 		dev_set_drvdata(&pdev->dev, port);
 		rc = uart_add_one_port(&xuartps_uart_driver, port);
 		if (rc) {
@@ -995,17 +1001,17 @@ static int xuartps_probe(struct platform_device *pdev)
  *
  * Returns 0 on success, negative error otherwise
  **/
-static int xuartps_remove(struct platform_device *pdev)
+static int __devexit xuartps_remove(struct platform_device *pdev)
 {
 	struct uart_port *port = dev_get_drvdata(&pdev->dev);
-	struct clk *clk = port->private_data;
-	int rc;
+	int rc = 0;
 
 	/* Remove the xuartps port from the serial core */
-	rc = uart_remove_one_port(&xuartps_uart_driver, port);
-	dev_set_drvdata(&pdev->dev, NULL);
-	port->mapbase = 0;
-	clk_disable_unprepare(clk);
+	if (port) {
+		rc = uart_remove_one_port(&xuartps_uart_driver, port);
+		dev_set_drvdata(&pdev->dev, NULL);
+		port->mapbase = 0;
+	}
 	return rc;
 }
 
@@ -1038,15 +1044,20 @@ static int xuartps_resume(struct platform_device *pdev)
 }
 
 /* Match table for of_platform binding */
-static struct of_device_id xuartps_of_match[] = {
+
+#ifdef CONFIG_OF
+static struct of_device_id xuartps_of_match[] __devinitdata = {
 	{ .compatible = "xlnx,xuartps", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, xuartps_of_match);
+#else
+#define xuartps_of_match NULL
+#endif
 
 static struct platform_driver xuartps_platform_driver = {
 	.probe   = xuartps_probe,		/* Probe method */
-	.remove  = xuartps_remove,		/* Detach method */
+	.remove  = __exit_p(xuartps_remove),	/* Detach method */
 	.suspend = xuartps_suspend,		/* Suspend */
 	.resume  = xuartps_resume,		/* Resume after a suspend */
 	.driver  = {

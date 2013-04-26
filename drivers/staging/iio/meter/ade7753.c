@@ -103,6 +103,7 @@ static int ade7753_spi_read_reg_24(struct device *dev,
 		u8 reg_address,
 		u32 *val)
 {
+	struct spi_message msg;
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ade7753_state *st = iio_priv(indio_dev);
 	int ret;
@@ -121,7 +122,10 @@ static int ade7753_spi_read_reg_24(struct device *dev,
 	mutex_lock(&st->buf_lock);
 	st->tx[0] = ADE7753_READ_REG(reg_address);
 
-	ret = spi_sync_transfer(st->us, xfers, ARRAY_SIZE(xfers));
+	spi_message_init(&msg);
+	spi_message_add_tail(&xfers[0], &msg);
+	spi_message_add_tail(&xfers[1], &msg);
+	ret = spi_sync(st->us, &msg);
 	if (ret) {
 		dev_err(&st->us->dev, "problem when reading 24 bit register 0x%02X",
 				reg_address);
@@ -508,7 +512,7 @@ static const struct iio_info ade7753_info = {
 	.driver_module = THIS_MODULE,
 };
 
-static int ade7753_probe(struct spi_device *spi)
+static int __devinit ade7753_probe(struct spi_device *spi)
 {
 	int ret;
 	struct ade7753_state *st;
@@ -551,7 +555,7 @@ error_ret:
 }
 
 /* fixme, confirm ordering in this function */
-static int ade7753_remove(struct spi_device *spi)
+static int __devexit ade7753_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 
@@ -568,7 +572,7 @@ static struct spi_driver ade7753_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe = ade7753_probe,
-	.remove = ade7753_remove,
+	.remove = __devexit_p(ade7753_remove),
 };
 module_spi_driver(ade7753_driver);
 

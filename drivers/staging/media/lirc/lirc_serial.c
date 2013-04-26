@@ -48,8 +48,6 @@
  * Steve Davies <steve@daviesfam.org>  July 2001
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -669,7 +667,8 @@ static irqreturn_t irq_handler(int i, void *blah)
 		counter++;
 		status = sinp(UART_MSR);
 		if (counter > RS_ISR_PASS_LIMIT) {
-			pr_warn("AIEEEE: We're caught!\n");
+			printk(KERN_WARNING LIRC_DRIVER_NAME ": AIEEEE: "
+			       "We're caught!\n");
 			break;
 		}
 		if ((status & hardware[type].signal_pin_change)
@@ -704,10 +703,11 @@ static irqreturn_t irq_handler(int i, void *blah)
 			dcd = (status & hardware[type].signal_pin) ? 1 : 0;
 
 			if (dcd == last_dcd) {
-				pr_warn("ignoring spike: %d %d %lx %lx %lx %lx\n",
-					dcd, sense,
-					tv.tv_sec, lasttv.tv_sec,
-					tv.tv_usec, lasttv.tv_usec);
+				printk(KERN_WARNING LIRC_DRIVER_NAME
+				": ignoring spike: %d %d %lx %lx %lx %lx\n",
+				dcd, sense,
+				tv.tv_sec, lasttv.tv_sec,
+				tv.tv_usec, lasttv.tv_usec);
 				continue;
 			}
 
@@ -715,20 +715,25 @@ static irqreturn_t irq_handler(int i, void *blah)
 			if (tv.tv_sec < lasttv.tv_sec ||
 			    (tv.tv_sec == lasttv.tv_sec &&
 			     tv.tv_usec < lasttv.tv_usec)) {
-				pr_warn("AIEEEE: your clock just jumped backwards\n");
-				pr_warn("%d %d %lx %lx %lx %lx\n",
-					dcd, sense,
-					tv.tv_sec, lasttv.tv_sec,
-					tv.tv_usec, lasttv.tv_usec);
+				printk(KERN_WARNING LIRC_DRIVER_NAME
+				       ": AIEEEE: your clock just jumped "
+				       "backwards\n");
+				printk(KERN_WARNING LIRC_DRIVER_NAME
+				       ": %d %d %lx %lx %lx %lx\n",
+				       dcd, sense,
+				       tv.tv_sec, lasttv.tv_sec,
+				       tv.tv_usec, lasttv.tv_usec);
 				data = PULSE_MASK;
 			} else if (deltv > 15) {
 				data = PULSE_MASK; /* really long time */
 				if (!(dcd^sense)) {
 					/* sanity check */
-					pr_warn("AIEEEE: %d %d %lx %lx %lx %lx\n",
-						dcd, sense,
-						tv.tv_sec, lasttv.tv_sec,
-						tv.tv_usec, lasttv.tv_usec);
+					printk(KERN_WARNING LIRC_DRIVER_NAME
+					       ": AIEEEE: "
+					       "%d %d %lx %lx %lx %lx\n",
+					       dcd, sense,
+					       tv.tv_sec, lasttv.tv_sec,
+					       tv.tv_usec, lasttv.tv_usec);
 					/*
 					 * detecting pulse while this
 					 * MUST be a space!
@@ -771,7 +776,8 @@ static int hardware_init_port(void)
 	soutp(UART_IER, scratch);
 	if (scratch2 != 0 || scratch3 != 0x0f) {
 		/* we fail, there's nothing here */
-		pr_err("port existence test failed, cannot continue\n");
+		printk(KERN_ERR LIRC_DRIVER_NAME ": port existence test "
+		       "failed, cannot continue\n");
 		return -ENODEV;
 	}
 
@@ -835,7 +841,7 @@ static int hardware_init_port(void)
 	return 0;
 }
 
-static int lirc_serial_probe(struct platform_device *dev)
+static int __devinit lirc_serial_probe(struct platform_device *dev)
 {
 	int i, nlow, nhigh, result;
 
@@ -844,9 +850,11 @@ static int lirc_serial_probe(struct platform_device *dev)
 			     LIRC_DRIVER_NAME, (void *)&hardware);
 	if (result < 0) {
 		if (result == -EBUSY)
-			dev_err(&dev->dev, "IRQ %d busy\n", irq);
+			printk(KERN_ERR LIRC_DRIVER_NAME ": IRQ %d busy\n",
+			       irq);
 		else if (result == -EINVAL)
-			dev_err(&dev->dev, "Bad irq number or handler\n");
+			printk(KERN_ERR LIRC_DRIVER_NAME
+			       ": Bad irq number or handler\n");
 		return result;
 	}
 
@@ -861,11 +869,14 @@ static int lirc_serial_probe(struct platform_device *dev)
 				    LIRC_DRIVER_NAME) == NULL))
 	   || ((iommap == 0)
 	       && (request_region(io, 8, LIRC_DRIVER_NAME) == NULL))) {
-		dev_err(&dev->dev, "port %04x already in use\n", io);
-		dev_warn(&dev->dev, "use 'setserial /dev/ttySX uart none'\n");
-		dev_warn(&dev->dev,
-			 "or compile the serial port driver as module and\n");
-		dev_warn(&dev->dev, "make sure this module is loaded first\n");
+		printk(KERN_ERR  LIRC_DRIVER_NAME
+		       ": port %04x already in use\n", io);
+		printk(KERN_WARNING LIRC_DRIVER_NAME
+		       ": use 'setserial /dev/ttySX uart none'\n");
+		printk(KERN_WARNING LIRC_DRIVER_NAME
+		       ": or compile the serial port driver as module and\n");
+		printk(KERN_WARNING LIRC_DRIVER_NAME
+		       ": make sure this module is loaded first\n");
 		result = -EBUSY;
 		goto exit_free_irq;
 	}
@@ -896,11 +907,11 @@ static int lirc_serial_probe(struct platform_device *dev)
 			msleep(40);
 		}
 		sense = (nlow >= nhigh ? 1 : 0);
-		dev_info(&dev->dev, "auto-detected active %s receiver\n",
-			 sense ? "low" : "high");
+		printk(KERN_INFO LIRC_DRIVER_NAME  ": auto-detected active "
+		       "%s receiver\n", sense ? "low" : "high");
 	} else
-		dev_info(&dev->dev, "Manually using active %s receiver\n",
-			 sense ? "low" : "high");
+		printk(KERN_INFO LIRC_DRIVER_NAME  ": Manually using active "
+		       "%s receiver\n", sense ? "low" : "high");
 
 	dprintk("Interrupt %d, port %04x obtained\n", irq, io);
 	return 0;
@@ -916,7 +927,7 @@ exit_free_irq:
 	return result;
 }
 
-static int lirc_serial_remove(struct platform_device *dev)
+static int __devexit lirc_serial_remove(struct platform_device *dev)
 {
 	free_irq(irq, (void *)&hardware);
 
@@ -1137,7 +1148,7 @@ static int lirc_serial_resume(struct platform_device *dev)
 
 static struct platform_driver lirc_serial_driver = {
 	.probe		= lirc_serial_probe,
-	.remove		= lirc_serial_remove,
+	.remove		= __devexit_p(lirc_serial_remove),
 	.suspend	= lirc_serial_suspend,
 	.resume		= lirc_serial_resume,
 	.driver		= {
@@ -1228,10 +1239,6 @@ static int __init lirc_serial_init_module(void)
 		}
 	}
 
-	/* make sure sense is either -1, 0, or 1 */
-	if (sense != -1)
-		sense = !!sense;
-
 	result = lirc_serial_init();
 	if (result)
 		return result;
@@ -1240,7 +1247,8 @@ static int __init lirc_serial_init_module(void)
 	driver.dev = &lirc_serial_dev->dev;
 	driver.minor = lirc_register_driver(&driver);
 	if (driver.minor < 0) {
-		pr_err("register_chrdev failed!\n");
+		printk(KERN_ERR  LIRC_DRIVER_NAME
+		       ": register_chrdev failed!\n");
 		lirc_serial_exit();
 		return driver.minor;
 	}
@@ -1290,7 +1298,7 @@ MODULE_PARM_DESC(irq, "Interrupt (4 or 3)");
 module_param(share_irq, bool, S_IRUGO);
 MODULE_PARM_DESC(share_irq, "Share interrupts (0 = off, 1 = on)");
 
-module_param(sense, int, S_IRUGO);
+module_param(sense, bool, S_IRUGO);
 MODULE_PARM_DESC(sense, "Override autodetection of IR receiver circuit"
 		 " (0 = active high, 1 = active low )");
 

@@ -1,3 +1,4 @@
+
 /******************************************************************************
  *
  * Module Name: exresolv - AML Interpreter object resolution
@@ -5,7 +6,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2013, Intel Corp.
+ * Copyright (C) 2000 - 2012, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -326,7 +327,7 @@ acpi_ex_resolve_object_to_value(union acpi_operand_object **stack_ptr,
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Return the base object and type. Traverse a reference list if
+ * DESCRIPTION: Return the base object and type.  Traverse a reference list if
  *              necessary to get to the base object.
  *
  ******************************************************************************/

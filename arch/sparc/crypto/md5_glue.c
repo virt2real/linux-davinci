@@ -186,5 +186,3 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("MD5 Secure Hash Algorithm, sparc64 md5 opcode accelerated");
 
 MODULE_ALIAS("md5");
-
-#include "crop_devid.c"

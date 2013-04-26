@@ -418,7 +418,8 @@ fail:
 	return rc;
 }
 
-static int x38_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit x38_init_one(struct pci_dev *pdev,
+				const struct pci_device_id *ent)
 {
 	int rc;
 
@@ -434,7 +435,7 @@ static int x38_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return rc;
 }
 
-static void x38_remove_one(struct pci_dev *pdev)
+static void __devexit x38_remove_one(struct pci_dev *pdev)
 {
 	struct mem_ctl_info *mci;
 
@@ -463,7 +464,7 @@ MODULE_DEVICE_TABLE(pci, x38_pci_tbl);
 static struct pci_driver x38_driver = {
 	.name = EDAC_MOD_STR,
 	.probe = x38_init_one,
-	.remove = x38_remove_one,
+	.remove = __devexit_p(x38_remove_one),
 	.id_table = x38_pci_tbl,
 };
 

@@ -14,7 +14,6 @@
 #include <asm/page.h> /* I/O is all done through memory accesses */
 #include <asm/cpu-regs.h>
 #include <asm/cacheflush.h>
-#include <asm-generic/pci_iomap.h>
 
 #define mmiowb() do {} while (0)
 
@@ -259,7 +258,7 @@ static inline void __iomem *__ioremap(unsigned long offset, unsigned long size,
 
 static inline void __iomem *ioremap(unsigned long offset, unsigned long size)
 {
-	return (void __iomem *)(offset & ~0x20000000);
+	return (void __iomem *) offset;
 }
 
 /*

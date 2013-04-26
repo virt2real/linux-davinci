@@ -228,7 +228,7 @@ static const struct rtc_class_ops da9052_rtc_ops = {
 	.alarm_irq_enable = da9052_rtc_alarm_irq_enable,
 };
 
-static int da9052_rtc_probe(struct platform_device *pdev)
+static int __devinit da9052_rtc_probe(struct platform_device *pdev)
 {
 	struct da9052_rtc *rtc;
 	int ret;
@@ -239,9 +239,10 @@ static int da9052_rtc_probe(struct platform_device *pdev)
 
 	rtc->da9052 = dev_get_drvdata(pdev->dev.parent);
 	platform_set_drvdata(pdev, rtc);
-	rtc->irq =  DA9052_IRQ_ALARM;
-	ret = da9052_request_irq(rtc->da9052, rtc->irq, "ALM",
-				da9052_rtc_irq, rtc);
+	rtc->irq = platform_get_irq_byname(pdev, "ALM");
+	ret = request_threaded_irq(rtc->irq, NULL, da9052_rtc_irq,
+				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+				   "ALM", rtc);
 	if (ret != 0) {
 		rtc_err(rtc->da9052, "irq registration failed: %d\n", ret);
 		return ret;
@@ -249,17 +250,24 @@ static int da9052_rtc_probe(struct platform_device *pdev)
 
 	rtc->rtc = rtc_device_register(pdev->name, &pdev->dev,
 				       &da9052_rtc_ops, THIS_MODULE);
-	if (IS_ERR(rtc->rtc))
-		return PTR_ERR(rtc->rtc);
+	if (IS_ERR(rtc->rtc)) {
+		ret = PTR_ERR(rtc->rtc);
+		goto err_free_irq;
+	}
 
 	return 0;
+
+err_free_irq:
+	free_irq(rtc->irq, rtc);
+	return ret;
 }
 
-static int da9052_rtc_remove(struct platform_device *pdev)
+static int __devexit da9052_rtc_remove(struct platform_device *pdev)
 {
 	struct da9052_rtc *rtc = pdev->dev.platform_data;
 
 	rtc_device_unregister(rtc->rtc);
+	free_irq(rtc->irq, rtc);
 	platform_set_drvdata(pdev, NULL);
 
 	return 0;
@@ -267,7 +275,7 @@ static int da9052_rtc_remove(struct platform_device *pdev)
 
 static struct platform_driver da9052_rtc_driver = {
 	.probe	= da9052_rtc_probe,
-	.remove	= da9052_rtc_remove,
+	.remove	= __devexit_p(da9052_rtc_remove),
 	.driver = {
 		.name	= "da9052-rtc",
 		.owner	= THIS_MODULE,

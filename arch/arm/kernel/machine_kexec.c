@@ -45,9 +45,10 @@ int machine_kexec_prepare(struct kimage *image)
 	for (i = 0; i < image->nr_segments; i++) {
 		current_segment = &image->segment[i];
 
-		if (!memblock_is_region_memory(current_segment->mem,
-					       current_segment->memsz))
-			return -EINVAL;
+		err = memblock_is_region_memory(current_segment->mem,
+						current_segment->memsz);
+		if (err)
+			return - EINVAL;
 
 		err = get_user(header, (__be32*)current_segment->buf);
 		if (err)

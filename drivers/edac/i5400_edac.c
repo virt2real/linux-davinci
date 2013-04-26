@@ -1373,7 +1373,8 @@ fail0:
  *		negative on error
  *		count (>= 0)
  */
-static int i5400_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
+static int __devinit i5400_init_one(struct pci_dev *pdev,
+				const struct pci_device_id *id)
 {
 	int rc;
 
@@ -1392,7 +1393,7 @@ static int i5400_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
  *	i5400_remove_one	destructor for one instance of device
  *
  */
-static void i5400_remove_one(struct pci_dev *pdev)
+static void __devexit i5400_remove_one(struct pci_dev *pdev)
 {
 	struct mem_ctl_info *mci;
 
@@ -1430,7 +1431,7 @@ MODULE_DEVICE_TABLE(pci, i5400_pci_tbl);
 static struct pci_driver i5400_driver = {
 	.name = "i5400_edac",
 	.probe = i5400_init_one,
-	.remove = i5400_remove_one,
+	.remove = __devexit_p(i5400_remove_one),
 	.id_table = i5400_pci_tbl,
 };
 

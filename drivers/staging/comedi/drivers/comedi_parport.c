@@ -196,13 +196,28 @@ static int parport_intr_cmdtest(struct comedi_device *dev,
 	if (err)
 		return 2;
 
-	/* Step 3: check if arguments are trivially valid */
+	/* step 3: */
 
-	err |= cfc_check_trigger_arg_is(&cmd->start_arg, 0);
-	err |= cfc_check_trigger_arg_is(&cmd->scan_begin_arg, 0);
-	err |= cfc_check_trigger_arg_is(&cmd->convert_arg, 0);
-	err |= cfc_check_trigger_arg_is(&cmd->scan_end_arg, 1);
-	err |= cfc_check_trigger_arg_is(&cmd->stop_arg, 0);
+	if (cmd->start_arg != 0) {
+		cmd->start_arg = 0;
+		err++;
+	}
+	if (cmd->scan_begin_arg != 0) {
+		cmd->scan_begin_arg = 0;
+		err++;
+	}
+	if (cmd->convert_arg != 0) {
+		cmd->convert_arg = 0;
+		err++;
+	}
+	if (cmd->scan_end_arg != 1) {
+		cmd->scan_end_arg = 1;
+		err++;
+	}
+	if (cmd->stop_arg != 0) {
+		cmd->stop_arg = 0;
+		err++;
+	}
 
 	if (err)
 		return 3;
@@ -290,10 +305,10 @@ static int parport_attach(struct comedi_device *dev,
 	if (ret)
 		return ret;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(*devpriv));
+	if (ret < 0)
+		return ret;
+	devpriv = dev->private;
 
 	s = &dev->subdevices[0];
 	s->type = COMEDI_SUBD_DIO;

@@ -417,12 +417,12 @@ static int __net_init ip_conntrack_net_init(struct net *net)
 {
 	struct proc_dir_entry *proc, *proc_exp, *proc_stat;
 
-	proc = proc_create("ip_conntrack", 0440, net->proc_net, &ct_file_ops);
+	proc = proc_net_fops_create(net, "ip_conntrack", 0440, &ct_file_ops);
 	if (!proc)
 		goto err1;
 
-	proc_exp = proc_create("ip_conntrack_expect", 0440, net->proc_net,
-			       &ip_exp_file_ops);
+	proc_exp = proc_net_fops_create(net, "ip_conntrack_expect", 0440,
+					&ip_exp_file_ops);
 	if (!proc_exp)
 		goto err2;
 
@@ -433,9 +433,9 @@ static int __net_init ip_conntrack_net_init(struct net *net)
 	return 0;
 
 err3:
-	remove_proc_entry("ip_conntrack_expect", net->proc_net);
+	proc_net_remove(net, "ip_conntrack_expect");
 err2:
-	remove_proc_entry("ip_conntrack", net->proc_net);
+	proc_net_remove(net, "ip_conntrack");
 err1:
 	return -ENOMEM;
 }
@@ -443,8 +443,8 @@ err1:
 static void __net_exit ip_conntrack_net_exit(struct net *net)
 {
 	remove_proc_entry("ip_conntrack", net->proc_net_stat);
-	remove_proc_entry("ip_conntrack_expect", net->proc_net);
-	remove_proc_entry("ip_conntrack", net->proc_net);
+	proc_net_remove(net, "ip_conntrack_expect");
+	proc_net_remove(net, "ip_conntrack");
 }
 
 static struct pernet_operations ip_conntrack_net_ops = {

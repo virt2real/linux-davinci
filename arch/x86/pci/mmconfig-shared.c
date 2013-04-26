@@ -49,7 +49,7 @@ static __init void free_all_mmcfg(void)
 		pci_mmconfig_remove(cfg);
 }
 
-static void list_add_sorted(struct pci_mmcfg_region *new)
+static __devinit void list_add_sorted(struct pci_mmcfg_region *new)
 {
 	struct pci_mmcfg_region *cfg;
 
@@ -65,8 +65,9 @@ static void list_add_sorted(struct pci_mmcfg_region *new)
 	list_add_tail_rcu(&new->list, &pci_mmcfg_list);
 }
 
-static struct pci_mmcfg_region *pci_mmconfig_alloc(int segment, int start,
-						   int end, u64 addr)
+static __devinit struct pci_mmcfg_region *pci_mmconfig_alloc(int segment,
+							     int start,
+							     int end, u64 addr)
 {
 	struct pci_mmcfg_region *new;
 	struct resource *res;
@@ -370,7 +371,8 @@ static int __init pci_mmcfg_check_hostbridge(void)
 	return !list_empty(&pci_mmcfg_list);
 }
 
-static acpi_status check_mcfg_resource(struct acpi_resource *res, void *data)
+static acpi_status __devinit check_mcfg_resource(struct acpi_resource *res,
+						 void *data)
 {
 	struct resource *mcfg_res = data;
 	struct acpi_resource_address64 address;
@@ -406,8 +408,8 @@ static acpi_status check_mcfg_resource(struct acpi_resource *res, void *data)
 	return AE_OK;
 }
 
-static acpi_status find_mboard_resource(acpi_handle handle, u32 lvl,
-					void *context, void **rv)
+static acpi_status __devinit find_mboard_resource(acpi_handle handle, u32 lvl,
+						  void *context, void **rv)
 {
 	struct resource *mcfg_res = context;
 
@@ -420,7 +422,7 @@ static acpi_status find_mboard_resource(acpi_handle handle, u32 lvl,
 	return AE_OK;
 }
 
-static int is_acpi_reserved(u64 start, u64 end, unsigned not_used)
+static int __devinit is_acpi_reserved(u64 start, u64 end, unsigned not_used)
 {
 	struct resource mcfg_res;
 
@@ -548,7 +550,8 @@ static int __init acpi_mcfg_check_entry(struct acpi_table_mcfg *mcfg,
 	if (cfg->address < 0xFFFFFFFF)
 		return 0;
 
-	if (!strncmp(mcfg->header.oem_id, "SGI", 3))
+	if (!strcmp(mcfg->header.oem_id, "SGI") ||
+			!strcmp(mcfg->header.oem_id, "SGI2"))
 		return 0;
 
 	if (mcfg->header.revision >= 1) {
@@ -690,8 +693,9 @@ static int __init pci_mmcfg_late_insert_resources(void)
 late_initcall(pci_mmcfg_late_insert_resources);
 
 /* Add MMCFG information for host bridges */
-int pci_mmconfig_insert(struct device *dev, u16 seg, u8 start, u8 end,
-			phys_addr_t addr)
+int __devinit pci_mmconfig_insert(struct device *dev,
+				  u16 seg, u8 start, u8 end,
+				  phys_addr_t addr)
 {
 	int rc;
 	struct resource *tmp = NULL;

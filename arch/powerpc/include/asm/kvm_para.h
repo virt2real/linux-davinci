@@ -21,6 +21,7 @@
 
 #include <uapi/asm/kvm_para.h>
 
+
 #ifdef CONFIG_KVM_GUEST
 
 #include <linux/of.h>
@@ -54,7 +55,7 @@ static unsigned long kvm_hypercall(unsigned long *in,
 				   unsigned long *out,
 				   unsigned long nr)
 {
-	return EV_UNIMPLEMENTED;
+	return HC_EV_UNIMPLEMENTED;
 }
 
 #endif
@@ -65,7 +66,7 @@ static inline long kvm_hypercall0_1(unsigned int nr, unsigned long *r2)
 	unsigned long out[8];
 	unsigned long r;
 
-	r = kvm_hypercall(in, out, KVM_HCALL_TOKEN(nr));
+	r = kvm_hypercall(in, out, nr | HC_VENDOR_KVM);
 	*r2 = out[0];
 
 	return r;
@@ -76,7 +77,7 @@ static inline long kvm_hypercall0(unsigned int nr)
 	unsigned long in[8];
 	unsigned long out[8];
 
-	return kvm_hypercall(in, out, KVM_HCALL_TOKEN(nr));
+	return kvm_hypercall(in, out, nr | HC_VENDOR_KVM);
 }
 
 static inline long kvm_hypercall1(unsigned int nr, unsigned long p1)
@@ -85,7 +86,7 @@ static inline long kvm_hypercall1(unsigned int nr, unsigned long p1)
 	unsigned long out[8];
 
 	in[0] = p1;
-	return kvm_hypercall(in, out, KVM_HCALL_TOKEN(nr));
+	return kvm_hypercall(in, out, nr | HC_VENDOR_KVM);
 }
 
 static inline long kvm_hypercall2(unsigned int nr, unsigned long p1,
@@ -96,7 +97,7 @@ static inline long kvm_hypercall2(unsigned int nr, unsigned long p1,
 
 	in[0] = p1;
 	in[1] = p2;
-	return kvm_hypercall(in, out, KVM_HCALL_TOKEN(nr));
+	return kvm_hypercall(in, out, nr | HC_VENDOR_KVM);
 }
 
 static inline long kvm_hypercall3(unsigned int nr, unsigned long p1,
@@ -108,7 +109,7 @@ static inline long kvm_hypercall3(unsigned int nr, unsigned long p1,
 	in[0] = p1;
 	in[1] = p2;
 	in[2] = p3;
-	return kvm_hypercall(in, out, KVM_HCALL_TOKEN(nr));
+	return kvm_hypercall(in, out, nr | HC_VENDOR_KVM);
 }
 
 static inline long kvm_hypercall4(unsigned int nr, unsigned long p1,
@@ -122,7 +123,7 @@ static inline long kvm_hypercall4(unsigned int nr, unsigned long p1,
 	in[1] = p2;
 	in[2] = p3;
 	in[3] = p4;
-	return kvm_hypercall(in, out, KVM_HCALL_TOKEN(nr));
+	return kvm_hypercall(in, out, nr | HC_VENDOR_KVM);
 }
 
 

@@ -19,7 +19,6 @@
 #include <linux/errno.h>
 #include <linux/skbuff.h>
 #include <net/netlink.h>
-#include <net/sch_generic.h>
 #include <net/pkt_sched.h>
 
 
@@ -101,20 +100,22 @@
 struct tbf_sched_data {
 /* Parameters */
 	u32		limit;		/* Maximal length of backlog: bytes */
-	s64		buffer;		/* Token bucket depth/rate: MUST BE >= MTU/B */
-	s64		mtu;
+	u32		buffer;		/* Token bucket depth/rate: MUST BE >= MTU/B */
+	u32		mtu;
 	u32		max_size;
-	struct psched_ratecfg rate;
-	struct psched_ratecfg peak;
-	bool peak_present;
+	struct qdisc_rate_table	*R_tab;
+	struct qdisc_rate_table	*P_tab;
 
 /* Variables */
-	s64	tokens;			/* Current number of B tokens */
-	s64	ptokens;		/* Current number of P tokens */
-	s64	t_c;			/* Time check-point */
+	long	tokens;			/* Current number of B tokens */
+	long	ptokens;		/* Current number of P tokens */
+	psched_time_t	t_c;		/* Time check-point */
 	struct Qdisc	*qdisc;		/* Inner qdisc, default - bfifo queue */
 	struct qdisc_watchdog watchdog;	/* Watchdog timer */
 };
+
+#define L2T(q, L)   qdisc_l2t((q)->R_tab, L)
+#define L2T_P(q, L) qdisc_l2t((q)->P_tab, L)
 
 static int tbf_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 {
@@ -155,24 +156,24 @@ static struct sk_buff *tbf_dequeue(struct Qdisc *sch)
 	skb = q->qdisc->ops->peek(q->qdisc);
 
 	if (skb) {
-		s64 now;
-		s64 toks;
-		s64 ptoks = 0;
+		psched_time_t now;
+		long toks;
+		long ptoks = 0;
 		unsigned int len = qdisc_pkt_len(skb);
 
-		now = ktime_to_ns(ktime_get());
-		toks = min_t(s64, now - q->t_c, q->buffer);
+		now = psched_get_time();
+		toks = psched_tdiff_bounded(now, q->t_c, q->buffer);
 
-		if (q->peak_present) {
+		if (q->P_tab) {
 			ptoks = toks + q->ptokens;
-			if (ptoks > q->mtu)
+			if (ptoks > (long)q->mtu)
 				ptoks = q->mtu;
-			ptoks -= (s64) psched_l2t_ns(&q->peak, len);
+			ptoks -= L2T_P(q, len);
 		}
 		toks += q->tokens;
-		if (toks > q->buffer)
+		if (toks > (long)q->buffer)
 			toks = q->buffer;
-		toks -= (s64) psched_l2t_ns(&q->rate, len);
+		toks -= L2T(q, len);
 
 		if ((toks|ptoks) >= 0) {
 			skb = qdisc_dequeue_peeked(q->qdisc);
@@ -188,8 +189,8 @@ static struct sk_buff *tbf_dequeue(struct Qdisc *sch)
 			return skb;
 		}
 
-		qdisc_watchdog_schedule_ns(&q->watchdog,
-					   now + max_t(long, -toks, -ptoks));
+		qdisc_watchdog_schedule(&q->watchdog,
+					now + max_t(long, -toks, -ptoks));
 
 		/* Maybe we have a shorter packet in the queue,
 		   which can be sent now. It sounds cool,
@@ -213,7 +214,7 @@ static void tbf_reset(struct Qdisc *sch)
 
 	qdisc_reset(q->qdisc);
 	sch->q.qlen = 0;
-	q->t_c = ktime_to_ns(ktime_get());
+	q->t_c = psched_get_time();
 	q->tokens = q->buffer;
 	q->ptokens = q->mtu;
 	qdisc_watchdog_cancel(&q->watchdog);
@@ -292,19 +293,14 @@ static int tbf_change(struct Qdisc *sch, struct nlattr *opt)
 		q->qdisc = child;
 	}
 	q->limit = qopt->limit;
-	q->mtu = PSCHED_TICKS2NS(qopt->mtu);
+	q->mtu = qopt->mtu;
 	q->max_size = max_size;
-	q->buffer = PSCHED_TICKS2NS(qopt->buffer);
+	q->buffer = qopt->buffer;
 	q->tokens = q->buffer;
 	q->ptokens = q->mtu;
 
-	psched_ratecfg_precompute(&q->rate, rtab->rate.rate);
-	if (ptab) {
-		psched_ratecfg_precompute(&q->peak, ptab->rate.rate);
-		q->peak_present = true;
-	} else {
-		q->peak_present = false;
-	}
+	swap(q->R_tab, rtab);
+	swap(q->P_tab, ptab);
 
 	sch_tree_unlock(sch);
 	err = 0;
@@ -323,7 +319,7 @@ static int tbf_init(struct Qdisc *sch, struct nlattr *opt)
 	if (opt == NULL)
 		return -EINVAL;
 
-	q->t_c = ktime_to_ns(ktime_get());
+	q->t_c = psched_get_time();
 	qdisc_watchdog_init(&q->watchdog, sch);
 	q->qdisc = &noop_qdisc;
 
@@ -335,6 +331,12 @@ static void tbf_destroy(struct Qdisc *sch)
 	struct tbf_sched_data *q = qdisc_priv(sch);
 
 	qdisc_watchdog_cancel(&q->watchdog);
+
+	if (q->P_tab)
+		qdisc_put_rtab(q->P_tab);
+	if (q->R_tab)
+		qdisc_put_rtab(q->R_tab);
+
 	qdisc_destroy(q->qdisc);
 }
 
@@ -350,13 +352,13 @@ static int tbf_dump(struct Qdisc *sch, struct sk_buff *skb)
 		goto nla_put_failure;
 
 	opt.limit = q->limit;
-	opt.rate.rate = psched_ratecfg_getrate(&q->rate);
-	if (q->peak_present)
-		opt.peakrate.rate = psched_ratecfg_getrate(&q->peak);
+	opt.rate = q->R_tab->rate;
+	if (q->P_tab)
+		opt.peakrate = q->P_tab->rate;
 	else
 		memset(&opt.peakrate, 0, sizeof(opt.peakrate));
-	opt.mtu = PSCHED_NS2TICKS(q->mtu);
-	opt.buffer = PSCHED_NS2TICKS(q->buffer);
+	opt.mtu = q->mtu;
+	opt.buffer = q->buffer;
 	if (nla_put(skb, TCA_TBF_PARMS, sizeof(opt), &opt))
 		goto nla_put_failure;
 

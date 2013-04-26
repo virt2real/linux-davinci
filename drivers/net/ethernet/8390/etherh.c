@@ -463,6 +463,12 @@ etherh_open(struct net_device *dev)
 {
 	struct ei_device *ei_local = netdev_priv(dev);
 
+	if (!is_valid_ether_addr(dev->dev_addr)) {
+		printk(KERN_WARNING "%s: invalid ethernet MAC address\n",
+			dev->name);
+		return -EINVAL;
+	}
+
 	if (request_irq(dev->irq, __ei_interrupt, 0, dev->name, dev))
 		return -EAGAIN;
 
@@ -521,7 +527,7 @@ static void __init etherh_banner(void)
  * Read the ethernet address string from the on board rom.
  * This is an ascii string...
  */
-static int etherh_addr(char *addr, struct expansion_card *ec)
+static int __devinit etherh_addr(char *addr, struct expansion_card *ec)
 {
 	struct in_chunk_dir cd;
 	char *s;
@@ -651,7 +657,7 @@ static const struct net_device_ops etherh_netdev_ops = {
 static u32 etherh_regoffsets[16];
 static u32 etherm_regoffsets[16];
 
-static int
+static int __devinit
 etherh_probe(struct expansion_card *ec, const struct ecard_id *id)
 {
 	const struct etherh_data *data = id->data;
@@ -769,7 +775,7 @@ etherh_probe(struct expansion_card *ec, const struct ecard_id *id)
 	return ret;
 }
 
-static void etherh_remove(struct expansion_card *ec)
+static void __devexit etherh_remove(struct expansion_card *ec)
 {
 	struct net_device *dev = ecard_get_drvdata(ec);
 
@@ -833,7 +839,7 @@ static const struct ecard_id etherh_ids[] = {
 
 static struct ecard_driver etherh_driver = {
 	.probe		= etherh_probe,
-	.remove		= etherh_remove,
+	.remove		= __devexit_p(etherh_remove),
 	.id_table	= etherh_ids,
 	.drv = {
 		.name	= DRV_NAME,

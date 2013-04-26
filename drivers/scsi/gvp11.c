@@ -204,7 +204,7 @@ static struct scsi_host_template gvp11_scsi_template = {
 	.use_clustering		= DISABLE_CLUSTERING
 };
 
-static int check_wd33c93(struct gvp11_scsiregs *regs)
+static int __devinit check_wd33c93(struct gvp11_scsiregs *regs)
 {
 #ifdef CHECK_WD33C93
 	volatile unsigned char *sasr_3393, *scmd_3393;
@@ -284,7 +284,8 @@ static int check_wd33c93(struct gvp11_scsiregs *regs)
 	return 0;
 }
 
-static int gvp11_probe(struct zorro_dev *z, const struct zorro_device_id *ent)
+static int __devinit gvp11_probe(struct zorro_dev *z,
+				 const struct zorro_device_id *ent)
 {
 	struct Scsi_Host *instance;
 	unsigned long address;
@@ -379,7 +380,7 @@ fail_check_or_alloc:
 	return error;
 }
 
-static void gvp11_remove(struct zorro_dev *z)
+static void __devexit gvp11_remove(struct zorro_dev *z)
 {
 	struct Scsi_Host *instance = zorro_get_drvdata(z);
 	struct gvp11_hostdata *hdata = shost_priv(instance);
@@ -397,7 +398,7 @@ static void gvp11_remove(struct zorro_dev *z)
 	 * SERIES I though).
 	 */
 
-static struct zorro_device_id gvp11_zorro_tbl[] = {
+static struct zorro_device_id gvp11_zorro_tbl[] __devinitdata = {
 	{ ZORRO_PROD_GVP_COMBO_030_R3_SCSI,	~0x00ffffff },
 	{ ZORRO_PROD_GVP_SERIES_II,		~0x00ffffff },
 	{ ZORRO_PROD_GVP_GFORCE_030_SCSI,	~0x01ffffff },
@@ -413,7 +414,7 @@ static struct zorro_driver gvp11_driver = {
 	.name		= "gvp11",
 	.id_table	= gvp11_zorro_tbl,
 	.probe		= gvp11_probe,
-	.remove		= gvp11_remove,
+	.remove		= __devexit_p(gvp11_remove),
 };
 
 static int __init gvp11_init(void)

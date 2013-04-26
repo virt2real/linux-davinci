@@ -149,6 +149,7 @@ unsigned long mach_get_cmos_time(void)
 	if (century) {
 		century = bcd2bin(century);
 		year += century * 100;
+		printk(KERN_INFO "Extended CMOS year: %d\n", century * 100);
 	} else
 		year += CMOS_YEARS_OFFS;
 
@@ -193,6 +194,12 @@ void read_persistent_clock(struct timespec *ts)
 	ts->tv_sec = retval;
 	ts->tv_nsec = 0;
 }
+
+unsigned long long native_read_tsc(void)
+{
+	return __native_read_tsc();
+}
+EXPORT_SYMBOL(native_read_tsc);
 
 
 static struct resource rtc_resources[] = {

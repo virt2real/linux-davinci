@@ -83,7 +83,7 @@ static inline int percpu_counter_initialized(struct percpu_counter *fbc)
 	return (fbc->counters != NULL);
 }
 
-#else /* !CONFIG_SMP */
+#else
 
 struct percpu_counter {
 	s64 count;

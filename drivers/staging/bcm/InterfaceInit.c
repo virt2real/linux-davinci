@@ -4,12 +4,11 @@ static struct usb_device_id InterfaceUsbtable[] = {
 	{ USB_DEVICE(BCM_USB_VENDOR_ID_T3, BCM_USB_PRODUCT_ID_T3) },
 	{ USB_DEVICE(BCM_USB_VENDOR_ID_T3, BCM_USB_PRODUCT_ID_T3B) },
 	{ USB_DEVICE(BCM_USB_VENDOR_ID_T3, BCM_USB_PRODUCT_ID_T3L) },
-	{ USB_DEVICE(BCM_USB_VENDOR_ID_T3, BCM_USB_PRODUCT_ID_SYM) },
+	{ USB_DEVICE(BCM_USB_VENDOR_ID_T3, BCM_USB_PRODUCT_ID_SM250) },
 	{ USB_DEVICE(BCM_USB_VENDOR_ID_ZTE, BCM_USB_PRODUCT_ID_226) },
 	{ USB_DEVICE(BCM_USB_VENDOR_ID_FOXCONN, BCM_USB_PRODUCT_ID_1901) },
 	{ USB_DEVICE(BCM_USB_VENDOR_ID_ZTE, BCM_USB_PRODUCT_ID_ZTE_TU25) },
 	{ USB_DEVICE(BCM_USB_VENDOR_ID_ZTE, BCM_USB_PRODUCT_ID_ZTE_226) },
-	{ USB_DEVICE(BCM_USB_VENDOR_ID_ZTE, BCM_USB_PRODUCT_ID_ZTE_326) },
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, InterfaceUsbtable);
@@ -23,9 +22,9 @@ static const u32 default_msg =
 	| NETIF_MSG_TIMER | NETIF_MSG_TX_ERR | NETIF_MSG_RX_ERR
 	| NETIF_MSG_IFUP | NETIF_MSG_IFDOWN;
 
-static int InterfaceAdapterInit(struct bcm_interface_adapter *Adapter);
+static int InterfaceAdapterInit(PS_INTERFACE_ADAPTER Adapter);
 
-static void InterfaceAdapterFree(struct bcm_interface_adapter *psIntfAdapter)
+static void InterfaceAdapterFree(PS_INTERFACE_ADAPTER psIntfAdapter)
 {
 	int i = 0;
 
@@ -80,7 +79,7 @@ static void ConfigureEndPointTypesThroughEEPROM(struct bcm_mini_adapter *Adapter
 
 	ulReg = ntohl(EP2_CFG_REG);
 	BeceemEEPROMBulkWrite(Adapter, (PUCHAR)&ulReg, 0x132, 4, TRUE);
-	if (((struct bcm_interface_adapter *)(Adapter->pvInterfaceAdapter))->bHighSpeedDevice == TRUE) {
+	if (((PS_INTERFACE_ADAPTER)(Adapter->pvInterfaceAdapter))->bHighSpeedDevice == TRUE) {
 		ulReg = ntohl(EP2_CFG_INT);
 		BeceemEEPROMBulkWrite(Adapter, (PUCHAR)&ulReg, 0x136, 4, TRUE);
 	} else {
@@ -146,7 +145,7 @@ static int usbbcm_device_probe(struct usb_interface *intf, const struct usb_devi
 	struct usb_device *udev = interface_to_usbdev(intf);
 	int retval;
 	struct bcm_mini_adapter *psAdapter;
-	struct bcm_interface_adapter *psIntfAdapter;
+	PS_INTERFACE_ADAPTER psIntfAdapter;
 	struct net_device *ndev;
 
 	/* Reserve one extra queue for the bit-bucket */
@@ -190,9 +189,9 @@ static int usbbcm_device_probe(struct usb_interface *intf, const struct usb_devi
 	}
 
 	/* Allocate interface adapter structure */
-	psIntfAdapter = kzalloc(sizeof(struct bcm_interface_adapter),
-				GFP_KERNEL);
+	psIntfAdapter = kzalloc(sizeof(S_INTERFACE_ADAPTER), GFP_KERNEL);
 	if (psIntfAdapter == NULL) {
+		dev_err(&udev->dev, DRV_NAME ": no memory for Interface adapter\n");
 		AdapterFree(psAdapter);
 		return -ENOMEM;
 	}
@@ -258,7 +257,7 @@ static int usbbcm_device_probe(struct usb_interface *intf, const struct usb_devi
 
 static void usbbcm_disconnect(struct usb_interface *intf)
 {
-	struct bcm_interface_adapter *psIntfAdapter = usb_get_intfdata(intf);
+	PS_INTERFACE_ADAPTER psIntfAdapter = usb_get_intfdata(intf);
 	struct bcm_mini_adapter *psAdapter;
 	struct usb_device  *udev = interface_to_usbdev(intf);
 
@@ -277,7 +276,7 @@ static void usbbcm_disconnect(struct usb_interface *intf)
 	usb_put_dev(udev);
 }
 
-static int AllocUsbCb(struct bcm_interface_adapter *psIntfAdapter)
+static int AllocUsbCb(PS_INTERFACE_ADAPTER psIntfAdapter)
 {
 	int i = 0;
 
@@ -312,7 +311,7 @@ static int AllocUsbCb(struct bcm_interface_adapter *psIntfAdapter)
 	return 0;
 }
 
-static int device_run(struct bcm_interface_adapter *psIntfAdapter)
+static int device_run(PS_INTERFACE_ADAPTER psIntfAdapter)
 {
 	int value = 0;
 	UINT status = STATUS_SUCCESS;
@@ -422,7 +421,7 @@ static inline int bcm_usb_endpoint_is_isoc_out(const struct usb_endpoint_descrip
 	return bcm_usb_endpoint_xfer_isoc(epd) && bcm_usb_endpoint_dir_out(epd);
 }
 
-static int InterfaceAdapterInit(struct bcm_interface_adapter *psIntfAdapter)
+static int InterfaceAdapterInit(PS_INTERFACE_ADAPTER psIntfAdapter)
 {
 	struct usb_host_interface *iface_desc;
 	struct usb_endpoint_descriptor *endpoint;
@@ -564,8 +563,11 @@ static int InterfaceAdapterInit(struct bcm_interface_adapter *psIntfAdapter)
 			psIntfAdapter->sIntrIn.int_in_interval = endpoint->bInterval;
 			psIntfAdapter->sIntrIn.int_in_buffer =
 						kmalloc(buffer_size, GFP_KERNEL);
-			if (!psIntfAdapter->sIntrIn.int_in_buffer)
+			if (!psIntfAdapter->sIntrIn.int_in_buffer) {
+				dev_err(&psIntfAdapter->udev->dev,
+					"could not allocate interrupt_in_buffer\n");
 				return -EINVAL;
+			}
 		}
 
 		if (!psIntfAdapter->sIntrOut.int_out_endpointAddr && bcm_usb_endpoint_is_int_out(endpoint)) {
@@ -584,8 +586,11 @@ static int InterfaceAdapterInit(struct bcm_interface_adapter *psIntfAdapter)
 				psIntfAdapter->sIntrOut.int_out_endpointAddr = endpoint->bEndpointAddress;
 				psIntfAdapter->sIntrOut.int_out_interval = endpoint->bInterval;
 				psIntfAdapter->sIntrOut.int_out_buffer = kmalloc(buffer_size, GFP_KERNEL);
-				if (!psIntfAdapter->sIntrOut.int_out_buffer)
+				if (!psIntfAdapter->sIntrOut.int_out_buffer) {
+					dev_err(&psIntfAdapter->udev->dev,
+						"could not allocate interrupt_out_buffer\n");
 					return -EINVAL;
+				}
 			}
 		}
 	}
@@ -614,7 +619,7 @@ static int InterfaceAdapterInit(struct bcm_interface_adapter *psIntfAdapter)
 
 static int InterfaceSuspend(struct usb_interface *intf, pm_message_t message)
 {
-	struct bcm_interface_adapter *psIntfAdapter = usb_get_intfdata(intf);
+	PS_INTERFACE_ADAPTER  psIntfAdapter = usb_get_intfdata(intf);
 
 	psIntfAdapter->bSuspended = TRUE;
 
@@ -641,7 +646,7 @@ static int InterfaceSuspend(struct usb_interface *intf, pm_message_t message)
 
 static int InterfaceResume(struct usb_interface *intf)
 {
-	struct bcm_interface_adapter *psIntfAdapter = usb_get_intfdata(intf);
+	PS_INTERFACE_ADAPTER  psIntfAdapter = usb_get_intfdata(intf);
 
 	mdelay(100);
 	psIntfAdapter->bSuspended = FALSE;

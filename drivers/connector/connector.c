@@ -256,7 +256,7 @@ static struct cn_dev cdev = {
 	.input   = cn_rx_skb,
 };
 
-static int cn_init(void)
+static int __devinit cn_init(void)
 {
 	struct cn_dev *dev = &cdev;
 	struct netlink_kernel_cfg cfg = {
@@ -276,18 +276,18 @@ static int cn_init(void)
 
 	cn_already_initialized = 1;
 
-	proc_create("connector", S_IRUGO, init_net.proc_net, &cn_file_ops);
+	proc_net_fops_create(&init_net, "connector", S_IRUGO, &cn_file_ops);
 
 	return 0;
 }
 
-static void cn_fini(void)
+static void __devexit cn_fini(void)
 {
 	struct cn_dev *dev = &cdev;
 
 	cn_already_initialized = 0;
 
-	remove_proc_entry("connector", init_net.proc_net);
+	proc_net_remove(&init_net, "connector");
 
 	cn_queue_free_dev(dev->cbdev);
 	netlink_kernel_release(dev->nls);

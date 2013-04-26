@@ -20,19 +20,18 @@
 # Here is the format of the ip configuration file:
 #
 # HWADDR=macaddr
-# DEVICE=interface name
-# BOOTPROTO=<protocol> (where <protocol> is "dhcp" if DHCP is configured
-#                       or "none" if no boot-time protocol should be used)
+# IF_NAME=interface name
+# DHCP=yes (This is optional; if yes, DHCP is configured)
 #
-# IPADDR0=ipaddr1
-# IPADDR1=ipaddr2
-# IPADDRx=ipaddry (where y = x + 1)
+# IPADDR=ipaddr1
+# IPADDR_1=ipaddr2
+# IPADDR_x=ipaddry (where y = x + 1)
 #
-# NETMASK0=netmask1
-# NETMASKx=netmasky (where y = x + 1)
+# NETMASK=netmask1
+# NETMASK_x=netmasky (where y = x + 1)
 #
 # GATEWAY=ipaddr1
-# GATEWAYx=ipaddry (where y = x + 1)
+# GATEWAY_x=ipaddry (where y = x + 1)
 #
 # DNSx=ipaddrx (where first DNS address is tagged as DNS1 etc)
 #
@@ -54,6 +53,11 @@ echo "NM_CONTROLLED=no" >> $1
 echo "PEERDNS=yes" >> $1
 echo "ONBOOT=yes" >> $1
 
+dhcp=$(grep "DHCP" $1 2>/dev/null)
+if [ "$dhcp" != "" ];
+then
+echo "BOOTPROTO=dhcp" >> $1;
+fi
 
 cp $1 /etc/sysconfig/network-scripts/
 
@@ -61,4 +65,4 @@ cp $1 /etc/sysconfig/network-scripts/
 interface=$(echo $1 | awk -F - '{ print $2 }')
 
 /sbin/ifdown $interface 2>/dev/null
-/sbin/ifup $interface 2>/dev/null
+/sbin/ifup $interfac 2>/dev/null

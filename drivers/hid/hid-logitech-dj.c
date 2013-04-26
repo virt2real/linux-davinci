@@ -459,25 +459,19 @@ static int logi_dj_recv_send_report(struct dj_receiver_dev *djrcv_dev,
 				    struct dj_report *dj_report)
 {
 	struct hid_device *hdev = djrcv_dev->hdev;
-	struct hid_report *report;
-	struct hid_report_enum *output_report_enum;
-	u8 *data = (u8 *)(&dj_report->device_index);
-	int i;
+	int sent_bytes;
 
-	output_report_enum = &hdev->report_enum[HID_OUTPUT_REPORT];
-	report = output_report_enum->report_id_hash[REPORT_ID_DJ_SHORT];
-
-	if (!report) {
-		dev_err(&hdev->dev, "%s: unable to find dj report\n", __func__);
+	if (!hdev->hid_output_raw_report) {
+		dev_err(&hdev->dev, "%s:"
+			"hid_output_raw_report is null\n", __func__);
 		return -ENODEV;
 	}
 
-	for (i = 0; i < report->field[0]->report_count; i++)
-		report->field[0]->value[i] = data[i];
+	sent_bytes = hdev->hid_output_raw_report(hdev, (u8 *) dj_report,
+						 sizeof(struct dj_report),
+						 HID_OUTPUT_REPORT);
 
-	usbhid_submit_report(hdev, report, USB_DIR_OUT);
-
-	return 0;
+	return (sent_bytes < 0) ? sent_bytes : 0;
 }
 
 static int logi_dj_recv_query_paired_devices(struct dj_receiver_dev *djrcv_dev)

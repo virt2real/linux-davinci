@@ -148,7 +148,7 @@ static int dev_mkdir(const char *name, umode_t mode)
 	struct path path;
 	int err;
 
-	dentry = kern_path_create(AT_FDCWD, name, &path, LOOKUP_DIRECTORY);
+	dentry = kern_path_create(AT_FDCWD, name, &path, 1);
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 
@@ -302,8 +302,7 @@ static int handle_remove(const char *nodename, struct device *dev)
 
 	if (dentry->d_inode) {
 		struct kstat stat;
-		struct path p = {.mnt = parent.mnt, .dentry = dentry};
-		err = vfs_getattr(&p, &stat);
+		err = vfs_getattr(parent.mnt, dentry, &stat);
 		if (!err && dev_mynode(dev, dentry->d_inode, &stat)) {
 			struct iattr newattrs;
 			/*

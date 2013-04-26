@@ -21,6 +21,7 @@
 
 #include <asm/setup.h>
 #include <asm/io.h>
+#include <mach/hardware.h>
 
 /* we need the constants in amba/serial.h, but it refers to amba_device */
 struct amba_device;
@@ -56,5 +57,7 @@ static void flush(void)
 static inline void arch_decomp_setup(void)
 {
 }
+
+#define arch_decomp_wdog() /* nothing to do here */
 
 #endif /* __ASM_ARCH_UNCOMPRESS_H */

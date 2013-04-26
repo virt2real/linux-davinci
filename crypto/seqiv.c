@@ -305,8 +305,9 @@ static struct crypto_instance *seqiv_alloc(struct rtattr **tb)
 	int err;
 
 	algt = crypto_get_attr_type(tb);
+	err = PTR_ERR(algt);
 	if (IS_ERR(algt))
-		return ERR_CAST(algt);
+		return ERR_PTR(err);
 
 	err = crypto_get_default_rng();
 	if (err)

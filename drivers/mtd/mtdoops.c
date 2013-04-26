@@ -271,7 +271,7 @@ static void find_next_position(struct mtdoops_context *cxt)
 
 		if (count[0] == 0xffffffff && count[1] == 0xffffffff)
 			mark_page_unused(cxt, page);
-		if (count[0] == 0xffffffff || count[1] != MTDOOPS_KERNMSG_MAGIC)
+		if (count[0] == 0xffffffff)
 			continue;
 		if (maxcount == 0xffffffff) {
 			maxcount = count[0];
@@ -289,13 +289,14 @@ static void find_next_position(struct mtdoops_context *cxt)
 		}
 	}
 	if (maxcount == 0xffffffff) {
-		cxt->nextpage = cxt->oops_pages - 1;
-		cxt->nextcount = 0;
+		cxt->nextpage = 0;
+		cxt->nextcount = 1;
+		schedule_work(&cxt->work_erase);
+		return;
 	}
-	else {
-		cxt->nextpage = maxpos;
-		cxt->nextcount = maxcount;
-	}
+
+	cxt->nextpage = maxpos;
+	cxt->nextcount = maxcount;
 
 	mtdoops_inc_counter(cxt);
 }

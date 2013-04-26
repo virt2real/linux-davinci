@@ -15,7 +15,6 @@
 #define SUPPORT_SYSRQ
 #endif
 
-#include <linux/err.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/console.h>
@@ -24,9 +23,8 @@
 #include <linux/io.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
-#include <linux/spinlock.h>
 #include <linux/platform_device.h>
-#include <linux/platform_data/serial-sccnxp.h>
+#include <linux/platform_data/sccnxp.h>
 
 #define SCCNXP_NAME			"uart-sccnxp"
 #define SCCNXP_MAJOR			204
@@ -108,7 +106,6 @@ enum {
 struct sccnxp_port {
 	struct uart_driver	uart;
 	struct uart_port	port[SCCNXP_MAX_UARTS];
-	bool			opened[SCCNXP_MAX_UARTS];
 
 	const char		*name;
 	int			irq;
@@ -125,10 +122,7 @@ struct sccnxp_port {
 	struct console		console;
 #endif
 
-	spinlock_t		lock;
-
-	bool			poll;
-	struct timer_list	timer;
+	struct mutex		sccnxp_mutex;
 
 	struct sccnxp_pdata	pdata;
 };
@@ -180,12 +174,14 @@ static int sccnxp_update_best_err(int a, int b, int *besterr)
 	return 1;
 }
 
-static const struct {
+struct baud_table {
 	u8	csr;
 	u8	acr;
 	u8	mr0;
 	int	baud;
-} baud_std[] = {
+};
+
+const struct baud_table baud_std[] = {
 	{ 0,	ACR_BAUD0,	MR0_BAUD_NORMAL,	50, },
 	{ 0,	ACR_BAUD1,	MR0_BAUD_NORMAL,	75, },
 	{ 1,	ACR_BAUD0,	MR0_BAUD_NORMAL,	110, },
@@ -289,6 +285,10 @@ static void sccnxp_handle_rx(struct uart_port *port)
 {
 	u8 sr;
 	unsigned int ch, flag;
+	struct tty_struct *tty = tty_port_tty_get(&port->state->port);
+
+	if (!tty)
+		return;
 
 	for (;;) {
 		sr = sccnxp_port_read(port, SCCNXP_SR_REG);
@@ -304,19 +304,14 @@ static void sccnxp_handle_rx(struct uart_port *port)
 		if (unlikely(sr)) {
 			if (sr & SR_BRK) {
 				port->icount.brk++;
-				sccnxp_port_write(port, SCCNXP_CR_REG,
-						  CR_CMD_BREAK_RESET);
 				if (uart_handle_break(port))
 					continue;
 			} else if (sr & SR_PE)
 				port->icount.parity++;
 			else if (sr & SR_FE)
 				port->icount.frame++;
-			else if (sr & SR_OVR) {
+			else if (sr & SR_OVR)
 				port->icount.overrun++;
-				sccnxp_port_write(port, SCCNXP_CR_REG,
-						  CR_CMD_STATUS_RESET);
-			}
 
 			sr &= port->read_status_mask;
 			if (sr & SR_BRK)
@@ -338,7 +333,9 @@ static void sccnxp_handle_rx(struct uart_port *port)
 		uart_insert_char(port, sr, SR_OVR, ch, flag);
 	}
 
-	tty_flip_buffer_push(&port->state->port);
+	tty_flip_buffer_push(tty);
+
+	tty_kref_put(tty);
 }
 
 static void sccnxp_handle_tx(struct uart_port *port)
@@ -380,48 +377,31 @@ static void sccnxp_handle_tx(struct uart_port *port)
 		uart_write_wakeup(port);
 }
 
-static void sccnxp_handle_events(struct sccnxp_port *s)
+static irqreturn_t sccnxp_ist(int irq, void *dev_id)
 {
 	int i;
 	u8 isr;
+	struct sccnxp_port *s = (struct sccnxp_port *)dev_id;
 
-	do {
+	mutex_lock(&s->sccnxp_mutex);
+
+	for (;;) {
 		isr = sccnxp_read(&s->port[0], SCCNXP_ISR_REG);
 		isr &= s->imr;
 		if (!isr)
 			break;
 
+		dev_dbg(s->port[0].dev, "IRQ status: 0x%02x\n", isr);
+
 		for (i = 0; i < s->uart.nr; i++) {
-			if (s->opened[i] && (isr & ISR_RXRDY(i)))
+			if (isr & ISR_RXRDY(i))
 				sccnxp_handle_rx(&s->port[i]);
-			if (s->opened[i] && (isr & ISR_TXRDY(i)))
+			if (isr & ISR_TXRDY(i))
 				sccnxp_handle_tx(&s->port[i]);
 		}
-	} while (1);
-}
+	}
 
-static void sccnxp_timer(unsigned long data)
-{
-	struct sccnxp_port *s = (struct sccnxp_port *)data;
-	unsigned long flags;
-
-	spin_lock_irqsave(&s->lock, flags);
-	sccnxp_handle_events(s);
-	spin_unlock_irqrestore(&s->lock, flags);
-
-	if (!timer_pending(&s->timer))
-		mod_timer(&s->timer, jiffies +
-			  usecs_to_jiffies(s->pdata.poll_time_us));
-}
-
-static irqreturn_t sccnxp_ist(int irq, void *dev_id)
-{
-	struct sccnxp_port *s = (struct sccnxp_port *)dev_id;
-	unsigned long flags;
-
-	spin_lock_irqsave(&s->lock, flags);
-	sccnxp_handle_events(s);
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 
 	return IRQ_HANDLED;
 }
@@ -429,9 +409,8 @@ static irqreturn_t sccnxp_ist(int irq, void *dev_id)
 static void sccnxp_start_tx(struct uart_port *port)
 {
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
-	unsigned long flags;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 
 	/* Set direction to output */
 	if (s->flags & SCCNXP_HAVE_IO)
@@ -439,7 +418,7 @@ static void sccnxp_start_tx(struct uart_port *port)
 
 	sccnxp_enable_irq(port, IMR_TXRDY);
 
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 }
 
 static void sccnxp_stop_tx(struct uart_port *port)
@@ -450,22 +429,20 @@ static void sccnxp_stop_tx(struct uart_port *port)
 static void sccnxp_stop_rx(struct uart_port *port)
 {
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
-	unsigned long flags;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 	sccnxp_port_write(port, SCCNXP_CR_REG, CR_RX_DISABLE);
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 }
 
 static unsigned int sccnxp_tx_empty(struct uart_port *port)
 {
 	u8 val;
-	unsigned long flags;
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 	val = sccnxp_port_read(port, SCCNXP_SR_REG);
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 
 	return (val & SR_TXEMT) ? TIOCSER_TEMT : 0;
 }
@@ -478,30 +455,28 @@ static void sccnxp_enable_ms(struct uart_port *port)
 static void sccnxp_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
-	unsigned long flags;
 
 	if (!(s->flags & SCCNXP_HAVE_IO))
 		return;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 
 	sccnxp_set_bit(port, DTR_OP, mctrl & TIOCM_DTR);
 	sccnxp_set_bit(port, RTS_OP, mctrl & TIOCM_RTS);
 
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 }
 
 static unsigned int sccnxp_get_mctrl(struct uart_port *port)
 {
 	u8 bitmask, ipr;
-	unsigned long flags;
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
 	unsigned int mctrl = TIOCM_DSR | TIOCM_CTS | TIOCM_CAR;
 
 	if (!(s->flags & SCCNXP_HAVE_IO))
 		return mctrl;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 
 	ipr = ~sccnxp_read(port, SCCNXP_IPCR_REG);
 
@@ -530,7 +505,7 @@ static unsigned int sccnxp_get_mctrl(struct uart_port *port)
 		mctrl |= (ipr & bitmask) ? TIOCM_RNG : 0;
 	}
 
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 
 	return mctrl;
 }
@@ -538,23 +513,21 @@ static unsigned int sccnxp_get_mctrl(struct uart_port *port)
 static void sccnxp_break_ctl(struct uart_port *port, int break_state)
 {
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
-	unsigned long flags;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 	sccnxp_port_write(port, SCCNXP_CR_REG, break_state ?
 			  CR_CMD_START_BREAK : CR_CMD_STOP_BREAK);
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 }
 
 static void sccnxp_set_termios(struct uart_port *port,
 			       struct ktermios *termios, struct ktermios *old)
 {
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
-	unsigned long flags;
 	u8 mr1, mr2;
 	int baud;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 
 	/* Mask termios capabilities we don't support */
 	termios->c_cflag &= ~CMSPAR;
@@ -621,22 +594,20 @@ static void sccnxp_set_termios(struct uart_port *port,
 	/* Update timeout according to new baud rate */
 	uart_update_timeout(port, termios->c_cflag, baud);
 
-	/* Report actual baudrate back to core */
 	if (tty_termios_baud_rate(termios))
 		tty_termios_encode_baud_rate(termios, baud, baud);
 
 	/* Enable RX & TX */
 	sccnxp_port_write(port, SCCNXP_CR_REG, CR_RX_ENABLE | CR_TX_ENABLE);
 
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 }
 
 static int sccnxp_startup(struct uart_port *port)
 {
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
-	unsigned long flags;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 
 	if (s->flags & SCCNXP_HAVE_IO) {
 		/* Outputs are controlled manually */
@@ -655,9 +626,7 @@ static int sccnxp_startup(struct uart_port *port)
 	/* Enable RX interrupt */
 	sccnxp_enable_irq(port, IMR_RXRDY);
 
-	s->opened[port->line] = 1;
-
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 
 	return 0;
 }
@@ -665,11 +634,8 @@ static int sccnxp_startup(struct uart_port *port)
 static void sccnxp_shutdown(struct uart_port *port)
 {
 	struct sccnxp_port *s = dev_get_drvdata(port->dev);
-	unsigned long flags;
 
-	spin_lock_irqsave(&s->lock, flags);
-
-	s->opened[port->line] = 0;
+	mutex_lock(&s->sccnxp_mutex);
 
 	/* Disable interrupts */
 	sccnxp_disable_irq(port, IMR_TXRDY | IMR_RXRDY);
@@ -681,7 +647,7 @@ static void sccnxp_shutdown(struct uart_port *port)
 	if (s->flags & SCCNXP_HAVE_IO)
 		sccnxp_set_bit(port, DIR_OP, 0);
 
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 }
 
 static const char *sccnxp_type(struct uart_port *port)
@@ -755,11 +721,10 @@ static void sccnxp_console_write(struct console *co, const char *c, unsigned n)
 {
 	struct sccnxp_port *s = (struct sccnxp_port *)co->data;
 	struct uart_port *port = &s->port[co->index];
-	unsigned long flags;
 
-	spin_lock_irqsave(&s->lock, flags);
+	mutex_lock(&s->sccnxp_mutex);
 	uart_console_write(port, c, n, sccnxp_console_putchar);
-	spin_unlock_irqrestore(&s->lock, flags);
+	mutex_unlock(&s->sccnxp_mutex);
 }
 
 static int sccnxp_console_setup(struct console *co, char *options)
@@ -775,7 +740,7 @@ static int sccnxp_console_setup(struct console *co, char *options)
 }
 #endif
 
-static int sccnxp_probe(struct platform_device *pdev)
+static int __devinit sccnxp_probe(struct platform_device *pdev)
 {
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	int chiptype = pdev->id_entry->driver_data;
@@ -798,7 +763,7 @@ static int sccnxp_probe(struct platform_device *pdev)
 	}
 	platform_set_drvdata(pdev, s);
 
-	spin_lock_init(&s->lock);
+	mutex_init(&s->sccnxp_mutex);
 
 	/* Individual chip settings */
 	switch (chiptype) {
@@ -895,19 +860,11 @@ static int sccnxp_probe(struct platform_device *pdev)
 	} else
 		memcpy(&s->pdata, pdata, sizeof(struct sccnxp_pdata));
 
-	if (s->pdata.poll_time_us) {
-		dev_info(&pdev->dev, "Using poll mode, resolution %u usecs\n",
-			 s->pdata.poll_time_us);
-		s->poll = 1;
-	}
-
-	if (!s->poll) {
-		s->irq = platform_get_irq(pdev, 0);
-		if (s->irq < 0) {
-			dev_err(&pdev->dev, "Missing irq resource data\n");
-			ret = -ENXIO;
-			goto err_out;
-		}
+	s->irq = platform_get_irq(pdev, 0);
+	if (s->irq <= 0) {
+		dev_err(&pdev->dev, "Missing irq resource data\n");
+		ret = -ENXIO;
+		goto err_out;
 	}
 
 	/* Check input frequency */
@@ -918,9 +875,10 @@ static int sccnxp_probe(struct platform_device *pdev)
 		goto err_out;
 	}
 
-	membase = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(membase)) {
-		ret = PTR_ERR(membase);
+	membase = devm_request_and_ioremap(&pdev->dev, res);
+	if (!membase) {
+		dev_err(&pdev->dev, "Failed to ioremap\n");
+		ret = -EIO;
 		goto err_out;
 	}
 
@@ -971,23 +929,13 @@ static int sccnxp_probe(struct platform_device *pdev)
 	if (s->pdata.init)
 		s->pdata.init();
 
-	if (!s->poll) {
-		ret = devm_request_threaded_irq(&pdev->dev, s->irq, NULL,
-						sccnxp_ist,
-						IRQF_TRIGGER_FALLING |
-						IRQF_ONESHOT,
-						dev_name(&pdev->dev), s);
-		if (!ret)
-			return 0;
-
-		dev_err(&pdev->dev, "Unable to reguest IRQ %i\n", s->irq);
-	} else {
-		init_timer(&s->timer);
-		setup_timer(&s->timer, sccnxp_timer, (unsigned long)s);
-		mod_timer(&s->timer, jiffies +
-			  usecs_to_jiffies(s->pdata.poll_time_us));
+	ret = devm_request_threaded_irq(&pdev->dev, s->irq, NULL, sccnxp_ist,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					dev_name(&pdev->dev), s);
+	if (!ret)
 		return 0;
-	}
+
+	dev_err(&pdev->dev, "Unable to reguest IRQ %i\n", s->irq);
 
 err_out:
 	platform_set_drvdata(pdev, NULL);
@@ -995,15 +943,12 @@ err_out:
 	return ret;
 }
 
-static int sccnxp_remove(struct platform_device *pdev)
+static int __devexit sccnxp_remove(struct platform_device *pdev)
 {
 	int i;
 	struct sccnxp_port *s = platform_get_drvdata(pdev);
 
-	if (!s->poll)
-		devm_free_irq(&pdev->dev, s->irq, s);
-	else
-		del_timer_sync(&s->timer);
+	devm_free_irq(&pdev->dev, s->irq, s);
 
 	for (i = 0; i < s->uart.nr; i++)
 		uart_remove_one_port(&s->uart, &s->port[i]);
@@ -1036,7 +981,7 @@ static struct platform_driver sccnxp_uart_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= sccnxp_probe,
-	.remove		= sccnxp_remove,
+	.remove		= __devexit_p(sccnxp_remove),
 	.id_table	= sccnxp_id_table,
 };
 module_platform_driver(sccnxp_uart_driver);

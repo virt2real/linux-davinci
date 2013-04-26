@@ -207,9 +207,14 @@ static void safe_process_read_urb(struct urb *urb)
 	unsigned char *data = urb->transfer_buffer;
 	unsigned char length = urb->actual_length;
 	int actual_length;
+	struct tty_struct *tty;
 	__u16 fcs;
 
 	if (!length)
+		return;
+
+	tty = tty_port_tty_get(&port->port);
+	if (!tty)
 		return;
 
 	if (!safe)
@@ -218,20 +223,22 @@ static void safe_process_read_urb(struct urb *urb)
 	fcs = fcs_compute10(data, length, CRC10_INITFCS);
 	if (fcs) {
 		dev_err(&port->dev, "%s - bad CRC %x\n", __func__, fcs);
-		return;
+		goto err;
 	}
 
 	actual_length = data[length - 2] >> 2;
 	if (actual_length > (length - 2)) {
 		dev_err(&port->dev, "%s - inconsistent lengths %d:%d\n",
 				__func__, actual_length, length);
-		return;
+		goto err;
 	}
 	dev_info(&urb->dev->dev, "%s - actual: %d\n", __func__, actual_length);
 	length = actual_length;
 out:
-	tty_insert_flip_string(&port->port, data, length);
-	tty_flip_buffer_push(&port->port);
+	tty_insert_flip_string(tty, data, length);
+	tty_flip_buffer_push(tty);
+err:
+	tty_kref_put(tty);
 }
 
 static int safe_prepare_write_buffer(struct usb_serial_port *port,

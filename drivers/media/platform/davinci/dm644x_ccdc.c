@@ -957,7 +957,7 @@ static struct ccdc_hw_device ccdc_hw_dev = {
 	},
 };
 
-static int dm644x_ccdc_probe(struct platform_device *pdev)
+static int __devinit dm644x_ccdc_probe(struct platform_device *pdev)
 {
 	struct resource	*res;
 	int status = 0;
@@ -994,7 +994,7 @@ static int dm644x_ccdc_probe(struct platform_device *pdev)
 		status = PTR_ERR(ccdc_cfg.mclk);
 		goto fail_nomap;
 	}
-	if (clk_prepare_enable(ccdc_cfg.mclk)) {
+	if (clk_enable(ccdc_cfg.mclk)) {
 		status = -ENODEV;
 		goto fail_mclk;
 	}
@@ -1005,7 +1005,7 @@ static int dm644x_ccdc_probe(struct platform_device *pdev)
 		status = PTR_ERR(ccdc_cfg.sclk);
 		goto fail_mclk;
 	}
-	if (clk_prepare_enable(ccdc_cfg.sclk)) {
+	if (clk_enable(ccdc_cfg.sclk)) {
 		status = -ENODEV;
 		goto fail_sclk;
 	}
@@ -1013,10 +1013,8 @@ static int dm644x_ccdc_probe(struct platform_device *pdev)
 	printk(KERN_NOTICE "%s is registered with vpfe.\n", ccdc_hw_dev.name);
 	return 0;
 fail_sclk:
-	clk_disable_unprepare(ccdc_cfg.sclk);
 	clk_put(ccdc_cfg.sclk);
 fail_mclk:
-	clk_disable_unprepare(ccdc_cfg.mclk);
 	clk_put(ccdc_cfg.mclk);
 fail_nomap:
 	iounmap(ccdc_cfg.base_addr);
@@ -1031,8 +1029,6 @@ static int dm644x_ccdc_remove(struct platform_device *pdev)
 {
 	struct resource	*res;
 
-	clk_disable_unprepare(ccdc_cfg.mclk);
-	clk_disable_unprepare(ccdc_cfg.sclk);
 	clk_put(ccdc_cfg.mclk);
 	clk_put(ccdc_cfg.sclk);
 	iounmap(ccdc_cfg.base_addr);
@@ -1050,8 +1046,8 @@ static int dm644x_ccdc_suspend(struct device *dev)
 	/* Disable CCDC */
 	ccdc_enable(0);
 	/* Disable both master and slave clock */
-	clk_disable_unprepare(ccdc_cfg.mclk);
-	clk_disable_unprepare(ccdc_cfg.sclk);
+	clk_disable(ccdc_cfg.mclk);
+	clk_disable(ccdc_cfg.sclk);
 
 	return 0;
 }
@@ -1059,8 +1055,8 @@ static int dm644x_ccdc_suspend(struct device *dev)
 static int dm644x_ccdc_resume(struct device *dev)
 {
 	/* Enable both master and slave clock */
-	clk_prepare_enable(ccdc_cfg.mclk);
-	clk_prepare_enable(ccdc_cfg.sclk);
+	clk_enable(ccdc_cfg.mclk);
+	clk_enable(ccdc_cfg.sclk);
 	/* Restore CCDC context */
 	ccdc_restore_context();
 
@@ -1078,7 +1074,7 @@ static struct platform_driver dm644x_ccdc_driver = {
 		.owner = THIS_MODULE,
 		.pm = &dm644x_ccdc_pm_ops,
 	},
-	.remove = dm644x_ccdc_remove,
+	.remove = __devexit_p(dm644x_ccdc_remove),
 	.probe = dm644x_ccdc_probe,
 };
 

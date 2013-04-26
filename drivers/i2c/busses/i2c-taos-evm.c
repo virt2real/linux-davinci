@@ -271,6 +271,7 @@ static int taos_connect(struct serio *serio, struct serio_driver *drv)
  exit_close:
 	serio_close(serio);
  exit_kfree:
+	serio_set_drvdata(serio, NULL);
 	kfree(taos);
  exit:
 	return err;
@@ -284,6 +285,7 @@ static void taos_disconnect(struct serio *serio)
 		i2c_unregister_device(taos->client);
 	i2c_del_adapter(&taos->adapter);
 	serio_close(serio);
+	serio_set_drvdata(serio, NULL);
 	kfree(taos);
 
 	dev_info(&serio->dev, "Disconnected from TAOS EVM\n");

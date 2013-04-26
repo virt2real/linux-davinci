@@ -51,15 +51,14 @@ nouveau_channel_idle(struct nouveau_channel *chan)
 	struct nouveau_fence *fence = NULL;
 	int ret;
 
-	ret = nouveau_fence_new(chan, false, &fence);
+	ret = nouveau_fence_new(chan, &fence);
 	if (!ret) {
 		ret = nouveau_fence_wait(fence, false, false);
 		nouveau_fence_unref(&fence);
 	}
 
 	if (ret)
-		NV_ERROR(cli, "failed to idle channel 0x%08x [%s]\n",
-			 chan->handle, cli->base.name);
+		NV_ERROR(cli, "failed to idle channel 0x%08x\n", chan->handle);
 	return ret;
 }
 
@@ -77,8 +76,6 @@ nouveau_channel_del(struct nouveau_channel **pchan)
 		nouveau_object_del(client, NVDRM_DEVICE, chan->push.handle);
 		nouveau_bo_vma_del(chan->push.buffer, &chan->push.vma);
 		nouveau_bo_unmap(chan->push.buffer);
-		if (chan->push.buffer && chan->push.buffer->pin_refcnt)
-			nouveau_bo_unpin(chan->push.buffer);
 		nouveau_bo_ref(NULL, &chan->push.buffer);
 		kfree(chan);
 	}
@@ -270,7 +267,7 @@ nouveau_channel_init(struct nouveau_channel *chan, u32 vram, u32 gart)
 	struct nouveau_fb *pfb = nouveau_fb(device);
 	struct nouveau_software_chan *swch;
 	struct nouveau_object *object;
-	struct nv_dma_class args = {};
+	struct nv_dma_class args;
 	int ret, i;
 
 	/* allocate dma objects to cover all allowed vram, and gart */
@@ -349,7 +346,7 @@ nouveau_channel_init(struct nouveau_channel *chan, u32 vram, u32 gart)
 	/* allocate software object class (used for fences on <= nv05, and
 	 * to signal flip completion), bind it to a subchannel.
 	 */
-	if ((device->card_type < NV_E0) || gart /* nve0: want_nvsw */) {
+	if (chan != chan->drm->cechan) {
 		ret = nouveau_object_new(nv_object(client), chan->handle,
 					 NvSw, nouveau_abi16_swclass(chan->drm),
 					 NULL, 0, &object);

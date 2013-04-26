@@ -756,8 +756,8 @@ err_probe:
 
 
 #ifdef CONFIG_OF
-static int spear_smi_probe_config_dt(struct platform_device *pdev,
-				     struct device_node *np)
+static int __devinit spear_smi_probe_config_dt(struct platform_device *pdev,
+					       struct device_node *np)
 {
 	struct spear_smi_plat_data *pdata = dev_get_platdata(&pdev->dev);
 	struct device_node *pp = NULL;
@@ -799,8 +799,8 @@ static int spear_smi_probe_config_dt(struct platform_device *pdev,
 	return 0;
 }
 #else
-static int spear_smi_probe_config_dt(struct platform_device *pdev,
-				     struct device_node *np)
+static int __devinit spear_smi_probe_config_dt(struct platform_device *pdev,
+					       struct device_node *np)
 {
 	return -ENOSYS;
 }
@@ -901,7 +901,7 @@ static int spear_smi_setup_banks(struct platform_device *pdev,
  * and do proper init for any found one.
  * Returns 0 on success, non zero otherwise
  */
-static int spear_smi_probe(struct platform_device *pdev)
+static int __devinit spear_smi_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct spear_smi_plat_data *pdata = NULL;
@@ -949,9 +949,10 @@ static int spear_smi_probe(struct platform_device *pdev)
 
 	smi_base = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-	dev->io_base = devm_ioremap_resource(&pdev->dev, smi_base);
-	if (IS_ERR(dev->io_base)) {
-		ret = PTR_ERR(dev->io_base);
+	dev->io_base = devm_request_and_ioremap(&pdev->dev, smi_base);
+	if (!dev->io_base) {
+		ret = -EIO;
+		dev_err(&pdev->dev, "devm_request_and_ioremap fail\n");
 		goto err;
 	}
 
@@ -1015,7 +1016,7 @@ err:
  *
  * free all allocations and delete the partitions.
  */
-static int spear_smi_remove(struct platform_device *pdev)
+static int __devexit spear_smi_remove(struct platform_device *pdev)
 {
 	struct spear_smi *dev;
 	struct spear_snor_flash *flash;
@@ -1091,9 +1092,20 @@ static struct platform_driver spear_smi_driver = {
 #endif
 	},
 	.probe = spear_smi_probe,
-	.remove = spear_smi_remove,
+	.remove = __devexit_p(spear_smi_remove),
 };
-module_platform_driver(spear_smi_driver);
+
+static int spear_smi_init(void)
+{
+	return platform_driver_register(&spear_smi_driver);
+}
+module_init(spear_smi_init);
+
+static void spear_smi_exit(void)
+{
+	platform_driver_unregister(&spear_smi_driver);
+}
+module_exit(spear_smi_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ashish Priyadarshi, Shiraz Hashim <shiraz.hashim@st.com>");

@@ -11,21 +11,20 @@
  * published by the Free Software Foundation.
  */
 #include <linux/kernel.h>
-#include <linux/init.h>
 #include <linux/acpi.h>
 #include <linux/efi.h>
 #include <linux/efi-bgrt.h>
 
 struct acpi_table_bgrt *bgrt_tab;
-void *__initdata bgrt_image;
-size_t __initdata bgrt_image_size;
+void *bgrt_image;
+size_t bgrt_image_size;
 
 struct bmp_header {
 	u16 id;
 	u32 size;
 } __packed;
 
-void __init efi_bgrt_init(void)
+void efi_bgrt_init(void)
 {
 	acpi_status status;
 	void __iomem *image;
@@ -40,8 +39,6 @@ void __init efi_bgrt_init(void)
 	if (ACPI_FAILURE(status))
 		return;
 
-	if (bgrt_tab->header.length < sizeof(*bgrt_tab))
-		return;
 	if (bgrt_tab->version != 1)
 		return;
 	if (bgrt_tab->image_type != 0 || !bgrt_tab->image_address)

@@ -2035,23 +2035,25 @@ static int put_rxbuf_data(struct urb *urb, struct hso_serial *serial)
 	tty = tty_port_tty_get(&serial->port);
 
 	/* Push data to tty */
-	write_length_remaining = urb->actual_length -
-		serial->curr_rx_urb_offset;
-	D1("data to push to tty");
-	while (write_length_remaining) {
-		if (tty && test_bit(TTY_THROTTLED, &tty->flags)) {
-			tty_kref_put(tty);
-			return -1;
+	if (tty) {
+		write_length_remaining = urb->actual_length -
+			serial->curr_rx_urb_offset;
+		D1("data to push to tty");
+		while (write_length_remaining) {
+			if (test_bit(TTY_THROTTLED, &tty->flags)) {
+				tty_kref_put(tty);
+				return -1;
+			}
+			curr_write_len =  tty_insert_flip_string
+				(tty, urb->transfer_buffer +
+				 serial->curr_rx_urb_offset,
+				 write_length_remaining);
+			serial->curr_rx_urb_offset += curr_write_len;
+			write_length_remaining -= curr_write_len;
+			tty_flip_buffer_push(tty);
 		}
-		curr_write_len = tty_insert_flip_string(&serial->port,
-			urb->transfer_buffer + serial->curr_rx_urb_offset,
-			write_length_remaining);
-		serial->curr_rx_urb_offset += curr_write_len;
-		write_length_remaining -= curr_write_len;
-		tty_flip_buffer_push(&serial->port);
+		tty_kref_put(tty);
 	}
-	tty_kref_put(tty);
-
 	if (write_length_remaining == 0) {
 		serial->curr_rx_urb_offset = 0;
 		serial->rx_urb_filled[hso_urb_to_index(serial, urb)] = 0;
@@ -2272,7 +2274,6 @@ static void hso_serial_common_free(struct hso_serial *serial)
 	/* unlink and free TX URB */
 	usb_free_urb(serial->tx_urb);
 	kfree(serial->tx_data);
-	tty_port_destroy(&serial->port);
 }
 
 static int hso_serial_common_create(struct hso_serial *serial, int num_urbs,
@@ -2282,11 +2283,11 @@ static int hso_serial_common_create(struct hso_serial *serial, int num_urbs,
 	int minor;
 	int i;
 
-	tty_port_init(&serial->port);
-
 	minor = get_free_serial_index();
 	if (minor < 0)
 		goto exit;
+
+	tty_port_init(&serial->port);
 
 	/* register our minor number */
 	serial->parent->dev = tty_port_register_device(&serial->port, tty_drv,
@@ -2315,8 +2316,10 @@ static int hso_serial_common_create(struct hso_serial *serial, int num_urbs,
 		serial->rx_urb[i]->transfer_buffer_length = 0;
 		serial->rx_data[i] = kzalloc(serial->rx_data_length,
 					     GFP_KERNEL);
-		if (!serial->rx_data[i])
+		if (!serial->rx_data[i]) {
+			dev_err(dev, "%s - Out of memory\n", __func__);
 			goto exit;
+		}
 	}
 
 	/* TX, allocate urb and initialize */
@@ -2332,12 +2335,15 @@ static int hso_serial_common_create(struct hso_serial *serial, int num_urbs,
 	serial->tx_buffer_count = 0;
 	serial->tx_data_length = tx_size;
 	serial->tx_data = kzalloc(serial->tx_data_length, GFP_KERNEL);
-	if (!serial->tx_data)
+	if (!serial->tx_data) {
+		dev_err(dev, "%s - Out of memory\n", __func__);
 		goto exit;
-
+	}
 	serial->tx_buffer = kzalloc(serial->tx_data_length, GFP_KERNEL);
-	if (!serial->tx_buffer)
+	if (!serial->tx_buffer) {
+		dev_err(dev, "%s - Out of memory\n", __func__);
 		goto exit;
+	}
 
 	return 0;
 exit:
@@ -2573,8 +2579,10 @@ static struct hso_device *hso_create_net_device(struct usb_interface *interface,
 		}
 		hso_net->mux_bulk_rx_buf_pool[i] = kzalloc(MUX_BULK_RX_BUF_SIZE,
 							   GFP_KERNEL);
-		if (!hso_net->mux_bulk_rx_buf_pool[i])
+		if (!hso_net->mux_bulk_rx_buf_pool[i]) {
+			dev_err(&interface->dev, "Could not allocate rx buf\n");
 			goto exit;
+		}
 	}
 	hso_net->mux_bulk_tx_urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!hso_net->mux_bulk_tx_urb) {
@@ -2582,8 +2590,10 @@ static struct hso_device *hso_create_net_device(struct usb_interface *interface,
 		goto exit;
 	}
 	hso_net->mux_bulk_tx_buf = kzalloc(MUX_BULK_TX_BUF_SIZE, GFP_KERNEL);
-	if (!hso_net->mux_bulk_tx_buf)
+	if (!hso_net->mux_bulk_tx_buf) {
+		dev_err(&interface->dev, "Could not allocate tx buf\n");
 		goto exit;
+	}
 
 	add_net_device(hso_dev);
 
@@ -2807,8 +2817,10 @@ struct hso_shared_int *hso_create_shared_int(struct usb_interface *interface)
 	mux->shared_intr_buf =
 		kzalloc(le16_to_cpu(mux->intr_endp->wMaxPacketSize),
 			GFP_KERNEL);
-	if (!mux->shared_intr_buf)
+	if (!mux->shared_intr_buf) {
+		dev_err(&interface->dev, "Could not allocate intr buf?\n");
 		goto exit;
+	}
 
 	mutex_init(&mux->shared_int_lock);
 

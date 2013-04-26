@@ -755,18 +755,14 @@ int ccw_device_tm_intrg(struct ccw_device *cdev)
 }
 EXPORT_SYMBOL(ccw_device_tm_intrg);
 
-/**
- * ccw_device_get_schid - obtain a subchannel id
- * @cdev: device to obtain the id for
- * @schid: where to fill in the values
- */
-void ccw_device_get_schid(struct ccw_device *cdev, struct subchannel_id *schid)
-{
-	struct subchannel *sch = to_subchannel(cdev->dev.parent);
+// FIXME: these have to go:
 
-	*schid = sch->schid;
+int
+_ccw_device_get_subchannel_number(struct ccw_device *cdev)
+{
+	return cdev->private->schid.sch_no;
 }
-EXPORT_SYMBOL_GPL(ccw_device_get_schid);
+
 
 MODULE_LICENSE("GPL");
 EXPORT_SYMBOL(ccw_device_set_options_mask);
@@ -781,4 +777,5 @@ EXPORT_SYMBOL(ccw_device_start_timeout_key);
 EXPORT_SYMBOL(ccw_device_start_key);
 EXPORT_SYMBOL(ccw_device_get_ciw);
 EXPORT_SYMBOL(ccw_device_get_path_mask);
+EXPORT_SYMBOL(_ccw_device_get_subchannel_number);
 EXPORT_SYMBOL_GPL(ccw_device_get_chp_desc);

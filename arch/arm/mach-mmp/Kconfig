@@ -89,8 +89,6 @@ config MACH_MMP_DT
 	select CPU_PXA168
 	select CPU_PXA910
 	select USE_OF
-	select PINCTRL
-	select PINCTRL_SINGLE
 	help
 	  Include support for Marvell MMP2 based platforms using
 	  the device tree. Needn't select any other machine while
@@ -101,8 +99,6 @@ config MACH_MMP2_DT
 	depends on !CPU_MOHAWK
 	select CPU_MMP2
 	select USE_OF
-	select PINCTRL
-	select PINCTRL_SINGLE
 	help
 	  Include support for Marvell MMP2 based platforms using
 	  the device tree.

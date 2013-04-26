@@ -1452,6 +1452,20 @@ static int dac33_soc_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+static int dac33_soc_suspend(struct snd_soc_codec *codec)
+{
+	dac33_set_bias_level(codec, SND_SOC_BIAS_OFF);
+
+	return 0;
+}
+
+static int dac33_soc_resume(struct snd_soc_codec *codec)
+{
+	dac33_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+
+	return 0;
+}
+
 static struct snd_soc_codec_driver soc_codec_dev_tlv320dac33 = {
 	.read = dac33_read_reg_cache,
 	.write = dac33_write_locked,
@@ -1462,6 +1476,8 @@ static struct snd_soc_codec_driver soc_codec_dev_tlv320dac33 = {
 	.reg_cache_default = dac33_reg,
 	.probe = dac33_soc_probe,
 	.remove = dac33_soc_remove,
+	.suspend = dac33_soc_suspend,
+	.resume = dac33_soc_resume,
 
 	.controls = dac33_snd_controls,
 	.num_controls = ARRAY_SIZE(dac33_snd_controls),
@@ -1498,8 +1514,8 @@ static struct snd_soc_dai_driver dac33_dai = {
 	.ops = &dac33_dai_ops,
 };
 
-static int dac33_i2c_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id)
+static int __devinit dac33_i2c_probe(struct i2c_client *client,
+				     const struct i2c_device_id *id)
 {
 	struct tlv320dac33_platform_data *pdata;
 	struct tlv320dac33_priv *dac33;
@@ -1570,7 +1586,7 @@ err_gpio:
 	return ret;
 }
 
-static int dac33_i2c_remove(struct i2c_client *client)
+static int __devexit dac33_i2c_remove(struct i2c_client *client)
 {
 	struct tlv320dac33_priv *dac33 = i2c_get_clientdata(client);
 
@@ -1601,7 +1617,7 @@ static struct i2c_driver tlv320dac33_i2c_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe		= dac33_i2c_probe,
-	.remove		= dac33_i2c_remove,
+	.remove		= __devexit_p(dac33_i2c_remove),
 	.id_table	= tlv320dac33_i2c_id,
 };
 

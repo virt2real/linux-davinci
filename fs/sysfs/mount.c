@@ -10,7 +10,7 @@
  * Please see Documentation/filesystems/sysfs.txt for more information.
  */
 
-#define DEBUG
+#define DEBUG 
 
 #include <linux/fs.h>
 #include <linux/mount.h>
@@ -19,7 +19,6 @@
 #include <linux/module.h>
 #include <linux/magic.h>
 #include <linux/slab.h>
-#include <linux/user_namespace.h>
 
 #include "sysfs.h"
 
@@ -112,9 +111,6 @@ static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 	struct super_block *sb;
 	int error;
 
-	if (!(flags & MS_KERNMOUNT) && !current_user_ns()->may_mount_sysfs)
-		return ERR_PTR(-EPERM);
-
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return ERR_PTR(-ENOMEM);
@@ -153,7 +149,6 @@ static struct file_system_type sysfs_fs_type = {
 	.name		= "sysfs",
 	.mount		= sysfs_mount,
 	.kill_sb	= sysfs_kill_sb,
-	.fs_flags	= FS_USERNS_MOUNT,
 };
 
 int __init sysfs_init(void)

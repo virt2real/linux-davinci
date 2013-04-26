@@ -34,7 +34,6 @@
 #include "ext2.h"
 #include "acl.h"
 #include "xip.h"
-#include "xattr.h"
 
 static int __ext2_write_inode(struct inode *inode, int do_sync);
 
@@ -89,7 +88,6 @@ void ext2_evict_inode(struct inode * inode)
 		inode->i_size = 0;
 		if (inode->i_blocks)
 			ext2_truncate_blocks(inode, 0);
-		ext2_xattr_delete_inode(inode);
 	}
 
 	invalidate_inode_buffers(inode);
@@ -497,10 +495,6 @@ static int ext2_alloc_branch(struct inode *inode,
 		 * parent to disk.
 		 */
 		bh = sb_getblk(inode->i_sb, new_blocks[n-1]);
-		if (unlikely(!bh)) {
-			err = -ENOMEM;
-			goto failed;
-		}
 		branch[n].bh = bh;
 		lock_buffer(bh);
 		memset(bh->b_data, 0, blocksize);
@@ -528,14 +522,6 @@ static int ext2_alloc_branch(struct inode *inode,
 			sync_dirty_buffer(bh);
 	}
 	*blks = num;
-	return err;
-
-failed:
-	for (i = 1; i < n; i++)
-		bforget(branch[i].bh);
-	for (i = 0; i < indirect_blks; i++)
-		ext2_free_blocks(inode, new_blocks[i], 1);
-	ext2_free_blocks(inode, new_blocks[i], num);
 	return err;
 }
 

@@ -345,27 +345,19 @@ int xt_find_revision(u8 af, const char *name, u8 revision, int target,
 }
 EXPORT_SYMBOL_GPL(xt_find_revision);
 
-static char *
-textify_hooks(char *buf, size_t size, unsigned int mask, uint8_t nfproto)
+static char *textify_hooks(char *buf, size_t size, unsigned int mask)
 {
-	static const char *const inetbr_names[] = {
+	static const char *const names[] = {
 		"PREROUTING", "INPUT", "FORWARD",
 		"OUTPUT", "POSTROUTING", "BROUTING",
 	};
-	static const char *const arp_names[] = {
-		"INPUT", "FORWARD", "OUTPUT",
-	};
-	const char *const *names;
-	unsigned int i, max;
+	unsigned int i;
 	char *p = buf;
 	bool np = false;
 	int res;
 
-	names = (nfproto == NFPROTO_ARP) ? arp_names : inetbr_names;
-	max   = (nfproto == NFPROTO_ARP) ? ARRAY_SIZE(arp_names) :
-	                                   ARRAY_SIZE(inetbr_names);
 	*p = '\0';
-	for (i = 0; i < max; ++i) {
+	for (i = 0; i < ARRAY_SIZE(names); ++i) {
 		if (!(mask & (1 << i)))
 			continue;
 		res = snprintf(p, size, "%s%s", np ? "/" : "", names[i]);
@@ -410,10 +402,8 @@ int xt_check_match(struct xt_mtchk_param *par,
 		pr_err("%s_tables: %s match: used from hooks %s, but only "
 		       "valid from %s\n",
 		       xt_prefix[par->family], par->match->name,
-		       textify_hooks(used, sizeof(used), par->hook_mask,
-		                     par->family),
-		       textify_hooks(allow, sizeof(allow), par->match->hooks,
-		                     par->family));
+		       textify_hooks(used, sizeof(used), par->hook_mask),
+		       textify_hooks(allow, sizeof(allow), par->match->hooks));
 		return -EINVAL;
 	}
 	if (par->match->proto && (par->match->proto != proto || inv_proto)) {
@@ -585,10 +575,8 @@ int xt_check_target(struct xt_tgchk_param *par,
 		pr_err("%s_tables: %s target: used from hooks %s, but only "
 		       "usable from %s\n",
 		       xt_prefix[par->family], par->target->name,
-		       textify_hooks(used, sizeof(used), par->hook_mask,
-		                     par->family),
-		       textify_hooks(allow, sizeof(allow), par->target->hooks,
-		                     par->family));
+		       textify_hooks(used, sizeof(used), par->hook_mask),
+		       textify_hooks(allow, sizeof(allow), par->target->hooks));
 		return -EINVAL;
 	}
 	if (par->target->proto && (par->target->proto != proto || inv_proto)) {
@@ -1323,12 +1311,12 @@ int xt_proto_init(struct net *net, u_int8_t af)
 out_remove_matches:
 	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
-	remove_proc_entry(buf, net->proc_net);
+	proc_net_remove(net, buf);
 
 out_remove_tables:
 	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TABLES, sizeof(buf));
-	remove_proc_entry(buf, net->proc_net);
+	proc_net_remove(net, buf);
 out:
 	return -1;
 #endif
@@ -1342,15 +1330,15 @@ void xt_proto_fini(struct net *net, u_int8_t af)
 
 	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TABLES, sizeof(buf));
-	remove_proc_entry(buf, net->proc_net);
+	proc_net_remove(net, buf);
 
 	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TARGETS, sizeof(buf));
-	remove_proc_entry(buf, net->proc_net);
+	proc_net_remove(net, buf);
 
 	strlcpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
-	remove_proc_entry(buf, net->proc_net);
+	proc_net_remove(net, buf);
 #endif /*CONFIG_PROC_FS*/
 }
 EXPORT_SYMBOL_GPL(xt_proto_fini);

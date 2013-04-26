@@ -9,6 +9,9 @@
             on the license terms.
 
 *****************************************************************************/
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /************************************************************************************
  * Segmentation of primitives in upstream and downstream segment
@@ -51,5 +54,9 @@ typedef u16 CsrPrim;
 #define NUMBER_OF_CSR_FW_MISC_EVENTS        (CSR_SDIO_PROBE_PRIM - CSR_SYNERGY_EVENT_CLASS_MISC_BASE + 1)
 
 #define CSR_ENV_PRIM                        ((u16) (0x00FF | CSR_SYNERGY_EVENT_CLASS_MISC_BASE))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CSR_PRIM_DEFS_H__ */

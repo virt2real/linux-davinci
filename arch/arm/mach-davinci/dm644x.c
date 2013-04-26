@@ -12,11 +12,11 @@
 #include <linux/clk.h>
 #include <linux/serial_8250.h>
 #include <linux/platform_device.h>
-#include <linux/platform_data/edma.h>
 
 #include <asm/mach/map.h>
 
 #include <mach/cputype.h>
+#include <mach/edma.h>
 #include <mach/irqs.h>
 #include <mach/psc.h>
 #include <mach/mux.h>
@@ -310,7 +310,7 @@ static struct clk_lookup dm644x_clks[] = {
 	CLK("i2c_davinci.1", NULL, &i2c_clk),
 	CLK("palm_bk3710", NULL, &ide_clk),
 	CLK("davinci-mcbsp", NULL, &asp_clk),
-	CLK("dm6441-mmc.0", NULL, &mmcsd_clk),
+	CLK("davinci_mmc.0", NULL, &mmcsd_clk),
 	CLK(NULL, "spi", &spi_clk),
 	CLK(NULL, "gpio", &gpio_clk),
 	CLK(NULL, "usb", &usb_clk),
@@ -669,14 +669,19 @@ static struct resource dm644x_osd_resources[] = {
 	},
 };
 
+static struct osd_platform_data dm644x_osd_data = {
+	.vpbe_type     = VPBE_VERSION_1,
+};
+
 static struct platform_device dm644x_osd_dev = {
-	.name		= DM644X_VPBE_OSD_SUBDEV_NAME,
+	.name		= VPBE_OSD_SUBDEV_NAME,
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(dm644x_osd_resources),
 	.resource	= dm644x_osd_resources,
 	.dev		= {
 		.dma_mask		= &dm644x_video_dma_mask,
 		.coherent_dma_mask	= DMA_BIT_MASK(32),
+		.platform_data		= &dm644x_osd_data,
 	},
 };
 
@@ -746,11 +751,12 @@ static struct platform_device dm644x_vpbe_display = {
 };
 
 static struct venc_platform_data dm644x_venc_pdata = {
+	.venc_type	= VPBE_VERSION_1,
 	.setup_clock	= dm644x_venc_setup_clock,
 };
 
 static struct platform_device dm644x_venc_dev = {
-	.name		= DM644X_VPBE_VENC_SUBDEV_NAME,
+	.name		= VPBE_VENC_SUBDEV_NAME,
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(dm644x_venc_resources),
 	.resource	= dm644x_venc_resources,

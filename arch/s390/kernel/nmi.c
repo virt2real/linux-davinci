@@ -254,7 +254,7 @@ void notrace s390_do_machine_check(struct pt_regs *regs)
 	int umode;
 
 	nmi_enter();
-	inc_irq_stat(NMI_NMI);
+	kstat_cpu(smp_processor_id()).irqs[NMI_NMI]++;
 	mci = (struct mci *) &S390_lowcore.mcck_interruption_code;
 	mcck = &__get_cpu_var(cpu_mcck);
 	umode = user_mode(regs);
@@ -293,7 +293,7 @@ void notrace s390_do_machine_check(struct pt_regs *regs)
 			 * retry this instruction.
 			 */
 			spin_lock(&ipd_lock);
-			tmp = get_tod_clock();
+			tmp = get_clock();
 			if (((tmp - last_ipd) >> 12) < MAX_IPD_TIME)
 				ipd_count++;
 			else

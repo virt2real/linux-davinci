@@ -34,8 +34,6 @@
 #include <asm/kvm_book3s.h>
 #include <asm/mmu_context.h>
 #include <asm/switch_to.h>
-#include <asm/firmware.h>
-#include <asm/hvcall.h>
 #include <linux/gfp.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
@@ -54,6 +52,8 @@ static int kvmppc_handle_ext(struct kvm_vcpu *vcpu, unsigned int exit_nr,
 #define MSR_USER32 MSR_USER
 #define MSR_USER64 MSR_USER
 #define HW_PAGE_SIZE PAGE_SIZE
+#define __hard_irq_disable local_irq_disable
+#define __hard_irq_enable local_irq_enable
 #endif
 
 void kvmppc_core_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
@@ -66,7 +66,7 @@ void kvmppc_core_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	svcpu->slb_max = to_book3s(vcpu)->slb_shadow_max;
 	svcpu_put(svcpu);
 #endif
-	vcpu->cpu = smp_processor_id();
+
 #ifdef CONFIG_PPC_BOOK3S_32
 	current->thread.kvm_shadow_vcpu = to_book3s(vcpu)->shadow_vcpu;
 #endif
@@ -83,71 +83,17 @@ void kvmppc_core_vcpu_put(struct kvm_vcpu *vcpu)
 	svcpu_put(svcpu);
 #endif
 
-	kvmppc_giveup_ext(vcpu, MSR_FP | MSR_VEC | MSR_VSX);
-	vcpu->cpu = -1;
+	kvmppc_giveup_ext(vcpu, MSR_FP);
+	kvmppc_giveup_ext(vcpu, MSR_VEC);
+	kvmppc_giveup_ext(vcpu, MSR_VSX);
 }
-
-int kvmppc_core_check_requests(struct kvm_vcpu *vcpu)
-{
-	int r = 1; /* Indicate we want to get back into the guest */
-
-	/* We misuse TLB_FLUSH to indicate that we want to clear
-	   all shadow cache entries */
-	if (kvm_check_request(KVM_REQ_TLB_FLUSH, vcpu))
-		kvmppc_mmu_pte_flush(vcpu, 0, 0);
-
-	return r;
-}
-
-/************* MMU Notifiers *************/
-
-int kvm_unmap_hva(struct kvm *kvm, unsigned long hva)
-{
-	trace_kvm_unmap_hva(hva);
-
-	/*
-	 * Flush all shadow tlb entries everywhere. This is slow, but
-	 * we are 100% sure that we catch the to be unmapped page
-	 */
-	kvm_flush_remote_tlbs(kvm);
-
-	return 0;
-}
-
-int kvm_unmap_hva_range(struct kvm *kvm, unsigned long start, unsigned long end)
-{
-	/* kvm_unmap_hva flushes everything anyways */
-	kvm_unmap_hva(kvm, start);
-
-	return 0;
-}
-
-int kvm_age_hva(struct kvm *kvm, unsigned long hva)
-{
-	/* XXX could be more clever ;) */
-	return 0;
-}
-
-int kvm_test_age_hva(struct kvm *kvm, unsigned long hva)
-{
-	/* XXX could be more clever ;) */
-	return 0;
-}
-
-void kvm_set_spte_hva(struct kvm *kvm, unsigned long hva, pte_t pte)
-{
-	/* The page will get remapped properly on its next fault */
-	kvm_unmap_hva(kvm, hva);
-}
-
-/*****************************************/
 
 static void kvmppc_recalc_shadow_msr(struct kvm_vcpu *vcpu)
 {
 	ulong smsr = vcpu->arch.shared->msr;
 
 	/* Guest MSR values */
-	smsr &= MSR_FE0 | MSR_FE1 | MSR_SF | MSR_SE | MSR_BE;
+	smsr &= MSR_FE0 | MSR_FE1 | MSR_SF | MSR_SE | MSR_BE | MSR_DE;
 	/* Process MSR values */
 	smsr |= MSR_ME | MSR_RI | MSR_IR | MSR_DR | MSR_PR | MSR_EE;
 	/* External providers the guest reserved */
@@ -433,7 +379,10 @@ int kvmppc_handle_pagefault(struct kvm_run *run, struct kvm_vcpu *vcpu,
 
 static inline int get_fpr_index(int i)
 {
-	return i * TS_FPRWIDTH;
+#ifdef CONFIG_VSX
+	i *= 2;
+#endif
+	return i;
 }
 
 /* Give up external provider (FPU, Altivec, VSX) */
@@ -447,49 +396,41 @@ void kvmppc_giveup_ext(struct kvm_vcpu *vcpu, ulong msr)
 	u64 *thread_fpr = (u64*)t->fpr;
 	int i;
 
-	/*
-	 * VSX instructions can access FP and vector registers, so if
-	 * we are giving up VSX, make sure we give up FP and VMX as well.
-	 */
-	if (msr & MSR_VSX)
-		msr |= MSR_FP | MSR_VEC;
-
-	msr &= vcpu->arch.guest_owned_ext;
-	if (!msr)
+	if (!(vcpu->arch.guest_owned_ext & msr))
 		return;
 
 #ifdef DEBUG_EXT
 	printk(KERN_INFO "Giving up ext 0x%lx\n", msr);
 #endif
 
-	if (msr & MSR_FP) {
-		/*
-		 * Note that on CPUs with VSX, giveup_fpu stores
-		 * both the traditional FP registers and the added VSX
-		 * registers into thread.fpr[].
-		 */
+	switch (msr) {
+	case MSR_FP:
 		giveup_fpu(current);
 		for (i = 0; i < ARRAY_SIZE(vcpu->arch.fpr); i++)
 			vcpu_fpr[i] = thread_fpr[get_fpr_index(i)];
 
 		vcpu->arch.fpscr = t->fpscr.val;
-
-#ifdef CONFIG_VSX
-		if (cpu_has_feature(CPU_FTR_VSX))
-			for (i = 0; i < ARRAY_SIZE(vcpu->arch.vsr) / 2; i++)
-				vcpu_vsx[i] = thread_fpr[get_fpr_index(i) + 1];
-#endif
-	}
-
+		break;
+	case MSR_VEC:
 #ifdef CONFIG_ALTIVEC
-	if (msr & MSR_VEC) {
 		giveup_altivec(current);
 		memcpy(vcpu->arch.vr, t->vr, sizeof(vcpu->arch.vr));
 		vcpu->arch.vscr = t->vscr;
-	}
 #endif
+		break;
+	case MSR_VSX:
+#ifdef CONFIG_VSX
+		__giveup_vsx(current);
+		for (i = 0; i < ARRAY_SIZE(vcpu->arch.vsr); i++)
+			vcpu_vsx[i] = thread_fpr[get_fpr_index(i) + 1];
+#endif
+		break;
+	default:
+		BUG();
+	}
 
-	vcpu->arch.guest_owned_ext &= ~(msr | MSR_VSX);
+	vcpu->arch.guest_owned_ext &= ~msr;
+	current->thread.regs->msr &= ~msr;
 	kvmppc_recalc_shadow_msr(vcpu);
 }
 
@@ -549,27 +490,10 @@ static int kvmppc_handle_ext(struct kvm_vcpu *vcpu, unsigned int exit_nr,
 		return RESUME_GUEST;
 	}
 
-	if (msr == MSR_VSX) {
-		/* No VSX?  Give an illegal instruction interrupt */
-#ifdef CONFIG_VSX
-		if (!cpu_has_feature(CPU_FTR_VSX))
-#endif
-		{
-			kvmppc_core_queue_program(vcpu, SRR1_PROGILL);
-			return RESUME_GUEST;
-		}
-
-		/*
-		 * We have to load up all the FP and VMX registers before
-		 * we can let the guest use VSX instructions.
-		 */
-		msr = MSR_FP | MSR_VEC | MSR_VSX;
-	}
-
-	/* See if we already own all the ext(s) needed */
-	msr &= ~vcpu->arch.guest_owned_ext;
-	if (!msr)
+	/* We already own the ext */
+	if (vcpu->arch.guest_owned_ext & msr) {
 		return RESUME_GUEST;
+	}
 
 #ifdef DEBUG_EXT
 	printk(KERN_INFO "Loading up ext 0x%lx\n", msr);
@@ -577,28 +501,36 @@ static int kvmppc_handle_ext(struct kvm_vcpu *vcpu, unsigned int exit_nr,
 
 	current->thread.regs->msr |= msr;
 
-	if (msr & MSR_FP) {
+	switch (msr) {
+	case MSR_FP:
 		for (i = 0; i < ARRAY_SIZE(vcpu->arch.fpr); i++)
 			thread_fpr[get_fpr_index(i)] = vcpu_fpr[i];
-#ifdef CONFIG_VSX
-		for (i = 0; i < ARRAY_SIZE(vcpu->arch.vsr) / 2; i++)
-			thread_fpr[get_fpr_index(i) + 1] = vcpu_vsx[i];
-#endif
+
 		t->fpscr.val = vcpu->arch.fpscr;
 		t->fpexc_mode = 0;
 		kvmppc_load_up_fpu();
-	}
-
-	if (msr & MSR_VEC) {
+		break;
+	case MSR_VEC:
 #ifdef CONFIG_ALTIVEC
 		memcpy(t->vr, vcpu->arch.vr, sizeof(vcpu->arch.vr));
 		t->vscr = vcpu->arch.vscr;
 		t->vrsave = -1;
 		kvmppc_load_up_altivec();
 #endif
+		break;
+	case MSR_VSX:
+#ifdef CONFIG_VSX
+		for (i = 0; i < ARRAY_SIZE(vcpu->arch.vsr); i++)
+			thread_fpr[get_fpr_index(i) + 1] = vcpu_vsx[i];
+		kvmppc_load_up_vsx();
+#endif
+		break;
+	default:
+		BUG();
 	}
 
 	vcpu->arch.guest_owned_ext |= msr;
+
 	kvmppc_recalc_shadow_msr(vcpu);
 
 	return RESUME_GUEST;
@@ -608,18 +540,18 @@ int kvmppc_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu,
                        unsigned int exit_nr)
 {
 	int r = RESUME_HOST;
-	int s;
 
 	vcpu->stat.sum_exits++;
 
 	run->exit_reason = KVM_EXIT_UNKNOWN;
 	run->ready_for_interrupt_injection = 1;
 
-	/* We get here with MSR.EE=1 */
+	/* We get here with MSR.EE=0, so enable it to be a nice citizen */
+	__hard_irq_enable();
 
-	trace_kvm_exit(exit_nr, vcpu);
-	kvm_guest_exit();
-
+	trace_kvm_book3s_exit(exit_nr, vcpu);
+	preempt_enable();
+	kvm_resched(vcpu);
 	switch (exit_nr) {
 	case BOOK3S_INTERRUPT_INST_STORAGE:
 	{
@@ -762,11 +694,6 @@ program_interrupt:
 			run->exit_reason = KVM_EXIT_MMIO;
 			r = RESUME_HOST_NV;
 			break;
-		case EMULATE_DO_PAPR:
-			run->exit_reason = KVM_EXIT_PAPR_HCALL;
-			vcpu->arch.hcall_needed = 1;
-			r = RESUME_HOST_NV;
-			break;
 		default:
 			BUG();
 		}
@@ -875,6 +802,7 @@ program_interrupt:
 	}
 	}
 
+	preempt_disable();
 	if (!(r & RESUME_HOST)) {
 		/* To avoid clobbering exit_reason, only check for signals if
 		 * we aren't already exiting to userspace for some other
@@ -886,13 +814,20 @@ program_interrupt:
 		 * and if we really did time things so badly, then we just exit
 		 * again due to a host external interrupt.
 		 */
-		local_irq_disable();
-		s = kvmppc_prepare_to_enter(vcpu);
-		if (s <= 0) {
-			local_irq_enable();
-			r = s;
+		__hard_irq_disable();
+		if (signal_pending(current)) {
+			__hard_irq_enable();
+#ifdef EXIT_DEBUG
+			printk(KERN_EMERG "KVM: Going back to host\n");
+#endif
+			vcpu->stat.signal_exits++;
+			run->exit_reason = KVM_EXIT_INTR;
+			r = -EINTR;
 		} else {
-			kvmppc_lazy_ee_enable();
+			/* In case an interrupt came in that was triggered
+			 * from userspace (like DEC), we need to check what
+			 * to inject now! */
+			kvmppc_core_prepare_to_enter(vcpu);
 		}
 	}
 
@@ -964,59 +899,34 @@ int kvm_arch_vcpu_ioctl_set_sregs(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
-int kvmppc_get_one_reg(struct kvm_vcpu *vcpu, u64 id, union kvmppc_one_reg *val)
+int kvm_vcpu_ioctl_get_one_reg(struct kvm_vcpu *vcpu, struct kvm_one_reg *reg)
 {
-	int r = 0;
+	int r = -EINVAL;
 
-	switch (id) {
+	switch (reg->id) {
 	case KVM_REG_PPC_HIOR:
-		*val = get_reg_val(id, to_book3s(vcpu)->hior);
+		r = copy_to_user((u64 __user *)(long)reg->addr,
+				&to_book3s(vcpu)->hior, sizeof(u64));
 		break;
-#ifdef CONFIG_VSX
-	case KVM_REG_PPC_VSR0 ... KVM_REG_PPC_VSR31: {
-		long int i = id - KVM_REG_PPC_VSR0;
-
-		if (!cpu_has_feature(CPU_FTR_VSX)) {
-			r = -ENXIO;
-			break;
-		}
-		val->vsxval[0] = vcpu->arch.fpr[i];
-		val->vsxval[1] = vcpu->arch.vsr[i];
-		break;
-	}
-#endif /* CONFIG_VSX */
 	default:
-		r = -EINVAL;
 		break;
 	}
 
 	return r;
 }
 
-int kvmppc_set_one_reg(struct kvm_vcpu *vcpu, u64 id, union kvmppc_one_reg *val)
+int kvm_vcpu_ioctl_set_one_reg(struct kvm_vcpu *vcpu, struct kvm_one_reg *reg)
 {
-	int r = 0;
+	int r = -EINVAL;
 
-	switch (id) {
+	switch (reg->id) {
 	case KVM_REG_PPC_HIOR:
-		to_book3s(vcpu)->hior = set_reg_val(id, *val);
-		to_book3s(vcpu)->hior_explicit = true;
+		r = copy_from_user(&to_book3s(vcpu)->hior,
+				   (u64 __user *)(long)reg->addr, sizeof(u64));
+		if (!r)
+			to_book3s(vcpu)->hior_explicit = true;
 		break;
-#ifdef CONFIG_VSX
-	case KVM_REG_PPC_VSR0 ... KVM_REG_PPC_VSR31: {
-		long int i = id - KVM_REG_PPC_VSR0;
-
-		if (!cpu_has_feature(CPU_FTR_VSX)) {
-			r = -ENXIO;
-			break;
-		}
-		vcpu->arch.fpr[i] = val->vsxval[0];
-		vcpu->arch.vsr[i] = val->vsxval[1];
-		break;
-	}
-#endif /* CONFIG_VSX */
 	default:
-		r = -EINVAL;
 		break;
 	}
 
@@ -1110,6 +1020,8 @@ int kvmppc_vcpu_run(struct kvm_run *kvm_run, struct kvm_vcpu *vcpu)
 #endif
 	ulong ext_msr;
 
+	preempt_disable();
+
 	/* Check if we can run the vcpu at all */
 	if (!vcpu->arch.sane) {
 		kvm_run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
@@ -1117,16 +1029,21 @@ int kvmppc_vcpu_run(struct kvm_run *kvm_run, struct kvm_vcpu *vcpu)
 		goto out;
 	}
 
+	kvmppc_core_prepare_to_enter(vcpu);
+
 	/*
 	 * Interrupts could be timers for the guest which we have to inject
 	 * again, so let's postpone them until we're in the guest and if we
 	 * really did time things so badly, then we just exit again due to
 	 * a host external interrupt.
 	 */
-	local_irq_disable();
-	ret = kvmppc_prepare_to_enter(vcpu);
-	if (ret <= 0) {
-		local_irq_enable();
+	__hard_irq_disable();
+
+	/* No need to go into the guest when all we do is going out */
+	if (signal_pending(current)) {
+		__hard_irq_enable();
+		kvm_run->exit_reason = KVM_EXIT_INTR;
+		ret = -EINTR;
 		goto out;
 	}
 
@@ -1153,7 +1070,7 @@ int kvmppc_vcpu_run(struct kvm_run *kvm_run, struct kvm_vcpu *vcpu)
 	/* Save VSX state in stack */
 	used_vsr = current->thread.used_vsr;
 	if (used_vsr && (current->thread.regs->msr & MSR_VSX))
-		__giveup_vsx(current);
+			__giveup_vsx(current);
 #endif
 
 	/* Remember the MSR with disabled extensions */
@@ -1163,19 +1080,20 @@ int kvmppc_vcpu_run(struct kvm_run *kvm_run, struct kvm_vcpu *vcpu)
 	if (vcpu->arch.shared->msr & MSR_FP)
 		kvmppc_handle_ext(vcpu, BOOK3S_INTERRUPT_FP_UNAVAIL, MSR_FP);
 
-	kvmppc_lazy_ee_enable();
+	kvm_guest_enter();
 
 	ret = __kvmppc_vcpu_run(kvm_run, vcpu);
 
-	/* No need for kvm_guest_exit. It's done in handle_exit.
-	   We also get here with interrupts enabled. */
-
-	/* Make sure we save the guest FPU/Altivec/VSX state */
-	kvmppc_giveup_ext(vcpu, MSR_FP | MSR_VEC | MSR_VSX);
+	kvm_guest_exit();
 
 	current->thread.regs->msr = ext_msr;
 
-	/* Restore FPU/VSX state from stack */
+	/* Make sure we save the guest FPU/Altivec/VSX state */
+	kvmppc_giveup_ext(vcpu, MSR_FP);
+	kvmppc_giveup_ext(vcpu, MSR_VEC);
+	kvmppc_giveup_ext(vcpu, MSR_VSX);
+
+	/* Restore FPU state from stack */
 	memcpy(current->thread.fpr, fpr, sizeof(current->thread.fpr));
 	current->thread.fpscr.val = fpscr;
 	current->thread.fpexc_mode = fpexc_mode;
@@ -1195,7 +1113,7 @@ int kvmppc_vcpu_run(struct kvm_run *kvm_run, struct kvm_vcpu *vcpu)
 #endif
 
 out:
-	vcpu->mode = OUTSIDE_GUEST_MODE;
+	preempt_enable();
 	return ret;
 }
 
@@ -1263,36 +1181,16 @@ int kvm_vm_ioctl_get_smmu_info(struct kvm *kvm, struct kvm_ppc_smmu_info *info)
 }
 #endif /* CONFIG_PPC64 */
 
-void kvmppc_core_free_memslot(struct kvm_memory_slot *free,
-			      struct kvm_memory_slot *dont)
-{
-}
-
-int kvmppc_core_create_memslot(struct kvm_memory_slot *slot,
-			       unsigned long npages)
-{
-	return 0;
-}
-
 int kvmppc_core_prepare_memory_region(struct kvm *kvm,
-				      struct kvm_memory_slot *memslot,
 				      struct kvm_userspace_memory_region *mem)
 {
 	return 0;
 }
 
 void kvmppc_core_commit_memory_region(struct kvm *kvm,
-				struct kvm_userspace_memory_region *mem,
-				struct kvm_memory_slot old)
+				struct kvm_userspace_memory_region *mem)
 {
 }
-
-void kvmppc_core_flush_memslot(struct kvm *kvm, struct kvm_memory_slot *memslot)
-{
-}
-
-static unsigned int kvm_global_user_count = 0;
-static DEFINE_SPINLOCK(kvm_global_user_count_lock);
 
 int kvmppc_core_init_vm(struct kvm *kvm)
 {
@@ -1300,12 +1198,6 @@ int kvmppc_core_init_vm(struct kvm *kvm)
 	INIT_LIST_HEAD(&kvm->arch.spapr_tce_tables);
 #endif
 
-	if (firmware_has_feature(FW_FEATURE_SET_MODE)) {
-		spin_lock(&kvm_global_user_count_lock);
-		if (++kvm_global_user_count == 1)
-			pSeries_disable_reloc_on_exc();
-		spin_unlock(&kvm_global_user_count_lock);
-	}
 	return 0;
 }
 
@@ -1314,14 +1206,6 @@ void kvmppc_core_destroy_vm(struct kvm *kvm)
 #ifdef CONFIG_PPC64
 	WARN_ON(!list_empty(&kvm->arch.spapr_tce_tables));
 #endif
-
-	if (firmware_has_feature(FW_FEATURE_SET_MODE)) {
-		spin_lock(&kvm_global_user_count_lock);
-		BUG_ON(kvm_global_user_count == 0);
-		if (--kvm_global_user_count == 0)
-			pSeries_enable_reloc_on_exc();
-		spin_unlock(&kvm_global_user_count_lock);
-	}
 }
 
 static int kvmppc_book3s_init(void)

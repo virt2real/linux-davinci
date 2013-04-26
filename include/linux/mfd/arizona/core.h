@@ -75,12 +75,8 @@ enum arizona_type {
 #define ARIZONA_IRQ_DCS_HP_DONE           47
 #define ARIZONA_IRQ_FLL2_CLOCK_OK         48
 #define ARIZONA_IRQ_FLL1_CLOCK_OK         49
-#define ARIZONA_IRQ_MICD_CLAMP_RISE	  50
-#define ARIZONA_IRQ_MICD_CLAMP_FALL	  51
 
-#define ARIZONA_NUM_IRQ                   52
-
-struct snd_soc_dapm_context;
+#define ARIZONA_NUM_IRQ                   50
 
 struct arizona {
 	struct regmap *regmap;
@@ -102,8 +98,6 @@ struct arizona {
 
 	struct mutex clk_lock;
 	int clk32k_ref;
-
-	struct snd_soc_dapm_context *dapm;
 };
 
 int arizona_clk32k_enable(struct arizona *arizona);

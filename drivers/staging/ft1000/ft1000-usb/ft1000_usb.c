@@ -63,13 +63,16 @@ static int ft1000_probe(struct usb_interface *interface,
 	unsigned numaltsetting;
 	int i, ret = 0, size;
 
-	struct ft1000_usb *ft1000dev;
+	struct ft1000_device *ft1000dev;
 	struct ft1000_info *pft1000info = NULL;
 	const struct firmware *dsp_fw;
 
-	ft1000dev = kzalloc(sizeof(struct ft1000_usb), GFP_KERNEL);
-	if (!ft1000dev)
+	ft1000dev = kzalloc(sizeof(struct ft1000_device), GFP_KERNEL);
+
+	if (!ft1000dev) {
+		pr_err("out of memory allocating device structure\n");
 		return -ENOMEM;
+	}
 
 	dev = interface_to_usbdev(interface);
 	DEBUG("ft1000_probe: usb device descriptor info:\n");
@@ -168,11 +171,11 @@ static int ft1000_probe(struct usb_interface *interface,
 	}
 
 	gPollingfailed = FALSE;
-	ft1000dev->pPollThread =
+	pft1000info->pPollThread =
 	    kthread_run(ft1000_poll_thread, ft1000dev, "ft1000_poll");
 
-	if (IS_ERR(ft1000dev->pPollThread)) {
-		ret = PTR_ERR(ft1000dev->pPollThread);
+	if (IS_ERR(pft1000info->pPollThread)) {
+		ret = PTR_ERR(pft1000info->pPollThread);
 		goto err_load;
 	}
 
@@ -197,7 +200,7 @@ static int ft1000_probe(struct usb_interface *interface,
 	if (ret)
 		goto err_proc;
 
-	ft1000dev->NetDevRegDone = 1;
+	pft1000info->NetDevRegDone = 1;
 
 	return 0;
 
@@ -205,7 +208,7 @@ err_proc:
 	unregister_netdev(ft1000dev->net);
 	free_netdev(ft1000dev->net);
 err_thread:
-	kthread_stop(ft1000dev->pPollThread);
+	kthread_stop(pft1000info->pPollThread);
 err_load:
 	kfree(pFileStart);
 err_fw:
@@ -216,7 +219,6 @@ err_fw:
 static void ft1000_disconnect(struct usb_interface *interface)
 {
 	struct ft1000_info *pft1000info;
-	struct ft1000_usb *ft1000dev;
 
 	DEBUG("ft1000_disconnect is called\n");
 
@@ -224,29 +226,28 @@ static void ft1000_disconnect(struct usb_interface *interface)
 	DEBUG("In disconnect pft1000info=%p\n", pft1000info);
 
 	if (pft1000info) {
-		ft1000dev = pft1000info->priv;
 		ft1000_cleanup_proc(pft1000info);
-		if (ft1000dev->pPollThread)
-			kthread_stop(ft1000dev->pPollThread);
+		if (pft1000info->pPollThread)
+			kthread_stop(pft1000info->pPollThread);
 
 		DEBUG("ft1000_disconnect: threads are terminated\n");
 
-		if (ft1000dev->net) {
+		if (pft1000info->pFt1000Dev->net) {
 			DEBUG("ft1000_disconnect: destroy char driver\n");
-			ft1000_destroy_dev(ft1000dev->net);
-			unregister_netdev(ft1000dev->net);
+			ft1000_destroy_dev(pft1000info->pFt1000Dev->net);
+			unregister_netdev(pft1000info->pFt1000Dev->net);
 			DEBUG
 			    ("ft1000_disconnect: network device unregistered\n");
-			free_netdev(ft1000dev->net);
+			free_netdev(pft1000info->pFt1000Dev->net);
 
 		}
 
-		usb_free_urb(ft1000dev->rx_urb);
-		usb_free_urb(ft1000dev->tx_urb);
+		usb_free_urb(pft1000info->pFt1000Dev->rx_urb);
+		usb_free_urb(pft1000info->pFt1000Dev->tx_urb);
 
 		DEBUG("ft1000_disconnect: urb freed\n");
 
-		kfree(ft1000dev);
+		kfree(pft1000info->pFt1000Dev);
 	}
 	kfree(pFileStart);
 

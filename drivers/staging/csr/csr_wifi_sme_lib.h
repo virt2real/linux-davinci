@@ -32,6 +32,11 @@
 # endif
 #endif
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*----------------------------------------------------------------------------*
  *  CsrWifiSmeFreeUpstreamMessageContents
  *
@@ -4299,5 +4304,10 @@ extern const char *CsrWifiSmeDownstreamPrimNames[CSR_WIFI_SME_PRIM_DOWNSTREAM_CO
 
 #define CsrWifiSmeWpsConfigurationCfmSend(dst__, status__) \
     CsrWifiSmeWpsConfigurationCfmSendTo(dst__, CSR_WIFI_SME_IFACEQUEUE, status__)
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CSR_WIFI_SME_LIB_H__ */

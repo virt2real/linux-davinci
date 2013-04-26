@@ -12,7 +12,6 @@ struct pci_root_info {
 	char name[16];
 	unsigned int res_num;
 	struct resource *res;
-	resource_size_t *res_offset;
 	struct pci_sysdata sd;
 #ifdef	CONFIG_PCI_MMCONFIG
 	bool mcfg_added;
@@ -23,7 +22,6 @@ struct pci_root_info {
 };
 
 static bool pci_use_crs = true;
-static bool pci_ignore_seg = false;
 
 static int __init set_use_crs(const struct dmi_system_id *id)
 {
@@ -37,14 +35,7 @@ static int __init set_nouse_crs(const struct dmi_system_id *id)
 	return 0;
 }
 
-static int __init set_ignore_seg(const struct dmi_system_id *id)
-{
-	printk(KERN_INFO "PCI: %s detected: ignoring ACPI _SEG\n", id->ident);
-	pci_ignore_seg = true;
-	return 0;
-}
-
-static const struct dmi_system_id pci_crs_quirks[] __initconst = {
+static const struct dmi_system_id pci_use_crs_table[] __initconst = {
 	/* http://bugzilla.kernel.org/show_bug.cgi?id=14183 */
 	{
 		.callback = set_use_crs,
@@ -107,16 +98,6 @@ static const struct dmi_system_id pci_crs_quirks[] __initconst = {
 			DMI_MATCH(DMI_BIOS_VERSION, "6JET85WW (1.43 )"),
 		},
 	},
-
-	/* https://bugzilla.kernel.org/show_bug.cgi?id=15362 */
-	{
-		.callback = set_ignore_seg,
-		.ident = "HP xw9300",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Hewlett-Packard"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "HP xw9300 Workstation"),
-		},
-	},
 	{}
 };
 
@@ -127,7 +108,7 @@ void __init pci_acpi_crs_quirks(void)
 	if (dmi_get_date(DMI_BIOS_DATE, &year, NULL, NULL) && year < 2008)
 		pci_use_crs = false;
 
-	dmi_check_system(pci_crs_quirks);
+	dmi_check_system(pci_use_crs_table);
 
 	/*
 	 * If the user specifies "pci=use_crs" or "pci=nocrs" explicitly, that
@@ -145,7 +126,7 @@ void __init pci_acpi_crs_quirks(void)
 }
 
 #ifdef	CONFIG_PCI_MMCONFIG
-static int check_segment(u16 seg, struct device *dev, char *estr)
+static int __devinit check_segment(u16 seg, struct device *dev, char *estr)
 {
 	if (seg) {
 		dev_err(dev,
@@ -168,8 +149,9 @@ static int check_segment(u16 seg, struct device *dev, char *estr)
 	return 0;
 }
 
-static int setup_mcfg_map(struct pci_root_info *info, u16 seg, u8 start,
-			  u8 end, phys_addr_t addr)
+static int __devinit setup_mcfg_map(struct pci_root_info *info,
+				    u16 seg, u8 start, u8 end,
+				    phys_addr_t addr)
 {
 	int result;
 	struct device *dev = &info->bridge->dev;
@@ -207,7 +189,7 @@ static void teardown_mcfg_map(struct pci_root_info *info)
 	}
 }
 #else
-static int setup_mcfg_map(struct pci_root_info *info,
+static int __devinit setup_mcfg_map(struct pci_root_info *info,
 				    u16 seg, u8 start, u8 end,
 				    phys_addr_t addr)
 {
@@ -323,7 +305,6 @@ setup_resource(struct acpi_resource *acpi_res, void *data)
 	res->flags = flags;
 	res->start = start;
 	res->end = end;
-	info->res_offset[info->res_num] = addr.translation_offset;
 
 	if (!pci_use_crs) {
 		dev_printk(KERN_DEBUG, &info->bridge->dev,
@@ -393,8 +374,7 @@ static void add_resources(struct pci_root_info *info,
 				 "ignoring host bridge window %pR (conflicts with %s %pR)\n",
 				 res, conflict->name, conflict);
 		else
-			pci_add_resource_offset(resources, res,
-					info->res_offset[i]);
+			pci_add_resource(resources, res);
 	}
 }
 
@@ -402,8 +382,6 @@ static void free_pci_root_info_res(struct pci_root_info *info)
 {
 	kfree(info->res);
 	info->res = NULL;
-	kfree(info->res_offset);
-	info->res_offset = NULL;
 	info->res_num = 0;
 }
 
@@ -454,26 +432,16 @@ probe_pci_root_info(struct pci_root_info *info, struct acpi_device *device,
 		return;
 
 	size = sizeof(*info->res) * info->res_num;
-	info->res = kzalloc(size, GFP_KERNEL);
-	if (!info->res) {
-		info->res_num = 0;
-		return;
-	}
-
-	size = sizeof(*info->res_offset) * info->res_num;
 	info->res_num = 0;
-	info->res_offset = kzalloc(size, GFP_KERNEL);
-	if (!info->res_offset) {
-		kfree(info->res);
-		info->res = NULL;
+	info->res = kzalloc(size, GFP_KERNEL);
+	if (!info->res)
 		return;
-	}
 
 	acpi_walk_resources(device->handle, METHOD_NAME__CRS, setup_resource,
 				info);
 }
 
-struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
+struct pci_bus * __devinit pci_acpi_scan_root(struct acpi_pci_root *root)
 {
 	struct acpi_device *device = root->device;
 	struct pci_root_info *info = NULL;
@@ -486,9 +454,6 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 #ifdef CONFIG_ACPI_NUMA
 	int pxm;
 #endif
-
-	if (pci_ignore_seg)
-		domain = 0;
 
 	if (domain && !pci_domains_supported) {
 		printk(KERN_WARNING "pci_bus %04x:%02x: "
@@ -521,7 +486,6 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 	sd = &info->sd;
 	sd->domain = domain;
 	sd->node = node;
-	sd->acpi = device->handle;
 	/*
 	 * Maybe the desired pci bus has been already scanned. In such case
 	 * it is unnecessary to scan the pci bus with the given domain,busnum.
@@ -591,14 +555,6 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 	}
 
 	return bus;
-}
-
-int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
-{
-	struct pci_sysdata *sd = bridge->bus->sysdata;
-
-	ACPI_HANDLE_SET(&bridge->dev, sd->acpi);
-	return 0;
 }
 
 int __init pci_acpi_init(void)

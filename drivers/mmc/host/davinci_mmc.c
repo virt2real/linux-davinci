@@ -34,10 +34,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/edma.h>
 #include <linux/mmc/mmc.h>
-#include <linux/of.h>
-#include <linux/of_device.h>
 
-#include <linux/platform_data/edma.h>
 #include <linux/platform_data/mmc-davinci.h>
 
 /*
@@ -525,16 +522,14 @@ static int __init davinci_acquire_dma_channels(struct mmc_davinci_host *host)
 	dma_cap_set(DMA_SLAVE, mask);
 
 	host->dma_tx =
-		dma_request_slave_channel_compat(mask, edma_filter_fn,
-				&host->txdma, mmc_dev(host->mmc), "tx");
+		dma_request_channel(mask, edma_filter_fn, &host->txdma);
 	if (!host->dma_tx) {
 		dev_err(mmc_dev(host->mmc), "Can't get dma_tx channel\n");
 		return -ENODEV;
 	}
 
 	host->dma_rx =
-		dma_request_slave_channel_compat(mask, edma_filter_fn,
-				&host->rxdma, mmc_dev(host->mmc), "rx");
+		dma_request_channel(mask, edma_filter_fn, &host->rxdma);
 	if (!host->dma_rx) {
 		dev_err(mmc_dev(host->mmc), "Can't get dma_rx channel\n");
 		r = -ENODEV;
@@ -1162,86 +1157,16 @@ static void __init init_mmcsd_host(struct mmc_davinci_host *host)
 	mmc_davinci_reset_ctrl(host, 0);
 }
 
-static struct platform_device_id davinci_mmc_devtype[] = {
-	{
-		.name	= "dm6441-mmc",
-		.driver_data = MMC_CTLR_VERSION_1,
-	}, {
-		.name	= "da830-mmc",
-		.driver_data = MMC_CTLR_VERSION_2,
-	},
-	{},
-};
-MODULE_DEVICE_TABLE(platform, davinci_mmc_devtype);
-
-static const struct of_device_id davinci_mmc_dt_ids[] = {
-	{
-		.compatible = "ti,dm6441-mmc",
-		.data = &davinci_mmc_devtype[MMC_CTLR_VERSION_1],
-	},
-	{
-		.compatible = "ti,da830-mmc",
-		.data = &davinci_mmc_devtype[MMC_CTLR_VERSION_2],
-	},
-	{},
-};
-MODULE_DEVICE_TABLE(of, davinci_mmc_dt_ids);
-
-static struct davinci_mmc_config
-	*mmc_parse_pdata(struct platform_device *pdev)
-{
-	struct device_node *np;
-	struct davinci_mmc_config *pdata = pdev->dev.platform_data;
-	const struct of_device_id *match =
-		of_match_device(of_match_ptr(davinci_mmc_dt_ids), &pdev->dev);
-	u32 data;
-
-	np = pdev->dev.of_node;
-	if (!np)
-		return pdata;
-
-	pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata) {
-		dev_err(&pdev->dev, "Failed to allocate memory for struct davinci_mmc_config\n");
-		goto nodata;
-	}
-
-	if (match)
-		pdev->id_entry = match->data;
-
-	if (of_property_read_u32(np, "max-frequency", &pdata->max_freq))
-		dev_info(&pdev->dev, "'max-frequency' property not specified, defaulting to 25MHz\n");
-
-	of_property_read_u32(np, "bus-width", &data);
-	switch (data) {
-	case 1:
-	case 4:
-	case 8:
-		pdata->wires = data;
-		break;
-	default:
-		pdata->wires = 1;
-		dev_info(&pdev->dev, "Unsupported buswidth, defaulting to 1 bit\n");
-	}
-nodata:
-	return pdata;
-}
-
 static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 {
-	struct davinci_mmc_config *pdata = NULL;
+	struct davinci_mmc_config *pdata = pdev->dev.platform_data;
 	struct mmc_davinci_host *host = NULL;
 	struct mmc_host *mmc = NULL;
 	struct resource *r, *mem = NULL;
 	int ret = 0, irq = 0;
 	size_t mem_size;
-	const struct platform_device_id *id_entry;
 
-	pdata = mmc_parse_pdata(pdev);
-	if (pdata == NULL) {
-		dev_err(&pdev->dev, "Couldn't get platform data\n");
-		return -ENOENT;
-	}
+	/* REVISIT:  when we're fully converted, fail if pdata is NULL */
 
 	ret = -ENODEV;
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1265,15 +1190,13 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 
 	r = platform_get_resource(pdev, IORESOURCE_DMA, 0);
 	if (!r)
-		dev_warn(&pdev->dev, "RX DMA resource not specified\n");
-	else
-		host->rxdma = r->start;
+		goto out;
+	host->rxdma = r->start;
 
 	r = platform_get_resource(pdev, IORESOURCE_DMA, 1);
 	if (!r)
-		dev_warn(&pdev->dev, "TX DMA resource not specified\n");
-	else
-		host->txdma = r->start;
+		goto out;
+	host->txdma = r->start;
 
 	host->mem_res = mem;
 	host->base = ioremap(mem->start, mem_size);
@@ -1314,9 +1237,7 @@ static int __init davinci_mmcsd_probe(struct platform_device *pdev)
 	if (pdata && (pdata->wires == 8))
 		mmc->caps |= (MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA);
 
-	id_entry = platform_get_device_id(pdev);
-	if (id_entry)
-		host->version = id_entry->driver_data;
+	host->version = pdata->version;
 
 	mmc->ops = &mmc_davinci_ops;
 	mmc->f_min = 312500;
@@ -1485,10 +1406,8 @@ static struct platform_driver davinci_mmcsd_driver = {
 		.name	= "davinci_mmc",
 		.owner	= THIS_MODULE,
 		.pm	= davinci_mmcsd_pm_ops,
-		.of_match_table = of_match_ptr(davinci_mmc_dt_ids),
 	},
 	.remove		= __exit_p(davinci_mmcsd_remove),
-	.id_table	= davinci_mmc_devtype,
 };
 
 static int __init davinci_mmcsd_init(void)

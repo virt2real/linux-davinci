@@ -16,10 +16,12 @@
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
-#include <linux/clk-provider.h>
+#include <linux/clk.h>
 #include <linux/io.h>
 
 #include <asm/div64.h>
+
+#include <plat/clock.h>
 
 #include "soc.h"
 #include "clock.h"
@@ -76,7 +78,7 @@
  * (assuming that it is counting N upwards), or -2 if the enclosing loop
  * should skip to the next iteration (again assuming N is increasing).
  */
-static int _dpll_test_fint(struct clk_hw_omap *clk, u8 n)
+static int _dpll_test_fint(struct clk *clk, u8 n)
 {
 	struct dpll_data *dd;
 	long fint, fint_min, fint_max;
@@ -85,7 +87,7 @@ static int _dpll_test_fint(struct clk_hw_omap *clk, u8 n)
 	dd = clk->dpll_data;
 
 	/* DPLL divider must result in a valid jitter correction val */
-	fint = __clk_get_rate(__clk_get_parent(clk->hw.clk)) / n;
+	fint = __clk_get_rate(__clk_get_parent(clk)) / n;
 
 	if (cpu_is_omap24xx()) {
 		/* Should not be called for OMAP2, so warn if it is called */
@@ -186,15 +188,15 @@ static int _dpll_test_mult(int *m, int n, unsigned long *new_rate,
 }
 
 /* Public functions */
-u8 omap2_init_dpll_parent(struct clk_hw *hw)
+
+void omap2_init_dpll_parent(struct clk *clk)
 {
-	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
 	u32 v;
 	struct dpll_data *dd;
 
 	dd = clk->dpll_data;
 	if (!dd)
-		return -EINVAL;
+		return;
 
 	v = __raw_readl(dd->control_reg);
 	v &= dd->enable_mask;
@@ -204,18 +206,18 @@ u8 omap2_init_dpll_parent(struct clk_hw *hw)
 	if (cpu_is_omap24xx()) {
 		if (v == OMAP2XXX_EN_DPLL_LPBYPASS ||
 		    v == OMAP2XXX_EN_DPLL_FRBYPASS)
-			return 1;
+			clk_reparent(clk, dd->clk_bypass);
 	} else if (cpu_is_omap34xx()) {
 		if (v == OMAP3XXX_EN_DPLL_LPBYPASS ||
 		    v == OMAP3XXX_EN_DPLL_FRBYPASS)
-			return 1;
+			clk_reparent(clk, dd->clk_bypass);
 	} else if (soc_is_am33xx() || cpu_is_omap44xx()) {
 		if (v == OMAP4XXX_EN_DPLL_LPBYPASS ||
 		    v == OMAP4XXX_EN_DPLL_FRBYPASS ||
 		    v == OMAP4XXX_EN_DPLL_MNBYPASS)
-			return 1;
+			clk_reparent(clk, dd->clk_bypass);
 	}
-	return 0;
+	return;
 }
 
 /**
@@ -232,7 +234,7 @@ u8 omap2_init_dpll_parent(struct clk_hw *hw)
  * locked, or the appropriate bypass rate if the DPLL is bypassed, or 0
  * if the clock @clk is not a DPLL.
  */
-unsigned long omap2_get_dpll_rate(struct clk_hw_omap *clk)
+u32 omap2_get_dpll_rate(struct clk *clk)
 {
 	long long dpll_clk;
 	u32 dpll_mult, dpll_div, v;
@@ -288,10 +290,8 @@ unsigned long omap2_get_dpll_rate(struct clk_hw_omap *clk)
  * (expensive) function again.  Returns ~0 if the target rate cannot
  * be rounded, or the rounded rate upon success.
  */
-long omap2_dpll_round_rate(struct clk_hw *hw, unsigned long target_rate,
-		unsigned long *parent_rate)
+long omap2_dpll_round_rate(struct clk *clk, unsigned long target_rate)
 {
-	struct clk_hw_omap *clk = to_clk_hw_omap(hw);
 	int m, n, r, scaled_max_m;
 	unsigned long scaled_rt_rp;
 	unsigned long new_rate = 0;
@@ -305,7 +305,7 @@ long omap2_dpll_round_rate(struct clk_hw *hw, unsigned long target_rate,
 	dd = clk->dpll_data;
 
 	ref_rate = __clk_get_rate(dd->clk_ref);
-	clk_name = __clk_get_name(hw->clk);
+	clk_name = __clk_get_name(clk);
 	pr_debug("clock: %s: starting DPLL round_rate, target rate %ld\n",
 		 clk_name, target_rate);
 

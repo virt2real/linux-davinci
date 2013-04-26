@@ -18,7 +18,6 @@
  */
 
 #include <linux/kthread.h>
-#include <linux/file.h>
 #include <linux/net.h>
 
 #include "usbip_common.h"
@@ -190,8 +189,7 @@ static ssize_t store_attach(struct device *dev, struct device_attribute *attr,
 	if (valid_args(rhport, speed) < 0)
 		return -EINVAL;
 
-	/* Extract socket from fd. */
-	/* The correct way to clean this up is to fput(socket->file). */
+	/* check sockfd */
 	socket = sockfd_to_socket(sockfd);
 	if (!socket)
 		return -EINVAL;
@@ -207,8 +205,6 @@ static ssize_t store_attach(struct device *dev, struct device_attribute *attr,
 		/* end of the lock */
 		spin_unlock(&vdev->ud.lock);
 		spin_unlock(&the_controller->lock);
-
-		fput(socket->file);
 
 		dev_err(dev, "port %d already used\n", rhport);
 		return -EINVAL;

@@ -240,14 +240,13 @@ static const struct ath_ops ath5k_common_ops = {
 * Driver Initialization *
 \***********************/
 
-static void ath5k_reg_notifier(struct wiphy *wiphy,
-			       struct regulatory_request *request)
+static int ath5k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct ath5k_hw *ah = hw->priv;
 	struct ath_regulatory *regulatory = ath5k_hw_regulatory(ah);
 
-	ath_reg_notifier_apply(wiphy, request, regulatory);
+	return ath_reg_notifier_apply(wiphy, request, regulatory);
 }
 
 /********************\
@@ -512,9 +511,8 @@ ath5k_update_bssid_mask_and_opmode(struct ath5k_hw *ah,
 		ath5k_vif_iter(&iter_data, vif->addr, vif);
 
 	/* Get list of all active MAC addresses */
-	ieee80211_iterate_active_interfaces_atomic(
-		ah->hw, IEEE80211_IFACE_ITER_RESUME_ALL,
-		ath5k_vif_iter, &iter_data);
+	ieee80211_iterate_active_interfaces_atomic(ah->hw, ath5k_vif_iter,
+						   &iter_data);
 	memcpy(ah->bssidmask, iter_data.mask, ETH_ALEN);
 
 	ah->opmode = iter_data.opmode;
@@ -850,7 +848,7 @@ ath5k_txbuf_free_skb(struct ath5k_hw *ah, struct ath5k_buf *bf)
 		return;
 	dma_unmap_single(ah->dev, bf->skbaddr, bf->skb->len,
 			DMA_TO_DEVICE);
-	ieee80211_free_txskb(ah->hw, bf->skb);
+	dev_kfree_skb_any(bf->skb);
 	bf->skb = NULL;
 	bf->skbaddr = 0;
 	bf->desc->ds_data = 0;
@@ -1337,9 +1335,20 @@ ath5k_receive_frame(struct ath5k_hw *ah, struct sk_buff *skb,
 	 * 15bit only. that means TSF extension has to be done within
 	 * 32768usec (about 32ms). it might be necessary to move this to
 	 * the interrupt handler, like it is done in madwifi.
+	 *
+	 * Unfortunately we don't know when the hardware takes the rx
+	 * timestamp (beginning of phy frame, data frame, end of rx?).
+	 * The only thing we know is that it is hardware specific...
+	 * On AR5213 it seems the rx timestamp is at the end of the
+	 * frame, but I'm not sure.
+	 *
+	 * NOTE: mac80211 defines mactime at the beginning of the first
+	 * data symbol. Since we don't have any time references it's
+	 * impossible to comply to that. This affects IBSS merge only
+	 * right now, so it's not too bad...
 	 */
 	rxs->mactime = ath5k_extend_tsf(ah, rs->rs_tstamp);
-	rxs->flag |= RX_FLAG_MACTIME_END;
+	rxs->flag |= RX_FLAG_MACTIME_MPDU;
 
 	rxs->freq = ah->curchan->center_freq;
 	rxs->band = ah->curchan->band;
@@ -1566,7 +1575,7 @@ ath5k_tx_queue(struct ieee80211_hw *hw, struct sk_buff *skb,
 	return;
 
 drop_packet:
-	ieee80211_free_txskb(hw, skb);
+	dev_kfree_skb_any(skb);
 }
 
 static void
@@ -2425,7 +2434,7 @@ static const struct ieee80211_iface_combination if_comb = {
 	.num_different_channels = 1,
 };
 
-int
+int __devinit
 ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 {
 	struct ieee80211_hw *hw = ah->hw;
@@ -2851,7 +2860,7 @@ static void ath5k_reset_work(struct work_struct *work)
 	mutex_unlock(&ah->lock);
 }
 
-static int
+static int __devinit
 ath5k_init(struct ieee80211_hw *hw)
 {
 
@@ -3036,9 +3045,8 @@ ath5k_any_vif_assoc(struct ath5k_hw *ah)
 	iter_data.need_set_hw_addr = false;
 	iter_data.found_active = true;
 
-	ieee80211_iterate_active_interfaces_atomic(
-		ah->hw, IEEE80211_IFACE_ITER_RESUME_ALL,
-		ath5k_vif_iter, &iter_data);
+	ieee80211_iterate_active_interfaces_atomic(ah->hw, ath5k_vif_iter,
+						   &iter_data);
 	return iter_data.any_assoc;
 }
 

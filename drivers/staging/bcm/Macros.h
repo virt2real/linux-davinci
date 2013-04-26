@@ -162,11 +162,13 @@
 #define GPIO_MODE_REGISTER       0x0F000034
 #define GPIO_PIN_STATE_REGISTER  0x0F000038
 
-struct bcm_link_state {
-	unsigned char ucLinkStatus;
-	unsigned char bIdleMode;
-	unsigned char bShutdownMode;
-};
+
+typedef struct _LINK_STATE {
+	UCHAR ucLinkStatus;
+	UCHAR bIdleMode;
+	UCHAR bShutdownMode;
+} LINK_STATE, *PLINK_STATE;
+
 
 enum enLinkStatus {
 	WAIT_FOR_SYNC = 1,
@@ -180,12 +182,13 @@ enum enLinkStatus {
 	COMPLETE_WAKE_UP_NOTIFICATION_FRM_FW = 9
 };
 
-enum bcm_phs_dsc_action {
+typedef enum _E_PHS_DSC_ACTION {
 	eAddPHSRule = 0,
 	eSetPHSRule,
 	eDeletePHSRule,
 	eDeleteAllPHSRules
-};
+} E_PHS_DSC_ACTION;
+
 
 #define CM_CONTROL_NEWDSX_MULTICLASSIFIER_REQ  0x89 /* Host to Mac */
 #define CM_CONTROL_NEWDSX_MULTICLASSIFIER_RESP 0xA9 /* Mac to Host */
@@ -321,18 +324,18 @@ enum bcm_phs_dsc_action {
 #define HPM_CONFIG_MSW    0x0F000D58
 
 #define T3B 0xbece0310
-enum bcm_nvm_type {
+typedef enum eNVM_TYPE {
 	NVM_AUTODETECT = 0,
 	NVM_EEPROM,
 	NVM_FLASH,
 	NVM_UNKNOWN
-};
+} NVM_TYPE;
 
-enum bcm_pmu_modes {
+typedef enum ePMU_MODES {
 	HYBRID_MODE_7C  = 0,
 	INTERNAL_MODE_6 = 1,
 	HYBRID_MODE_6   = 2
-};
+} PMU_MODE;
 
 #define MAX_RDM_WRM_RETIRES 1
 

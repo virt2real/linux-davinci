@@ -155,7 +155,7 @@ enum si_stat_indexes {
 	/* Number of watchdog pretimeouts. */
 	SI_STAT_watchdog_pretimeouts,
 
-	/* Number of asynchronous messages received. */
+	/* Number of asyncronous messages received. */
 	SI_STAT_incoming_messages,
 
 
@@ -1208,16 +1208,6 @@ static int smi_num; /* Used to sequence the SMIs */
 #define DEFAULT_REGSPACING	1
 #define DEFAULT_REGSIZE		1
 
-#ifdef CONFIG_ACPI
-static bool          si_tryacpi = 1;
-#endif
-#ifdef CONFIG_DMI
-static bool          si_trydmi = 1;
-#endif
-static bool          si_tryplatform = 1;
-#ifdef CONFIG_PCI
-static bool          si_trypci = 1;
-#endif
 static bool          si_trydefaults = 1;
 static char          *si_type[SI_MAX_PARMS];
 #define MAX_SI_TYPE_STR 30
@@ -1248,25 +1238,6 @@ MODULE_PARM_DESC(hotmod, "Add and remove interfaces.  See"
 		 " Documentation/IPMI.txt in the kernel sources for the"
 		 " gory details.");
 
-#ifdef CONFIG_ACPI
-module_param_named(tryacpi, si_tryacpi, bool, 0);
-MODULE_PARM_DESC(tryacpi, "Setting this to zero will disable the"
-		 " default scan of the interfaces identified via ACPI");
-#endif
-#ifdef CONFIG_DMI
-module_param_named(trydmi, si_trydmi, bool, 0);
-MODULE_PARM_DESC(trydmi, "Setting this to zero will disable the"
-		 " default scan of the interfaces identified via DMI");
-#endif
-module_param_named(tryplatform, si_tryplatform, bool, 0);
-MODULE_PARM_DESC(tryacpi, "Setting this to zero will disable the"
-		 " default scan of the interfaces identified via platform"
-		 " interfaces like openfirmware");
-#ifdef CONFIG_PCI
-module_param_named(trypci, si_trypci, bool, 0);
-MODULE_PARM_DESC(tryacpi, "Setting this to zero will disable the"
-		 " default scan of the interfaces identified via pci");
-#endif
 module_param_named(trydefaults, si_trydefaults, bool, 0);
 MODULE_PARM_DESC(trydefaults, "Setting this to 'false' will disable the"
 		 " default scan of the KCS and SMIC interface at the standard"
@@ -1865,7 +1836,7 @@ static int hotmod_handler(const char *val, struct kernel_param *kp)
 	return rv;
 }
 
-static int hardcode_find_bmc(void)
+static int __devinit hardcode_find_bmc(void)
 {
 	int ret = -ENODEV;
 	int             i;
@@ -2052,7 +2023,7 @@ struct SPMITable {
 	s8      spmi_id[1]; /* A '\0' terminated array starts here. */
 };
 
-static int try_init_spmi(struct SPMITable *spmi)
+static int __devinit try_init_spmi(struct SPMITable *spmi)
 {
 	struct smi_info  *info;
 
@@ -2135,7 +2106,7 @@ static int try_init_spmi(struct SPMITable *spmi)
 	return 0;
 }
 
-static void spmi_find_bmc(void)
+static void __devinit spmi_find_bmc(void)
 {
 	acpi_status      status;
 	struct SPMITable *spmi;
@@ -2157,7 +2128,7 @@ static void spmi_find_bmc(void)
 	}
 }
 
-static int ipmi_pnp_probe(struct pnp_dev *dev,
+static int __devinit ipmi_pnp_probe(struct pnp_dev *dev,
 				    const struct pnp_device_id *dev_id)
 {
 	struct acpi_device *acpi_dev;
@@ -2257,7 +2228,7 @@ err_free:
 	return -EINVAL;
 }
 
-static void ipmi_pnp_remove(struct pnp_dev *dev)
+static void __devexit ipmi_pnp_remove(struct pnp_dev *dev)
 {
 	struct smi_info *info = pnp_get_drvdata(dev);
 
@@ -2272,7 +2243,7 @@ static const struct pnp_device_id pnp_dev_table[] = {
 static struct pnp_driver ipmi_pnp_driver = {
 	.name		= DEVICE_NAME,
 	.probe		= ipmi_pnp_probe,
-	.remove		= ipmi_pnp_remove,
+	.remove		= __devexit_p(ipmi_pnp_remove),
 	.id_table	= pnp_dev_table,
 };
 #endif
@@ -2287,7 +2258,7 @@ struct dmi_ipmi_data {
 	u8              slave_addr;
 };
 
-static int decode_dmi(const struct dmi_header *dm,
+static int __devinit decode_dmi(const struct dmi_header *dm,
 				struct dmi_ipmi_data *dmi)
 {
 	const u8	*data = (const u8 *)dm;
@@ -2349,7 +2320,7 @@ static int decode_dmi(const struct dmi_header *dm,
 	return 0;
 }
 
-static void try_init_dmi(struct dmi_ipmi_data *ipmi_data)
+static void __devinit try_init_dmi(struct dmi_ipmi_data *ipmi_data)
 {
 	struct smi_info *info;
 
@@ -2417,7 +2388,7 @@ static void try_init_dmi(struct dmi_ipmi_data *ipmi_data)
 		kfree(info);
 }
 
-static void dmi_find_bmc(void)
+static void __devinit dmi_find_bmc(void)
 {
 	const struct dmi_device *dev = NULL;
 	struct dmi_ipmi_data data;
@@ -2453,7 +2424,7 @@ static void ipmi_pci_cleanup(struct smi_info *info)
 	pci_disable_device(pdev);
 }
 
-static int ipmi_pci_probe_regspacing(struct smi_info *info)
+static int __devinit ipmi_pci_probe_regspacing(struct smi_info *info)
 {
 	if (info->si_type == SI_KCS) {
 		unsigned char	status;
@@ -2485,7 +2456,7 @@ static int ipmi_pci_probe_regspacing(struct smi_info *info)
 	return DEFAULT_REGSPACING;
 }
 
-static int ipmi_pci_probe(struct pci_dev *pdev,
+static int __devinit ipmi_pci_probe(struct pci_dev *pdev,
 				    const struct pci_device_id *ent)
 {
 	int rv;
@@ -2558,7 +2529,7 @@ static int ipmi_pci_probe(struct pci_dev *pdev,
 	return 0;
 }
 
-static void ipmi_pci_remove(struct pci_dev *pdev)
+static void __devexit ipmi_pci_remove(struct pci_dev *pdev)
 {
 	struct smi_info *info = pci_get_drvdata(pdev);
 	cleanup_one_si(info);
@@ -2575,12 +2546,12 @@ static struct pci_driver ipmi_pci_driver = {
 	.name =         DEVICE_NAME,
 	.id_table =     ipmi_pci_devices,
 	.probe =        ipmi_pci_probe,
-	.remove =       ipmi_pci_remove,
+	.remove =       __devexit_p(ipmi_pci_remove),
 };
 #endif /* CONFIG_PCI */
 
 static struct of_device_id ipmi_match[];
-static int ipmi_probe(struct platform_device *dev)
+static int __devinit ipmi_probe(struct platform_device *dev)
 {
 #ifdef CONFIG_OF
 	const struct of_device_id *match;
@@ -2664,7 +2635,7 @@ static int ipmi_probe(struct platform_device *dev)
 	return 0;
 }
 
-static int ipmi_remove(struct platform_device *dev)
+static int __devexit ipmi_remove(struct platform_device *dev)
 {
 #ifdef CONFIG_OF
 	cleanup_one_si(dev_get_drvdata(&dev->dev));
@@ -2690,7 +2661,7 @@ static struct platform_driver ipmi_driver = {
 		.of_match_table = ipmi_match,
 	},
 	.probe		= ipmi_probe,
-	.remove		= ipmi_remove,
+	.remove		= __devexit_p(ipmi_remove),
 };
 
 static int wait_for_msg_done(struct smi_info *smi_info)
@@ -3076,7 +3047,7 @@ static inline void wait_for_timer_and_thread(struct smi_info *smi_info)
 	}
 }
 
-static struct ipmi_default_vals
+static __devinitdata struct ipmi_default_vals
 {
 	int type;
 	int port;
@@ -3088,7 +3059,7 @@ static struct ipmi_default_vals
 	{ .port = 0 }
 };
 
-static void default_find_bmc(void)
+static void __devinit default_find_bmc(void)
 {
 	struct smi_info *info;
 	int             i;
@@ -3388,7 +3359,7 @@ static int try_smi_init(struct smi_info *new_smi)
 	return rv;
 }
 
-static int init_ipmi_si(void)
+static int __devinit init_ipmi_si(void)
 {
 	int  i;
 	char *str;
@@ -3400,14 +3371,12 @@ static int init_ipmi_si(void)
 		return 0;
 	initialized = 1;
 
-	if (si_tryplatform) {
-		rv = platform_driver_register(&ipmi_driver);
-		if (rv) {
-			printk(KERN_ERR PFX "Unable to register "
-			       "driver: %d\n", rv);
-			return rv;
-		}
+	rv = platform_driver_register(&ipmi_driver);
+	if (rv) {
+		printk(KERN_ERR PFX "Unable to register driver: %d\n", rv);
+		return rv;
 	}
+
 
 	/* Parse out the si_type string into its components. */
 	str = si_type_str;
@@ -3431,31 +3400,24 @@ static int init_ipmi_si(void)
 		return 0;
 
 #ifdef CONFIG_PCI
-	if (si_trypci) {
-		rv = pci_register_driver(&ipmi_pci_driver);
-		if (rv)
-			printk(KERN_ERR PFX "Unable to register "
-			       "PCI driver: %d\n", rv);
-		else
-			pci_registered = 1;
-	}
+	rv = pci_register_driver(&ipmi_pci_driver);
+	if (rv)
+		printk(KERN_ERR PFX "Unable to register PCI driver: %d\n", rv);
+	else
+		pci_registered = 1;
 #endif
 
 #ifdef CONFIG_ACPI
-	if (si_tryacpi) {
-		pnp_register_driver(&ipmi_pnp_driver);
-		pnp_registered = 1;
-	}
+	pnp_register_driver(&ipmi_pnp_driver);
+	pnp_registered = 1;
 #endif
 
 #ifdef CONFIG_DMI
-	if (si_trydmi)
-		dmi_find_bmc();
+	dmi_find_bmc();
 #endif
 
 #ifdef CONFIG_ACPI
-	if (si_tryacpi)
-		spmi_find_bmc();
+	spmi_find_bmc();
 #endif
 
 	/* We prefer devices with interrupts, but in the case of a machine

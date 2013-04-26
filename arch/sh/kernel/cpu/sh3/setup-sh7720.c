@@ -20,7 +20,6 @@
 #include <linux/serial_sci.h>
 #include <linux/sh_timer.h>
 #include <linux/sh_intc.h>
-#include <linux/usb/ohci_pdriver.h>
 #include <asm/rtc.h>
 #include <cpu/serial.h>
 
@@ -104,15 +103,12 @@ static struct resource usb_ohci_resources[] = {
 
 static u64 usb_ohci_dma_mask = 0xffffffffUL;
 
-static struct usb_ohci_pdata usb_ohci_pdata;
-
 static struct platform_device usb_ohci_device = {
-	.name		= "ohci-platform",
+	.name		= "sh_ohci",
 	.id		= -1,
 	.dev = {
 		.dma_mask		= &usb_ohci_dma_mask,
 		.coherent_dma_mask	= 0xffffffff,
-		.platform_data		= &usb_ohci_pdata,
 	},
 	.num_resources	= ARRAY_SIZE(usb_ohci_resources),
 	.resource	= usb_ohci_resources,

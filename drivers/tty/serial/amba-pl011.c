@@ -56,7 +56,8 @@
 #include <linux/of_device.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/sizes.h>
-#include <linux/io.h>
+
+#include <asm/io.h>
 
 #define UART_NR			14
 
@@ -698,7 +699,7 @@ static void pl011_dma_rx_chars(struct uart_amba_port *uap,
 			       u32 pending, bool use_buf_b,
 			       bool readfifo)
 {
-	struct tty_port *port = &uap->port.state->port;
+	struct tty_struct *tty = uap->port.state->port.tty;
 	struct pl011_sgbuf *sgbuf = use_buf_b ?
 		&uap->dmarx.sgbuf_b : &uap->dmarx.sgbuf_a;
 	struct device *dev = uap->dmarx.chan->device->dev;
@@ -715,7 +716,8 @@ static void pl011_dma_rx_chars(struct uart_amba_port *uap,
 		 * Note that tty_insert_flip_buf() tries to take as many chars
 		 * as it can.
 		 */
-		dma_count = tty_insert_flip_string(port, sgbuf->buf, pending);
+		dma_count = tty_insert_flip_string(uap->port.state->port.tty,
+						   sgbuf->buf, pending);
 
 		/* Return buffer to device */
 		dma_sync_sg_for_device(dev, &sgbuf->sg, 1, DMA_FROM_DEVICE);
@@ -753,7 +755,7 @@ static void pl011_dma_rx_chars(struct uart_amba_port *uap,
 	dev_vdbg(uap->port.dev,
 		 "Took %d chars from DMA buffer and %d chars from the FIFO\n",
 		 dma_count, fifotaken);
-	tty_flip_buffer_push(port);
+	tty_flip_buffer_push(tty);
 	spin_lock(&uap->port.lock);
 }
 
@@ -1075,10 +1077,12 @@ static void pl011_enable_ms(struct uart_port *port)
 
 static void pl011_rx_chars(struct uart_amba_port *uap)
 {
+	struct tty_struct *tty = uap->port.state->port.tty;
+
 	pl011_fifo_to_tty(uap);
 
 	spin_unlock(&uap->port.lock);
-	tty_flip_buffer_push(&uap->port.state->port);
+	tty_flip_buffer_push(tty);
 	/*
 	 * If we were temporarily out of DMA mode for a while,
 	 * attempt to switch back to DMA mode again.
@@ -1969,8 +1973,7 @@ static int pl011_probe(struct amba_device *dev, const struct amba_id *id)
 		goto out;
 	}
 
-	uap = devm_kzalloc(&dev->dev, sizeof(struct uart_amba_port),
-			   GFP_KERNEL);
+	uap = kzalloc(sizeof(struct uart_amba_port), GFP_KERNEL);
 	if (uap == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -1978,17 +1981,16 @@ static int pl011_probe(struct amba_device *dev, const struct amba_id *id)
 
 	i = pl011_probe_dt_alias(i, &dev->dev);
 
-	base = devm_ioremap(&dev->dev, dev->res.start,
-			    resource_size(&dev->res));
+	base = ioremap(dev->res.start, resource_size(&dev->res));
 	if (!base) {
 		ret = -ENOMEM;
-		goto out;
+		goto free;
 	}
 
 	uap->pinctrl = devm_pinctrl_get(&dev->dev);
 	if (IS_ERR(uap->pinctrl)) {
 		ret = PTR_ERR(uap->pinctrl);
-		goto out;
+		goto unmap;
 	}
 	uap->pins_default = pinctrl_lookup_state(uap->pinctrl,
 						 PINCTRL_STATE_DEFAULT);
@@ -2000,10 +2002,10 @@ static int pl011_probe(struct amba_device *dev, const struct amba_id *id)
 	if (IS_ERR(uap->pins_sleep))
 		dev_dbg(&dev->dev, "could not get sleep pinstate\n");
 
-	uap->clk = devm_clk_get(&dev->dev, NULL);
+	uap->clk = clk_get(&dev->dev, NULL);
 	if (IS_ERR(uap->clk)) {
 		ret = PTR_ERR(uap->clk);
-		goto out;
+		goto unmap;
 	}
 
 	uap->vendor = vendor;
@@ -2036,6 +2038,11 @@ static int pl011_probe(struct amba_device *dev, const struct amba_id *id)
 		amba_set_drvdata(dev, NULL);
 		amba_ports[i] = NULL;
 		pl011_dma_remove(uap);
+		clk_put(uap->clk);
+ unmap:
+		iounmap(base);
+ free:
+		kfree(uap);
 	}
  out:
 	return ret;
@@ -2055,6 +2062,9 @@ static int pl011_remove(struct amba_device *dev)
 			amba_ports[i] = NULL;
 
 	pl011_dma_remove(uap);
+	iounmap(uap->port.membase);
+	clk_put(uap->clk);
+	kfree(uap);
 	return 0;
 }
 

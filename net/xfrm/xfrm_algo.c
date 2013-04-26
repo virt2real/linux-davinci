@@ -35,8 +35,6 @@ static struct xfrm_algo_desc aead_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AES_GCM_ICV8,
 		.sadb_alg_ivlen = 8,
@@ -52,8 +50,6 @@ static struct xfrm_algo_desc aead_list[] = {
 			.icv_truncbits = 96,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AES_GCM_ICV12,
@@ -71,8 +67,6 @@ static struct xfrm_algo_desc aead_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AES_GCM_ICV16,
 		.sadb_alg_ivlen = 8,
@@ -88,8 +82,6 @@ static struct xfrm_algo_desc aead_list[] = {
 			.icv_truncbits = 64,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AES_CCM_ICV8,
@@ -107,8 +99,6 @@ static struct xfrm_algo_desc aead_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AES_CCM_ICV12,
 		.sadb_alg_ivlen = 8,
@@ -125,8 +115,6 @@ static struct xfrm_algo_desc aead_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AES_CCM_ICV16,
 		.sadb_alg_ivlen = 8,
@@ -142,8 +130,6 @@ static struct xfrm_algo_desc aead_list[] = {
 			.icv_truncbits = 128,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_NULL_AES_GMAC,
@@ -165,8 +151,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_AALG_NULL,
 		.sadb_alg_ivlen = 0,
@@ -184,8 +168,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 			.icv_fullbits = 128,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_AALG_MD5HMAC,
@@ -205,8 +187,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_AALG_SHA1HMAC,
 		.sadb_alg_ivlen = 0,
@@ -225,8 +205,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_AALG_SHA2_256HMAC,
 		.sadb_alg_ivlen = 0,
@@ -244,8 +222,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_AALG_SHA2_384HMAC,
 		.sadb_alg_ivlen = 0,
@@ -262,8 +238,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 			.icv_fullbits = 512,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_AALG_SHA2_512HMAC,
@@ -283,8 +257,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_AALG_RIPEMD160HMAC,
 		.sadb_alg_ivlen = 0,
@@ -301,8 +273,6 @@ static struct xfrm_algo_desc aalg_list[] = {
 			.icv_fullbits = 128,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_AALG_AES_XCBC_MAC,
@@ -325,8 +295,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id =	SADB_EALG_NULL,
 		.sadb_alg_ivlen = 0,
@@ -344,8 +312,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 			.defkeybits = 64,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_EALG_DESCBC,
@@ -365,8 +331,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_EALG_3DESCBC,
 		.sadb_alg_ivlen = 8,
@@ -384,8 +348,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 			.defkeybits = 128,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_CASTCBC,
@@ -405,8 +367,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_BLOWFISHCBC,
 		.sadb_alg_ivlen = 8,
@@ -424,8 +384,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 			.defkeybits = 128,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AESCBC,
@@ -445,8 +403,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_SERPENTCBC,
 		.sadb_alg_ivlen = 8,
@@ -464,8 +420,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 			.defkeybits = 128,
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_CAMELLIACBC,
@@ -485,8 +439,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 		}
 	},
 
-	.pfkey_supported = 1,
-
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_TWOFISHCBC,
 		.sadb_alg_ivlen = 8,
@@ -503,8 +455,6 @@ static struct xfrm_algo_desc ealg_list[] = {
 			.defkeybits = 160, /* 128-bit key + 32-bit nonce */
 		}
 	},
-
-	.pfkey_supported = 1,
 
 	.desc = {
 		.sadb_alg_id = SADB_X_EALG_AESCTR,
@@ -523,7 +473,6 @@ static struct xfrm_algo_desc calg_list[] = {
 			.threshold = 90,
 		}
 	},
-	.pfkey_supported = 1,
 	.desc = { .sadb_alg_id = SADB_X_CALG_DEFLATE }
 },
 {
@@ -533,7 +482,6 @@ static struct xfrm_algo_desc calg_list[] = {
 			.threshold = 90,
 		}
 	},
-	.pfkey_supported = 1,
 	.desc = { .sadb_alg_id = SADB_X_CALG_LZS }
 },
 {
@@ -543,7 +491,6 @@ static struct xfrm_algo_desc calg_list[] = {
 			.threshold = 50,
 		}
 	},
-	.pfkey_supported = 1,
 	.desc = { .sadb_alg_id = SADB_X_CALG_LZJH }
 },
 };
@@ -753,7 +700,8 @@ void xfrm_probe_algs(void)
 	}
 
 	for (i = 0; i < ealg_entries(); i++) {
-		status = crypto_has_ablkcipher(ealg_list[i].name, 0, 0);
+		status = crypto_has_blkcipher(ealg_list[i].name, 0,
+					      CRYPTO_ALG_ASYNC);
 		if (ealg_list[i].available != status)
 			ealg_list[i].available = status;
 	}
@@ -767,27 +715,27 @@ void xfrm_probe_algs(void)
 }
 EXPORT_SYMBOL_GPL(xfrm_probe_algs);
 
-int xfrm_count_pfkey_auth_supported(void)
+int xfrm_count_auth_supported(void)
 {
 	int i, n;
 
 	for (i = 0, n = 0; i < aalg_entries(); i++)
-		if (aalg_list[i].available && aalg_list[i].pfkey_supported)
+		if (aalg_list[i].available)
 			n++;
 	return n;
 }
-EXPORT_SYMBOL_GPL(xfrm_count_pfkey_auth_supported);
+EXPORT_SYMBOL_GPL(xfrm_count_auth_supported);
 
-int xfrm_count_pfkey_enc_supported(void)
+int xfrm_count_enc_supported(void)
 {
 	int i, n;
 
 	for (i = 0, n = 0; i < ealg_entries(); i++)
-		if (ealg_list[i].available && ealg_list[i].pfkey_supported)
+		if (ealg_list[i].available)
 			n++;
 	return n;
 }
-EXPORT_SYMBOL_GPL(xfrm_count_pfkey_enc_supported);
+EXPORT_SYMBOL_GPL(xfrm_count_enc_supported);
 
 #if defined(CONFIG_INET_ESP) || defined(CONFIG_INET_ESP_MODULE) || defined(CONFIG_INET6_ESP) || defined(CONFIG_INET6_ESP_MODULE)
 

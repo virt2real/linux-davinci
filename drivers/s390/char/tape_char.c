@@ -273,13 +273,13 @@ tapechar_open (struct inode *inode, struct file *filp)
 	int minor, rc;
 
 	DBF_EVENT(6, "TCHAR:open: %i:%i\n",
-		imajor(file_inode(filp)),
-		iminor(file_inode(filp)));
+		imajor(filp->f_path.dentry->d_inode),
+		iminor(filp->f_path.dentry->d_inode));
 
-	if (imajor(file_inode(filp)) != tapechar_major)
+	if (imajor(filp->f_path.dentry->d_inode) != tapechar_major)
 		return -ENODEV;
 
-	minor = iminor(file_inode(filp));
+	minor = iminor(filp->f_path.dentry->d_inode);
 	device = tape_find_device(minor / TAPE_MINORS_PER_DEV);
 	if (IS_ERR(device)) {
 		DBF_EVENT(3, "TCHAR:open: tape_find_device() failed\n");

@@ -4,7 +4,6 @@
 #include <linux/string.h>
 #include <linux/random.h>
 #include <linux/module.h>
-#include <linux/ptrace.h>
 #include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/cache.h>

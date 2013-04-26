@@ -32,7 +32,6 @@
 #include <linux/debugfs.h>
 #include <linux/irq.h>
 #include <linux/memblock.h>
-#include <linux/of.h>
 
 #include <asm/prom.h>
 #include <asm/rtas.h>
@@ -50,11 +49,11 @@
 #include <asm/btext.h>
 #include <asm/sections.h>
 #include <asm/machdep.h>
+#include <asm/pSeries_reconfig.h>
 #include <asm/pci-bridge.h>
 #include <asm/kexec.h>
 #include <asm/opal.h>
 #include <asm/fadump.h>
-#include <asm/debug.h>
 
 #include <mm/mmu_decl.h>
 
@@ -803,7 +802,7 @@ static int prom_reconfig_notifier(struct notifier_block *nb,
 	int err;
 
 	switch (action) {
-	case OF_RECONFIG_ATTACH_NODE:
+	case PSERIES_RECONFIG_ADD:
 		err = of_finish_dynamic_node(node);
 		if (err < 0)
 			printk(KERN_ERR "finish_node returned %d\n", err);
@@ -822,7 +821,7 @@ static struct notifier_block prom_reconfig_nb = {
 
 static int __init prom_reconfig_setup(void)
 {
-	return of_reconfig_notifier_register(&prom_reconfig_nb);
+	return pSeries_reconfig_notifier_register(&prom_reconfig_nb);
 }
 __initcall(prom_reconfig_setup);
 #endif

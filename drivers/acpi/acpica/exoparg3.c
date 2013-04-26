@@ -1,3 +1,4 @@
+
 /******************************************************************************
  *
  * Module Name: exoparg3 - AML execution - opcodes with 3 arguments
@@ -5,7 +6,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2013, Intel Corp.
+ * Copyright (C) 2000 - 2012, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -157,7 +158,7 @@ acpi_status acpi_ex_opcode_3A_1T_1R(struct acpi_walk_state *walk_state)
 	case AML_MID_OP:	/* Mid (Source[0], Index[1], Length[2], Result[3]) */
 
 		/*
-		 * Create the return object. The Source operand is guaranteed to be
+		 * Create the return object.  The Source operand is guaranteed to be
 		 * either a String or a Buffer, so just use its type.
 		 */
 		return_desc = acpi_ut_create_internal_object((operand[0])->

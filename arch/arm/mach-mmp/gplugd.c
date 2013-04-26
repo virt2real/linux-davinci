@@ -9,7 +9,6 @@
  */
 
 #include <linux/init.h>
-#include <linux/platform_device.h>
 #include <linux/gpio.h>
 
 #include <asm/mach/arch.h>
@@ -195,7 +194,7 @@ MACHINE_START(GPLUGD, "PXA168-based GuruPlug Display (gplugD) Platform")
 	.map_io		= mmp_map_io,
 	.nr_irqs	= MMP_NR_IRQS,
 	.init_irq       = pxa168_init_irq,
-	.init_time	= pxa168_timer_init,
+	.timer          = &pxa168_timer,
 	.init_machine   = gplugd_init,
 	.restart	= pxa168_restart,
 MACHINE_END

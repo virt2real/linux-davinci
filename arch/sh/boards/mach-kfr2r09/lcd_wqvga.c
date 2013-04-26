@@ -283,7 +283,7 @@ void kfr2r09_lcd_start(void *sohandle, struct sh_mobile_lcdc_sys_bus_ops *so)
 #define MAIN_MLED4      0x40
 #define MAIN_MSW        0x80
 
-int kfr2r09_lcd_set_brightness(int brightness)
+static int kfr2r09_lcd_backlight(int on)
 {
 	struct i2c_adapter *a;
 	struct i2c_msg msg;
@@ -295,7 +295,7 @@ int kfr2r09_lcd_set_brightness(int brightness)
 		return -ENODEV;
 
 	buf[0] = 0x00;
-	if (brightness)
+	if (on)
 		buf[1] = CTRL_CPSW | CTRL_C10 | CTRL_CKSW;
 	else
 		buf[1] = 0;
@@ -309,7 +309,7 @@ int kfr2r09_lcd_set_brightness(int brightness)
 		return -ENODEV;
 
 	buf[0] = 0x01;
-	if (brightness)
+	if (on)
 		buf[1] = MAIN_MSW | MAIN_MLED4 | 0x0c;
 	else
 		buf[1] = 0;
@@ -323,4 +323,14 @@ int kfr2r09_lcd_set_brightness(int brightness)
 		return -ENODEV;
 
 	return 0;
+}
+
+void kfr2r09_lcd_on(void)
+{
+	kfr2r09_lcd_backlight(1);
+}
+
+void kfr2r09_lcd_off(void)
+{
+	kfr2r09_lcd_backlight(0);
 }

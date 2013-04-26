@@ -33,12 +33,11 @@
 
 #include <mach/regs-irq.h>
 #include <mach/regs-gpio.h>
+#include <mach/regs-power.h>
 
 #include <plat/cpu.h>
 #include <plat/irq.h>
 #include <plat/pm.h>
-
-#include "s3c2412-power.h"
 
 #define INTMSK(start, end) ((1 << ((end) + 1 - (start))) - 1)
 #define INTMSK_SUB(start, end) (INTMSK(start, end) << ((start - S3C2410_IRQSUB(0))))

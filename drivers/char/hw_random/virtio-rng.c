@@ -92,22 +92,14 @@ static int probe_common(struct virtio_device *vdev)
 {
 	int err;
 
-	if (vq) {
-		/* We only support one device for now */
-		return -EBUSY;
-	}
 	/* We expect a single virtqueue. */
 	vq = virtio_find_single_vq(vdev, random_recv_done, "input");
-	if (IS_ERR(vq)) {
-		err = PTR_ERR(vq);
-		vq = NULL;
-		return err;
-	}
+	if (IS_ERR(vq))
+		return PTR_ERR(vq);
 
 	err = hwrng_register(&virtio_hwrng);
 	if (err) {
 		vdev->config->del_vqs(vdev);
-		vq = NULL;
 		return err;
 	}
 
@@ -120,7 +112,6 @@ static void remove_common(struct virtio_device *vdev)
 	busy = false;
 	hwrng_unregister(&virtio_hwrng);
 	vdev->config->del_vqs(vdev);
-	vq = NULL;
 }
 
 static int virtrng_probe(struct virtio_device *vdev)
@@ -128,7 +119,7 @@ static int virtrng_probe(struct virtio_device *vdev)
 	return probe_common(vdev);
 }
 
-static void virtrng_remove(struct virtio_device *vdev)
+static void __devexit virtrng_remove(struct virtio_device *vdev)
 {
 	remove_common(vdev);
 }
@@ -156,14 +147,25 @@ static struct virtio_driver virtio_rng_driver = {
 	.driver.owner =	THIS_MODULE,
 	.id_table =	id_table,
 	.probe =	virtrng_probe,
-	.remove =	virtrng_remove,
+	.remove =	__devexit_p(virtrng_remove),
 #ifdef CONFIG_PM
 	.freeze =	virtrng_freeze,
 	.restore =	virtrng_restore,
 #endif
 };
 
-module_virtio_driver(virtio_rng_driver);
+static int __init init(void)
+{
+	return register_virtio_driver(&virtio_rng_driver);
+}
+
+static void __exit fini(void)
+{
+	unregister_virtio_driver(&virtio_rng_driver);
+}
+module_init(init);
+module_exit(fini);
+
 MODULE_DEVICE_TABLE(virtio, id_table);
 MODULE_DESCRIPTION("Virtio random number driver");
 MODULE_LICENSE("GPL");

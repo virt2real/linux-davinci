@@ -19,6 +19,11 @@
 #include <mach/dma.h>
 #include <mach/irqs.h>
 
+static const char *rclksrc[] = {
+	[0] = "iis",
+	[1] = "sclk_audio2",
+};
+
 static int s5p6440_cfg_i2s(struct platform_device *pdev)
 {
 	switch (pdev->id) {
@@ -40,6 +45,7 @@ static struct s3c_audio_pdata s5p6440_i2s_pdata = {
 	.type = {
 		.i2s = {
 			.quirks = QUIRK_PRI_6CHAN,
+			.src_clk = rclksrc,
 		},
 	},
 };
@@ -87,6 +93,7 @@ static struct s3c_audio_pdata s5p6450_i2s0_pdata = {
 	.type = {
 		.i2s = {
 			.quirks = QUIRK_PRI_6CHAN,
+			.src_clk = rclksrc,
 		},
 	},
 };
@@ -103,6 +110,11 @@ struct platform_device s5p6450_device_iis0 = {
 
 static struct s3c_audio_pdata s5p6450_i2s_pdata = {
 	.cfg_gpio = s5p6450_cfg_i2s,
+	.type = {
+		.i2s = {
+			.src_clk = rclksrc,
+		},
+	},
 };
 
 static struct resource s5p6450_i2s1_resource[] = {

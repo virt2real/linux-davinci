@@ -10,9 +10,8 @@
  */
 #include <linux/module.h>
 #include <linux/io.h>
-
-#include "hardware.h"
-#include "iim.h"
+#include <mach/hardware.h>
+#include <mach/iim.h>
 
 static int mx35_cpu_rev = -1;
 

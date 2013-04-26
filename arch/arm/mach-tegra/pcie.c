@@ -33,18 +33,15 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/export.h>
-#include <linux/clk/tegra.h>
 
 #include <asm/sizes.h>
 #include <asm/mach/pci.h>
 
+#include <mach/iomap.h>
+#include <mach/clk.h>
 #include <mach/powergate.h>
 
 #include "board.h"
-#include "iomap.h"
-
-/* Hack - need to parse this from DT */
-#define INT_PCIE_INTR 130
 
 /* register definitions */
 #define AFI_OFFSET	0x3800
@@ -331,7 +328,7 @@ static struct pci_ops tegra_pcie_ops = {
 	.write	= tegra_pcie_write_conf,
 };
 
-static void tegra_pcie_fixup_bridge(struct pci_dev *dev)
+static void __devinit tegra_pcie_fixup_bridge(struct pci_dev *dev)
 {
 	u16 reg;
 
@@ -345,7 +342,7 @@ static void tegra_pcie_fixup_bridge(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, tegra_pcie_fixup_bridge);
 
 /* Tegra PCIE root complex wrongly reports device class */
-static void tegra_pcie_fixup_class(struct pci_dev *dev)
+static void __devinit tegra_pcie_fixup_class(struct pci_dev *dev)
 {
 	dev->class = PCI_CLASS_BRIDGE_PCI << 8;
 }
@@ -353,7 +350,7 @@ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_NVIDIA, 0x0bf0, tegra_pcie_fixup_class);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_NVIDIA, 0x0bf1, tegra_pcie_fixup_class);
 
 /* Tegra PCIE requires relaxed ordering */
-static void tegra_pcie_relax_enable(struct pci_dev *dev)
+static void __devinit tegra_pcie_relax_enable(struct pci_dev *dev)
 {
 	pcie_capability_set_word(dev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_RELAX_EN);
 }

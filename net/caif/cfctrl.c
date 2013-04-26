@@ -515,7 +515,8 @@ static int cfctrl_recv(struct cflayer *layer, struct cfpkt *pkt)
 							  client_layer : NULL);
 			}
 
-			kfree(req);
+			if (req != NULL)
+				kfree(req);
 
 			spin_unlock_bh(&cfctrl->info_list_lock);
 		}

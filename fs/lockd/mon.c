@@ -12,7 +12,6 @@
 #include <linux/slab.h>
 
 #include <linux/sunrpc/clnt.h>
-#include <linux/sunrpc/addr.h>
 #include <linux/sunrpc/xprtsock.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/lockd/lockd.h>
@@ -86,38 +85,29 @@ static struct rpc_clnt *nsm_create(struct net *net)
 	return rpc_create(&args);
 }
 
-static struct rpc_clnt *nsm_client_set(struct lockd_net *ln,
-		struct rpc_clnt *clnt)
-{
-	spin_lock(&ln->nsm_clnt_lock);
-	if (ln->nsm_users == 0) {
-		if (clnt == NULL)
-			goto out;
-		ln->nsm_clnt = clnt;
-	}
-	clnt = ln->nsm_clnt;
-	ln->nsm_users++;
-out:
-	spin_unlock(&ln->nsm_clnt_lock);
-	return clnt;
-}
-
 static struct rpc_clnt *nsm_client_get(struct net *net)
 {
-	struct rpc_clnt	*clnt, *new;
+	static DEFINE_MUTEX(nsm_create_mutex);
+	struct rpc_clnt	*clnt;
 	struct lockd_net *ln = net_generic(net, lockd_net_id);
 
-	clnt = nsm_client_set(ln, NULL);
-	if (clnt != NULL)
+	spin_lock(&ln->nsm_clnt_lock);
+	if (ln->nsm_users) {
+		ln->nsm_users++;
+		clnt = ln->nsm_clnt;
+		spin_unlock(&ln->nsm_clnt_lock);
 		goto out;
+	}
+	spin_unlock(&ln->nsm_clnt_lock);
 
-	clnt = new = nsm_create(net);
-	if (IS_ERR(clnt))
-		goto out;
-
-	clnt = nsm_client_set(ln, new);
-	if (clnt != new)
-		rpc_shutdown_client(new);
+	mutex_lock(&nsm_create_mutex);
+	clnt = nsm_create(net);
+	if (!IS_ERR(clnt)) {
+		ln->nsm_clnt = clnt;
+		smp_wmb();
+		ln->nsm_users = 1;
+	}
+	mutex_unlock(&nsm_create_mutex);
 out:
 	return clnt;
 }
@@ -125,16 +115,18 @@ out:
 static void nsm_client_put(struct net *net)
 {
 	struct lockd_net *ln = net_generic(net, lockd_net_id);
-	struct rpc_clnt	*clnt = NULL;
+	struct rpc_clnt	*clnt = ln->nsm_clnt;
+	int shutdown = 0;
 
 	spin_lock(&ln->nsm_clnt_lock);
-	ln->nsm_users--;
-	if (ln->nsm_users == 0) {
-		clnt = ln->nsm_clnt;
-		ln->nsm_clnt = NULL;
+	if (ln->nsm_users) {
+		if (--ln->nsm_users)
+			ln->nsm_clnt = NULL;
+		shutdown = !ln->nsm_users;
 	}
 	spin_unlock(&ln->nsm_clnt_lock);
-	if (clnt != NULL)
+
+	if (shutdown)
 		rpc_shutdown_client(clnt);
 }
 
@@ -154,6 +146,8 @@ static int nsm_mon_unmon(struct nsm_handle *nsm, u32 proc, struct nsm_res *res,
 		.rpc_argp	= &args,
 		.rpc_resp	= res,
 	};
+
+	BUG_ON(clnt == NULL);
 
 	memset(res, 0, sizeof(*res));
 
@@ -465,6 +459,7 @@ static void encode_nsm_string(struct xdr_stream *xdr, const char *string)
 	const u32 len = strlen(string);
 	__be32 *p;
 
+	BUG_ON(len > SM_MAXSTRLEN);
 	p = xdr_reserve_space(xdr, 4 + len);
 	xdr_encode_opaque(p, string, len);
 }

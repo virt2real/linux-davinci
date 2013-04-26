@@ -1,5 +1,6 @@
 config IEEE802154
-	tristate "IEEE Std 802.15.4 Low-Rate Wireless Personal Area Networks support"
+	tristate "IEEE Std 802.15.4 Low-Rate Wireless Personal Area Networks support (EXPERIMENTAL)"
+	depends on EXPERIMENTAL
 	---help---
 	  IEEE Std 802.15.4 defines a low data rate, low power and low
 	  complexity short range wireless personal area networks. It was

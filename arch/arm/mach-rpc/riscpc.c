@@ -211,7 +211,7 @@ static void rpc_restart(char mode, const char *cmd)
 	soft_restart(0);
 }
 
-void ioc_timer_init(void);
+extern struct sys_timer ioc_timer;
 
 MACHINE_START(RISCPC, "Acorn-RiscPC")
 	/* Maintainer: Russell King */
@@ -220,6 +220,6 @@ MACHINE_START(RISCPC, "Acorn-RiscPC")
 	.reserve_lp1	= 1,
 	.map_io		= rpc_map_io,
 	.init_irq	= rpc_init_irq,
-	.init_time	= ioc_timer_init,
+	.timer		= &ioc_timer,
 	.restart	= rpc_restart,
 MACHINE_END

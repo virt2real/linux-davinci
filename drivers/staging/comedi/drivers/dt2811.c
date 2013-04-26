@@ -226,6 +226,8 @@ struct dt2811_private {
 	unsigned int ao_readback[2];
 };
 
+#define devpriv ((struct dt2811_private *)dev->private)
+
 static const struct comedi_lrange *dac_range_types[] = {
 	&range_bipolar5,
 	&range_bipolar2_5,
@@ -240,7 +242,6 @@ static irqreturn_t dt2811_interrupt(int irq, void *d)
 	int lo, hi;
 	int data;
 	struct comedi_device *dev = d;
-	struct dt2811_private *devpriv = dev->private;
 
 	if (!dev->attached) {
 		comedi_error(dev, "spurious interrupt");
@@ -317,7 +318,6 @@ int dt2811_adtrig(kdev_t minor, comedi_adtrig *adtrig)
 static int dt2811_ao_insn(struct comedi_device *dev, struct comedi_subdevice *s,
 			  struct comedi_insn *insn, unsigned int *data)
 {
-	struct dt2811_private *devpriv = dev->private;
 	int i;
 	int chan;
 
@@ -337,7 +337,6 @@ static int dt2811_ao_insn_read(struct comedi_device *dev,
 			       struct comedi_subdevice *s,
 			       struct comedi_insn *insn, unsigned int *data)
 {
-	struct dt2811_private *devpriv = dev->private;
 	int i;
 	int chan;
 
@@ -398,7 +397,6 @@ static int dt2811_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 	/* long flags; */
 
 	const struct dt2811_board *board = comedi_board(dev);
-	struct dt2811_private *devpriv;
 	int ret;
 	struct comedi_subdevice *s;
 	unsigned long iobase;
@@ -465,10 +463,9 @@ static int dt2811_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 	if (ret)
 		return ret;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(struct dt2811_private));
+	if (ret < 0)
+		return ret;
 
 	switch (it->options[2]) {
 	case 0:

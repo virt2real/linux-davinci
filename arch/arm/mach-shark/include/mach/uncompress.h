@@ -48,3 +48,4 @@ static void putr()
  * nothing to do
  */
 #define arch_decomp_setup()
+#define arch_decomp_wdog()

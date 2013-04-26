@@ -1028,7 +1028,7 @@ static int kenvctrld(void *__unused)
 	return 0;
 }
 
-static int envctrl_probe(struct platform_device *op)
+static int __devinit envctrl_probe(struct platform_device *op)
 {
 	struct device_node *dp;
 	int index, err;
@@ -1104,7 +1104,7 @@ out_iounmap:
 	return err;
 }
 
-static int envctrl_remove(struct platform_device *op)
+static int __devexit envctrl_remove(struct platform_device *op)
 {
 	int index;
 
@@ -1135,7 +1135,7 @@ static struct platform_driver envctrl_driver = {
 		.of_match_table = envctrl_match,
 	},
 	.probe		= envctrl_probe,
-	.remove		= envctrl_remove,
+	.remove		= __devexit_p(envctrl_remove),
 };
 
 module_platform_driver(envctrl_driver);

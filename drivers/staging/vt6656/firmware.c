@@ -56,26 +56,33 @@ static int          msglevel                =MSG_LEVEL_INFO;
 /*---------------------  Export Functions  --------------------------*/
 
 
-int FIRMWAREbDownload(struct vnt_private *pDevice)
+BOOL
+FIRMWAREbDownload(
+     PSDevice pDevice
+    )
 {
-	struct device *dev = &pDevice->usb->dev;
 	const struct firmware *fw;
 	int NdisStatus;
 	void *pBuffer = NULL;
-	bool result = false;
+	BOOL result = FALSE;
 	u16 wLength;
-	int ii, rc;
-
+	int ii;
 
 	DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"---->Download firmware\n");
 	spin_unlock_irq(&pDevice->lock);
 
-	rc = request_firmware(&fw, FIRMWARE_NAME, dev);
-	if (rc) {
-		dev_err(dev, "firmware file %s request failed (%d)\n",
-			FIRMWARE_NAME, rc);
+	if (!pDevice->firmware) {
+		struct device *dev = &pDevice->usb->dev;
+		int rc;
+
+		rc = request_firmware(&pDevice->firmware, FIRMWARE_NAME, dev);
+		if (rc) {
+			dev_err(dev, "firmware file %s request failed (%d)\n",
+				FIRMWARE_NAME, rc);
 			goto out;
+		}
 	}
+	fw = pDevice->firmware;
 
 	pBuffer = kmalloc(FIRMWARE_CHUNK_SIZE, GFP_KERNEL);
 	if (!pBuffer)
@@ -96,12 +103,10 @@ int FIRMWAREbDownload(struct vnt_private *pDevice)
 		DBG_PRT(MSG_LEVEL_DEBUG,
 			KERN_INFO"Download firmware...%d %zu\n", ii, fw->size);
 		if (NdisStatus != STATUS_SUCCESS)
-			goto free_fw;
+			goto out;
         }
 
-	result = true;
-free_fw:
-	release_firmware(fw);
+	result = TRUE;
 
 out:
 	kfree(pBuffer);
@@ -111,9 +116,12 @@ out:
 }
 MODULE_FIRMWARE(FIRMWARE_NAME);
 
-int FIRMWAREbBrach2Sram(struct vnt_private *pDevice)
+BOOL
+FIRMWAREbBrach2Sram(
+     PSDevice pDevice
+    )
 {
-	int NdisStatus;
+    int NdisStatus;
 
     DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"---->Branch to Sram\n");
 
@@ -126,14 +134,17 @@ int FIRMWAREbBrach2Sram(struct vnt_private *pDevice)
                                     );
 
     if (NdisStatus != STATUS_SUCCESS) {
-        return (false);
+        return (FALSE);
     } else {
-        return (true);
+        return (TRUE);
     }
 }
 
 
-int FIRMWAREbCheckVersion(struct vnt_private *pDevice)
+BOOL
+FIRMWAREbCheckVersion(
+     PSDevice pDevice
+    )
 {
 	int ntStatus;
 
@@ -147,17 +158,17 @@ int FIRMWAREbCheckVersion(struct vnt_private *pDevice)
     DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"Firmware Version [%04x]\n", pDevice->wFirmwareVersion);
     if (ntStatus != STATUS_SUCCESS) {
         DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"Firmware Invalid.\n");
-        return false;
+        return FALSE;
     }
     if (pDevice->wFirmwareVersion == 0xFFFF) {
         DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"In Loader.\n");
-        return false;
+        return FALSE;
     }
     DBG_PRT(MSG_LEVEL_DEBUG, KERN_INFO"Firmware Version [%04x]\n", pDevice->wFirmwareVersion);
     if (pDevice->wFirmwareVersion < FIRMWARE_VERSION) {
         // branch to loader for download new firmware
         FIRMWAREbBrach2Sram(pDevice);
-        return false;
+        return FALSE;
     }
-    return true;
+    return TRUE;
 }

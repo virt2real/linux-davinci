@@ -34,6 +34,7 @@
 #include <sound/initval.h>
 #include <sound/soc.h>
 
+#include <plat/cpu.h>
 #include <linux/platform_data/asoc-ti-mcbsp.h>
 #include "mcbsp.h"
 #include "omap-mcbsp.h"
@@ -511,7 +512,7 @@ static int omap_mcbsp_dai_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 		regs->srgr2	|= CLKSM;
 		break;
 	case OMAP_MCBSP_SYSCLK_CLKS_FCLK:
-		if (mcbsp_omap1()) {
+		if (cpu_class_is_omap1()) {
 			err = -EINVAL;
 			break;
 		}
@@ -519,7 +520,7 @@ static int omap_mcbsp_dai_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 					       MCBSP_CLKS_PRCM_SRC);
 		break;
 	case OMAP_MCBSP_SYSCLK_CLKS_EXT:
-		if (mcbsp_omap1()) {
+		if (cpu_class_is_omap1()) {
 			err = 0;
 			break;
 		}
@@ -757,7 +758,7 @@ static const struct of_device_id omap_mcbsp_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, omap_mcbsp_of_match);
 
-static int asoc_mcbsp_probe(struct platform_device *pdev)
+static __devinit int asoc_mcbsp_probe(struct platform_device *pdev)
 {
 	struct omap_mcbsp_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct omap_mcbsp *mcbsp;
@@ -798,7 +799,7 @@ static int asoc_mcbsp_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int asoc_mcbsp_remove(struct platform_device *pdev)
+static int __devexit asoc_mcbsp_remove(struct platform_device *pdev)
 {
 	struct omap_mcbsp *mcbsp = platform_get_drvdata(pdev);
 
@@ -824,7 +825,7 @@ static struct platform_driver asoc_mcbsp_driver = {
 	},
 
 	.probe = asoc_mcbsp_probe,
-	.remove = asoc_mcbsp_remove,
+	.remove = __devexit_p(asoc_mcbsp_remove),
 };
 
 module_platform_driver(asoc_mcbsp_driver);

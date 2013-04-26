@@ -146,7 +146,7 @@ free:
 static void mxs_dt_free_map(struct pinctrl_dev *pctldev,
 			    struct pinctrl_map *map, unsigned num_maps)
 {
-	u32 i;
+	int i;
 
 	for (i = 0; i < num_maps; i++) {
 		if (map[i].type == PIN_MAP_TYPE_MUX_GROUP)
@@ -203,7 +203,7 @@ static int mxs_pinctrl_enable(struct pinctrl_dev *pctldev, unsigned selector,
 	void __iomem *reg;
 	u8 bank, shift;
 	u16 pin;
-	u32 i;
+	int i;
 
 	for (i = 0; i < g->npins; i++) {
 		bank = PINID_TO_BANK(g->pins[i]);
@@ -256,7 +256,7 @@ static int mxs_pinconf_group_set(struct pinctrl_dev *pctldev,
 	void __iomem *reg;
 	u8 ma, vol, pull, bank, shift;
 	u16 pin;
-	u32 i;
+	int i;
 
 	ma = CONFIG_TO_MA(config);
 	vol = CONFIG_TO_VOL(config);
@@ -319,7 +319,7 @@ static void mxs_pinconf_group_dbg_show(struct pinctrl_dev *pctldev,
 		seq_printf(s, "0x%lx", config);
 }
 
-static struct pinconf_ops mxs_pinconf_ops = {
+struct pinconf_ops mxs_pinconf_ops = {
 	.pin_config_get = mxs_pinconf_get,
 	.pin_config_set = mxs_pinconf_set,
 	.pin_config_group_get = mxs_pinconf_group_get,
@@ -335,9 +335,9 @@ static struct pinctrl_desc mxs_pinctrl_desc = {
 	.owner = THIS_MODULE,
 };
 
-static int mxs_pinctrl_parse_group(struct platform_device *pdev,
-				   struct device_node *np, int idx,
-				   const char **out_name)
+static int __devinit mxs_pinctrl_parse_group(struct platform_device *pdev,
+					     struct device_node *np, int idx,
+					     const char **out_name)
 {
 	struct mxs_pinctrl_data *d = platform_get_drvdata(pdev);
 	struct mxs_group *g = &d->soc->groups[idx];
@@ -345,7 +345,8 @@ static int mxs_pinctrl_parse_group(struct platform_device *pdev,
 	const char *propname = "fsl,pinmux-ids";
 	char *group;
 	int length = strlen(np->name) + SUFFIX_LEN;
-	u32 val, i;
+	int i;
+	u32 val;
 
 	group = devm_kzalloc(&pdev->dev, length, GFP_KERNEL);
 	if (!group)
@@ -383,8 +384,8 @@ static int mxs_pinctrl_parse_group(struct platform_device *pdev,
 	return 0;
 }
 
-static int mxs_pinctrl_probe_dt(struct platform_device *pdev,
-				struct mxs_pinctrl_data *d)
+static int __devinit mxs_pinctrl_probe_dt(struct platform_device *pdev,
+					  struct mxs_pinctrl_data *d)
 {
 	struct mxs_pinctrl_soc_data *soc = d->soc;
 	struct device_node *np = pdev->dev.of_node;
@@ -475,8 +476,8 @@ static int mxs_pinctrl_probe_dt(struct platform_device *pdev,
 	return 0;
 }
 
-int mxs_pinctrl_probe(struct platform_device *pdev,
-		      struct mxs_pinctrl_soc_data *soc)
+int __devinit mxs_pinctrl_probe(struct platform_device *pdev,
+				struct mxs_pinctrl_soc_data *soc)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct mxs_pinctrl_data *d;
@@ -521,7 +522,7 @@ err:
 }
 EXPORT_SYMBOL_GPL(mxs_pinctrl_probe);
 
-int mxs_pinctrl_remove(struct platform_device *pdev)
+int __devexit mxs_pinctrl_remove(struct platform_device *pdev)
 {
 	struct mxs_pinctrl_data *d = platform_get_drvdata(pdev);
 

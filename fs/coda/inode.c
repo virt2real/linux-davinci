@@ -20,7 +20,6 @@
 #include <linux/file.h>
 #include <linux/vfs.h>
 #include <linux/slab.h>
-#include <linux/pid_namespace.h>
 
 #include <asm/uaccess.h>
 
@@ -49,7 +48,7 @@ static struct inode *coda_alloc_inode(struct super_block *sb)
 		return NULL;
 	memset(&ei->c_fid, 0, sizeof(struct CodaFid));
 	ei->c_flags = 0;
-	ei->c_uid = GLOBAL_ROOT_UID;
+	ei->c_uid = 0;
 	ei->c_cached_perm = 0;
 	spin_lock_init(&ei->c_lock);
 	return &ei->vfs_inode;
@@ -130,7 +129,7 @@ static int get_device_index(struct coda_mount_data *data)
 	f = fdget(data->fd);
 	if (!f.file)
 		goto Ebadf;
-	inode = file_inode(f.file);
+	inode = f.file->f_path.dentry->d_inode;
 	if (!S_ISCHR(inode->i_mode) || imajor(inode) != CODA_PSDEV_MAJOR) {
 		fdput(f);
 		goto Ebadf;
@@ -157,9 +156,6 @@ static int coda_fill_super(struct super_block *sb, void *data, int silent)
 	struct CodaFid fid;
 	int error;
 	int idx;
-
-	if (task_active_pid_ns(current) != &init_pid_ns)
-		return -EINVAL;
 
 	idx = get_device_index((struct coda_mount_data *) data);
 
@@ -329,5 +325,4 @@ struct file_system_type coda_fs_type = {
 	.kill_sb	= kill_anon_super,
 	.fs_flags	= FS_BINARY_MOUNTDATA,
 };
-MODULE_ALIAS_FS("coda");
 

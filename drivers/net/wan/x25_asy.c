@@ -128,6 +128,7 @@ static int x25_asy_change_mtu(struct net_device *dev, int newmtu)
 	rbuff = kmalloc(len + 4, GFP_ATOMIC);
 
 	if (xbuff == NULL || rbuff == NULL) {
+		netdev_warn(dev, "unable to grow X.25 buffers, MTU change cancelled\n");
 		kfree(xbuff);
 		kfree(rbuff);
 		return -ENOMEM;

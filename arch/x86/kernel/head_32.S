@@ -144,11 +144,6 @@ ENTRY(startup_32)
 	movl %eax, pa(olpc_ofw_pgd)
 #endif
 
-#ifdef CONFIG_MICROCODE_EARLY
-	/* Early load ucode on BSP. */
-	call load_ucode_bsp
-#endif
-
 /*
  * Initialize page tables.  This creates a PDE and a set of page
  * tables, which are located immediately beyond __brk_base.  The variable
@@ -271,19 +266,6 @@ num_subarch_entries = (. - subarch_entries) / 4
 	jmp default_entry
 #endif /* CONFIG_PARAVIRT */
 
-#ifdef CONFIG_HOTPLUG_CPU
-/*
- * Boot CPU0 entry point. It's called from play_dead(). Everything has been set
- * up already except stack. We just set up stack here. Then call
- * start_secondary().
- */
-ENTRY(start_cpu0)
-	movl stack_start, %ecx
-	movl %ecx, %esp
-	jmp  *(initial_code)
-ENDPROC(start_cpu0)
-#endif
-
 /*
  * Non-boot CPU entry point; entered from trampoline.S
  * We can't lgdt here, because lgdt itself uses a data segment, but
@@ -304,59 +286,33 @@ ENTRY(startup_32_smp)
 	movl %eax,%ss
 	leal -__PAGE_OFFSET(%ecx),%esp
 
-#ifdef CONFIG_MICROCODE_EARLY
-	/* Early load ucode on AP. */
-	call load_ucode_ap
-#endif
-
-
 default_entry:
-#define CR0_STATE	(X86_CR0_PE | X86_CR0_MP | X86_CR0_ET | \
-			 X86_CR0_NE | X86_CR0_WP | X86_CR0_AM | \
-			 X86_CR0_PG)
-	movl $(CR0_STATE & ~X86_CR0_PG),%eax
-	movl %eax,%cr0
-
 /*
- * We want to start out with EFLAGS unambiguously cleared. Some BIOSes leave
- * bits like NT set. This would confuse the debugger if this code is traced. So
- * initialize them properly now before switching to protected mode. That means
- * DF in particular (even though we have cleared it earlier after copying the
- * command line) because GCC expects it.
- */
-	pushl $0
-	popfl
-
-/*
- * New page tables may be in 4Mbyte page mode and may be using the global pages.
+ *	New page tables may be in 4Mbyte page mode and may
+ *	be using the global pages. 
  *
- * NOTE! If we are on a 486 we may have no cr4 at all! Specifically, cr4 exists
- * if and only if CPUID exists and has flags other than the FPU flag set.
+ *	NOTE! If we are on a 486 we may have no cr4 at all!
+ *	Specifically, cr4 exists if and only if CPUID exists,
+ *	which in turn exists if and only if EFLAGS.ID exists.
  */
-	movl $-1,pa(X86_CPUID)		# preset CPUID level
 	movl $X86_EFLAGS_ID,%ecx
 	pushl %ecx
-	popfl				# set EFLAGS=ID
+	popfl
 	pushfl
-	popl %eax			# get EFLAGS
-	testl $X86_EFLAGS_ID,%eax	# did EFLAGS.ID remained set?
-	jz enable_paging		# hw disallowed setting of ID bit
-					# which means no CPUID and no CR4
-
-	xorl %eax,%eax
-	cpuid
-	movl %eax,pa(X86_CPUID)		# save largest std CPUID function
-
-	movl $1,%eax
-	cpuid
-	andl $~1,%edx			# Ignore CPUID.FPU
-	jz enable_paging		# No flags or only CPUID.FPU = no CR4
+	popl %eax
+	pushl $0
+	popfl
+	pushfl
+	popl %edx
+	xorl %edx,%eax
+	testl %ecx,%eax
+	jz 6f			# No ID flag = no CPUID = no CR4
 
 	movl pa(mmu_cr4_features),%eax
 	movl %eax,%cr4
 
 	testb $X86_CR4_PAE, %al		# check if PAE is enabled
-	jz enable_paging
+	jz 6f
 
 	/* Check if extended functions are implemented */
 	movl $0x80000000, %eax
@@ -364,7 +320,7 @@ default_entry:
 	/* Value must be in the range 0x80000001 to 0x8000ffff */
 	subl $0x80000001, %eax
 	cmpl $(0x8000ffff-0x80000001), %eax
-	ja enable_paging
+	ja 6f
 
 	/* Clear bogus XD_DISABLE bits */
 	call verify_cpu
@@ -373,7 +329,7 @@ default_entry:
 	cpuid
 	/* Execute Disable bit supported? */
 	btl $(X86_FEATURE_NX & 31), %edx
-	jnc enable_paging
+	jnc 6f
 
 	/* Setup EFER (Extended Feature Enable Register) */
 	movl $MSR_EFER, %ecx
@@ -383,19 +339,28 @@ default_entry:
 	/* Make changes effective */
 	wrmsr
 
-enable_paging:
+6:
 
 /*
  * Enable paging
  */
 	movl $pa(initial_page_table), %eax
 	movl %eax,%cr3		/* set the page table pointer.. */
-	movl $CR0_STATE,%eax
+	movl %cr0,%eax
+	orl  $X86_CR0_PG,%eax
 	movl %eax,%cr0		/* ..and set paging (PG) bit */
 	ljmp $__BOOT_CS,$1f	/* Clear prefetch and normalize %eip */
 1:
 	/* Shift the stack pointer to a virtual address */
 	addl $__PAGE_OFFSET, %esp
+
+/*
+ * Initialize eflags.  Some BIOS's leave bits like NT set.  This would
+ * confuse the debugger if this code is traced.
+ * XXX - best to initialize before switching to protected mode.
+ */
+	pushl $0
+	popfl
 
 /*
  * start system 32-bit setup. We need to re-do some of the things done
@@ -406,11 +371,31 @@ enable_paging:
 	jz 1f				# Did we do this already?
 	call *%eax
 1:
-
+	
+/* check if it is 486 or 386. */
 /*
- * Check if it is 486
+ * XXX - this does a lot of unnecessary setup.  Alignment checks don't
+ * apply at our cpl of 0 and the stack ought to be aligned already, and
+ * we don't need to preserve eflags.
  */
-	cmpl $-1,X86_CPUID
+	movl $-1,X86_CPUID	# -1 for no CPUID initially
+	movb $3,X86		# at least 386
+	pushfl			# push EFLAGS
+	popl %eax		# get EFLAGS
+	movl %eax,%ecx		# save original EFLAGS
+	xorl $0x240000,%eax	# flip AC and ID bits in EFLAGS
+	pushl %eax		# copy to EFLAGS
+	popfl			# set EFLAGS
+	pushfl			# get new EFLAGS
+	popl %eax		# put it in eax
+	xorl %ecx,%eax		# change in flags
+	pushl %ecx		# restore original EFLAGS
+	popfl
+	testl $0x40000,%eax	# check if AC bit changed
+	je is386
+
+	movb $4,X86		# at least 486
+	testl $0x200000,%eax	# check if ID bit changed
 	je is486
 
 	/* get vendor info */
@@ -436,10 +421,11 @@ enable_paging:
 	movb %cl,X86_MASK
 	movl %edx,X86_CAPABILITY
 
-is486:
-	movb $4,X86
-	movl $0x50022,%ecx	# set AM, WP, NE and MP
-	movl %cr0,%eax
+is486:	movl $0x50022,%ecx	# set AM, WP, NE and MP
+	jmp 2f
+
+is386:	movl $2,%ecx		# set MP
+2:	movl %cr0,%eax
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl %ecx,%eax
 	movl %eax,%cr0
@@ -464,6 +450,7 @@ is486:
 	xorl %eax,%eax			# Clear LDT
 	lldt %ax
 
+	cld			# gcc2 wants the direction flag cleared at all times
 	pushl $0		# fake return address for unwinder
 	jmp *(initial_code)
 

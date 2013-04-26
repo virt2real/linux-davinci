@@ -19,8 +19,6 @@
  * Author: Adrian Hunter <ext-adrian.hunter@nokia.com>
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -30,6 +28,8 @@
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
 #include <linux/random.h>
+
+#define PRINT_PREF KERN_INFO "mtd_stresstest: "
 
 static int dev = -EINVAL;
 module_param(dev, int, S_IRUGO);
@@ -55,7 +55,7 @@ static int rand_eb(void)
 	unsigned int eb;
 
 again:
-	eb = prandom_u32();
+	eb = random32();
 	/* Read or write up 2 eraseblocks at a time - hence 'ebcnt - 1' */
 	eb %= (ebcnt - 1);
 	if (bbt[eb])
@@ -67,7 +67,7 @@ static int rand_offs(void)
 {
 	unsigned int offs;
 
-	offs = prandom_u32();
+	offs = random32();
 	offs %= bufsize;
 	return offs;
 }
@@ -76,7 +76,7 @@ static int rand_len(int offs)
 {
 	unsigned int len;
 
-	len = prandom_u32();
+	len = random32();
 	len %= (bufsize - offs);
 	return len;
 }
@@ -94,12 +94,12 @@ static int erase_eraseblock(int ebnum)
 
 	err = mtd_erase(mtd, &ei);
 	if (unlikely(err)) {
-		pr_err("error %d while erasing EB %d\n", err, ebnum);
+		printk(PRINT_PREF "error %d while erasing EB %d\n", err, ebnum);
 		return err;
 	}
 
 	if (unlikely(ei.state == MTD_ERASE_FAILED)) {
-		pr_err("some erase error occurred at EB %d\n",
+		printk(PRINT_PREF "some erase error occurred at EB %d\n",
 		       ebnum);
 		return -EIO;
 	}
@@ -114,7 +114,7 @@ static int is_block_bad(int ebnum)
 
 	ret = mtd_block_isbad(mtd, addr);
 	if (ret)
-		pr_info("block %d is bad\n", ebnum);
+		printk(PRINT_PREF "block %d is bad\n", ebnum);
 	return ret;
 }
 
@@ -137,7 +137,7 @@ static int do_read(void)
 	if (mtd_is_bitflip(err))
 		err = 0;
 	if (unlikely(err || read != len)) {
-		pr_err("error: read failed at 0x%llx\n",
+		printk(PRINT_PREF "error: read failed at 0x%llx\n",
 		       (long long)addr);
 		if (!err)
 			err = -EINVAL;
@@ -174,7 +174,7 @@ static int do_write(void)
 	addr = eb * mtd->erasesize + offs;
 	err = mtd_write(mtd, addr, len, &written, writebuf);
 	if (unlikely(err || written != len)) {
-		pr_err("error: write failed at 0x%llx\n",
+		printk(PRINT_PREF "error: write failed at 0x%llx\n",
 		       (long long)addr);
 		if (!err)
 			err = -EINVAL;
@@ -191,7 +191,7 @@ static int do_write(void)
 
 static int do_operation(void)
 {
-	if (prandom_u32() & 1)
+	if (random32() & 1)
 		return do_read();
 	else
 		return do_write();
@@ -203,21 +203,21 @@ static int scan_for_bad_eraseblocks(void)
 
 	bbt = kzalloc(ebcnt, GFP_KERNEL);
 	if (!bbt) {
-		pr_err("error: cannot allocate memory\n");
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		return -ENOMEM;
 	}
 
 	if (!mtd_can_have_bb(mtd))
 		return 0;
 
-	pr_info("scanning for bad eraseblocks\n");
+	printk(PRINT_PREF "scanning for bad eraseblocks\n");
 	for (i = 0; i < ebcnt; ++i) {
 		bbt[i] = is_block_bad(i) ? 1 : 0;
 		if (bbt[i])
 			bad += 1;
 		cond_resched();
 	}
-	pr_info("scanned %d eraseblocks, %d are bad\n", i, bad);
+	printk(PRINT_PREF "scanned %d eraseblocks, %d are bad\n", i, bad);
 	return 0;
 }
 
@@ -231,22 +231,22 @@ static int __init mtd_stresstest_init(void)
 	printk(KERN_INFO "=================================================\n");
 
 	if (dev < 0) {
-		pr_info("Please specify a valid mtd-device via module parameter\n");
-		pr_crit("CAREFUL: This test wipes all data on the specified MTD device!\n");
+		printk(PRINT_PREF "Please specify a valid mtd-device via module paramter\n");
+		printk(KERN_CRIT "CAREFUL: This test wipes all data on the specified MTD device!\n");
 		return -EINVAL;
 	}
 
-	pr_info("MTD device: %d\n", dev);
+	printk(PRINT_PREF "MTD device: %d\n", dev);
 
 	mtd = get_mtd_device(NULL, dev);
 	if (IS_ERR(mtd)) {
 		err = PTR_ERR(mtd);
-		pr_err("error: cannot get MTD device\n");
+		printk(PRINT_PREF "error: cannot get MTD device\n");
 		return err;
 	}
 
 	if (mtd->writesize == 1) {
-		pr_info("not NAND flash, assume page size is 512 "
+		printk(PRINT_PREF "not NAND flash, assume page size is 512 "
 		       "bytes.\n");
 		pgsize = 512;
 	} else
@@ -257,14 +257,14 @@ static int __init mtd_stresstest_init(void)
 	ebcnt = tmp;
 	pgcnt = mtd->erasesize / pgsize;
 
-	pr_info("MTD device size %llu, eraseblock size %u, "
+	printk(PRINT_PREF "MTD device size %llu, eraseblock size %u, "
 	       "page size %u, count of eraseblocks %u, pages per "
 	       "eraseblock %u, OOB size %u\n",
 	       (unsigned long long)mtd->size, mtd->erasesize,
 	       pgsize, ebcnt, pgcnt, mtd->oobsize);
 
 	if (ebcnt < 2) {
-		pr_err("error: need at least 2 eraseblocks\n");
+		printk(PRINT_PREF "error: need at least 2 eraseblocks\n");
 		err = -ENOSPC;
 		goto out_put_mtd;
 	}
@@ -277,28 +277,29 @@ static int __init mtd_stresstest_init(void)
 	writebuf = vmalloc(bufsize);
 	offsets = kmalloc(ebcnt * sizeof(int), GFP_KERNEL);
 	if (!readbuf || !writebuf || !offsets) {
-		pr_err("error: cannot allocate memory\n");
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		goto out;
 	}
 	for (i = 0; i < ebcnt; i++)
 		offsets[i] = mtd->erasesize;
-	prandom_bytes(writebuf, bufsize);
+	for (i = 0; i < bufsize; i++)
+		writebuf[i] = random32();
 
 	err = scan_for_bad_eraseblocks();
 	if (err)
 		goto out;
 
 	/* Do operations */
-	pr_info("doing operations\n");
+	printk(PRINT_PREF "doing operations\n");
 	for (op = 0; op < count; op++) {
 		if ((op & 1023) == 0)
-			pr_info("%d operations done\n", op);
+			printk(PRINT_PREF "%d operations done\n", op);
 		err = do_operation();
 		if (err)
 			goto out;
 		cond_resched();
 	}
-	pr_info("finished, %d operations done\n", op);
+	printk(PRINT_PREF "finished, %d operations done\n", op);
 
 out:
 	kfree(offsets);
@@ -308,7 +309,7 @@ out:
 out_put_mtd:
 	put_mtd_device(mtd);
 	if (err)
-		pr_info("error %d occurred\n", err);
+		printk(PRINT_PREF "error %d occurred\n", err);
 	printk(KERN_INFO "=================================================\n");
 	return err;
 }

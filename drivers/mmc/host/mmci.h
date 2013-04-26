@@ -28,8 +28,6 @@
 #define MCI_ST_UX500_NEG_EDGE	(1 << 13)
 #define MCI_ST_UX500_HWFCEN	(1 << 14)
 #define MCI_ST_UX500_CLK_INV	(1 << 15)
-/* Modified PL180 on Versatile Express platform */
-#define MCI_ARM_HWFCEN		(1 << 12)
 
 #define MMCIARGUMENT		0x008
 #define MMCICOMMAND		0x00c
@@ -195,10 +193,7 @@ struct mmci_host {
 	/* pio stuff */
 	struct sg_mapping_iter	sg_miter;
 	unsigned int		size;
-
-	/* pinctrl handles */
-	struct pinctrl		*pinctrl;
-	struct pinctrl_state	*pins_default;
+	struct regulator	*vcc;
 
 #ifdef CONFIG_DMA_ENGINE
 	/* DMA stuff */

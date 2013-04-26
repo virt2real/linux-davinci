@@ -424,6 +424,7 @@ static void hvc_hangup(struct tty_struct *tty)
 {
 	struct hvc_struct *hp = tty->driver_data;
 	unsigned long flags;
+	int temp_open_count;
 
 	if (!hp)
 		return;
@@ -443,6 +444,7 @@ static void hvc_hangup(struct tty_struct *tty)
 		return;
 	}
 
+	temp_open_count = hp->port.count;
 	hp->port.count = 0;
 	spin_unlock_irqrestore(&hp->port.lock, flags);
 	tty_port_tty_set(&hp->port, NULL);
@@ -451,6 +453,11 @@ static void hvc_hangup(struct tty_struct *tty)
 
 	if (hp->ops->notifier_hangup)
 		hp->ops->notifier_hangup(hp, hp->data);
+
+	while(temp_open_count) {
+		--temp_open_count;
+		tty_port_put(&hp->port);
+	}
 }
 
 /*
@@ -629,7 +636,7 @@ int hvc_poll(struct hvc_struct *hp)
 
 	/* Read data if any */
 	for (;;) {
-		int count = tty_buffer_request_room(&hp->port, N_INBUF);
+		int count = tty_buffer_request_room(tty, N_INBUF);
 
 		/* If flip is full, just reschedule a later read */
 		if (count == 0) {
@@ -672,7 +679,7 @@ int hvc_poll(struct hvc_struct *hp)
 				}
 			}
 #endif /* CONFIG_MAGIC_SYSRQ */
-			tty_insert_flip_char(&hp->port, buf[i], 0);
+			tty_insert_flip_char(tty, buf[i], 0);
 		}
 
 		read_total += n;
@@ -691,7 +698,7 @@ int hvc_poll(struct hvc_struct *hp)
 		   a minimum for performance. */
 		timeout = MIN_TIMEOUT;
 
-		tty_flip_buffer_push(&hp->port);
+		tty_flip_buffer_push(tty);
 	}
 	tty_kref_put(tty);
 

@@ -135,7 +135,6 @@ static int nes_inetaddr_event(struct notifier_block *notifier,
 	struct net_device *event_netdev = ifa->ifa_dev->dev;
 	struct nes_device *nesdev;
 	struct net_device *netdev;
-	struct net_device *upper_dev;
 	struct nes_vnic *nesvnic;
 	unsigned int is_bonded;
 
@@ -146,9 +145,8 @@ static int nes_inetaddr_event(struct notifier_block *notifier,
 				nesdev, nesdev->netdev[0]->name);
 		netdev = nesdev->netdev[0];
 		nesvnic = netdev_priv(netdev);
-		upper_dev = netdev_master_upper_dev_get(netdev);
 		is_bonded = netif_is_bond_slave(netdev) &&
-			    (upper_dev == event_netdev);
+			    (netdev->master == event_netdev);
 		if ((netdev == event_netdev) || is_bonded) {
 			if (nesvnic->rdma_enabled == 0) {
 				nes_debug(NES_DBG_NETDEV, "Returning without processing event for %s since"
@@ -181,9 +179,9 @@ static int nes_inetaddr_event(struct notifier_block *notifier,
 					/* fall through */
 				case NETDEV_CHANGEADDR:
 					/* Add the address to the IP table */
-					if (upper_dev)
+					if (netdev->master)
 						nesvnic->local_ipaddr =
-							((struct in_device *)upper_dev->ip_ptr)->ifa_list->ifa_address;
+							((struct in_device *)netdev->master->ip_ptr)->ifa_list->ifa_address;
 					else
 						nesvnic->local_ipaddr = ifa->ifa_address;
 
@@ -446,7 +444,7 @@ static irqreturn_t nes_interrupt(int irq, void *dev_id)
 /**
  * nes_probe - Device initialization
  */
-static int nes_probe(struct pci_dev *pcidev, const struct pci_device_id *ent)
+static int __devinit nes_probe(struct pci_dev *pcidev, const struct pci_device_id *ent)
 {
 	struct net_device *netdev = NULL;
 	struct nes_device *nesdev = NULL;
@@ -751,7 +749,7 @@ static int nes_probe(struct pci_dev *pcidev, const struct pci_device_id *ent)
 /**
  * nes_remove - unload from kernel
  */
-static void nes_remove(struct pci_dev *pcidev)
+static void __devexit nes_remove(struct pci_dev *pcidev)
 {
 	struct nes_device *nesdev = pci_get_drvdata(pcidev);
 	struct net_device *netdev;
@@ -812,7 +810,7 @@ static struct pci_driver nes_pci_driver = {
 	.name = DRV_NAME,
 	.id_table = nes_pci_table,
 	.probe = nes_probe,
-	.remove = nes_remove,
+	.remove = __devexit_p(nes_remove),
 };
 
 static ssize_t nes_show_adapter(struct device_driver *ddp, char *buf)

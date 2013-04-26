@@ -235,13 +235,14 @@ static const char *bcm_uart_type(struct uart_port *port)
  */
 static void bcm_uart_do_rx(struct uart_port *port)
 {
-	struct tty_port *tty_port = &port->state->port;
+	struct tty_struct *tty;
 	unsigned int max_count;
 
 	/* limit number of char read in interrupt, should not be
 	 * higher than fifo size anyway since we're much faster than
 	 * serial port */
 	max_count = 32;
+	tty = port->state->port.tty;
 	do {
 		unsigned int iestat, c, cstat;
 		char flag;
@@ -260,7 +261,7 @@ static void bcm_uart_do_rx(struct uart_port *port)
 			bcm_uart_writel(port, val, UART_CTL_REG);
 
 			port->icount.overrun++;
-			tty_insert_flip_char(tty_port, 0, TTY_OVERRUN);
+			tty_insert_flip_char(tty, 0, TTY_OVERRUN);
 		}
 
 		if (!(iestat & UART_IR_STAT(UART_IR_RXNOTEMPTY)))
@@ -299,11 +300,11 @@ static void bcm_uart_do_rx(struct uart_port *port)
 
 
 		if ((cstat & port->ignore_status_mask) == 0)
-			tty_insert_flip_char(tty_port, c, flag);
+			tty_insert_flip_char(tty, c, flag);
 
 	} while (--max_count);
 
-	tty_flip_buffer_push(tty_port);
+	tty_flip_buffer_push(tty);
 }
 
 /*
@@ -800,7 +801,7 @@ static struct uart_driver bcm_uart_driver = {
 /*
  * platform driver probe/remove callback
  */
-static int bcm_uart_probe(struct platform_device *pdev)
+static int __devinit bcm_uart_probe(struct platform_device *pdev)
 {
 	struct resource *res_mem, *res_irq;
 	struct uart_port *port;
@@ -847,7 +848,7 @@ static int bcm_uart_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int bcm_uart_remove(struct platform_device *pdev)
+static int __devexit bcm_uart_remove(struct platform_device *pdev)
 {
 	struct uart_port *port;
 
@@ -864,7 +865,7 @@ static int bcm_uart_remove(struct platform_device *pdev)
  */
 static struct platform_driver bcm_uart_platform_driver = {
 	.probe	= bcm_uart_probe,
-	.remove	= bcm_uart_remove,
+	.remove	= __devexit_p(bcm_uart_remove),
 	.driver	= {
 		.owner = THIS_MODULE,
 		.name  = "bcm63xx_uart",

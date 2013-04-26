@@ -45,13 +45,12 @@ broken.
 
  */
 
-#include <linux/pci.h>
-#include <linux/delay.h>
 #include <linux/interrupt.h>
+#include "../comedidev.h"
+
+#include <linux/delay.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
-
-#include "../comedidev.h"
 
 #include "comedi_fc.h"
 #include "8253.h"
@@ -60,6 +59,8 @@ broken.
 /* file removed due to GPL incompatibility */
 #include "me4000_fw.h"
 #endif
+
+#define PCI_VENDOR_ID_MEILHAUS		0x1402
 
 #define PCI_DEVICE_ID_MEILHAUS_ME4650	0x4650
 #define PCI_DEVICE_ID_MEILHAUS_ME4660	0x4660
@@ -970,23 +971,28 @@ static int me4000_ai_do_cmd_test(struct comedi_device *dev,
 	if (err)
 		return 2;
 
-	/* Step 3: check if arguments are trivially valid */
-
+	/*
+	 * Stage 3. Check if arguments are generally valid.
+	 */
 	if (cmd->chanlist_len < 1) {
+		dev_err(dev->class_dev, "No channel list\n");
 		cmd->chanlist_len = 1;
-		err |= -EINVAL;
+		err++;
 	}
 	if (init_ticks < 66) {
+		dev_err(dev->class_dev, "Start arg to low\n");
 		cmd->start_arg = 2000;
-		err |= -EINVAL;
+		err++;
 	}
 	if (scan_ticks && scan_ticks < 67) {
+		dev_err(dev->class_dev, "Scan begin arg to low\n");
 		cmd->scan_begin_arg = 2031;
-		err |= -EINVAL;
+		err++;
 	}
 	if (chan_ticks < 66) {
+		dev_err(dev->class_dev, "Convert arg to low\n");
 		cmd->convert_arg = 2000;
-		err |= -EINVAL;
+		err++;
 	}
 
 	if (err)
@@ -1564,14 +1570,15 @@ static const void *me4000_find_boardinfo(struct comedi_device *dev,
 	return NULL;
 }
 
-static int me4000_auto_attach(struct comedi_device *dev,
-					unsigned long context_unused)
+static int me4000_attach_pci(struct comedi_device *dev,
+			     struct pci_dev *pcidev)
 {
-	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
 	const struct me4000_board *thisboard;
 	struct me4000_info *info;
 	struct comedi_subdevice *s;
 	int result;
+
+	comedi_set_hw_dev(dev, &pcidev->dev);
 
 	thisboard = me4000_find_boardinfo(dev, pcidev);
 	if (!thisboard)
@@ -1579,10 +1586,10 @@ static int me4000_auto_attach(struct comedi_device *dev,
 	dev->board_ptr = thisboard;
 	dev->board_name = thisboard->name;
 
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
-	if (!info)
-		return -ENOMEM;
-	dev->private = info;
+	result = alloc_private(dev, sizeof(*info));
+	if (result)
+		return result;
+	info = dev->private;
 
 	result = comedi_pci_enable(pcidev, dev->board_name);
 	if (result)
@@ -1725,14 +1732,19 @@ static void me4000_detach(struct comedi_device *dev)
 static struct comedi_driver me4000_driver = {
 	.driver_name	= "me4000",
 	.module		= THIS_MODULE,
-	.auto_attach	= me4000_auto_attach,
+	.attach_pci	= me4000_attach_pci,
 	.detach		= me4000_detach,
 };
 
-static int me4000_pci_probe(struct pci_dev *dev,
+static int __devinit me4000_pci_probe(struct pci_dev *dev,
 				      const struct pci_device_id *ent)
 {
 	return comedi_pci_auto_config(dev, &me4000_driver);
+}
+
+static void __devexit me4000_pci_remove(struct pci_dev *dev)
+{
+	comedi_pci_auto_unconfig(dev);
 }
 
 static DEFINE_PCI_DEVICE_TABLE(me4000_pci_table) = {
@@ -1757,7 +1769,7 @@ static struct pci_driver me4000_pci_driver = {
 	.name		= "me4000",
 	.id_table	= me4000_pci_table,
 	.probe		= me4000_pci_probe,
-	.remove		= comedi_pci_auto_unconfig,
+	.remove		= __devexit_p(me4000_pci_remove),
 };
 module_comedi_pci_driver(me4000_driver, me4000_pci_driver);
 

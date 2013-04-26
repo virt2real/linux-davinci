@@ -98,9 +98,12 @@ static void pata_platform_setup_port(struct ata_ioports *ioaddr,
  *
  *	If no IRQ resource is present, PIO polling mode is used instead.
  */
-int __pata_platform_probe(struct device *dev, struct resource *io_res,
-			  struct resource *ctl_res, struct resource *irq_res,
-			  unsigned int ioport_shift, int __pio_mask)
+int __devinit __pata_platform_probe(struct device *dev,
+				    struct resource *io_res,
+				    struct resource *ctl_res,
+				    struct resource *irq_res,
+				    unsigned int ioport_shift,
+				    int __pio_mask)
 {
 	struct ata_host *host;
 	struct ata_port *ap;
@@ -175,7 +178,24 @@ int __pata_platform_probe(struct device *dev, struct resource *io_res,
 }
 EXPORT_SYMBOL_GPL(__pata_platform_probe);
 
-static int pata_platform_probe(struct platform_device *pdev)
+/**
+ *	__pata_platform_remove		-	unplug a platform interface
+ *	@dev: device
+ *
+ *	A platform bus ATA device has been unplugged. Perform the needed
+ *	cleanup. Also called on module unload for any active devices.
+ */
+int __pata_platform_remove(struct device *dev)
+{
+	struct ata_host *host = dev_get_drvdata(dev);
+
+	ata_host_detach(host);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(__pata_platform_remove);
+
+static int __devinit pata_platform_probe(struct platform_device *pdev)
 {
 	struct resource *io_res;
 	struct resource *ctl_res;
@@ -222,9 +242,14 @@ static int pata_platform_probe(struct platform_device *pdev)
 				     pio_mask);
 }
 
+static int __devexit pata_platform_remove(struct platform_device *pdev)
+{
+	return __pata_platform_remove(&pdev->dev);
+}
+
 static struct platform_driver pata_platform_driver = {
 	.probe		= pata_platform_probe,
-	.remove		= ata_platform_remove_one,
+	.remove		= __devexit_p(pata_platform_remove),
 	.driver = {
 		.name		= DRV_NAME,
 		.owner		= THIS_MODULE,

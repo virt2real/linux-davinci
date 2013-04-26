@@ -13,7 +13,6 @@
 #define DRIVER_PATCHLEVEL	0
 
 #include <core/client.h>
-#include <core/event.h>
 
 #include <subdev/vm.h>
 
@@ -113,7 +112,6 @@ struct nouveau_drm {
 	struct nvbios vbios;
 	struct nouveau_display *display;
 	struct backlight_device *backlight;
-	struct nouveau_eventh vblank[4];
 
 	/* power management */
 	struct nouveau_pm *pm;
@@ -131,8 +129,8 @@ nouveau_dev(struct drm_device *dev)
 	return nv_device(nouveau_drm(dev)->device);
 }
 
-int nouveau_pmops_suspend(struct device *);
-int nouveau_pmops_resume(struct device *);
+int nouveau_drm_suspend(struct pci_dev *, pm_message_t);
+int nouveau_drm_resume(struct pci_dev *);
 
 #define NV_FATAL(cli, fmt, args...) nv_fatal((cli), fmt, ##args)
 #define NV_ERROR(cli, fmt, args...) nv_error((cli), fmt, ##args)
@@ -142,7 +140,5 @@ int nouveau_pmops_resume(struct device *);
 	if (drm_debug & DRM_UT_DRIVER)                                         \
 		nv_info((cli), fmt, ##args);                                   \
 } while (0)
-
-extern int nouveau_modeset;
 
 #endif

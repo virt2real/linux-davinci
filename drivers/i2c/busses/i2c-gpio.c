@@ -85,7 +85,7 @@ static int i2c_gpio_getscl(void *data)
 	return gpio_get_value(pdata->scl_pin);
 }
 
-static int of_i2c_gpio_probe(struct device_node *np,
+static int __devinit of_i2c_gpio_probe(struct device_node *np,
 			     struct i2c_gpio_platform_data *pdata)
 {
 	u32 reg;
@@ -117,7 +117,7 @@ static int of_i2c_gpio_probe(struct device_node *np,
 	return 0;
 }
 
-static int i2c_gpio_probe(struct platform_device *pdev)
+static int __devinit i2c_gpio_probe(struct platform_device *pdev)
 {
 	struct i2c_gpio_private_data *priv;
 	struct i2c_gpio_platform_data *pdata;
@@ -184,11 +184,7 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 	bit_data->data = pdata;
 
 	adap->owner = THIS_MODULE;
-	if (pdev->dev.of_node)
-		strlcpy(adap->name, dev_name(&pdev->dev), sizeof(adap->name));
-	else
-		snprintf(adap->name, sizeof(adap->name), "i2c-gpio%d", pdev->id);
-
+	snprintf(adap->name, sizeof(adap->name), "i2c-gpio%d", pdev->id);
 	adap->algo_data = bit_data;
 	adap->class = I2C_CLASS_HWMON | I2C_CLASS_SPD;
 	adap->dev.parent = &pdev->dev;
@@ -218,7 +214,7 @@ err_request_sda:
 	return ret;
 }
 
-static int i2c_gpio_remove(struct platform_device *pdev)
+static int __devexit i2c_gpio_remove(struct platform_device *pdev)
 {
 	struct i2c_gpio_private_data *priv;
 	struct i2c_gpio_platform_data *pdata;
@@ -251,7 +247,7 @@ static struct platform_driver i2c_gpio_driver = {
 		.of_match_table	= of_match_ptr(i2c_gpio_dt_ids),
 	},
 	.probe		= i2c_gpio_probe,
-	.remove		= i2c_gpio_remove,
+	.remove		= __devexit_p(i2c_gpio_remove),
 };
 
 static int __init i2c_gpio_init(void)

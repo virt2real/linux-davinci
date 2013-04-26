@@ -154,18 +154,22 @@ static struct iscsi_param *iscsi_set_default_param(struct iscsi_param_list *para
 	}
 	INIT_LIST_HEAD(&param->p_list);
 
-	param->name = kstrdup(name, GFP_KERNEL);
+	param->name = kzalloc(strlen(name) + 1, GFP_KERNEL);
 	if (!param->name) {
 		pr_err("Unable to allocate memory for parameter name.\n");
 		goto out;
 	}
 
-	param->value = kstrdup(value, GFP_KERNEL);
+	param->value = kzalloc(strlen(value) + 1, GFP_KERNEL);
 	if (!param->value) {
 		pr_err("Unable to allocate memory for parameter value.\n");
 		goto out;
 	}
 
+	memcpy(param->name, name, strlen(name));
+	param->name[strlen(name)] = '\0';
+	memcpy(param->value, value, strlen(value));
+	param->value[strlen(value)] = '\0';
 	param->phase		= phase;
 	param->scope		= scope;
 	param->sender		= sender;
@@ -631,8 +635,11 @@ void iscsi_release_param_list(struct iscsi_param_list *param_list)
 		list_del(&param->p_list);
 
 		kfree(param->name);
+		param->name = NULL;
 		kfree(param->value);
+		param->value = NULL;
 		kfree(param);
+		param = NULL;
 	}
 
 	iscsi_release_extra_responses(param_list);
@@ -680,11 +687,14 @@ int iscsi_update_param_value(struct iscsi_param *param, char *value)
 {
 	kfree(param->value);
 
-	param->value = kstrdup(value, GFP_KERNEL);
+	param->value = kzalloc(strlen(value) + 1, GFP_KERNEL);
 	if (!param->value) {
 		pr_err("Unable to allocate memory for value.\n");
 		return -ENOMEM;
 	}
+
+	memcpy(param->value, value, strlen(value));
+	param->value[strlen(value)] = '\0';
 
 	pr_debug("iSCSI Parameter updated to %s=%s\n",
 			param->name, param->value);
@@ -1095,11 +1105,11 @@ static int iscsi_check_acceptor_state(struct iscsi_param *param, char *value,
 				SET_PSTATE_REPLY_OPTIONAL(param);
 		}
 	} else if (IS_TYPE_NUMBER(param)) {
-		char *tmpptr, buf[11];
+		char *tmpptr, buf[10];
 		u32 acceptor_value = simple_strtoul(param->value, &tmpptr, 0);
 		u32 proposer_value = simple_strtoul(value, &tmpptr, 0);
 
-		memset(buf, 0, sizeof(buf));
+		memset(buf, 0, 10);
 
 		if (!strcmp(param->name, MAXCONNECTIONS) ||
 		    !strcmp(param->name, MAXBURSTLENGTH) ||
@@ -1422,7 +1432,6 @@ static struct iscsi_param *iscsi_check_key(
 			break;
 		case PHASE_OPERATIONAL:
 			pr_debug("Operational phase.\n");
-			break;
 		default:
 			pr_debug("Unknown phase.\n");
 		}
@@ -1503,8 +1512,8 @@ static int iscsi_enforce_integrity_rules(
 			FirstBurstLength = simple_strtoul(param->value,
 					&tmpptr, 0);
 			if (FirstBurstLength > MaxBurstLength) {
-				char tmpbuf[11];
-				memset(tmpbuf, 0, sizeof(tmpbuf));
+				char tmpbuf[10];
+				memset(tmpbuf, 0, 10);
 				sprintf(tmpbuf, "%u", MaxBurstLength);
 				if (iscsi_update_param_value(param, tmpbuf))
 					return -1;

@@ -197,7 +197,7 @@ err_exit:
 	return ret;
 }
 
-static int cx18_alsa_load(struct cx18 *cx)
+int cx18_alsa_load(struct cx18 *cx)
 {
 	struct v4l2_device *v4l2_dev = &cx->v4l2_dev;
 	struct cx18_stream *s;

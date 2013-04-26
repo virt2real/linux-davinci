@@ -205,28 +205,28 @@ MODULE_DEVICE_TABLE(pci, rivafb_pci_tbl);
  * ------------------------------------------------------------------------- */
 
 /* command line data, set in rivafb_setup() */
-static int flatpanel = -1; /* Autodetect later */
-static int forceCRTC = -1;
-static bool noaccel  = 0;
+static int flatpanel __devinitdata = -1; /* Autodetect later */
+static int forceCRTC __devinitdata = -1;
+static bool noaccel  __devinitdata = 0;
 #ifdef CONFIG_MTRR
-static bool nomtrr = 0;
+static bool nomtrr __devinitdata = 0;
 #endif
 #ifdef CONFIG_PMAC_BACKLIGHT
-static int backlight = 1;
+static int backlight __devinitdata = 1;
 #else
-static int backlight = 0;
+static int backlight __devinitdata = 0;
 #endif
 
-static char *mode_option = NULL;
+static char *mode_option __devinitdata = NULL;
 static bool strictmode       = 0;
 
-static struct fb_fix_screeninfo rivafb_fix = {
+static struct fb_fix_screeninfo __devinitdata rivafb_fix = {
 	.type		= FB_TYPE_PACKED_PIXELS,
 	.xpanstep	= 1,
 	.ypanstep	= 1,
 };
 
-static struct fb_var_screeninfo rivafb_default_var = {
+static struct fb_var_screeninfo __devinitdata rivafb_default_var = {
 	.xres		= 640,
 	.yres		= 480,
 	.xres_virtual	= 640,
@@ -1709,7 +1709,7 @@ static struct fb_ops riva_fb_ops = {
 	.fb_sync 	= rivafb_sync,
 };
 
-static int riva_set_fbinfo(struct fb_info *info)
+static int __devinit riva_set_fbinfo(struct fb_info *info)
 {
 	unsigned int cmap_len;
 	struct riva_par *par = info->par;
@@ -1747,7 +1747,7 @@ static int riva_set_fbinfo(struct fb_info *info)
 }
 
 #ifdef CONFIG_PPC_OF
-static int riva_get_EDID_OF(struct fb_info *info, struct pci_dev *pd)
+static int __devinit riva_get_EDID_OF(struct fb_info *info, struct pci_dev *pd)
 {
 	struct riva_par *par = info->par;
 	struct device_node *dp;
@@ -1780,7 +1780,7 @@ static int riva_get_EDID_OF(struct fb_info *info, struct pci_dev *pd)
 #endif /* CONFIG_PPC_OF */
 
 #if defined(CONFIG_FB_RIVA_I2C) && !defined(CONFIG_PPC_OF)
-static int riva_get_EDID_i2c(struct fb_info *info)
+static int __devinit riva_get_EDID_i2c(struct fb_info *info)
 {
 	struct riva_par *par = info->par;
 	struct fb_var_screeninfo var;
@@ -1803,8 +1803,8 @@ static int riva_get_EDID_i2c(struct fb_info *info)
 }
 #endif /* CONFIG_FB_RIVA_I2C */
 
-static void riva_update_default_var(struct fb_var_screeninfo *var,
-				    struct fb_info *info)
+static void __devinit riva_update_default_var(struct fb_var_screeninfo *var,
+					      struct fb_info *info)
 {
 	struct fb_monspecs *specs = &info->monspecs;
 	struct fb_videomode modedb;
@@ -1836,7 +1836,7 @@ static void riva_update_default_var(struct fb_var_screeninfo *var,
 }
 
 
-static void riva_get_EDID(struct fb_info *info, struct pci_dev *pdev)
+static void __devinit riva_get_EDID(struct fb_info *info, struct pci_dev *pdev)
 {
 	NVTRACE_ENTER();
 #ifdef CONFIG_PPC_OF
@@ -1850,7 +1850,7 @@ static void riva_get_EDID(struct fb_info *info, struct pci_dev *pdev)
 }
 
 
-static void riva_get_edidinfo(struct fb_info *info)
+static void __devinit riva_get_edidinfo(struct fb_info *info)
 {
 	struct fb_var_screeninfo *var = &rivafb_default_var;
 	struct riva_par *par = info->par;
@@ -1871,7 +1871,7 @@ static void riva_get_edidinfo(struct fb_info *info)
  *
  * ------------------------------------------------------------------------- */
 
-static u32 riva_get_arch(struct pci_dev *pd)
+static u32 __devinit riva_get_arch(struct pci_dev *pd)
 {
     	u32 arch = 0;
 
@@ -1909,7 +1909,8 @@ static u32 riva_get_arch(struct pci_dev *pd)
 	return arch;
 }
 
-static int rivafb_probe(struct pci_dev *pd, const struct pci_device_id *ent)
+static int __devinit rivafb_probe(struct pci_dev *pd,
+			     	const struct pci_device_id *ent)
 {
 	struct riva_par *default_par;
 	struct fb_info *info;
@@ -2104,7 +2105,7 @@ err_ret:
 	return ret;
 }
 
-static void rivafb_remove(struct pci_dev *pd)
+static void __devexit rivafb_remove(struct pci_dev *pd)
 {
 	struct fb_info *info = pci_get_drvdata(pd);
 	struct riva_par *par = info->par;
@@ -2144,7 +2145,7 @@ static void rivafb_remove(struct pci_dev *pd)
  * ------------------------------------------------------------------------- */
 
 #ifndef MODULE
-static int rivafb_setup(char *options)
+static int __devinit rivafb_setup(char *options)
 {
 	char *this_opt;
 
@@ -2185,7 +2186,7 @@ static struct pci_driver rivafb_driver = {
 	.name		= "rivafb",
 	.id_table	= rivafb_pci_tbl,
 	.probe		= rivafb_probe,
-	.remove		= rivafb_remove,
+	.remove		= __devexit_p(rivafb_remove),
 };
 
 
@@ -2196,7 +2197,7 @@ static struct pci_driver rivafb_driver = {
  *
  * ------------------------------------------------------------------------- */
 
-static int rivafb_init(void)
+static int __devinit rivafb_init(void)
 {
 #ifndef MODULE
 	char *option = NULL;

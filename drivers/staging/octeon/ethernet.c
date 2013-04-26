@@ -72,7 +72,7 @@ int pow_receive_group = 15;
 module_param(pow_receive_group, int, 0444);
 MODULE_PARM_DESC(pow_receive_group, "\n"
 	"\tPOW group to receive packets from. All ethernet hardware\n"
-	"\twill be configured to send incoming packets to this POW\n"
+	"\twill be configured to send incomming packets to this POW\n"
 	"\tgroup. Also any other software can submit packets to this\n"
 	"\tgroup for the kernel to process.");
 
@@ -169,7 +169,7 @@ static void cvm_oct_periodic_worker(struct work_struct *work)
 		queue_delayed_work(cvm_oct_poll_queue, &priv->port_periodic_work, HZ);
  }
 
-static void cvm_oct_configure_common_hw(void)
+static __devinit void cvm_oct_configure_common_hw(void)
 {
 	/* Setup the FPA */
 	cvmx_fpa_enable();
@@ -453,10 +453,12 @@ int cvm_oct_common_init(struct net_device *dev)
 	if (priv->of_node)
 		mac = of_get_mac_address(priv->of_node);
 
-	if (mac && is_valid_ether_addr(mac))
+	if (mac && is_valid_ether_addr(mac)) {
 		memcpy(dev->dev_addr, mac, ETH_ALEN);
-	else
+		dev->addr_assign_type &= ~NET_ADDR_RANDOM;
+	} else {
 		eth_hw_addr_random(dev);
+	}
 
 	/*
 	 * Force the interface to use the POW send if always_use_pow
@@ -584,7 +586,7 @@ static const struct net_device_ops cvm_oct_pow_netdev_ops = {
 
 extern void octeon_mdiobus_force_mod_depencency(void);
 
-static struct device_node *cvm_oct_of_get_child(const struct device_node *parent,
+static struct device_node * __devinit cvm_oct_of_get_child(const struct device_node *parent,
 							   int reg_val)
 {
 	struct device_node *node = NULL;
@@ -602,7 +604,7 @@ static struct device_node *cvm_oct_of_get_child(const struct device_node *parent
 	return node;
 }
 
-static struct device_node *cvm_oct_node_for_port(struct device_node *pip,
+static struct device_node * __devinit cvm_oct_node_for_port(struct device_node *pip,
 							    int interface, int port)
 {
 	struct device_node *ni, *np;
@@ -617,7 +619,7 @@ static struct device_node *cvm_oct_node_for_port(struct device_node *pip,
 	return np;
 }
 
-static int cvm_oct_probe(struct platform_device *pdev)
+static int __devinit cvm_oct_probe(struct platform_device *pdev)
 {
 	int num_interfaces;
 	int interface;
@@ -811,7 +813,7 @@ static int cvm_oct_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int cvm_oct_remove(struct platform_device *pdev)
+static int __devexit cvm_oct_remove(struct platform_device *pdev)
 {
 	int port;
 
@@ -872,7 +874,7 @@ MODULE_DEVICE_TABLE(of, cvm_oct_match);
 
 static struct platform_driver cvm_oct_driver = {
 	.probe		= cvm_oct_probe,
-	.remove		= cvm_oct_remove,
+	.remove		= __devexit_p(cvm_oct_remove),
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= KBUILD_MODNAME,

@@ -28,13 +28,10 @@
 static const struct spi_device_id mc13xxx_device_id[] = {
 	{
 		.name = "mc13783",
-		.driver_data = (kernel_ulong_t)&mc13xxx_variant_mc13783,
+		.driver_data = MC13XXX_ID_MC13783,
 	}, {
 		.name = "mc13892",
-		.driver_data = (kernel_ulong_t)&mc13xxx_variant_mc13892,
-	}, {
-		.name = "mc34708",
-		.driver_data = (kernel_ulong_t)&mc13xxx_variant_mc34708,
+		.driver_data = MC13XXX_ID_MC13892,
 	}, {
 		/* sentinel */
 	}
@@ -42,9 +39,8 @@ static const struct spi_device_id mc13xxx_device_id[] = {
 MODULE_DEVICE_TABLE(spi, mc13xxx_device_id);
 
 static const struct of_device_id mc13xxx_dt_ids[] = {
-	{ .compatible = "fsl,mc13783", .data = &mc13xxx_variant_mc13783, },
-	{ .compatible = "fsl,mc13892", .data = &mc13xxx_variant_mc13892, },
-	{ .compatible = "fsl,mc34708", .data = &mc13xxx_variant_mc34708, },
+	{ .compatible = "fsl,mc13783", .data = (void *) MC13XXX_ID_MC13783, },
+	{ .compatible = "fsl,mc13892", .data = (void *) MC13XXX_ID_MC13892, },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mc13xxx_dt_ids);
@@ -148,21 +144,22 @@ static int mc13xxx_spi_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	if (spi->dev.of_node) {
-		const struct of_device_id *of_id =
-			of_match_device(mc13xxx_dt_ids, &spi->dev);
+	ret = mc13xxx_common_init(mc13xxx, pdata, spi->irq);
 
-		mc13xxx->variant = of_id->data;
+	if (ret) {
+		dev_set_drvdata(&spi->dev, NULL);
 	} else {
-		const struct spi_device_id *id_entry = spi_get_device_id(spi);
-
-		mc13xxx->variant = (void *)id_entry->driver_data;
+		const struct spi_device_id *devid =
+			spi_get_device_id(spi);
+		if (!devid || devid->driver_data != mc13xxx->ictype)
+			dev_warn(mc13xxx->dev,
+				"device id doesn't match auto detection!\n");
 	}
 
-	return mc13xxx_common_init(mc13xxx, pdata, spi->irq);
+	return ret;
 }
 
-static int mc13xxx_spi_remove(struct spi_device *spi)
+static int __devexit mc13xxx_spi_remove(struct spi_device *spi)
 {
 	struct mc13xxx *mc13xxx = dev_get_drvdata(&spi->dev);
 
@@ -179,7 +176,7 @@ static struct spi_driver mc13xxx_spi_driver = {
 		.of_match_table = mc13xxx_dt_ids,
 	},
 	.probe = mc13xxx_spi_probe,
-	.remove = mc13xxx_spi_remove,
+	.remove = __devexit_p(mc13xxx_spi_remove),
 };
 
 static int __init mc13xxx_init(void)

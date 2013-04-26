@@ -476,7 +476,8 @@ static struct bin_attribute ds1511_nvram_attr = {
 	.write = ds1511_nvram_write,
 };
 
-static int ds1511_rtc_probe(struct platform_device *pdev)
+ static int __devinit
+ds1511_rtc_probe(struct platform_device *pdev)
 {
 	struct rtc_device *rtc;
 	struct resource *res;
@@ -550,7 +551,8 @@ static int ds1511_rtc_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int ds1511_rtc_remove(struct platform_device *pdev)
+ static int __devexit
+ds1511_rtc_remove(struct platform_device *pdev)
 {
 	struct rtc_plat_data *pdata = platform_get_drvdata(pdev);
 
@@ -571,7 +573,7 @@ MODULE_ALIAS("platform:ds1511");
 
 static struct platform_driver ds1511_rtc_driver = {
 	.probe		= ds1511_rtc_probe,
-	.remove		= ds1511_rtc_remove,
+	.remove		= __devexit_p(ds1511_rtc_remove),
 	.driver		= {
 		.name	= "ds1511",
 		.owner	= THIS_MODULE,

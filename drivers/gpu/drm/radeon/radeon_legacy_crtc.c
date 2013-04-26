@@ -295,7 +295,6 @@ static void radeon_crtc_dpms(struct drm_crtc *crtc, int mode)
 	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	struct radeon_device *rdev = dev->dev_private;
-	uint32_t crtc_ext_cntl = 0;
 	uint32_t mask;
 
 	if (radeon_crtc->crtc_id)
@@ -308,16 +307,6 @@ static void radeon_crtc_dpms(struct drm_crtc *crtc, int mode)
 			RADEON_CRTC_VSYNC_DIS |
 			RADEON_CRTC_HSYNC_DIS);
 
-	/*
-	 * On all dual CRTC GPUs this bit controls the CRTC of the primary DAC.
-	 * Therefore it is set in the DAC DMPS function.
-	 * This is different for GPU's with a single CRTC but a primary and a
-	 * TV DAC: here it controls the single CRTC no matter where it is
-	 * routed. Therefore we set it here.
-	 */
-	if (rdev->flags & RADEON_SINGLE_CRTC)
-		crtc_ext_cntl = RADEON_CRTC_CRT_ON;
-	
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
 		radeon_crtc->enabled = true;
@@ -328,7 +317,7 @@ static void radeon_crtc_dpms(struct drm_crtc *crtc, int mode)
 		else {
 			WREG32_P(RADEON_CRTC_GEN_CNTL, RADEON_CRTC_EN, ~(RADEON_CRTC_EN |
 									 RADEON_CRTC_DISP_REQ_EN_B));
-			WREG32_P(RADEON_CRTC_EXT_CNTL, crtc_ext_cntl, ~(mask | crtc_ext_cntl));
+			WREG32_P(RADEON_CRTC_EXT_CNTL, 0, ~mask);
 		}
 		drm_vblank_post_modeset(dev, radeon_crtc->crtc_id);
 		radeon_crtc_load_lut(crtc);
@@ -342,7 +331,7 @@ static void radeon_crtc_dpms(struct drm_crtc *crtc, int mode)
 		else {
 			WREG32_P(RADEON_CRTC_GEN_CNTL, RADEON_CRTC_DISP_REQ_EN_B, ~(RADEON_CRTC_EN |
 										    RADEON_CRTC_DISP_REQ_EN_B));
-			WREG32_P(RADEON_CRTC_EXT_CNTL, mask, ~(mask | crtc_ext_cntl));
+			WREG32_P(RADEON_CRTC_EXT_CNTL, mask, ~mask);
 		}
 		radeon_crtc->enabled = false;
 		/* adjust pm to dpms changes AFTER disabling crtcs */

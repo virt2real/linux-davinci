@@ -65,7 +65,7 @@ void __init orion5x_map_io(void)
  ****************************************************************************/
 static struct clk *tclk;
 
-void __init clk_init(void)
+static void __init clk_init(void)
 {
 	tclk = clk_register_fixed_rate(NULL, "tclk", NULL, CLK_IS_ROOT,
 				       orion5x_tclk);
@@ -217,13 +217,17 @@ int __init orion5x_find_tclk(void)
 	return 166666667;
 }
 
-void __init orion5x_timer_init(void)
+static void __init orion5x_timer_init(void)
 {
 	orion5x_tclk = orion5x_find_tclk();
 
 	orion_time_init(ORION5X_BRIDGE_VIRT_BASE, BRIDGE_INT_TIMER1_CLR,
 			IRQ_ORION5X_BRIDGE, orion5x_tclk);
 }
+
+struct sys_timer orion5x_timer = {
+	.init = orion5x_timer_init,
+};
 
 
 /*****************************************************************************
@@ -232,7 +236,7 @@ void __init orion5x_timer_init(void)
 /*
  * Identify device ID and rev from PCIe configuration header space '0'.
  */
-void __init orion5x_id(u32 *dev, u32 *rev, char **dev_name)
+static void __init orion5x_id(u32 *dev, u32 *rev, char **dev_name)
 {
 	orion5x_pcie_id(dev, rev);
 

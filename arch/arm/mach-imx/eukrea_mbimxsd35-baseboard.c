@@ -36,10 +36,11 @@
 #include <asm/mach/time.h>
 #include <asm/mach/map.h>
 
-#include "common.h"
+#include <mach/hardware.h>
+#include <mach/common.h>
+#include <mach/iomux-mx35.h>
+
 #include "devices-imx35.h"
-#include "hardware.h"
-#include "iomux-mx35.h"
 
 static const struct fb_videomode fb_modedb[] = {
 	{

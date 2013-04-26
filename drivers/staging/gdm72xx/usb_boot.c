@@ -82,8 +82,7 @@ static int gdm_wibro_send(struct usb_device *usbdev, void *data, int len)
 			&actual, 1000);
 
 	if (ret < 0) {
-		dev_err(&usbdev->dev, "Error : usb_bulk_msg ( result = %d )\n",
-			ret);
+		printk(KERN_ERR "Error : usb_bulk_msg ( result = %d )\n", ret);
 		return ret;
 	}
 	return 0;
@@ -98,8 +97,8 @@ static int gdm_wibro_recv(struct usb_device *usbdev, void *data, int len)
 			&actual, 5000);
 
 	if (ret < 0) {
-		dev_err(&usbdev->dev,
-			"Error : usb_bulk_msg(recv) ( result = %d )\n", ret);
+		printk(KERN_ERR "Error : usb_bulk_msg(recv) ( result = %d )\n",
+			ret);
 		return ret;
 	}
 	return 0;
@@ -151,18 +150,20 @@ int usb_boot(struct usb_device *usbdev, u16 pid)
 
 	ret = request_firmware(&firm, img_name, &usbdev->dev);
 	if (ret < 0) {
-		dev_err(&usbdev->dev,
-			"requesting firmware %s failed with error %d\n",
+		printk(KERN_ERR
+		       "requesting firmware %s failed with error %d\n",
 			img_name, ret);
 		return ret;
 	}
 
 	tx_buf = kmalloc(DOWNLOAD_SIZE, GFP_KERNEL);
-	if (tx_buf == NULL)
+	if (tx_buf == NULL) {
+		printk(KERN_ERR "Error: kmalloc\n");
 		return -ENOMEM;
+	}
 
 	if (firm->size < sizeof(hdr)) {
-		dev_err(&usbdev->dev, "Cannot read the image info.\n");
+		printk(KERN_ERR "gdmwm: Cannot read the image info.\n");
 		ret = -EIO;
 		goto out;
 	}
@@ -171,22 +172,23 @@ int usb_boot(struct usb_device *usbdev, u16 pid)
 	array_le32_to_cpu((u32 *)&hdr, 19);
 #if 0
 	if (hdr.magic_code != 0x10767fff) {
-		dev_err(&usbdev->dev, "Invalid magic code 0x%08x\n",
+		printk(KERN_ERR "gdmwm: Invalid magic code 0x%08x\n",
 			hdr.magic_code);
 		ret = -EINVAL;
 		goto out;
 	}
 #endif
 	if (hdr.count > MAX_IMG_CNT) {
-		dev_err(&usbdev->dev, "Too many images. %d\n", hdr.count);
+		printk(KERN_ERR "gdmwm: Too many images. %d\n", hdr.count);
 		ret = -EINVAL;
 		goto out;
 	}
 
 	for (i = 0; i < hdr.count; i++) {
 		if (hdr.offset[i] > hdr.len) {
-			dev_err(&usbdev->dev,
-				"Invalid offset. Entry = %d Offset = 0x%08x Image length = 0x%08x\n",
+			printk(KERN_ERR "gdmwm: Invalid offset. "
+				"Entry = %d Offset = 0x%08x "
+				"Image length = 0x%08x\n",
 				i, hdr.offset[i], hdr.len);
 			ret = -EINVAL;
 			goto out;
@@ -194,7 +196,7 @@ int usb_boot(struct usb_device *usbdev, u16 pid)
 
 		pos = hdr.offset[i];
 		if (firm->size < sizeof(fw_info) + pos) {
-			dev_err(&usbdev->dev, "Cannot read the FW info.\n");
+			printk(KERN_ERR "gdmwm: Cannot read the FW info.\n");
 			ret = -EIO;
 			goto out;
 		}
@@ -203,7 +205,7 @@ int usb_boot(struct usb_device *usbdev, u16 pid)
 		array_le32_to_cpu((u32 *)&fw_info, 8);
 #if 0
 		if ((fw_info.id & 0xfffff000) != 0x10767000) {
-			dev_err(&usbdev->dev, "Invalid FW id. 0x%08x\n",
+			printk(KERN_ERR "gdmwm: Invalid FW id. 0x%08x\n",
 				fw_info.id);
 			ret = -EIO;
 			goto out;
@@ -215,7 +217,7 @@ int usb_boot(struct usb_device *usbdev, u16 pid)
 
 		pos = hdr.offset[i] + fw_info.kernel_offset;
 		if (firm->size < fw_info.kernel_len + pos) {
-			dev_err(&usbdev->dev, "Kernel FW is too small.\n");
+			printk(KERN_ERR "gdmwm: Kernel FW is too small.\n");
 			goto out;
 		}
 
@@ -223,25 +225,24 @@ int usb_boot(struct usb_device *usbdev, u16 pid)
 				fw_info.kernel_len, DN_KERNEL_MAGIC_NUMBER);
 		if (ret < 0)
 			goto out;
-		dev_info(&usbdev->dev, "GCT: Kernel download success.\n");
+		printk(KERN_INFO "GCT: Kernel download success.\n");
 
 		pos = hdr.offset[i] + fw_info.rootfs_offset;
 		if (firm->size < fw_info.rootfs_len + pos) {
-			dev_err(&usbdev->dev, "Filesystem FW is too small.\n");
+			printk(KERN_ERR "gdmwm: Filesystem FW is too small.\n");
 			goto out;
 		}
 		ret = download_image(usbdev, firm, pos, fw_info.rootfs_len,
 				DN_ROOTFS_MAGIC_NUMBER);
 		if (ret < 0)
 			goto out;
-		dev_info(&usbdev->dev, "GCT: Filesystem download success.\n");
+		printk(KERN_INFO "GCT: Filesystem download success.\n");
 
 		break;
 	}
 
 	if (i == hdr.count) {
-		dev_err(&usbdev->dev, "Firmware for gsk%x is not installed.\n",
-			pid);
+		printk(KERN_ERR "Firmware for gsk%x is not installed.\n", pid);
 		ret = -EINVAL;
 	}
 out:
@@ -292,15 +293,17 @@ static int em_download_image(struct usb_device *usbdev, const char *img_name,
 
 	ret = request_firmware(&firm, img_name, &usbdev->dev);
 	if (ret < 0) {
-		dev_err(&usbdev->dev,
-			"requesting firmware %s failed with error %d\n",
+		printk(KERN_ERR
+		       "requesting firmware %s failed with error %d\n",
 			img_name, ret);
 		return ret;
 	}
 
 	buf = kmalloc(DOWNLOAD_CHUCK + pad_size, GFP_KERNEL);
-	if (buf == NULL)
+	if (buf == NULL) {
+		printk(KERN_ERR "Error: kmalloc\n");
 		return -ENOMEM;
+	}
 
 	strcpy(buf+pad_size, type_string);
 	ret = gdm_wibro_send(usbdev, buf, strlen(type_string)+pad_size);
@@ -363,12 +366,12 @@ int usb_emergency(struct usb_device *usbdev)
 	ret = em_download_image(usbdev, kern_name, KERNEL_TYPE_STRING);
 	if (ret < 0)
 		return ret;
-	dev_err(&usbdev->dev, "GCT Emergency: Kernel download success.\n");
+	printk(KERN_INFO "GCT Emergency: Kernel download success.\n");
 
 	ret = em_download_image(usbdev, fs_name, FS_TYPE_STRING);
 	if (ret < 0)
 		return ret;
-	dev_info(&usbdev->dev, "GCT Emergency: Filesystem download success.\n");
+	printk(KERN_INFO "GCT Emergency: Filesystem download success.\n");
 
 	ret = em_fw_reset(usbdev);
 

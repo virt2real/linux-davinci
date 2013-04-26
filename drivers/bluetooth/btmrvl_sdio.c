@@ -492,7 +492,7 @@ done:
 static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 {
 	u16 buf_len = 0;
-	int ret, num_blocks, blksz;
+	int ret, buf_block_len, blksz;
 	struct sk_buff *skb = NULL;
 	u32 type;
 	u8 *payload = NULL;
@@ -514,17 +514,18 @@ static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 	}
 
 	blksz = SDIO_BLOCK_SIZE;
-	num_blocks = DIV_ROUND_UP(buf_len, blksz);
+	buf_block_len = (buf_len + blksz - 1) / blksz;
 
 	if (buf_len <= SDIO_HEADER_LEN
-	    || (num_blocks * blksz) > ALLOC_BUF_SIZE) {
+			|| (buf_block_len * blksz) > ALLOC_BUF_SIZE) {
 		BT_ERR("invalid packet length: %d", buf_len);
 		ret = -EINVAL;
 		goto exit;
 	}
 
 	/* Allocate buffer */
-	skb = bt_skb_alloc(num_blocks * blksz + BTSDIO_DMA_ALIGN, GFP_ATOMIC);
+	skb = bt_skb_alloc(buf_block_len * blksz + BTSDIO_DMA_ALIGN,
+								GFP_ATOMIC);
 	if (skb == NULL) {
 		BT_ERR("No free skb");
 		goto exit;
@@ -540,7 +541,7 @@ static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 	payload = skb->data;
 
 	ret = sdio_readsb(card->func, payload, card->ioport,
-			  num_blocks * blksz);
+			  buf_block_len * blksz);
 	if (ret < 0) {
 		BT_ERR("readsb failed: %d", ret);
 		ret = -EIO;
@@ -552,16 +553,7 @@ static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 	 */
 
 	buf_len = payload[0];
-	buf_len |= payload[1] << 8;
-	buf_len |= payload[2] << 16;
-
-	if (buf_len > blksz * num_blocks) {
-		BT_ERR("Skip incorrect packet: hdrlen %d buffer %d",
-		       buf_len, blksz * num_blocks);
-		ret = -EIO;
-		goto exit;
-	}
-
+	buf_len |= (u16) payload[1] << 8;
 	type = payload[3];
 
 	switch (type) {
@@ -597,7 +589,8 @@ static int btmrvl_sdio_card_to_host(struct btmrvl_private *priv)
 
 	default:
 		BT_ERR("Unknown packet type:%d", type);
-		BT_ERR("hex: %*ph", blksz * num_blocks, payload);
+		print_hex_dump_bytes("", DUMP_PREFIX_OFFSET, payload,
+						blksz * buf_block_len);
 
 		kfree_skb(skb);
 		skb = NULL;
@@ -856,7 +849,8 @@ static int btmrvl_sdio_host_to_card(struct btmrvl_private *priv,
 		if (ret < 0) {
 			i++;
 			BT_ERR("i=%d writesb failed: %d", i, ret);
-			BT_ERR("hex: %*ph", nb, payload);
+			print_hex_dump_bytes("", DUMP_PREFIX_OFFSET,
+						payload, nb);
 			ret = -EIO;
 			if (i > MAX_WRITE_IOMEM_RETRY)
 				goto exit;

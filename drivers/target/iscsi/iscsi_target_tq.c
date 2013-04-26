@@ -66,7 +66,8 @@ static struct iscsi_thread_set *iscsi_get_ts_from_inactive_list(void)
 		return NULL;
 	}
 
-	ts = list_first_entry(&inactive_ts_list, struct iscsi_thread_set, ts_list);
+	list_for_each_entry(ts, &inactive_ts_list, ts_list)
+		break;
 
 	list_del(&ts->ts_list);
 	iscsit_global->inactive_ts--;

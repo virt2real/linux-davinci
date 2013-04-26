@@ -144,6 +144,17 @@ static struct hid_driver cp_driver = {
 	.event = cp_event,
 	.probe = cp_probe,
 };
-module_hid_driver(cp_driver);
 
+static int __init cp_init(void)
+{
+	return hid_register_driver(&cp_driver);
+}
+
+static void __exit cp_exit(void)
+{
+	hid_unregister_driver(&cp_driver);
+}
+
+module_init(cp_init);
+module_exit(cp_exit);
 MODULE_LICENSE("GPL");

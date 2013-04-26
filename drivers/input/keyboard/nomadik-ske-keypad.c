@@ -67,7 +67,6 @@ struct ske_keypad {
 	const struct ske_keypad_platform_data *board;
 	unsigned short keymap[SKE_KPD_NUM_ROWS * SKE_KPD_NUM_COLS];
 	struct clk *clk;
-	struct clk *pclk;
 	spinlock_t ske_keypad_lock;
 };
 
@@ -272,18 +271,11 @@ static int __init ske_keypad_probe(struct platform_device *pdev)
 		goto err_free_mem_region;
 	}
 
-	keypad->pclk = clk_get(&pdev->dev, "apb_pclk");
-	if (IS_ERR(keypad->pclk)) {
-		dev_err(&pdev->dev, "failed to get pclk\n");
-		error = PTR_ERR(keypad->pclk);
-		goto err_iounmap;
-	}
-
 	keypad->clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(keypad->clk)) {
 		dev_err(&pdev->dev, "failed to get clk\n");
 		error = PTR_ERR(keypad->clk);
-		goto err_pclk;
+		goto err_iounmap;
 	}
 
 	input->id.bustype = BUS_HOST;
@@ -295,25 +287,14 @@ static int __init ske_keypad_probe(struct platform_device *pdev)
 					   keypad->keymap, input);
 	if (error) {
 		dev_err(&pdev->dev, "Failed to build keymap\n");
-		goto err_clk;
+		goto err_iounmap;
 	}
 
 	input_set_capability(input, EV_MSC, MSC_SCAN);
 	if (!plat->no_autorepeat)
 		__set_bit(EV_REP, input->evbit);
 
-	error = clk_prepare_enable(keypad->pclk);
-	if (error) {
-		dev_err(&pdev->dev, "Failed to prepare/enable pclk\n");
-		goto err_clk;
-	}
-
-	error = clk_prepare_enable(keypad->clk);
-	if (error) {
-		dev_err(&pdev->dev, "Failed to prepare/enable clk\n");
-		goto err_pclk_disable;
-	}
-
+	clk_enable(keypad->clk);
 
 	/* go through board initialization helpers */
 	if (keypad->board->init)
@@ -349,13 +330,8 @@ static int __init ske_keypad_probe(struct platform_device *pdev)
 err_free_irq:
 	free_irq(keypad->irq, keypad);
 err_clk_disable:
-	clk_disable_unprepare(keypad->clk);
-err_pclk_disable:
-	clk_disable_unprepare(keypad->pclk);
-err_clk:
+	clk_disable(keypad->clk);
 	clk_put(keypad->clk);
-err_pclk:
-	clk_put(keypad->pclk);
 err_iounmap:
 	iounmap(keypad->reg_base);
 err_free_mem_region:
@@ -366,7 +342,7 @@ err_free_mem:
 	return error;
 }
 
-static int ske_keypad_remove(struct platform_device *pdev)
+static int __devexit ske_keypad_remove(struct platform_device *pdev)
 {
 	struct ske_keypad *keypad = platform_get_drvdata(pdev);
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -375,7 +351,7 @@ static int ske_keypad_remove(struct platform_device *pdev)
 
 	input_unregister_device(keypad->input);
 
-	clk_disable_unprepare(keypad->clk);
+	clk_disable(keypad->clk);
 	clk_put(keypad->clk);
 
 	if (keypad->board->exit)
@@ -427,7 +403,7 @@ static struct platform_driver ske_keypad_driver = {
 		.owner  = THIS_MODULE,
 		.pm = &ske_keypad_dev_pm_ops,
 	},
-	.remove = ske_keypad_remove,
+	.remove = __devexit_p(ske_keypad_remove),
 };
 
 static int __init ske_keypad_init(void)

@@ -4,7 +4,7 @@
 
 obj-y		+= access.o bus.o probe.o host-bridge.o remove.o pci.o \
 			pci-driver.o search.o pci-sysfs.o rom.o setup-res.o \
-			irq.o vpd.o setup-bus.o
+			irq.o vpd.o
 obj-$(CONFIG_PROC_FS) += proc.o
 obj-$(CONFIG_SYSFS) += slot.o
 
@@ -14,6 +14,8 @@ obj-$(CONFIG_PCI_QUIRKS) += quirks.o
 obj-$(CONFIG_PCIEPORTBUS) += pcie/
 
 obj-$(CONFIG_PCI_IOAPIC) += ioapic.o
+
+obj-$(CONFIG_HOTPLUG) += hotplug.o
 
 # Build the PCI Hotplug drivers if we were asked to
 obj-$(CONFIG_HOTPLUG_PCI) += hotplug/
@@ -57,6 +59,9 @@ obj-$(CONFIG_ACPI)    += pci-acpi.o
 
 # SMBIOS provided firmware instance and labels
 obj-$(CONFIG_PCI_LABEL) += pci-label.o
+
+# Cardbus & CompactPCI use setup-bus
+obj-$(CONFIG_HOTPLUG) += setup-bus.o
 
 obj-$(CONFIG_PCI_SYSCALL) += syscall.o
 

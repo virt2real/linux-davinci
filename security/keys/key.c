@@ -854,13 +854,13 @@ key_ref_t key_create_or_update(key_ref_t keyring_ref,
 	/* if the client doesn't provide, decide on the permissions we want */
 	if (perm == KEY_PERM_UNDEF) {
 		perm = KEY_POS_VIEW | KEY_POS_SEARCH | KEY_POS_LINK | KEY_POS_SETATTR;
-		perm |= KEY_USR_VIEW;
+		perm |= KEY_USR_VIEW | KEY_USR_SEARCH | KEY_USR_LINK | KEY_USR_SETATTR;
 
 		if (ktype->read)
-			perm |= KEY_POS_READ;
+			perm |= KEY_POS_READ | KEY_USR_READ;
 
 		if (ktype == &key_type_keyring || ktype->update)
-			perm |= KEY_POS_WRITE;
+			perm |= KEY_USR_WRITE;
 	}
 
 	/* allocate a new key */

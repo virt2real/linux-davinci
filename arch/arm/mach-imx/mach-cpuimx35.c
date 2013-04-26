@@ -37,11 +37,12 @@
 #include <asm/mach/time.h>
 #include <asm/mach/map.h>
 
-#include "common.h"
+#include <mach/eukrea-baseboards.h>
+#include <mach/hardware.h>
+#include <mach/common.h>
+#include <mach/iomux-mx35.h>
+
 #include "devices-imx35.h"
-#include "eukrea-baseboards.h"
-#include "hardware.h"
-#include "iomux-mx35.h"
 
 static const struct imxuart_platform_data uart_pdata __initconst = {
 	.flags = IMXUART_HAVE_RTSCTS,
@@ -193,6 +194,10 @@ static void __init eukrea_cpuimx35_timer_init(void)
 	mx35_clocks_init();
 }
 
+static struct sys_timer eukrea_cpuimx35_timer = {
+	.init	= eukrea_cpuimx35_timer_init,
+};
+
 MACHINE_START(EUKREA_CPUIMX35SD, "Eukrea CPUIMX35")
 	/* Maintainer: Eukrea Electromatique */
 	.atag_offset = 0x100,
@@ -200,7 +205,7 @@ MACHINE_START(EUKREA_CPUIMX35SD, "Eukrea CPUIMX35")
 	.init_early = imx35_init_early,
 	.init_irq = mx35_init_irq,
 	.handle_irq = imx35_handle_irq,
-	.init_time	= eukrea_cpuimx35_timer_init,
+	.timer = &eukrea_cpuimx35_timer,
 	.init_machine = eukrea_cpuimx35_init,
 	.restart	= mxc_restart,
 MACHINE_END

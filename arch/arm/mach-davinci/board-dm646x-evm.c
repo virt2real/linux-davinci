@@ -117,7 +117,12 @@ static struct platform_device davinci_nand_device = {
 	},
 };
 
-#define HAS_ATA		IS_ENABLED(CONFIG_BLK_DEV_PALMCHIP_BK3710)
+#if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
+    defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
+#define HAS_ATA 1
+#else
+#define HAS_ATA 0
+#endif
 
 /* CPLD Register 0 bits to control ATA */
 #define DM646X_EVM_ATA_RST		BIT(0)
@@ -353,7 +358,7 @@ static int cpld_video_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int cpld_video_remove(struct i2c_client *client)
+static int __devexit cpld_video_remove(struct i2c_client *client)
 {
 	cpld_client = NULL;
 	return 0;
@@ -813,7 +818,7 @@ MACHINE_START(DAVINCI_DM6467_EVM, "DaVinci DM646x EVM")
 	.atag_offset  = 0x100,
 	.map_io       = davinci_map_io,
 	.init_irq     = davinci_irq_init,
-	.init_time	= davinci_timer_init,
+	.timer        = &davinci_timer,
 	.init_machine = evm_init,
 	.init_late	= davinci_init_late,
 	.dma_zone_size	= SZ_128M,
@@ -824,7 +829,7 @@ MACHINE_START(DAVINCI_DM6467TEVM, "DaVinci DM6467T EVM")
 	.atag_offset  = 0x100,
 	.map_io       = davinci_map_io,
 	.init_irq     = davinci_irq_init,
-	.init_time	= davinci_timer_init,
+	.timer        = &davinci_timer,
 	.init_machine = evm_init,
 	.init_late	= davinci_init_late,
 	.dma_zone_size	= SZ_128M,

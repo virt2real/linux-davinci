@@ -486,9 +486,11 @@ static int kdb_bc(int argc, const char **argv)
 /*
  * kdb_ss
  *
- *	Process the 'ss' (Single Step) command.
+ *	Process the 'ss' (Single Step) and 'ssb' (Single Step to Branch)
+ *	commands.
  *
  *	ss
+ *	ssb
  *
  * Parameters:
  *	argc	Argument count
@@ -496,23 +498,35 @@ static int kdb_bc(int argc, const char **argv)
  * Outputs:
  *	None.
  * Returns:
- *	KDB_CMD_SS for success, a kdb error if failure.
+ *	KDB_CMD_SS[B] for success, a kdb error if failure.
  * Locking:
  *	None.
  * Remarks:
  *
  *	Set the arch specific option to trigger a debug trap after the next
  *	instruction.
+ *
+ *	For 'ssb', set the trace flag in the debug trap handler
+ *	after printing the current insn and return directly without
+ *	invoking the kdb command processor, until a branch instruction
+ *	is encountered.
  */
 
 static int kdb_ss(int argc, const char **argv)
 {
+	int ssb = 0;
+
+	ssb = (strcmp(argv[0], "ssb") == 0);
 	if (argc != 0)
 		return KDB_ARGCOUNT;
 	/*
 	 * Set trace flag and go.
 	 */
 	KDB_STATE_SET(DOING_SS);
+	if (ssb) {
+		KDB_STATE_SET(DOING_SSB);
+		return KDB_CMD_SSB;
+	}
 	return KDB_CMD_SS;
 }
 
@@ -547,6 +561,8 @@ void __init kdb_initbptab(void)
 
 	kdb_register_repeat("ss", kdb_ss, "",
 		"Single Step", 1, KDB_REPEAT_NO_ARGS);
+	kdb_register_repeat("ssb", kdb_ss, "",
+		"Single step to branch/call", 0, KDB_REPEAT_NO_ARGS);
 	/*
 	 * Architecture dependent initialization.
 	 */

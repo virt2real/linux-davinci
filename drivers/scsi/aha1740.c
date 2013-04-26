@@ -646,7 +646,7 @@ static int aha1740_probe (struct device *dev)
 	return -ENODEV;
 }
 
-static int aha1740_remove (struct device *dev)
+static __devexit int aha1740_remove (struct device *dev)
 {
 	struct Scsi_Host *shpnt = dev_get_drvdata(dev);
 	struct aha1740_hostdata *host = HOSTDATA (shpnt);
@@ -677,7 +677,7 @@ static struct eisa_driver aha1740_driver = {
 	.driver   = {
 		.name    = "aha1740",
 		.probe   = aha1740_probe,
-		.remove  = aha1740_remove,
+		.remove  = __devexit_p (aha1740_remove),
 	},
 };
 

@@ -519,10 +519,8 @@ static int pcan_usb_decode_error(struct pcan_usb_msg_context *mc, u8 n,
 	mc->pdev->dev.can.state = new_state;
 
 	if (status_len & PCAN_USB_STATUSLEN_TIMESTAMP) {
-		struct skb_shared_hwtstamps *hwts = skb_hwtstamps(skb);
-
 		peak_usb_get_ts_tv(&mc->pdev->time_ref, mc->ts16, &tv);
-		hwts->hwtstamp = timeval_to_ktime(tv);
+		skb->tstamp = timeval_to_ktime(tv);
 	}
 
 	netif_rx(skb);
@@ -607,7 +605,6 @@ static int pcan_usb_decode_data(struct pcan_usb_msg_context *mc, u8 status_len)
 	struct sk_buff *skb;
 	struct can_frame *cf;
 	struct timeval tv;
-	struct skb_shared_hwtstamps *hwts;
 
 	skb = alloc_can_skb(mc->netdev, &cf);
 	if (!skb)
@@ -655,8 +652,7 @@ static int pcan_usb_decode_data(struct pcan_usb_msg_context *mc, u8 status_len)
 
 	/* convert timestamp into kernel time */
 	peak_usb_get_ts_tv(&mc->pdev->time_ref, mc->ts16, &tv);
-	hwts = skb_hwtstamps(skb);
-	hwts->hwtstamp = timeval_to_ktime(tv);
+	skb->tstamp = timeval_to_ktime(tv);
 
 	/* push the skb */
 	netif_rx(skb);

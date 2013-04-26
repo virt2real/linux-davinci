@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <drm/drmP.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_crtc_helper.h>
 
 #include <linux/fb.h>
 
@@ -121,10 +120,9 @@ static int cirrusfb_create_object(struct cirrus_fbdev *afbdev,
 	return ret;
 }
 
-static int cirrusfb_create(struct drm_fb_helper *helper,
+static int cirrusfb_create(struct cirrus_fbdev *gfbdev,
 			   struct drm_fb_helper_surface_size *sizes)
 {
-	struct cirrus_fbdev *gfbdev = (struct cirrus_fbdev *)helper;
 	struct drm_device *dev = gfbdev->helper.dev;
 	struct cirrus_device *cdev = gfbdev->helper.dev->dev_private;
 	struct fb_info *info;
@@ -221,6 +219,23 @@ out_iounmap:
 	return ret;
 }
 
+static int cirrus_fb_find_or_create_single(struct drm_fb_helper *helper,
+					   struct drm_fb_helper_surface_size
+					   *sizes)
+{
+	struct cirrus_fbdev *gfbdev = (struct cirrus_fbdev *)helper;
+	int new_fb = 0;
+	int ret;
+
+	if (!helper->fb) {
+		ret = cirrusfb_create(gfbdev, sizes);
+		if (ret)
+			return ret;
+		new_fb = 1;
+	}
+	return new_fb;
+}
+
 static int cirrus_fbdev_destroy(struct drm_device *dev,
 				struct cirrus_fbdev *gfbdev)
 {
@@ -243,7 +258,6 @@ static int cirrus_fbdev_destroy(struct drm_device *dev,
 
 	vfree(gfbdev->sysram);
 	drm_fb_helper_fini(&gfbdev->helper);
-	drm_framebuffer_unregister_private(&gfb->base);
 	drm_framebuffer_cleanup(&gfb->base);
 
 	return 0;
@@ -252,7 +266,7 @@ static int cirrus_fbdev_destroy(struct drm_device *dev,
 static struct drm_fb_helper_funcs cirrus_fb_helper_funcs = {
 	.gamma_set = cirrus_crtc_fb_gamma_set,
 	.gamma_get = cirrus_crtc_fb_gamma_get,
-	.fb_probe = cirrusfb_create,
+	.fb_probe = cirrus_fb_find_or_create_single,
 };
 
 int cirrus_fbdev_init(struct cirrus_device *cdev)
@@ -276,9 +290,6 @@ int cirrus_fbdev_init(struct cirrus_device *cdev)
 		return ret;
 	}
 	drm_fb_helper_single_add_all_connectors(&gfbdev->helper);
-
-	/* disable all the possible outputs/crtcs before entering KMS mode */
-	drm_helper_disable_unused_functions(cdev->dev);
 	drm_fb_helper_initial_config(&gfbdev->helper, bpp_sel);
 
 	return 0;

@@ -307,7 +307,6 @@ void nfs_fscache_set_inode_cookie(struct inode *inode, struct file *filp)
 		nfs_fscache_inode_unlock(inode);
 	}
 }
-EXPORT_SYMBOL_GPL(nfs_fscache_set_inode_cookie);
 
 /*
  * Replace a per-inode cookie due to revalidation detecting a file having

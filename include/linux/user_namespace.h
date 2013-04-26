@@ -21,13 +21,10 @@ struct user_namespace {
 	struct uid_gid_map	uid_map;
 	struct uid_gid_map	gid_map;
 	struct uid_gid_map	projid_map;
-	atomic_t		count;
+	struct kref		kref;
 	struct user_namespace	*parent;
 	kuid_t			owner;
 	kgid_t			group;
-	unsigned int		proc_inum;
-	bool			may_mount_sysfs;
-	bool			may_mount_proc;
 };
 
 extern struct user_namespace init_user_ns;
@@ -37,18 +34,17 @@ extern struct user_namespace init_user_ns;
 static inline struct user_namespace *get_user_ns(struct user_namespace *ns)
 {
 	if (ns)
-		atomic_inc(&ns->count);
+		kref_get(&ns->kref);
 	return ns;
 }
 
 extern int create_user_ns(struct cred *new);
-extern int unshare_userns(unsigned long unshare_flags, struct cred **new_cred);
-extern void free_user_ns(struct user_namespace *ns);
+extern void free_user_ns(struct kref *kref);
 
 static inline void put_user_ns(struct user_namespace *ns)
 {
-	if (ns && atomic_dec_and_test(&ns->count))
-		free_user_ns(ns);
+	if (ns)
+		kref_put(&ns->kref, free_user_ns);
 }
 
 struct seq_operations;
@@ -70,20 +66,10 @@ static inline int create_user_ns(struct cred *new)
 	return -EINVAL;
 }
 
-static inline int unshare_userns(unsigned long unshare_flags,
-				 struct cred **new_cred)
-{
-	if (unshare_flags & CLONE_NEWUSER)
-		return -EINVAL;
-	return 0;
-}
-
 static inline void put_user_ns(struct user_namespace *ns)
 {
 }
 
 #endif
-
-void update_mnt_policy(struct user_namespace *userns);
 
 #endif /* _LINUX_USER_H */

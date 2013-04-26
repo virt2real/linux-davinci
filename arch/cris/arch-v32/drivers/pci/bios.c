@@ -2,7 +2,7 @@
 #include <linux/kernel.h>
 #include <arch/hwregs/intr_vect.h>
 
-void pcibios_fixup_bus(struct pci_bus *b)
+void __devinit  pcibios_fixup_bus(struct pci_bus *b)
 {
 }
 

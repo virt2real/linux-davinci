@@ -27,13 +27,13 @@
  *	- Information block
  */
 struct module_signature {
-	u8	algo;		/* Public-key crypto algorithm [enum pkey_algo] */
-	u8	hash;		/* Digest algorithm [enum pkey_hash_algo] */
-	u8	id_type;	/* Key identifier type [enum pkey_id_type] */
-	u8	signer_len;	/* Length of signer's name */
-	u8	key_id_len;	/* Length of key identifier */
-	u8	__pad[3];
-	__be32	sig_len;	/* Length of signature data */
+	enum pkey_algo		algo : 8;	/* Public-key crypto algorithm */
+	enum pkey_hash_algo	hash : 8;	/* Digest algorithm */
+	enum pkey_id_type	id_type : 8;	/* Key identifier type */
+	u8			signer_len;	/* Length of signer's name */
+	u8			key_id_len;	/* Length of key identifier */
+	u8			__pad[3];
+	__be32			sig_len;	/* Length of signature data */
 };
 
 /*
@@ -192,7 +192,7 @@ int mod_verify_sig(const void *mod, unsigned long *_modlen)
 	size_t modlen = *_modlen, sig_len;
 	int ret;
 
-	pr_devel("==>%s(,%zu)\n", __func__, modlen);
+	pr_devel("==>%s(,%lu)\n", __func__, modlen);
 
 	if (modlen <= sizeof(ms))
 		return -EBADMSG;

@@ -423,8 +423,7 @@ int ceph_encrypt2(struct ceph_crypto_key *secret, void *dst, size_t *dst_len,
 	}
 }
 
-static int ceph_key_instantiate(struct key *key,
-				struct key_preparsed_payload *prep)
+int ceph_key_instantiate(struct key *key, struct key_preparsed_payload *prep)
 {
 	struct ceph_crypto_key *ckey;
 	size_t datalen = prep->datalen;
@@ -459,12 +458,12 @@ err:
 	return ret;
 }
 
-static int ceph_key_match(const struct key *key, const void *description)
+int ceph_key_match(const struct key *key, const void *description)
 {
 	return strcmp(key->description, description) == 0;
 }
 
-static void ceph_key_destroy(struct key *key) {
+void ceph_key_destroy(struct key *key) {
 	struct ceph_crypto_key *ckey = key->payload.data;
 
 	ceph_crypto_key_destroy(ckey);

@@ -17,8 +17,9 @@
 
 #include <linux/pci-acpi.h>
 #include <linux/pm_runtime.h>
-#include <linux/pm_qos.h>
 #include "pci.h"
+
+static DEFINE_MUTEX(pci_acpi_pm_notify_mtx);
 
 /**
  * pci_acpi_wake_bus - Wake-up notification handler for root buses.
@@ -53,18 +54,78 @@ static void pci_acpi_wake_dev(acpi_handle handle, u32 event, void *context)
 		return;
 	}
 
-	/* Clear PME Status if set. */
-	if (pci_dev->pme_support)
-		pci_check_pme_status(pci_dev);
+	if (!pci_dev->pm_cap || !pci_dev->pme_support
+	     || pci_check_pme_status(pci_dev)) {
+		if (pci_dev->pme_poll)
+			pci_dev->pme_poll = false;
 
-	if (pci_dev->pme_poll)
-		pci_dev->pme_poll = false;
-
-	pci_wakeup_event(pci_dev);
-	pm_runtime_resume(&pci_dev->dev);
+		pci_wakeup_event(pci_dev);
+		pm_runtime_resume(&pci_dev->dev);
+	}
 
 	if (pci_dev->subordinate)
 		pci_pme_wakeup_bus(pci_dev->subordinate);
+}
+
+/**
+ * add_pm_notifier - Register PM notifier for given ACPI device.
+ * @dev: ACPI device to add the notifier for.
+ * @context: PCI device or bus to check for PME status if an event is signaled.
+ *
+ * NOTE: @dev need not be a run-wake or wake-up device to be a valid source of
+ * PM wake-up events.  For example, wake-up events may be generated for bridges
+ * if one of the devices below the bridge is signaling PME, even if the bridge
+ * itself doesn't have a wake-up GPE associated with it.
+ */
+static acpi_status add_pm_notifier(struct acpi_device *dev,
+				   acpi_notify_handler handler,
+				   void *context)
+{
+	acpi_status status = AE_ALREADY_EXISTS;
+
+	mutex_lock(&pci_acpi_pm_notify_mtx);
+
+	if (dev->wakeup.flags.notifier_present)
+		goto out;
+
+	status = acpi_install_notify_handler(dev->handle,
+					     ACPI_SYSTEM_NOTIFY,
+					     handler, context);
+	if (ACPI_FAILURE(status))
+		goto out;
+
+	dev->wakeup.flags.notifier_present = true;
+
+ out:
+	mutex_unlock(&pci_acpi_pm_notify_mtx);
+	return status;
+}
+
+/**
+ * remove_pm_notifier - Unregister PM notifier from given ACPI device.
+ * @dev: ACPI device to remove the notifier from.
+ */
+static acpi_status remove_pm_notifier(struct acpi_device *dev,
+				      acpi_notify_handler handler)
+{
+	acpi_status status = AE_BAD_PARAMETER;
+
+	mutex_lock(&pci_acpi_pm_notify_mtx);
+
+	if (!dev->wakeup.flags.notifier_present)
+		goto out;
+
+	status = acpi_remove_notify_handler(dev->handle,
+					    ACPI_SYSTEM_NOTIFY,
+					    handler);
+	if (ACPI_FAILURE(status))
+		goto out;
+
+	dev->wakeup.flags.notifier_present = false;
+
+ out:
+	mutex_unlock(&pci_acpi_pm_notify_mtx);
+	return status;
 }
 
 /**
@@ -75,7 +136,7 @@ static void pci_acpi_wake_dev(acpi_handle handle, u32 event, void *context)
 acpi_status pci_acpi_add_bus_pm_notifier(struct acpi_device *dev,
 					 struct pci_bus *pci_bus)
 {
-	return acpi_add_pm_notifier(dev, pci_acpi_wake_bus, pci_bus);
+	return add_pm_notifier(dev, pci_acpi_wake_bus, pci_bus);
 }
 
 /**
@@ -84,7 +145,7 @@ acpi_status pci_acpi_add_bus_pm_notifier(struct acpi_device *dev,
  */
 acpi_status pci_acpi_remove_bus_pm_notifier(struct acpi_device *dev)
 {
-	return acpi_remove_pm_notifier(dev, pci_acpi_wake_bus);
+	return remove_pm_notifier(dev, pci_acpi_wake_bus);
 }
 
 /**
@@ -95,7 +156,7 @@ acpi_status pci_acpi_remove_bus_pm_notifier(struct acpi_device *dev)
 acpi_status pci_acpi_add_pm_notifier(struct acpi_device *dev,
 				     struct pci_dev *pci_dev)
 {
-	return acpi_add_pm_notifier(dev, pci_acpi_wake_dev, pci_dev);
+	return add_pm_notifier(dev, pci_acpi_wake_dev, pci_dev);
 }
 
 /**
@@ -104,7 +165,7 @@ acpi_status pci_acpi_add_pm_notifier(struct acpi_device *dev,
  */
 acpi_status pci_acpi_remove_pm_notifier(struct acpi_device *dev)
 {
-	return acpi_remove_pm_notifier(dev, pci_acpi_wake_dev);
+	return remove_pm_notifier(dev, pci_acpi_wake_dev);
 }
 
 phys_addr_t acpi_pci_root_get_mcfg_addr(acpi_handle handle)
@@ -196,16 +257,11 @@ static int acpi_pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 		return -ENODEV;
 
 	switch (state) {
-	case PCI_D3cold:
-		if (dev_pm_qos_flags(&dev->dev, PM_QOS_FLAG_NO_POWER_OFF) ==
-				PM_QOS_FLAGS_ALL) {
-			error = -EBUSY;
-			break;
-		}
 	case PCI_D0:
 	case PCI_D1:
 	case PCI_D2:
 	case PCI_D3hot:
+	case PCI_D3cold:
 		error = acpi_bus_set_power(handle, state_conv[state]);
 	}
 
@@ -284,6 +340,7 @@ static struct pci_platform_pm_ops acpi_pci_platform_pm = {
 	.is_manageable = acpi_pci_power_manageable,
 	.set_state = acpi_pci_set_power_state,
 	.choose_state = acpi_pci_choose_state,
+	.can_wakeup = acpi_pci_can_wakeup,
 	.sleep_wake = acpi_pci_sleep_wake,
 	.run_wake = acpi_pci_run_wake,
 };
@@ -303,46 +360,28 @@ static int acpi_pci_find_device(struct device *dev, acpi_handle *handle)
 	return 0;
 }
 
-static void pci_acpi_setup(struct device *dev)
+static int acpi_pci_find_root_bridge(struct device *dev, acpi_handle *handle)
 {
-	struct pci_dev *pci_dev = to_pci_dev(dev);
-	acpi_handle handle = ACPI_HANDLE(dev);
-	struct acpi_device *adev;
+	int num;
+	unsigned int seg, bus;
 
-	if (acpi_bus_get_device(handle, &adev) || !adev->wakeup.flags.valid)
-		return;
-
-	device_set_wakeup_capable(dev, true);
-	acpi_pci_sleep_wake(pci_dev, false);
-
-	pci_acpi_add_pm_notifier(adev, pci_dev);
-	if (adev->wakeup.flags.run_wake)
-		device_set_run_wake(dev, true);
-}
-
-static void pci_acpi_cleanup(struct device *dev)
-{
-	acpi_handle handle = ACPI_HANDLE(dev);
-	struct acpi_device *adev;
-
-	if (!acpi_bus_get_device(handle, &adev) && adev->wakeup.flags.valid) {
-		device_set_wakeup_capable(dev, false);
-		device_set_run_wake(dev, false);
-		pci_acpi_remove_pm_notifier(adev);
-	}
-}
-
-static bool pci_acpi_bus_match(struct device *dev)
-{
-	return dev->bus == &pci_bus_type;
+	/*
+	 * The string should be the same as root bridge's name
+	 * Please look at 'pci_scan_bus_parented'
+	 */
+	num = sscanf(dev_name(dev), "pci%04x:%02x", &seg, &bus);
+	if (num != 2)
+		return -ENODEV;
+	*handle = acpi_get_pci_rootbridge_handle(seg, bus);
+	if (!*handle)
+		return -ENODEV;
+	return 0;
 }
 
 static struct acpi_bus_type acpi_pci_bus = {
-	.name = "PCI",
-	.match = pci_acpi_bus_match,
+	.bus = &pci_bus_type,
 	.find_device = acpi_pci_find_device,
-	.setup = pci_acpi_setup,
-	.cleanup = pci_acpi_cleanup,
+	.find_bridge = acpi_pci_find_root_bridge,
 };
 
 static int __init acpi_pci_init(void)

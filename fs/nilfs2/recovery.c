@@ -527,8 +527,7 @@ static int nilfs_recover_dsync_blocks(struct the_nilfs *nilfs,
 		if (unlikely(err)) {
 			loff_t isize = inode->i_size;
 			if (pos + blocksize > isize)
-				nilfs_write_failed(inode->i_mapping,
-							pos + blocksize);
+				vmtruncate(inode, isize);
 			goto failed_inode;
 		}
 

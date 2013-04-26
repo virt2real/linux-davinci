@@ -134,7 +134,8 @@ int r8712_xmit_resource_alloc(struct _adapter *padapter,
 	for (i = 0; i < 8; i++) {
 		pxmitbuf->pxmit_urb[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (pxmitbuf->pxmit_urb[i] == NULL) {
-			netdev_err(padapter->pnetdev, "pxmitbuf->pxmit_urb[i] == NULL\n");
+			printk(KERN_ERR "r8712u: pxmitbuf->pxmit_urb[i]"
+			    " == NULL");
 			return _FAIL;
 		}
 	}

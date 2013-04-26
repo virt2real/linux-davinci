@@ -110,10 +110,6 @@ struct sk_security_struct {
 	u16 sclass;			/* sock security class */
 };
 
-struct tun_security_struct {
-	u32 sid;			/* SID for the tun device sockets */
-};
-
 struct key_security_struct {
 	u32 sid;	/* SID of key */
 };

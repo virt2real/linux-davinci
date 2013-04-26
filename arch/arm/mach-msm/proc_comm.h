@@ -253,6 +253,6 @@ enum {
 		(((drvstr) & 0xF) << 17))
 
 int msm_proc_comm(unsigned cmd, unsigned *data1, unsigned *data2);
-void proc_comm_boot_wait(void);
+void __init proc_comm_boot_wait(void);
 
 #endif

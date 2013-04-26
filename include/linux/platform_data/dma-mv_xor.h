@@ -10,14 +10,15 @@
 #include <linux/dmaengine.h>
 #include <linux/mbus.h>
 
-#define MV_XOR_NAME	"mv_xor"
-
-struct mv_xor_channel_data {
-	dma_cap_mask_t			cap_mask;
-};
+#define MV_XOR_SHARED_NAME	"mv_xor_shared"
+#define MV_XOR_NAME		"mv_xor"
 
 struct mv_xor_platform_data {
-	struct mv_xor_channel_data    *channels;
+	struct platform_device		*shared;
+	int				hw_id;
+	dma_cap_mask_t			cap_mask;
+	size_t				pool_size;
 };
+
 
 #endif

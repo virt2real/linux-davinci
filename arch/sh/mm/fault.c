@@ -301,6 +301,17 @@ bad_area_access_error(struct pt_regs *regs, unsigned long error_code,
 	__bad_area(regs, error_code, address, SEGV_ACCERR);
 }
 
+static void out_of_memory(void)
+{
+	/*
+	 * We ran out of memory, call the OOM killer, and return the userspace
+	 * (which will retry the fault, or kill us if we got oom-killed):
+	 */
+	up_read(&current->mm->mmap_sem);
+
+	pagefault_out_of_memory();
+}
+
 static void
 do_sigbus(struct pt_regs *regs, unsigned long error_code, unsigned long address)
 {
@@ -342,14 +353,8 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 			no_context(regs, error_code, address);
 			return 1;
 		}
-		up_read(&current->mm->mmap_sem);
 
-		/*
-		 * We ran out of memory, call the OOM killer, and return the
-		 * userspace (which will retry the fault, or kill us if we got
-		 * oom-killed):
-		 */
-		pagefault_out_of_memory();
+		out_of_memory();
 	} else {
 		if (fault & VM_FAULT_SIGBUS)
 			do_sigbus(regs, error_code, address);

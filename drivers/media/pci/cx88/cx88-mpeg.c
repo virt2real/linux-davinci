@@ -45,15 +45,11 @@ static unsigned int debug;
 module_param(debug,int,0644);
 MODULE_PARM_DESC(debug,"enable debug messages [mpeg]");
 
-#define dprintk(level, fmt, arg...) do {				       \
-	if (debug + 1 > level)						       \
-		printk(KERN_DEBUG "%s/2-mpeg: " fmt, dev->core->name, ## arg); \
-} while(0)
+#define dprintk(level,fmt, arg...)	if (debug >= level) \
+	printk(KERN_DEBUG "%s/2-mpeg: " fmt, dev->core->name, ## arg)
 
-#define mpeg_dbg(level, fmt, arg...) do {				  \
-	if (debug + 1 > level)						  \
-		printk(KERN_DEBUG "%s/2-mpeg: " fmt, core->name, ## arg); \
-} while(0)
+#define mpeg_dbg(level,fmt, arg...)	if (debug >= level) \
+	printk(KERN_DEBUG "%s/2-mpeg: " fmt, core->name, ## arg)
 
 #if defined(CONFIG_MODULES) && defined(MODULE)
 static void request_module_async(struct work_struct *work)
@@ -221,7 +217,8 @@ static int cx8802_restart_queue(struct cx8802_dev    *dev,
 				return 0;
 			buf = list_entry(q->queued.next, struct cx88_buffer, vb.queue);
 			if (NULL == prev) {
-				list_move_tail(&buf->vb.queue, &q->active);
+				list_del(&buf->vb.queue);
+				list_add_tail(&buf->vb.queue,&q->active);
 				cx8802_start_dma(dev, q, buf);
 				buf->vb.state = VIDEOBUF_ACTIVE;
 				buf->count    = q->count++;
@@ -232,7 +229,8 @@ static int cx8802_restart_queue(struct cx8802_dev    *dev,
 			} else if (prev->vb.width  == buf->vb.width  &&
 				   prev->vb.height == buf->vb.height &&
 				   prev->fmt       == buf->fmt) {
-				list_move_tail(&buf->vb.queue, &q->active);
+				list_del(&buf->vb.queue);
+				list_add_tail(&buf->vb.queue,&q->active);
 				buf->vb.state = VIDEOBUF_ACTIVE;
 				buf->count    = q->count++;
 				prev->risc.jmp[1] = cpu_to_le32(buf->risc.dma);
@@ -791,8 +789,8 @@ int cx8802_unregister_driver(struct cx8802_driver *drv)
 }
 
 /* ----------------------------------------------------------- */
-static int cx8802_probe(struct pci_dev *pci_dev,
-			const struct pci_device_id *pci_id)
+static int __devinit cx8802_probe(struct pci_dev *pci_dev,
+			       const struct pci_device_id *pci_id)
 {
 	struct cx8802_dev *dev;
 	struct cx88_core  *core;
@@ -840,7 +838,7 @@ static int cx8802_probe(struct pci_dev *pci_dev,
 	return err;
 }
 
-static void cx8802_remove(struct pci_dev *pci_dev)
+static void __devexit cx8802_remove(struct pci_dev *pci_dev)
 {
 	struct cx8802_dev *dev;
 
@@ -898,7 +896,7 @@ static struct pci_driver cx8802_pci_driver = {
 	.name     = "cx88-mpeg driver manager",
 	.id_table = cx8802_pci_tbl,
 	.probe    = cx8802_probe,
-	.remove   = cx8802_remove,
+	.remove   = __devexit_p(cx8802_remove),
 };
 
 static int __init cx8802_init(void)

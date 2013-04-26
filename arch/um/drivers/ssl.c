@@ -105,6 +105,7 @@ static const struct tty_operations ssl_ops = {
 	.throttle 		= line_throttle,
 	.unthrottle 		= line_unthrottle,
 	.install		= ssl_install,
+	.cleanup		= line_cleanup,
 	.hangup			= line_hangup,
 };
 

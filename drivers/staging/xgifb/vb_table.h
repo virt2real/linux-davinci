@@ -1,100 +1,134 @@
 #ifndef _VB_TABLE_
 #define _VB_TABLE_
-static const struct SiS_MCLKData XGI340New_MCLKData[] = {
+static struct SiS_MCLKData XGI340New_MCLKData[] = {
 	{0x16, 0x01, 0x01, 166},
 	{0x19, 0x02, 0x01, 124},
 	{0x7C, 0x08, 0x01, 200},
+	{0x79, 0x06, 0x01, 250},
+	{0x29, 0x01, 0x81, 301},
+	{0x5c, 0x23, 0x01, 166},
+	{0x5c, 0x23, 0x01, 166},
+	{0x5c, 0x23, 0x01, 166}
 };
 
-static const struct SiS_MCLKData XGI27New_MCLKData[] = {
+static struct SiS_MCLKData XGI27New_MCLKData[] = {
 	{0x5c, 0x23, 0x01, 166},
 	{0x19, 0x02, 0x01, 124},
 	{0x7C, 0x08, 0x80, 200},
+	{0x79, 0x06, 0x80, 250},
+	{0x29, 0x01, 0x81, 300},
+	{0x5c, 0x23, 0x01, 166},
+	{0x5c, 0x23, 0x01, 166},
+	{0x5c, 0x23, 0x01, 166}
 };
 
-const struct XGI_ECLKDataStruct XGI340_ECLKData[] = {
+static struct XGI_ECLKDataStruct XGI340_ECLKData[] = {
 	{0x5c, 0x23, 0x01, 166},
 	{0x55, 0x84, 0x01, 123},
 	{0x7C, 0x08, 0x01, 200},
+	{0x79, 0x06, 0x01, 250},
+	{0x29, 0x01, 0x81, 301},
+	{0x5c, 0x23, 0x01, 166},
+	{0x5c, 0x23, 0x01, 166},
+	{0x5c, 0x23, 0x01, 166}
 };
 
-static const unsigned char XG27_SR13[4][3] = {
-	{0x35, 0x45, 0xb1}, /* SR13 */
-	{0x41, 0x51, 0x5c}, /* SR14 */
-	{0x32, 0x32, 0x42}, /* SR18 */
-	{0x03, 0x03, 0x03}  /* SR1B */
+static unsigned char XG27_SR13[4][8] = {
+	{0x35, 0x45, 0xb1, 0x00, 0x00, 0x00, 0x00, 0x00}, /* SR13 */
+	{0x41, 0x51, 0x5c, 0x00, 0x00, 0x00, 0x00, 0x00}, /* SR14 */
+	{0x32, 0x32, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00}, /* SR18 */
+	{0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00}  /* SR1B */
 };
 
-static const unsigned char XGI340_SR13[4][3] = {
-	{0x35, 0x45, 0xb1}, /* SR13 */
-	{0x41, 0x51, 0x5c}, /* SR14 */
-	{0x31, 0x42, 0x42}, /* SR18 */
-	{0x03, 0x03, 0x03}  /* SR1B */
+static unsigned char XGI340_SR13[4][8] = {
+	{0x35, 0x45, 0xb1, 0x00, 0x00, 0x00, 0x00, 0x00}, /* SR13 */
+	{0x41, 0x51, 0x5c, 0x00, 0x00, 0x00, 0x00, 0x00}, /* SR14 */
+	{0x31, 0x42, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00}, /* SR18 */
+	{0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00}  /* SR1B */
 };
 
-static const unsigned char XGI340_cr41[24][3] = {
-	{0x20, 0x50, 0x60}, /* 0 CR41 */
-	{0xc4, 0x40, 0x84}, /* 1 CR8A */
-	{0xc4, 0x40, 0x84}, /* 2 CR8B */
-	{0xb5, 0xa4, 0xa4},
-	{0xf0, 0xf0, 0xf0},
-	{0x90, 0x90, 0x24}, /* 5 CR68 */
-	{0x77, 0x77, 0x44}, /* 6 CR69 */
-	{0x77, 0x77, 0x44}, /* 7 CR6A */
-	{0xff, 0xff, 0xff}, /* 8 CR6D */
-	{0x55, 0x55, 0x55}, /* 9 CR80 */
-	{0x00, 0x00, 0x00}, /* 10 CR81 */
-	{0x88, 0xa8, 0x48}, /* 11 CR82 */
-	{0x44, 0x44, 0x77}, /* 12 CR85 */
-	{0x48, 0x48, 0x88}, /* 13 CR86 */
-	{0x54, 0x54, 0x44}, /* 14 CR90 */
-	{0x54, 0x54, 0x44}, /* 15 CR91 */
-	{0x0a, 0x0a, 0x07}, /* 16 CR92 */
-	{0x44, 0x44, 0x44}, /* 17 CR93 */
-	{0x10, 0x10, 0x0A}, /* 18 CR94 */
-	{0x11, 0x11, 0x0a}, /* 19 CR95 */
-	{0x05, 0x05, 0x05}, /* 20 CR96 */
-	{0xf0, 0xf0, 0xf0}, /* 21 CRC3 */
-	{0x05, 0x00, 0x02}, /* 22 CRC4 */
-	{0x00, 0x00, 0x00}  /* 23 CRC5 */
+static unsigned char XGI340_cr41[24][8] = {
+	{0x20, 0x50, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 0 CR41 */
+	{0xc4, 0x40, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 1 CR8A */
+	{0xc4, 0x40, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 2 CR8B */
+	{0xb5, 0xa4, 0xa4, 0x00, 0x00, 0x00, 0x00, 0x00},
+	{0xf0, 0xf0, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00},
+	{0x90, 0x90, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 5 CR68 */
+	{0x77, 0x77, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 6 CR69 */
+	{0x77, 0x77, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 7 CR6A */
+	{0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 8 CR6D */
+	{0x55, 0x55, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 9 CR80 */
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 10 CR81 */
+	{0x88, 0xa8, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 11 CR82 */
+	{0x44, 0x44, 0x77, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 12 CR85 */
+	{0x48, 0x48, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 13 CR86 */
+	{0x54, 0x54, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 14 CR90 */
+	{0x54, 0x54, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 15 CR91 */
+	{0x0a, 0x0a, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 16 CR92 */
+	{0x44, 0x44, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 17 CR93 */
+	{0x10, 0x10, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 18 CR94 */
+	{0x11, 0x11, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 19 CR95 */
+	{0x05, 0x05, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 20 CR96 */
+	{0xf0, 0xf0, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 21 CRC3 */
+	{0x05, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 22 CRC4 */
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}  /* 23 CRC5 */
 };
 
-static const unsigned char XGI27_cr41[24][3] = {
-	{0x20, 0x40, 0x60}, /* 0 CR41 */
-	{0xC4, 0x40, 0x84}, /* 1 CR8A */
-	{0xC4, 0x40, 0x84}, /* 2 CR8B */
-	{0xB3, 0x13, 0xa4}, /* 3 CR40[7],
-				 CR99[2:0],
-				 CR45[3:0]*/
-	{0xf0, 0xf5, 0xf0}, /* 4 CR59 */
-	{0x90, 0x90, 0x24}, /* 5 CR68 */
-	{0x77, 0x67, 0x44}, /* 6 CR69 */
-	{0x77, 0x77, 0x44}, /* 7 CR6A */
-	{0xff, 0xff, 0xff}, /* 8 CR6D */
-	{0x55, 0x55, 0x55}, /* 9 CR80 */
-	{0x00, 0x00, 0x00}, /* 10 CR81 */
-	{0x88, 0xcc, 0x48}, /* 11 CR82 */
-	{0x44, 0x88, 0x77}, /* 12 CR85 */
-	{0x48, 0x88, 0x88}, /* 13 CR86 */
-	{0x54, 0x32, 0x44}, /* 14 CR90 */
-	{0x54, 0x33, 0x44}, /* 15 CR91 */
-	{0x0a, 0x07, 0x07}, /* 16 CR92 */
-	{0x44, 0x63, 0x44}, /* 17 CR93 */
-	{0x10, 0x14, 0x0A}, /* 18 CR94 */
-	{0x11, 0x0B, 0x0C}, /* 19 CR95 */
-	{0x05, 0x22, 0x05}, /* 20 CR96 */
-	{0xf0, 0xf0, 0x00}, /* 21 CRC3 */
-	{0x05, 0x00, 0x02}, /* 22 CRC4 */
-	{0x00, 0x00, 0x00}  /* 23 CRC5 */
+static unsigned char XGI27_cr41[24][8] = {
+	{0x20, 0x40, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 0 CR41 */
+	{0xC4, 0x40, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 1 CR8A */
+	{0xC4, 0x40, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 2 CR8B */
+	{0xB3, 0x13, 0xa4, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 3 CR40[7],
+							       CR99[2:0],
+							       CR45[3:0]*/
+	{0xf0, 0xf5, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 4 CR59 */
+	{0x90, 0x90, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 5 CR68 */
+	{0x77, 0x67, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 6 CR69 */
+	{0x77, 0x77, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 7 CR6A */
+	{0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 8 CR6D */
+	{0x55, 0x55, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 9 CR80 */
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 10 CR81 */
+	{0x88, 0xcc, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 11 CR82 */
+	{0x44, 0x88, 0x77, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 12 CR85 */
+	{0x48, 0x88, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 13 CR86 */
+	{0x54, 0x32, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 14 CR90 */
+	{0x54, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 15 CR91 */
+	{0x0a, 0x07, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 16 CR92 */
+	{0x44, 0x63, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 17 CR93 */
+	{0x10, 0x14, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 18 CR94 */
+	{0x11, 0x0B, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 19 CR95 */
+	{0x05, 0x22, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 20 CR96 */
+	{0xf0, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 21 CRC3 */
+	{0x05, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00}, /* 22 CRC4 */
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}  /* 23 CRC5 */
 };
+
+static unsigned char XGI340_CR6B[8][4] = {
+	{0xaa, 0xaa, 0xaa, 0xaa},
+	{0xaa, 0xaa, 0xaa, 0xaa},
+	{0xaa, 0xaa, 0xaa, 0xaa},
+	{0x00, 0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00, 0x00}
+};
+
+static unsigned char XGI340_CR6E[8][4];
+
+static unsigned char XGI340_CR6F[8][32];
+
+static unsigned char XGI340_CR89[8][2];
 
 /* CR47,CR48,CR49,CR4A,CR4B,CR4C,CR70,CR71,CR74,CR75,CR76,CR77 */
-const unsigned char XGI340_AGPReg[12] = {
+static unsigned char XGI340_AGPReg[12] = {
 	0x28, 0x23, 0x00, 0x20, 0x00, 0x20,
 	0x00, 0x05, 0xd0, 0x10, 0x10, 0x00
 };
 
-const struct XGI_ExtStruct XGI330_EModeIDTable[] = {
+static unsigned char XGI340_SR16[4] = {0x03, 0x83, 0x03, 0x83};
+
+static struct XGI_ExtStruct XGI330_EModeIDTable[] = {
 	{0x2e, 0x0a1b, 0x0306, 0x06, 0x05, 0x06},
 	{0x2f, 0x0a1b, 0x0305, 0x05, 0x05, 0x05},
 	{0x30, 0x2a1b, 0x0407, 0x07, 0x07, 0x0e},
@@ -166,10 +200,10 @@ const struct XGI_ExtStruct XGI330_EModeIDTable[] = {
 	{0xff, 0x0000, 0x0000, 0x00, 0x00, 0x00}
 };
 
-static const struct SiS_StandTable_S XGI330_StandTable = {
+static struct SiS_StandTable_S XGI330_StandTable = {
 /* ExtVGATable */
 	0x00, 0x00, 0x00, 0x0000,
-	{0x21, 0x0f, 0x00, 0x0e}, /* 0x21 = 0x01 | (0x20 = screen off) */
+	{0x01, 0x0f, 0x00, 0x0e},
 	 0x23,
 	{0x5f, 0x4f, 0x50, 0x82, 0x54, 0x80, 0x0b, 0x3e,
 	 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -182,7 +216,11 @@ static const struct SiS_StandTable_S XGI330_StandTable = {
 	 0xff}
 };
 
-static const struct XGI_XG21CRT1Struct XGI_UpdateCRT1Table[] = {
+static struct XGI_TimingHStruct XGI_TimingH[1];
+
+static struct XGI_TimingVStruct XGI_TimingV[1];
+
+static struct XGI_XG21CRT1Struct XGI_UpdateCRT1Table[] = {
 	{0x01, 0x27, 0x91, 0x8f, 0xc0},	/* 00 */
 	{0x03, 0x4f, 0x83, 0x8f, 0xc0},	/* 01 */
 	{0x05, 0x27, 0x91, 0x8f, 0xc0},	/* 02 */
@@ -202,7 +240,7 @@ static const struct XGI_XG21CRT1Struct XGI_UpdateCRT1Table[] = {
 	{0x59, 0x27, 0x91, 0x8f, 0xc0}	/* 16 */
 };
 
-const struct XGI_CRT1TableStruct XGI_CRT1Table[] = {
+static struct XGI_CRT1TableStruct XGI_CRT1Table[] = {
 	{ {0x2d, 0x28, 0x90, 0x2c, 0x90, 0x00, 0x04, 0x00,
 	  0xbf, 0x1f, 0x9c, 0x8e, 0x96, 0xb9, 0x30} }, /* 0x0 */
 	{ {0x2d, 0x28, 0x90, 0x2c, 0x90, 0x00, 0x04, 0x00,
@@ -366,7 +404,7 @@ const struct XGI_CRT1TableStruct XGI_CRT1Table[] = {
 };
 
 /*add for new UNIVGABIOS*/
-static const struct SiS_LCDData XGI_StLCD1024x768Data[] = {
+static struct SiS_LCDData  XGI_StLCD1024x768Data[] = {
 	{62,  25, 800,  546, 1344, 806},
 	{32,  15, 930,  546, 1344, 806},
 	{62,  25, 800,  546, 1344, 806}, /*chiawenfordot9->dot8*/
@@ -376,7 +414,7 @@ static const struct SiS_LCDData XGI_StLCD1024x768Data[] = {
 	{1,   1,  1344, 806, 1344, 806}
 };
 
-static const struct SiS_LCDData XGI_ExtLCD1024x768Data[] = {
+static struct SiS_LCDData  XGI_ExtLCD1024x768Data[] = {
 	{42, 25, 1536, 419, 1344, 806},
 	{48, 25, 1536, 369, 1344, 806},
 	{42, 25, 1536, 419, 1344, 806},
@@ -392,7 +430,7 @@ static const struct SiS_LCDData XGI_ExtLCD1024x768Data[] = {
 	{1,  1,  1344, 806, 1344, 806}
 };
 
-static const struct SiS_LCDData XGI_CetLCD1024x768Data[] = {
+static struct SiS_LCDData  XGI_CetLCD1024x768Data[] = {
 	{1, 1, 1344, 806, 1344, 806}, /* ; 00 (320x200,320x400,
 					       640x200,640x400) */
 	{1, 1, 1344, 806, 1344, 806}, /* 01 (320x350,640x350) */
@@ -403,7 +441,7 @@ static const struct SiS_LCDData XGI_CetLCD1024x768Data[] = {
 	{1, 1, 1344, 806, 1344, 806}  /* 06 (1024x768x60Hz) */
 };
 
-static const struct SiS_LCDData XGI_StLCD1280x1024Data[] = {
+static struct SiS_LCDData  XGI_StLCD1280x1024Data[] = {
 	{22,  5,  800,  510,  1650, 1088},
 	{22,  5,  800,  510,  1650, 1088},
 	{176, 45, 900,  510,  1650, 1088},
@@ -414,7 +452,7 @@ static const struct SiS_LCDData XGI_StLCD1280x1024Data[] = {
 	{1,   1,  1688, 1066, 1688, 1066}
 };
 
-static const struct SiS_LCDData XGI_ExtLCD1280x1024Data[] = {
+static struct SiS_LCDData  XGI_ExtLCD1280x1024Data[] = {
 	{211, 60,  1024, 501,  1688, 1066},
 	{211, 60,  1024, 508,  1688, 1066},
 	{211, 60,  1024, 501,  1688, 1066},
@@ -425,7 +463,7 @@ static const struct SiS_LCDData XGI_ExtLCD1280x1024Data[] = {
 	{1,   1,   1688, 1066, 1688, 1066}
 };
 
-static const struct SiS_LCDData XGI_CetLCD1280x1024Data[] = {
+static struct SiS_LCDData  XGI_CetLCD1280x1024Data[] = {
 	{1, 1, 1688, 1066, 1688, 1066}, /* 00 (320x200,320x400,
 					       640x200,640x400) */
 	{1, 1, 1688, 1066, 1688, 1066}, /* 01 (320x350,640x350) */
@@ -438,7 +476,7 @@ static const struct SiS_LCDData XGI_CetLCD1280x1024Data[] = {
 	{1, 1, 1688, 1066, 1688, 1066}  /* 08 (1400x1050x60Hz) */
 };
 
-static const struct SiS_LCDData xgifb_lcd_1400x1050[] = {
+static struct SiS_LCDData xgifb_lcd_1400x1050[] = {
 	{211, 100, 2100, 408,  1688, 1066}, /* 00 (320x200,320x400,
 						   640x200,640x400) */
 	{211, 64,  1536, 358,  1688, 1066}, /* 01 (320x350,640x350) */
@@ -452,7 +490,7 @@ static const struct SiS_LCDData xgifb_lcd_1400x1050[] = {
 	{1,   1,   1688, 1066, 1688, 1066}  /* 08 (1400x1050x60Hz) */
 };
 
-static const struct SiS_LCDData XGI_ExtLCD1600x1200Data[] = {
+static struct SiS_LCDData  XGI_ExtLCD1600x1200Data[] = {
 	{4,  1,  1620, 420,  2160, 1250}, /* 00 (320x200,320x400,
 						 640x200,640x400)*/
 	{27, 7,  1920, 375,  2160, 1250}, /* 01 (320x350,640x350) */
@@ -466,7 +504,7 @@ static const struct SiS_LCDData XGI_ExtLCD1600x1200Data[] = {
 	{1,  1,  2160, 1250, 2160, 1250}  /* 09 (1600x1200x60Hz) ;302lv */
 };
 
-static const struct SiS_LCDData XGI_StLCD1600x1200Data[] = {
+static struct SiS_LCDData  XGI_StLCD1600x1200Data[] = {
 	{27,  4,  800,  500,  2160, 1250}, /* 00 (320x200,320x400,
 						  640x200,640x400) */
 	{27,  4,  800,  500,  2160, 1250}, /* 01 (320x350,640x350) */
@@ -482,7 +520,7 @@ static const struct SiS_LCDData XGI_StLCD1600x1200Data[] = {
 
 #define XGI_CetLCD1400x1050Data XGI_CetLCD1280x1024Data
 
-static const struct SiS_LCDData XGI_NoScalingData[] = {
+static struct SiS_LCDData  XGI_NoScalingData[] = {
 	{1, 1, 800,  449,  800,  449},
 	{1, 1, 800,  449,  800,  449},
 	{1, 1, 900,  449,  900,  449},
@@ -493,7 +531,7 @@ static const struct SiS_LCDData XGI_NoScalingData[] = {
 	{1, 1, 1688, 1066, 1688, 1066}
 };
 
-static const struct SiS_LCDData XGI_ExtLCD1024x768x75Data[] = {
+static struct SiS_LCDData  XGI_ExtLCD1024x768x75Data[] = {
 	{42, 25, 1536, 419, 1344, 806}, /* ; 00 (320x200,320x400,
 						 640x200,640x400) */
 	{48, 25, 1536, 369, 1344, 806}, /* ; 01 (320x350,640x350) */
@@ -504,7 +542,7 @@ static const struct SiS_LCDData XGI_ExtLCD1024x768x75Data[] = {
 	{1,  1,  1312, 800, 1312, 800}  /* ; 06 (1024x768x75Hz) */
 };
 
-static const struct SiS_LCDData XGI_CetLCD1024x768x75Data[] = {
+static struct SiS_LCDData  XGI_CetLCD1024x768x75Data[] = {
 	{1, 1, 1312, 800, 1312, 800}, /* ; 00 (320x200,320x400,
 					       640x200,640x400) */
 	{1, 1, 1312, 800, 1312, 800}, /* ; 01 (320x350,640x350) */
@@ -515,7 +553,7 @@ static const struct SiS_LCDData XGI_CetLCD1024x768x75Data[] = {
 	{1, 1, 1312, 800, 1312, 800}  /* ; 06 (1024x768x75Hz) */
 };
 
-static const struct SiS_LCDData xgifb_lcd_1280x1024x75[] = {
+static struct SiS_LCDData xgifb_lcd_1280x1024x75[] = {
 	{211, 60,  1024, 501,  1688, 1066}, /* ; 00 (320x200,320x400,
 						     640x200,640x400) */
 	{211, 60,  1024, 508,  1688, 1066}, /* ; 01 (320x350,640x350) */
@@ -529,7 +567,7 @@ static const struct SiS_LCDData xgifb_lcd_1280x1024x75[] = {
 
 #define XGI_CetLCD1280x1024x75Data XGI_CetLCD1280x1024Data
 
-static const struct SiS_LCDData XGI_NoScalingDatax75[] = {
+static struct SiS_LCDData  XGI_NoScalingDatax75[] = {
 	{1, 1, 800,  449,  800,  449},  /* ; 00 (320x200, 320x400,
 						 640x200, 640x400) */
 	{1, 1, 800,  449,  800,  449},  /* ; 01 (320x350, 640x350) */
@@ -544,7 +582,7 @@ static const struct SiS_LCDData XGI_NoScalingDatax75[] = {
 	{1, 1, 1688, 806,  1688, 806}   /* ; 0A (1280x768x75Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_ExtLCDDes1024x768Data[] = {
+static struct XGI_LCDDesStruct XGI_ExtLCDDes1024x768Data[] = {
 	{9, 1057, 0,   771}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{9, 1057, 0,   771}, /* ; 01 (320x350,640x350) */
 	{9, 1057, 0,   771}, /* ; 02 (360x400,720x400) */
@@ -554,7 +592,7 @@ static const struct XGI_LCDDesStruct XGI_ExtLCDDes1024x768Data[] = {
 	{9, 1057, 805, 770}  /* ; 06 (1024x768x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_StLCDDes1024x768Data[] = {
+static struct XGI_LCDDesStruct XGI_StLCDDes1024x768Data[] = {
 	{9, 1057, 737, 703}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{9, 1057, 686, 651}, /* ; 01 (320x350,640x350) */
 	{9, 1057, 737, 703}, /* ; 02 (360x400,720x400) */
@@ -564,7 +602,7 @@ static const struct XGI_LCDDesStruct XGI_StLCDDes1024x768Data[] = {
 	{9, 1057, 805, 770}  /* ; 06 (1024x768x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_CetLCDDes1024x768Data[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDes1024x768Data[] = {
 	{1152, 856,  622, 587}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1152, 856,  597, 562}, /* ; 01 (320x350,640x350) */
 	{1152, 856,  622, 587}, /* ; 02 (360x400,720x400) */
@@ -574,7 +612,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDes1024x768Data[] = {
 	{0,    1048, 805, 770}  /* ; 06 (1024x768x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_ExtLCDDLDes1280x1024Data[] = {
+static struct XGI_LCDDesStruct XGI_ExtLCDDLDes1280x1024Data[] = {
 	{18, 1346, 981,  940},  /* 00 (320x200,320x400,640x200,640x400) */
 	{18, 1346, 926,  865},  /* 01 (320x350,640x350) */
 	{18, 1346, 981,  940},  /* 02 (360x400,720x400) */
@@ -585,7 +623,7 @@ static const struct XGI_LCDDesStruct XGI_ExtLCDDLDes1280x1024Data[] = {
 	{18, 1346, 1065, 1024}  /* 07 (1280x1024x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_StLCDDLDes1280x1024Data[] = {
+static struct XGI_LCDDesStruct XGI_StLCDDLDes1280x1024Data[] = {
 	{18, 1346, 970,  907},  /* 00 (320x200,320x400,640x200,640x400) */
 	{18, 1346, 917,  854},  /* 01 (320x350,640x350) */
 	{18, 1346, 970,  907},  /* 02 (360x400,720x400) */
@@ -596,7 +634,7 @@ static const struct XGI_LCDDesStruct XGI_StLCDDLDes1280x1024Data[] = {
 	{18, 1346, 1065, 1024}  /* 07 (1280x1024x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_CetLCDDLDes1280x1024Data[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDLDes1280x1024Data[] = {
 	{1368, 1008, 752,  711}, /* 00 (320x200,320x400,640x200,640x400) */
 	{1368, 1008, 729,  688}, /* 01 (320x350,640x350) */
 	{1368, 1008, 752,  711}, /* 02 (360x400,720x400) */
@@ -607,7 +645,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDLDes1280x1024Data[] = {
 	{18,   1346, 1065, 1024} /* 07 (1280x1024x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_ExtLCDDes1280x1024Data[] = {
+static struct XGI_LCDDesStruct XGI_ExtLCDDes1280x1024Data[] = {
 	{9, 1337, 981,  940},  /* ; 00 (320x200,320x400,640x200,640x400) */
 	{9, 1337, 926,  884},  /* ; 01 (320x350,640x350) alan, 2003/09/30 */
 	{9, 1337, 981,  940},  /* ; 02 (360x400,720x400) */
@@ -618,7 +656,7 @@ static const struct XGI_LCDDesStruct XGI_ExtLCDDes1280x1024Data[] = {
 	{9, 1337, 1065, 1024}  /* ; 07 (1280x1024x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_StLCDDes1280x1024Data[] = {
+static struct XGI_LCDDesStruct XGI_StLCDDes1280x1024Data[] = {
 	{9, 1337, 970,  907},  /* ; 00 (320x200,320x400,640x200,640x400) */
 	{9, 1337, 917,  854},  /* ; 01 (320x350,640x350) */
 	{9, 1337, 970,  907},  /* ; 02 (360x400,720x400) */
@@ -629,7 +667,7 @@ static const struct XGI_LCDDesStruct XGI_StLCDDes1280x1024Data[] = {
 	{9, 1337, 1065, 1024}  /* ; 07 (1280x1024x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_CetLCDDes1280x1024Data[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDes1280x1024Data[] = {
 	{1368, 1008, 752,  711}, /* 00 (320x200,320x400,640x200,640x400) */
 	{1368, 1008, 729,  688}, /* 01 (320x350,640x350) */
 	{1368, 1008, 752,  711}, /* 02 (360x400,720x400) */
@@ -640,7 +678,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDes1280x1024Data[] = {
 	{9,    1337, 1065, 1024} /* 07 (1280x1024x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct xgifb_lcddldes_1400x1050[] = {
+static struct XGI_LCDDesStruct xgifb_lcddldes_1400x1050[] = {
 	{18,   1464, 0,    1051}, /* 00 (320x200,320x400,640x200,640x400) */
 	{18,   1464, 0,    1051}, /* 01 (320x350,640x350) */
 	{18,   1464, 0,    1051}, /* 02 (360x400,720x400) */
@@ -652,7 +690,7 @@ static const struct XGI_LCDDesStruct xgifb_lcddldes_1400x1050[] = {
 	{18,   1464, 0,    1051}  /* 08 (1400x1050x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct xgifb_lcddes_1400x1050[] = {
+static struct XGI_LCDDesStruct xgifb_lcddes_1400x1050[] = {
 	{9,    1455, 0,    1051}, /* 00 (320x200,320x400,640x200,640x400) */
 	{9,    1455, 0,    1051}, /* 01 (320x350,640x350) */
 	{9,    1455, 0,    1051}, /* 02 (360x400,720x400) */
@@ -664,7 +702,7 @@ static const struct XGI_LCDDesStruct xgifb_lcddes_1400x1050[] = {
 	{9,    1455, 0,    1051}  /* 08 (1400x1050x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_CetLCDDes1400x1050Data[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDes1400x1050Data[] = {
 	{1308, 1068, 781,  766},  /* 00 (320x200,320x400,640x200,640x400) */
 	{1308, 1068, 781,  766},  /* 01 (320x350,640x350) */
 	{1308, 1068, 781,  766},  /* 02 (360x400,720x400) */
@@ -676,7 +714,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDes1400x1050Data[] = {
 	{18,   1464, 0,    1051}  /* 08 (1400x1050x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_CetLCDDes1400x1050Data2[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDes1400x1050Data2[] = {
 	{0, 1448, 0, 1051}, /* 00 (320x200,320x400,640x200,640x400) */
 	{0, 1448, 0, 1051}, /* 01 (320x350,640x350) */
 	{0, 1448, 0, 1051}, /* 02 (360x400,720x400) */
@@ -684,7 +722,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDes1400x1050Data2[] = {
 	{0, 1448, 0, 1051}  /* 04 (640x480x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_ExtLCDDLDes1600x1200Data[] = {
+static struct XGI_LCDDesStruct XGI_ExtLCDDLDes1600x1200Data[] = {
 	{18, 1682, 0, 1201}, /* 00 (320x200,320x400,640x200,640x400) */
 	{18, 1682, 0, 1201}, /* 01 (320x350,640x350) */
 	{18, 1682, 0, 1201}, /* 02 (360x400,720x400) */
@@ -697,7 +735,7 @@ static const struct XGI_LCDDesStruct XGI_ExtLCDDLDes1600x1200Data[] = {
 	{18, 1682, 0, 1201}  /* 09 (1600x1200x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_StLCDDLDes1600x1200Data[] = {
+static struct XGI_LCDDesStruct XGI_StLCDDLDes1600x1200Data[] = {
 	{18, 1682, 1150, 1101}, /* 00 (320x200,320x400,640x200,640x400) */
 	{18, 1682, 1083, 1034}, /* 01 (320x350,640x350) */
 	{18, 1682, 1150, 1101}, /* 02 (360x400,720x400) */
@@ -710,7 +748,7 @@ static const struct XGI_LCDDesStruct XGI_StLCDDLDes1600x1200Data[] = {
 	{18, 1682, 0,    1201} /* 09 (1600x1200x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_ExtLCDDes1600x1200Data[] = {
+static struct XGI_LCDDesStruct XGI_ExtLCDDes1600x1200Data[] = {
 	{9, 1673, 0, 1201}, /* 00 (320x200,320x400,640x200,640x400) */
 	{9, 1673, 0, 1201}, /* 01 (320x350,640x350) */
 	{9, 1673, 0, 1201}, /* 02 (360x400,720x400) */
@@ -723,7 +761,7 @@ static const struct XGI_LCDDesStruct XGI_ExtLCDDes1600x1200Data[] = {
 	{9, 1673, 0, 1201}  /* 09 (1600x1200x60Hz) */
 };
 
-static const struct XGI_LCDDesStruct XGI_StLCDDes1600x1200Data[] = {
+static struct XGI_LCDDesStruct XGI_StLCDDes1600x1200Data[] = {
 	{9, 1673, 1150, 1101}, /* 00 (320x200,320x400,640x200,640x400) */
 	{9, 1673, 1083, 1034}, /* 01 (320x350,640x350) */
 	{9, 1673, 1150, 1101}, /* 02 (360x400,720x400) */
@@ -736,7 +774,7 @@ static const struct XGI_LCDDesStruct XGI_StLCDDes1600x1200Data[] = {
 	{9, 1673, 0,    1201}  /* 09 (1600x1200x60Hz) */
 };
 
-static const struct XGI330_LCDDataDesStruct2  XGI_NoScalingDesData[] = {
+static struct XGI330_LCDDataDesStruct2  XGI_NoScalingDesData[] = {
 	{9, 657,  448, 405,  96,   2}, /* 00 (320x200,320x400,
 					      640x200,640x400) */
 	{9, 657,  448, 355,  96,   2}, /* 01 (320x350,640x350) */
@@ -752,7 +790,7 @@ static const struct XGI330_LCDDataDesStruct2  XGI_NoScalingDesData[] = {
 };
 
 /* ;;1024x768x75Hz */
-static const struct XGI_LCDDesStruct xgifb_lcddes_1024x768x75[] = {
+static struct XGI_LCDDesStruct xgifb_lcddes_1024x768x75[] = {
 	{9, 1049, 0, 769}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{9, 1049, 0, 769}, /* ; 01 (320x350,640x350) */
 	{9, 1049, 0, 769}, /* ; 02 (360x400,720x400) */
@@ -763,7 +801,7 @@ static const struct XGI_LCDDesStruct xgifb_lcddes_1024x768x75[] = {
 };
 
 /* ;;1024x768x75Hz */
-static const struct XGI_LCDDesStruct XGI_CetLCDDes1024x768x75Data[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDes1024x768x75Data[] = {
 	{1152, 856,  622, 587}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1152, 856,  597, 562}, /* ; 01 (320x350,640x350) */
 	{1192, 896,  622, 587}, /* ; 02 (360x400,720x400) */
@@ -774,7 +812,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDes1024x768x75Data[] = {
 };
 
 /* ;;1280x1024x75Hz */
-static const struct XGI_LCDDesStruct xgifb_lcddldes_1280x1024x75[] = {
+static struct XGI_LCDDesStruct xgifb_lcddldes_1280x1024x75[] = {
 	{18, 1314, 0, 1025}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{18, 1314, 0, 1025}, /* ; 01 (320x350,640x350) */
 	{18, 1314, 0, 1025}, /* ; 02 (360x400,720x400) */
@@ -786,7 +824,7 @@ static const struct XGI_LCDDesStruct xgifb_lcddldes_1280x1024x75[] = {
 };
 
 /* 1280x1024x75Hz */
-static const struct XGI_LCDDesStruct XGI_CetLCDDLDes1280x1024x75Data[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDLDes1280x1024x75Data[] = {
 	{1368, 1008, 752, 711}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1368, 1008, 729, 688}, /* ; 01 (320x350,640x350) */
 	{1408, 1048, 752, 711}, /* ; 02 (360x400,720x400) */
@@ -798,7 +836,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDLDes1280x1024x75Data[] = {
 };
 
 /* ;;1280x1024x75Hz */
-static const struct XGI_LCDDesStruct xgifb_lcddes_1280x1024x75[] = {
+static struct XGI_LCDDesStruct xgifb_lcddes_1280x1024x75[] = {
 	{9, 1305, 0, 1025}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{9, 1305, 0, 1025}, /* ; 01 (320x350,640x350) */
 	{9, 1305, 0, 1025}, /* ; 02 (360x400,720x400) */
@@ -810,7 +848,7 @@ static const struct XGI_LCDDesStruct xgifb_lcddes_1280x1024x75[] = {
 };
 
 /* 1280x1024x75Hz */
-static const struct XGI_LCDDesStruct XGI_CetLCDDes1280x1024x75Data[] = {
+static struct XGI_LCDDesStruct XGI_CetLCDDes1280x1024x75Data[] = {
 	{1368, 1008, 752, 711}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1368, 1008, 729, 688}, /* ; 01 (320x350,640x350) */
 	{1408, 1048, 752, 711}, /* ; 02 (360x400,720x400) */
@@ -822,7 +860,7 @@ static const struct XGI_LCDDesStruct XGI_CetLCDDes1280x1024x75Data[] = {
 };
 
 /* Scaling LCD 75Hz */
-static const struct XGI330_LCDDataDesStruct2 XGI_NoScalingDesDatax75[] =  {
+static struct XGI330_LCDDataDesStruct2 XGI_NoScalingDesDatax75[] =  {
 	{9, 657,  448, 405,  96,  2}, /* ; 00 (320x200,320x400,
 					       640x200,640x400) */
 	{9, 657,  448, 355,  96,  2}, /* ; 01 (320x350,640x350) */
@@ -1136,7 +1174,7 @@ static const unsigned char XGI330_Ren750pGroup3[] = {
 	0x18, 0x1D, 0x23, 0x28, 0x4C, 0xAA, 0x01
 };
 
-static const struct SiS_LVDSData XGI_LVDS1024x768Data_1[] = {
+static struct SiS_LVDSData  XGI_LVDS1024x768Data_1[] = {
 	{ 960, 438, 1344, 806},	/* 00 (320x200,320x400,640x200,640x400) */
 	{ 960, 388, 1344, 806},	/* 01 (320x350,640x350) */
 	{1040, 438, 1344, 806},	/* 02 (360x400,720x400) */
@@ -1147,7 +1185,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Data_1[] = {
 };
 
 
-static const struct SiS_LVDSData XGI_LVDS1024x768Data_2[] = {
+static struct SiS_LVDSData  XGI_LVDS1024x768Data_2[] = {
 	{1344, 806, 1344, 806},
 	{1344, 806, 1344, 806},
 	{1344, 806, 1344, 806},
@@ -1159,7 +1197,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Data_2[] = {
 	{800,  525, 1280, 813}
 };
 
-static const struct SiS_LVDSData XGI_LVDS1280x1024Data_1[] = {
+static struct SiS_LVDSData  XGI_LVDS1280x1024Data_1[] = {
 	{1048, 442,  1688, 1066},
 	{1048, 392,  1688, 1066},
 	{1048, 442,  1688, 1066},
@@ -1172,7 +1210,7 @@ static const struct SiS_LVDSData XGI_LVDS1280x1024Data_1[] = {
 
 #define XGI_LVDS1280x1024Data_2 XGI_LVDS1024x768Data_2
 
-static const struct SiS_LVDSData XGI_LVDS1400x1050Data_1[] = {
+static struct SiS_LVDSData  XGI_LVDS1400x1050Data_1[] = {
 	{928,   416, 1688, 1066},
 	{928,   366, 1688, 1066},
 	{928,   416, 1688, 1066},
@@ -1184,7 +1222,7 @@ static const struct SiS_LVDSData XGI_LVDS1400x1050Data_1[] = {
 	{1688, 1066, 1688, 1066}
 };
 
-static const struct SiS_LVDSData XGI_LVDS1400x1050Data_2[] = {
+static struct SiS_LVDSData  XGI_LVDS1400x1050Data_2[] = {
 	{1688, 1066, 1688, 1066},
 	{1688, 1066, 1688, 1066},
 	{1688, 1066, 1688, 1066},
@@ -1197,7 +1235,7 @@ static const struct SiS_LVDSData XGI_LVDS1400x1050Data_2[] = {
 };
 
 /* ;;[ycchen] 12/05/02 LCDHTxLCDVT=2048x1320 */
-static const struct SiS_LVDSData XGI_LVDS1600x1200Data_1[] = {
+static struct SiS_LVDSData XGI_LVDS1600x1200Data_1[] = {
 	{1088, 520,  2048, 1320}, /* 00 (320x200,320x400,640x200,640x400) */
 	{1088, 470,  2048, 1320}, /* 01 (320x350,640x350) */
 	{1088, 520,  2048, 1320}, /* 02 (360x400,720x400) */
@@ -1210,7 +1248,7 @@ static const struct SiS_LVDSData XGI_LVDS1600x1200Data_1[] = {
 	{2048, 1320, 2048, 1320}  /* 09 (1600x1200) */
 };
 
-static const struct SiS_LVDSData XGI_LVDSNoScalingData[] = {
+static struct SiS_LVDSData XGI_LVDSNoScalingData[] = {
 	{ 800,  449,  800,  449}, /* 00 (320x200,320x400,640x200,640x400) */
 	{ 800,  449,  800,  449}, /* 01 (320x350,640x350) */
 	{ 800,  449,  800,  449}, /* 02 (360x400,720x400) */
@@ -1224,7 +1262,7 @@ static const struct SiS_LVDSData XGI_LVDSNoScalingData[] = {
 	{1688,  806, 1688,  806}  /* 0A (1280x768x60Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1024x768Data_1x75[] = {
+static struct SiS_LVDSData XGI_LVDS1024x768Data_1x75[] = {
 	{ 960, 438, 1312, 800}, /* 00 (320x200,320x400,640x200,640x400) */
 	{ 960, 388, 1312, 800}, /* 01 (320x350,640x350) */
 	{1040, 438, 1312, 800}, /* 02 (360x400,720x400) */
@@ -1235,7 +1273,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Data_1x75[] = {
 };
 
 
-static const struct SiS_LVDSData XGI_LVDS1024x768Data_2x75[] = {
+static struct SiS_LVDSData XGI_LVDS1024x768Data_2x75[] = {
 	{1312, 800, 1312, 800}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1312, 800, 1312, 800}, /* ; 01 (320x350,640x350) */
 	{1312, 800, 1312, 800}, /* ; 02 (360x400,720x400) */
@@ -1245,7 +1283,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Data_2x75[] = {
 	{1312, 800, 1312, 800}, /* ; 06 (512x384,1024x768) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1280x1024Data_1x75[] = {
+static struct SiS_LVDSData XGI_LVDS1280x1024Data_1x75[] = {
 	{1048,  442, 1688, 1066  }, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1048,  392, 1688, 1066  }, /* ; 01 (320x350,640x350) */
 	{1128,  442, 1688, 1066  }, /* ; 02 (360x400,720x400) */
@@ -1256,7 +1294,7 @@ static const struct SiS_LVDSData XGI_LVDS1280x1024Data_1x75[] = {
 	{1688, 1066, 1688, 1066 },  /* ; 06; 07 (640x512,1280x1024) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1280x1024Data_2x75[] = {
+static struct SiS_LVDSData XGI_LVDS1280x1024Data_2x75[] = {
 	{1688, 1066, 1688, 1066 }, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1688, 1066, 1688, 1066 }, /* ; 01 (320x350,640x350) */
 	{1688, 1066, 1688, 1066 }, /* ; 02 (360x400,720x400) */
@@ -1267,7 +1305,7 @@ static const struct SiS_LVDSData XGI_LVDS1280x1024Data_2x75[] = {
 	{1688, 1066, 1688, 1066 }, /* ; 06; 07 (640x512,1280x1024) */
 };
 
-static const struct SiS_LVDSData XGI_LVDSNoScalingDatax75[] = {
+static struct SiS_LVDSData XGI_LVDSNoScalingDatax75[] = {
 	{ 800,  449,  800, 449},  /* ; 00 (320x200,320x400,640x200,640x400) */
 	{ 800,  449,  800, 449},  /* ; 01 (320x350,640x350) */
 	{ 900,  449,  900, 449},  /* ; 02 (360x400,720x400) */
@@ -1282,7 +1320,7 @@ static const struct SiS_LVDSData XGI_LVDSNoScalingDatax75[] = {
 	{1688,  806, 1688, 806},  /* ; 0A (1280x768x75Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1024x768Des_1[] = {
+static struct SiS_LVDSData XGI_LVDS1024x768Des_1[] = {
 	{0, 1048,   0, 771}, /* 00 (320x200,320x400,640x200,640x400) */
 	{0, 1048,   0, 771}, /* 01 (320x350,640x350) */
 	{0, 1048,   0, 771}, /* 02 (360x400,720x400) */
@@ -1292,7 +1330,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Des_1[] = {
 	{0, 1048, 805, 770}  /* 06 (1024x768x60Hz) */
 } ;
 
-static const struct SiS_LVDSData XGI_LVDS1024x768Des_2[] = {
+static struct SiS_LVDSData XGI_LVDS1024x768Des_2[] = {
 	{1142,  856, 622, 587}, /* 00 (320x200,320x400,640x200,640x400) */
 	{1142,  856, 597, 562}, /* 01 (320x350,640x350) */
 	{1142,  856, 622, 587}, /* 02 (360x400,720x400) */
@@ -1302,7 +1340,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Des_2[] = {
 	{   0, 1048, 805, 771}  /* 06 (1024x768x60Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1024x768Des_3[] = {
+static struct SiS_LVDSData XGI_LVDS1024x768Des_3[] = {
 	{320, 24, 622, 587}, /* 00 (320x200,320x400,640x200,640x400) */
 	{320, 24, 597, 562}, /* 01 (320x350,640x350) */
 	{320, 24, 622, 587}, /* 02 (360x400,720x400) */
@@ -1310,7 +1348,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Des_3[] = {
 	{320, 24, 722, 687}  /* 04 (640x480x60Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1280x1024Des_1[] = {
+static struct SiS_LVDSData XGI_LVDS1280x1024Des_1[] = {
 	{0, 1328,    0, 1025}, /* 00 (320x200,320x400,640x200,640x400) */
 	{0, 1328,    0, 1025}, /* 01 (320x350,640x350) */
 	{0, 1328,    0, 1025}, /* 02 (360x400,720x400) */
@@ -1322,7 +1360,7 @@ static const struct SiS_LVDSData XGI_LVDS1280x1024Des_1[] = {
 };
 
  /* The Display setting for DE Mode Panel */
-static const struct SiS_LVDSData XGI_LVDS1280x1024Des_2[] = {
+static struct SiS_LVDSData XGI_LVDS1280x1024Des_2[] = {
 	{1368, 1008, 752, 711}, /* 00 (320x200,320x400,640x200,640x400) */
 	{1368, 1008, 729, 688}, /* 01 (320x350,640x350) */
 	{1408, 1048, 752, 711}, /* 02 (360x400,720x400) */
@@ -1333,7 +1371,7 @@ static const struct SiS_LVDSData XGI_LVDS1280x1024Des_2[] = {
 	{0000, 1328,   0, 1025} /* 07 (1280x1024x60Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1400x1050Des_1[] = {
+static struct SiS_LVDSData XGI_LVDS1400x1050Des_1[] = {
 	{0, 1448, 0, 1051}, /* 00 (320x200,320x400,640x200,640x400) */
 	{0, 1448, 0, 1051}, /* 01 (320x350,640x350) */
 	{0, 1448, 0, 1051}, /* 02 (360x400,720x400) */
@@ -1345,7 +1383,7 @@ static const struct SiS_LVDSData XGI_LVDS1400x1050Des_1[] = {
 	{0, 1448, 0, 1051}  /* 08 (1400x1050x60Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1400x1050Des_2[] = {
+static struct SiS_LVDSData XGI_LVDS1400x1050Des_2[] = {
 	{1308, 1068,  781,  766}, /* 00 (320x200,320x400,640x200,640x400) */
 	{1308, 1068,  781,  766}, /* 01 (320x350,640x350) */
 	{1308, 1068,  781,  766}, /* 02 (360x400,720x400) */
@@ -1357,7 +1395,7 @@ static const struct SiS_LVDSData XGI_LVDS1400x1050Des_2[] = {
 	{   0, 1448,    0, 1051}  /* 08 (1400x1050x60Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1600x1200Des_1[] = {
+static struct SiS_LVDSData XGI_LVDS1600x1200Des_1[] = {
 	{0, 1664, 0, 1201}, /* 00 (320x200,320x400,640x200,640x400) */
 	{0, 1664, 0, 1201}, /* 01 (320x350,640x350) */
 	{0, 1664, 0, 1201}, /* 02 (360x400,720x400) */
@@ -1370,7 +1408,7 @@ static const struct SiS_LVDSData XGI_LVDS1600x1200Des_1[] = {
 	{0, 1664, 0, 1201}  /* 09 (1600x1200x60Hz) */
 };
 
-static const struct XGI330_LCDDataDesStruct2  XGI_LVDSNoScalingDesData[] = {
+static struct XGI330_LCDDataDesStruct2  XGI_LVDSNoScalingDesData[] = {
 	{0,  648,  448,  405,  96, 2}, /* 00 (320x200,320x400,
 					      640x200,640x400) */
 	{0,  648,  448,  355,  96, 2}, /* 01 (320x350,640x350) */
@@ -1386,7 +1424,7 @@ static const struct XGI330_LCDDataDesStruct2  XGI_LVDSNoScalingDesData[] = {
 };
 
 /* ; 1024x768 Full-screen */
-static const struct SiS_LVDSData XGI_LVDS1024x768Des_1x75[] = {
+static struct SiS_LVDSData XGI_LVDS1024x768Des_1x75[] = {
 	{0, 1040, 0, 769}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{0, 1040, 0, 769}, /* ; 01 (320x350,640x350) */
 	{0, 1040, 0, 769}, /* ; 02 (360x400,720x400) */
@@ -1397,7 +1435,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Des_1x75[] = {
 };
 
 /* ; 1024x768 center-screen (Enh. Mode) */
-static const struct SiS_LVDSData XGI_LVDS1024x768Des_2x75[] = {
+static struct SiS_LVDSData XGI_LVDS1024x768Des_2x75[] = {
 	{1142,  856, 622, 587}, /* 00 (320x200,320x400,640x200,640x400) */
 	{1142,  856, 597, 562}, /* 01 (320x350,640x350) */
 	{1142,  856, 622, 587}, /* 02 (360x400,720x400) */
@@ -1408,7 +1446,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Des_2x75[] = {
 };
 
 /* ; 1024x768 center-screen (St.Mode) */
-static const struct SiS_LVDSData XGI_LVDS1024x768Des_3x75[] =  {
+static struct SiS_LVDSData XGI_LVDS1024x768Des_3x75[] =  {
 	{320, 24, 622, 587}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{320, 24, 597, 562}, /* ; 01 (320x350,640x350) */
 	{320, 24, 622, 587}, /* ; 02 (360x400,720x400) */
@@ -1416,7 +1454,7 @@ static const struct SiS_LVDSData XGI_LVDS1024x768Des_3x75[] =  {
 	{320, 24, 722, 687}  /* ; 04 (640x480x60Hz) */
 };
 
-static const struct SiS_LVDSData XGI_LVDS1280x1024Des_1x75[] = {
+static struct SiS_LVDSData XGI_LVDS1280x1024Des_1x75[] = {
 	{0, 1296, 0, 1025}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{0, 1296, 0, 1025}, /* ; 01 (320x350,640x350) */
 	{0, 1296, 0, 1025}, /* ; 02 (360x400,720x400) */
@@ -1429,7 +1467,7 @@ static const struct SiS_LVDSData XGI_LVDS1280x1024Des_1x75[] = {
 
 /* The Display setting for DE Mode Panel */
 /* Set DE as default */
-static const struct SiS_LVDSData XGI_LVDS1280x1024Des_2x75[] = {
+static struct SiS_LVDSData XGI_LVDS1280x1024Des_2x75[] = {
 	{1368,  976, 752,  711}, /* ; 00 (320x200,320x400,640x200,640x400) */
 	{1368,  976, 729,  688}, /* ; 01 (320x350,640x350) */
 	{1408,  976, 752,  711}, /* ; 02 (360x400,720x400) */
@@ -1441,7 +1479,7 @@ static const struct SiS_LVDSData XGI_LVDS1280x1024Des_2x75[] = {
 };
 
 /* Scaling LCD 75Hz */
-static const struct XGI330_LCDDataDesStruct2 XGI_LVDSNoScalingDesDatax75[] = {
+static struct XGI330_LCDDataDesStruct2 XGI_LVDSNoScalingDesDatax75[] = {
 	{0,  648, 448,  405,  96, 2}, /* ; 00 (320x200,320x400,
 					       640x200,640x400) */
 	{0,  648, 448,  355,  96, 2}, /* ; 01 (320x350,640x350) */
@@ -1457,7 +1495,7 @@ static const struct XGI330_LCDDataDesStruct2 XGI_LVDSNoScalingDesDatax75[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11024x768_1_H[] = {
+static struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11024x768_1_H[] = {
 	{ {0x4B, 0x27, 0x8F, 0x32, 0x1B, 0x00, 0x45, 0x00} }, /* 00 (320x) */
 	{ {0x4B, 0x27, 0x8F, 0x2B, 0x03, 0x00, 0x44, 0x00} }, /* 01 (360x) */
 	{ {0x55, 0x31, 0x99, 0x46, 0x1D, 0x00, 0x55, 0x00} }, /* 02 (400x) */
@@ -1469,7 +1507,7 @@ static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11024x768_1_H[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11280x1024_1_H[] = {
+static struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11280x1024_1_H[] = {
 	{ {0x56, 0x27, 0x9A, 0x30, 0x1E, 0x00, 0x05, 0x00 } }, /* 00 (320x) */
 	{ {0x56, 0x27, 0x9A, 0x30, 0x1E, 0x00, 0x05, 0x00 } }, /* 01 (360x) */
 	{ {0x60, 0x31, 0x84, 0x3A, 0x88, 0x00, 0x01, 0x00 } }, /* 02 (400x) */
@@ -1482,7 +1520,7 @@ static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11280x1024_1_H[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11024x768_2_H[] = {
+static struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11024x768_2_H[] = {
 	{ {0x63, 0x27, 0x87, 0x3B, 0x8C, 0x00, 0x01, 0x00} }, /* 00 (320x) */
 	{ {0x63, 0x27, 0x87, 0x3B, 0x8C, 0x00, 0x01, 0x00} }, /* 01 (360x) */
 	{ {0x63, 0x31, 0x87, 0x3D, 0x8E, 0x00, 0x01, 0x00} }, /* 02 (400x) */
@@ -1494,7 +1532,7 @@ static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11024x768_2_H[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11280x1024_2_H[] = {
+static struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11280x1024_2_H[] = {
 	{ {0x7E, 0x3B, 0x9A, 0x44, 0x12, 0x00, 0x01, 0x00} }, /* 00 (320x) */
 	{ {0x7E, 0x3B, 0x9A, 0x44, 0x12, 0x00, 0x01, 0x00} }, /* 01 (360x) */
 	{ {0x7E, 0x40, 0x84, 0x49, 0x91, 0x00, 0x01, 0x00} }, /* 02 (400x) */
@@ -1507,7 +1545,7 @@ static const struct XGI_LVDSCRT1HDataStruct  XGI_LVDSCRT11280x1024_2_H[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11400x1050_1_H[] = {
+static struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11400x1050_1_H[] = {
 	{ {0x47, 0x27, 0x8B, 0x2C, 0x1A, 0x00, 0x05, 0x00} }, /* 00 (320x) */
 	{ {0x47, 0x27, 0x8B, 0x30, 0x1E, 0x00, 0x05, 0x00} }, /* 01 (360x) */
 	{ {0x51, 0x31, 0x95, 0x36, 0x04, 0x00, 0x01, 0x00} }, /* 02 (400x) */
@@ -1521,7 +1559,7 @@ static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11400x1050_1_H[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11400x1050_2_H[] = {
+static struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11400x1050_2_H[] = {
 	{ {0x76, 0x3F, 0x83, 0x45, 0x8C, 0x00, 0x41, 0x00} }, /* 00 (320x) */
 	{ {0x76, 0x3F, 0x83, 0x45, 0x8C, 0x00, 0x41, 0x00} }, /* 01 (360x) */
 	{ {0x76, 0x31, 0x9A, 0x48, 0x9F, 0x00, 0x41, 0x00} }, /* 02 (400x) */
@@ -1536,7 +1574,7 @@ static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11400x1050_2_H[] = {
 
 /* ;302lv channelA [ycchen] 12/05/02 LCDHT=2048 */
 /* ; CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11600x1200_1_H[] = {
+static struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11600x1200_1_H[] = {
 	{ {0x5B, 0x27, 0x9F, 0x32, 0x0A, 0x00, 0x01, 0x00} }, /* 00 (320x) */
 	{ {0x5B, 0x27, 0x9F, 0x32, 0x0A, 0x00, 0x01, 0x00} }, /* 01 (360x) */
 	{ {0x65, 0x31, 0x89, 0x3C, 0x94, 0x00, 0x01, 0x00} }, /* 02 (400x) */
@@ -1551,7 +1589,7 @@ static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11600x1200_1_H[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A+CR09(5->7) */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_1_V[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_1_V[] = {
 	{ {0x97, 0x1F, 0x60, 0x87, 0x5D, 0x83, 0x10} }, /* 00 (x350) */
 	{ {0xB4, 0x1F, 0x92, 0x89, 0x8F, 0xB5, 0x30} }, /* 01 (x400) */
 	{ {0x04, 0x3E, 0xE2, 0x89, 0xDF, 0x05, 0x00} }, /* 02 (x480) */
@@ -1560,7 +1598,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_1_V[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_2_V[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_2_V[] = {
 	{ {0x24, 0xBB, 0x31, 0x87, 0x5D, 0x25, 0x30} }, /* 00 (x350) */
 	{ {0x24, 0xBB, 0x4A, 0x80, 0x8F, 0x25, 0x30} }, /* 01 (x400) */
 	{ {0x24, 0xBB, 0x72, 0x88, 0xDF, 0x25, 0x30} }, /* 02 (x480) */
@@ -1569,7 +1607,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_2_V[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_1_V[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_1_V[] = {
 	{ {0x86, 0x1F, 0x5E, 0x82, 0x5D, 0x87, 0x00} }, /* 00 (x350) */
 	{ {0xB8, 0x1F, 0x90, 0x84, 0x8F, 0xB9, 0x30} }, /* 01 (x400) */
 	{ {0x08, 0x3E, 0xE0, 0x84, 0xDF, 0x09, 0x00} }, /* 02 (x480) */
@@ -1579,7 +1617,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_1_V[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_2_V[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_2_V[] = {
 	{ {0x28, 0xD2, 0xAF, 0x83, 0xAE, 0xD8, 0xA1} }, /* 00 (x350) */
 	{ {0x28, 0xD2, 0xC8, 0x8C, 0xC7, 0xF2, 0x81} }, /* 01 (x400) */
 	{ {0x28, 0xD2, 0xF0, 0x84, 0xEF, 0x1A, 0xB1} }, /* 02 (x480) */
@@ -1589,7 +1627,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_2_V[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11400x1050_1_V[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11400x1050_1_V[] = {
 	{ {0x6C, 0x1F, 0x60, 0x84, 0x5D, 0x6D, 0x10} }, /* 00 (x350) */
 	{ {0x9E, 0x1F, 0x93, 0x86, 0x8F, 0x9F, 0x30} }, /* 01 (x400) */
 	{ {0xEE, 0x1F, 0xE2, 0x86, 0xDF, 0xEF, 0x10} }, /* 02 (x480) */
@@ -1600,7 +1638,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11400x1050_1_V[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11400x1050_2_V[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11400x1050_2_V[] = {
 	{ {0x28, 0x92, 0xB6, 0x83, 0xB5, 0xCF, 0x81} }, /* 00 (x350) */
 	{ {0x28, 0x92, 0xD5, 0x82, 0xD4, 0xEE, 0x81} }, /* 01 (x400) */
 	{ {0x28, 0x92, 0xFD, 0x8A, 0xFC, 0x16, 0xB1} }, /* 02 (x480) */
@@ -1611,7 +1649,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11400x1050_2_V[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A+CR09(5->7) */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11600x1200_1_V[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11600x1200_1_V[] = {
 	{ {0xd4, 0x1F, 0x81, 0x84, 0x5D, 0xd5, 0x10} }, /* 00 (x350) */
 	{ {0x06, 0x3e, 0xb3, 0x86, 0x8F, 0x07, 0x20} }, /* 01 (x400) */
 	{ {0x56, 0xba, 0x03, 0x86, 0xDF, 0x57, 0x00} }, /* 02 (x480) */
@@ -1623,7 +1661,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11600x1200_1_V[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11024x768_1_Hx75[] = {
+static struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11024x768_1_Hx75[] = {
 	{ {0x4B, 0x27, 0x8F, 0x32, 0x1B, 0x00, 0x45, 0x00} },/* ; 00 (320x) */
 	{ {0x4B, 0x27, 0x8F, 0x2B, 0x03, 0x00, 0x44, 0x00} },/* ; 01 (360x) */
 	{ {0x55, 0x31, 0x99, 0x46, 0x1D, 0x00, 0x55, 0x00} },/* ; 02 (400x) */
@@ -1635,7 +1673,7 @@ static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11024x768_1_Hx75[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A+CR09(5->7) */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_1_Vx75[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_1_Vx75[] = {
 	{ {0x97, 0x1F, 0x60, 0x87, 0x5D, 0x83, 0x10} },/* ; 00 (x350) */
 	{ {0xB4, 0x1F, 0x92, 0x89, 0x8F, 0xB5, 0x30} },/* ; 01 (x400) */
 	{ {0xFE, 0x1F, 0xE0, 0x84, 0xDF, 0xFF, 0x10} },/* ; 02 (x480) */
@@ -1644,7 +1682,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_1_Vx75[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11024x768_2_Hx75[] = {
+static struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11024x768_2_Hx75[] = {
 	{ {0x63, 0x27, 0x87, 0x3B, 0x8C, 0x00, 0x01, 0x00} },/* ; 00 (320x) */
 	{ {0x63, 0x27, 0x87, 0x3B, 0x8C, 0x00, 0x01, 0x00} },/* ; 01 (360x) */
 	{ {0x63, 0x31, 0x87, 0x3D, 0x8E, 0x00, 0x01, 0x00} },/* ; 02 (400x) */
@@ -1656,7 +1694,7 @@ static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11024x768_2_Hx75[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_2_Vx75[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_2_Vx75[] = {
 	{ {0x24, 0xBB, 0x31, 0x87, 0x5D, 0x25, 0x30} },/* ; 00 (x350) */
 	{ {0x24, 0xBB, 0x4A, 0x80, 0x8F, 0x25, 0x30} },/* ; 01 (x400) */
 	{ {0x24, 0xBB, 0x72, 0x88, 0xDF, 0x25, 0x30} },/* ; 02 (x480) */
@@ -1665,7 +1703,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11024x768_2_Vx75[] = {
 };
 
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11280x1024_1_Hx75[] = {
+static struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11280x1024_1_Hx75[] = {
 	{ {0x56, 0x27, 0x9A, 0x30, 0x1E, 0x00, 0x05, 0x00} },/* ; 00 (320x) */
 	{ {0x56, 0x27, 0x9A, 0x30, 0x1E, 0x00, 0x05, 0x00} },/* ; 01 (360x) */
 	{ {0x60, 0x31, 0x84, 0x3A, 0x88, 0x00, 0x01, 0x00} },/* ; 02 (400x) */
@@ -1678,7 +1716,7 @@ static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11280x1024_1_Hx75[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_1_Vx75[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_1_Vx75[] = {
 	{ {0x86, 0xD1, 0xBC, 0x80, 0xBB, 0xE5, 0x00} },/* ; 00 (x350) */
 	{ {0xB8, 0x1F, 0x90, 0x84, 0x8F, 0xB9, 0x30} },/* ; 01 (x400) */
 	{ {0x08, 0x3E, 0xE0, 0x84, 0xDF, 0x09, 0x00} },/* ; 02 (x480) */
@@ -1687,7 +1725,7 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_1_Vx75[] = {
 	{ {0x28, 0x5A, 0x13, 0x87, 0xFF, 0x29, 0xA9} } /* ; 05 (x1024) */
 };
 /* CR00,CR02,CR03,CR04,CR05,SR0B,SR0C,SR0E */
-static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11280x1024_2_Hx75[] = {
+static struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11280x1024_2_Hx75[] = {
 	{ {0x7E, 0x3B, 0x9A, 0x44, 0x12, 0x00, 0x01, 0x00} },/* ; 00 (320x) */
 	{ {0x7E, 0x3B, 0x9A, 0x44, 0x12, 0x00, 0x01, 0x00} },/* ; 01 (360x) */
 	{ {0x7E, 0x40, 0x84, 0x49, 0x91, 0x00, 0x01, 0x00} },/* ; 02 (400x) */
@@ -1700,7 +1738,7 @@ static const struct XGI_LVDSCRT1HDataStruct XGI_LVDSCRT11280x1024_2_Hx75[] = {
 };
 
 /* CR06,CR07,CR10,CR11,CR15,CR16,SR0A */
-static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_2_Vx75[] = {
+static struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_2_Vx75[] = {
 	{ {0x28, 0xD2, 0xAF, 0x83, 0xAE, 0xD8, 0xA1} },/* ; 00 (x350) */
 	{ {0x28, 0xD2, 0xC8, 0x8C, 0xC7, 0xF2, 0x81} },/* ; 01 (x400) */
 	{ {0x28, 0xD2, 0xF0, 0x84, 0xEF, 0x1A, 0xB1} },/* ; 02 (x480) */
@@ -1710,141 +1748,115 @@ static const struct XGI_LVDSCRT1VDataStruct XGI_LVDSCRT11280x1024_2_Vx75[] = {
 };
 
 /*add for new UNIVGABIOS*/
-static const struct XGI330_LCDDataTablStruct XGI_LCDDataTable[] = {
-	{Panel_1024x768, 0x0019, 0x0001, XGI_ExtLCD1024x768Data },
-	{Panel_1024x768, 0x0019, 0x0000, XGI_StLCD1024x768Data },
-	{Panel_1024x768, 0x0018, 0x0010, XGI_CetLCD1024x768Data },
-	{Panel_1280x1024, 0x0019, 0x0001, XGI_ExtLCD1280x1024Data },
-	{Panel_1280x1024, 0x0019, 0x0000, XGI_StLCD1280x1024Data },
-	{Panel_1280x1024, 0x0018, 0x0010, XGI_CetLCD1280x1024Data },
-	{Panel_1400x1050, 0x0019, 0x0001, xgifb_lcd_1400x1050 },
-	{Panel_1400x1050, 0x0019, 0x0000, xgifb_lcd_1400x1050 },
-	{Panel_1400x1050, 0x0018, 0x0010, XGI_CetLCD1400x1050Data },
-	{Panel_1600x1200, 0x0019, 0x0001, XGI_ExtLCD1600x1200Data },
-	{Panel_1600x1200, 0x0019, 0x0000, XGI_StLCD1600x1200Data },
-	{PanelRef60Hz, 0x0008, 0x0008, XGI_NoScalingData },
-	{Panel_1024x768x75, 0x0019, 0x0001, XGI_ExtLCD1024x768x75Data },
-	{Panel_1024x768x75, 0x0019, 0x0000, XGI_ExtLCD1024x768x75Data },
-	{Panel_1024x768x75, 0x0018, 0x0010, XGI_CetLCD1024x768x75Data },
-	{Panel_1280x1024x75, 0x0019, 0x0001, xgifb_lcd_1280x1024x75 },
-	{Panel_1280x1024x75, 0x0019, 0x0000, xgifb_lcd_1280x1024x75 },
-	{Panel_1280x1024x75, 0x0018, 0x0010, XGI_CetLCD1280x1024x75Data },
-	{PanelRef75Hz, 0x0008, 0x0008, XGI_NoScalingDatax75 },
-	{0xFF, 0x0000, 0x0000, NULL } /* End of table */
+static struct XGI330_LCDDataTablStruct XGI_LCDDataTable[] = {
+	{Panel_1024x768, 0x0019, 0x0001, 0}, /* XGI_ExtLCD1024x768Data */
+	{Panel_1024x768, 0x0019, 0x0000, 1}, /* XGI_StLCD1024x768Data */
+	{Panel_1024x768, 0x0018, 0x0010, 2}, /* XGI_CetLCD1024x768Data */
+	{Panel_1280x1024, 0x0019, 0x0001, 3}, /* XGI_ExtLCD1280x1024Data */
+	{Panel_1280x1024, 0x0019, 0x0000, 4}, /* XGI_StLCD1280x1024Data */
+	{Panel_1280x1024, 0x0018, 0x0010, 5}, /* XGI_CetLCD1280x1024Data */
+	{Panel_1400x1050, 0x0019, 0x0001, 6}, /* XGI_ExtLCD1400x1050Data */
+	{Panel_1400x1050, 0x0019, 0x0000, 7}, /* XGI_StLCD1400x1050Data */
+	{Panel_1400x1050, 0x0018, 0x0010, 8}, /* XGI_CetLCD1400x1050Data */
+	{Panel_1600x1200, 0x0019, 0x0001, 9}, /* XGI_ExtLCD1600x1200Data */
+	{Panel_1600x1200, 0x0019, 0x0000, 10}, /* XGI_StLCD1600x1200Data */
+	{PanelRef60Hz, 0x0008, 0x0008, 11}, /* XGI_NoScalingData */
+	{Panel_1024x768x75, 0x0019, 0x0001, 12}, /* XGI_ExtLCD1024x768x75Data */
+	{Panel_1024x768x75, 0x0019, 0x0000, 13}, /* XGI_StLCD1024x768x75Data */
+	{Panel_1024x768x75, 0x0018, 0x0010, 14}, /* XGI_CetLCD1024x768x75Data */
+	/* XGI_ExtLCD1280x1024x75Data */
+	{Panel_1280x1024x75, 0x0019, 0x0001, 15},
+	/* XGI_StLCD1280x1024x75Data */
+	{Panel_1280x1024x75, 0x0019, 0x0000, 16},
+	/* XGI_CetLCD1280x1024x75Data */
+	{Panel_1280x1024x75, 0x0018, 0x0010, 17},
+	{PanelRef75Hz, 0x0008, 0x0008, 18}, /* XGI_NoScalingDatax75 */
+	{0xFF, 0x0000, 0x0000, 0} /* End of table */
 };
 
-static const struct XGI330_LCDDataTablStruct XGI_LCDDesDataTable[] = {
-	{Panel_1024x768, 0x0019, 0x0001, XGI_ExtLCDDes1024x768Data },
-	{Panel_1024x768, 0x0019, 0x0000, XGI_StLCDDes1024x768Data },
-	{Panel_1024x768, 0x0018, 0x0010, XGI_CetLCDDes1024x768Data },
-	{Panel_1280x1024, 0x0019, 0x0001, XGI_ExtLCDDes1280x1024Data },
-	{Panel_1280x1024, 0x0019, 0x0000, XGI_StLCDDes1280x1024Data },
-	{Panel_1280x1024, 0x0018, 0x0010, XGI_CetLCDDes1280x1024Data },
-	{Panel_1400x1050, 0x0019, 0x0001, xgifb_lcddes_1400x1050 },
-	{Panel_1400x1050, 0x0019, 0x0000, xgifb_lcddes_1400x1050 },
-	{Panel_1400x1050, 0x0418, 0x0010, XGI_CetLCDDes1400x1050Data },
-	{Panel_1400x1050, 0x0418, 0x0410, XGI_CetLCDDes1400x1050Data2 },
-	{Panel_1600x1200, 0x0019, 0x0001, XGI_ExtLCDDes1600x1200Data },
-	{Panel_1600x1200, 0x0019, 0x0000, XGI_StLCDDes1600x1200Data },
-	{PanelRef60Hz, 0x0008, 0x0008, XGI_NoScalingDesData },
-	{Panel_1024x768x75, 0x0019, 0x0001, xgifb_lcddes_1024x768x75 },
-	{Panel_1024x768x75, 0x0019, 0x0000, xgifb_lcddes_1024x768x75 },
-	{Panel_1024x768x75, 0x0018, 0x0010, XGI_CetLCDDes1024x768x75Data },
-	{Panel_1280x1024x75, 0x0019, 0x0001, xgifb_lcddes_1280x1024x75 },
-	{Panel_1280x1024x75, 0x0019, 0x0000, xgifb_lcddes_1280x1024x75 },
-	{Panel_1280x1024x75, 0x0018, 0x0010, XGI_CetLCDDes1280x1024x75Data },
-	{PanelRef75Hz, 0x0008, 0x0008, XGI_NoScalingDesDatax75 },
-	{0xFF, 0x0000, 0x0000, NULL }
+static struct XGI330_LCDDataTablStruct XGI_LCDDesDataTable[] = {
+	{Panel_1024x768, 0x0019, 0x0001, 0}, /* XGI_ExtLCDDes1024x768Data */
+	{Panel_1024x768, 0x0019, 0x0000, 1}, /* XGI_StLCDDes1024x768Data */
+	{Panel_1024x768, 0x0018, 0x0010, 2}, /* XGI_CetLCDDes1024x768Data */
+	{Panel_1280x1024, 0x0019, 0x0001, 3}, /* XGI_ExtLCDDes1280x1024Data */
+	{Panel_1280x1024, 0x0019, 0x0000, 4}, /* XGI_StLCDDes1280x1024Data */
+	{Panel_1280x1024, 0x0018, 0x0010, 5}, /* XGI_CetLCDDes1280x1024Data */
+	{Panel_1400x1050, 0x0019, 0x0001, 6}, /* XGI_ExtLCDDes1400x1050Data */
+	{Panel_1400x1050, 0x0019, 0x0000, 7}, /* XGI_StLCDDes1400x1050Data */
+	{Panel_1400x1050, 0x0418, 0x0010, 8}, /* XGI_CetLCDDes1400x1050Data */
+	{Panel_1400x1050, 0x0418, 0x0410, 9}, /* XGI_CetLCDDes1400x1050Data2 */
+	{Panel_1600x1200, 0x0019, 0x0001, 10}, /* XGI_ExtLCDDes1600x1200Data */
+	{Panel_1600x1200, 0x0019, 0x0000, 11}, /* XGI_StLCDDes1600x1200Data */
+	{PanelRef60Hz, 0x0008, 0x0008, 12}, /* XGI_NoScalingDesData */
+	/* XGI_ExtLCDDes1024x768x75Data */
+	{Panel_1024x768x75, 0x0019, 0x0001, 13},
+	/* XGI_StLCDDes1024x768x75Data */
+	{Panel_1024x768x75, 0x0019, 0x0000, 14},
+	/* XGI_CetLCDDes1024x768x75Data */
+	{Panel_1024x768x75, 0x0018, 0x0010, 15},
+	/* XGI_ExtLCDDes1280x1024x75Data */
+	{Panel_1280x1024x75, 0x0019, 0x0001, 16},
+	/* XGI_StLCDDes1280x1024x75Data */
+	{Panel_1280x1024x75, 0x0019, 0x0000, 17},
+	/* XGI_CetLCDDes1280x1024x75Data */
+	{Panel_1280x1024x75, 0x0018, 0x0010, 18},
+	{PanelRef75Hz, 0x0008, 0x0008, 19}, /* XGI_NoScalingDesDatax75 */
+	{0xFF, 0x0000, 0x0000, 0}
 };
 
-static const struct XGI330_LCDDataTablStruct xgifb_lcddldes[] = {
-	{Panel_1024x768, 0x0019, 0x0001, XGI_ExtLCDDes1024x768Data },
-	{Panel_1024x768, 0x0019, 0x0000, XGI_StLCDDes1024x768Data },
-	{Panel_1024x768, 0x0018, 0x0010, XGI_CetLCDDes1024x768Data },
-	{Panel_1280x1024, 0x0019, 0x0001, XGI_ExtLCDDLDes1280x1024Data },
-	{Panel_1280x1024, 0x0019, 0x0000, XGI_StLCDDLDes1280x1024Data },
-	{Panel_1280x1024, 0x0018, 0x0010, XGI_CetLCDDLDes1280x1024Data },
-	{Panel_1400x1050, 0x0019, 0x0001, xgifb_lcddldes_1400x1050 },
-	{Panel_1400x1050, 0x0019, 0x0000, xgifb_lcddldes_1400x1050 },
-	{Panel_1400x1050, 0x0418, 0x0010, XGI_CetLCDDes1400x1050Data },
-	{Panel_1400x1050, 0x0418, 0x0410, XGI_CetLCDDes1400x1050Data2 },
-	{Panel_1600x1200, 0x0019, 0x0001, XGI_ExtLCDDLDes1600x1200Data },
-	{Panel_1600x1200, 0x0019, 0x0000, XGI_StLCDDLDes1600x1200Data },
-	{PanelRef60Hz, 0x0008, 0x0008, XGI_NoScalingDesData },
-	{Panel_1024x768x75, 0x0019, 0x0001, xgifb_lcddes_1024x768x75 },
-	{Panel_1024x768x75, 0x0019, 0x0000, xgifb_lcddes_1024x768x75 },
-	{Panel_1024x768x75, 0x0018, 0x0010, XGI_CetLCDDes1024x768x75Data },
-	{Panel_1280x1024x75, 0x0019, 0x0001, xgifb_lcddldes_1280x1024x75 },
-	{Panel_1280x1024x75, 0x0019, 0x0000, xgifb_lcddldes_1280x1024x75 },
-	{Panel_1280x1024x75, 0x0018, 0x0010, XGI_CetLCDDLDes1280x1024x75Data },
-	{PanelRef75Hz, 0x0008, 0x0008, XGI_NoScalingDesDatax75 },
-	{0xFF, 0x0000, 0x0000, NULL }
+static struct XGI330_LCDDataTablStruct xgifb_epllcd_crt1[] = {
+	{Panel_1024x768, 0x0018, 0x0000, 0}, /* XGI_LVDSCRT11024x768_1 */
+	{Panel_1024x768, 0x0018, 0x0010, 1}, /* XGI_LVDSCRT11024x768_2 */
+	{Panel_1280x1024, 0x0018, 0x0000, 2}, /* XGI_LVDSCRT11280x1024_1 */
+	{Panel_1280x1024, 0x0018, 0x0010, 3}, /* XGI_LVDSCRT11280x1024_2 */
+	{Panel_1400x1050, 0x0018, 0x0000, 4}, /* XGI_LVDSCRT11400x1050_1 */
+	{Panel_1400x1050, 0x0018, 0x0010, 5}, /* XGI_LVDSCRT11400x1050_2 */
+	{Panel_1600x1200, 0x0018, 0x0000, 6}, /* XGI_LVDSCRT11600x1200_1 */
+	{Panel_1024x768x75, 0x0018, 0x0000, 7}, /* XGI_LVDSCRT11024x768_1x75 */
+	{Panel_1024x768x75, 0x0018, 0x0010, 8}, /* XGI_LVDSCRT11024x768_2x75 */
+	{Panel_1280x1024x75, 0x0018, 0x0000, 9}, /*XGI_LVDSCRT11280x1024_1x75*/
+	{Panel_1280x1024x75, 0x0018, 0x0010, 10},/*XGI_LVDSCRT11280x1024_2x75*/
+	{0xFF, 0x0000, 0x0000, 0}
 };
 
-static const struct XGI330_LCDDataTablStruct xgifb_epllcd_crt1_h[] = {
-	{Panel_1024x768, 0x0018, 0x0000, XGI_LVDSCRT11024x768_1_H },
-	{Panel_1024x768, 0x0018, 0x0010, XGI_LVDSCRT11024x768_2_H },
-	{Panel_1280x1024, 0x0018, 0x0000, XGI_LVDSCRT11280x1024_1_H },
-	{Panel_1280x1024, 0x0018, 0x0010, XGI_LVDSCRT11280x1024_2_H },
-	{Panel_1400x1050, 0x0018, 0x0000, XGI_LVDSCRT11400x1050_1_H },
-	{Panel_1400x1050, 0x0018, 0x0010, XGI_LVDSCRT11400x1050_2_H },
-	{Panel_1600x1200, 0x0018, 0x0000, XGI_LVDSCRT11600x1200_1_H },
-	{Panel_1024x768x75, 0x0018, 0x0000, XGI_LVDSCRT11024x768_1_Hx75 },
-	{Panel_1024x768x75, 0x0018, 0x0010, XGI_LVDSCRT11024x768_2_Hx75 },
-	{Panel_1280x1024x75, 0x0018, 0x0000, XGI_LVDSCRT11280x1024_1_Hx75 },
-	{Panel_1280x1024x75, 0x0018, 0x0010, XGI_LVDSCRT11280x1024_2_Hx75 },
-	{0xFF, 0x0000, 0x0000, NULL }
+static struct XGI330_LCDDataTablStruct XGI_EPLLCDDataPtr[] = {
+	{Panel_1024x768, 0x0018, 0x0000, 0}, /* XGI_LVDS1024x768Data_1 */
+	{Panel_1024x768, 0x0018, 0x0010, 1}, /* XGI_LVDS1024x768Data_2 */
+	{Panel_1280x1024, 0x0018, 0x0000, 2}, /* XGI_LVDS1280x1024Data_1 */
+	{Panel_1280x1024, 0x0018, 0x0010, 3}, /* XGI_LVDS1280x1024Data_2 */
+	{Panel_1400x1050, 0x0018, 0x0000, 4}, /* XGI_LVDS1400x1050Data_1 */
+	{Panel_1400x1050, 0x0018, 0x0010, 5}, /* XGI_LVDS1400x1050Data_2 */
+	{Panel_1600x1200, 0x0018, 0x0000, 6}, /* XGI_LVDS1600x1200Data_1 */
+	{PanelRef60Hz, 0x0008, 0x0008, 7}, /* XGI_LVDSNoScalingData */
+	{Panel_1024x768x75, 0x0018, 0x0000, 8}, /* XGI_LVDS1024x768Data_1x75 */
+	{Panel_1024x768x75, 0x0018, 0x0010, 9}, /* XGI_LVDS1024x768Data_2x75 */
+	/* XGI_LVDS1280x1024Data_1x75 */
+	{Panel_1280x1024x75, 0x0018, 0x0000, 10},
+	/* XGI_LVDS1280x1024Data_2x75 */
+	{Panel_1280x1024x75, 0x0018, 0x0010, 11},
+	{PanelRef75Hz, 0x0008, 0x0008, 12}, /* XGI_LVDSNoScalingDatax75 */
+	{0xFF, 0x0000, 0x0000, 0}
 };
 
-static const struct XGI330_LCDDataTablStruct xgifb_epllcd_crt1_v[] = {
-	{Panel_1024x768, 0x0018, 0x0000, XGI_LVDSCRT11024x768_1_V },
-	{Panel_1024x768, 0x0018, 0x0010, XGI_LVDSCRT11024x768_2_V },
-	{Panel_1280x1024, 0x0018, 0x0000, XGI_LVDSCRT11280x1024_1_V },
-	{Panel_1280x1024, 0x0018, 0x0010, XGI_LVDSCRT11280x1024_2_V },
-	{Panel_1400x1050, 0x0018, 0x0000, XGI_LVDSCRT11400x1050_1_V },
-	{Panel_1400x1050, 0x0018, 0x0010, XGI_LVDSCRT11400x1050_2_V },
-	{Panel_1600x1200, 0x0018, 0x0000, XGI_LVDSCRT11600x1200_1_V },
-	{Panel_1024x768x75, 0x0018, 0x0000, XGI_LVDSCRT11024x768_1_Vx75 },
-	{Panel_1024x768x75, 0x0018, 0x0010, XGI_LVDSCRT11024x768_2_Vx75 },
-	{Panel_1280x1024x75, 0x0018, 0x0000, XGI_LVDSCRT11280x1024_1_Vx75 },
-	{Panel_1280x1024x75, 0x0018, 0x0010, XGI_LVDSCRT11280x1024_2_Vx75 },
-	{0xFF, 0x0000, 0x0000, NULL }
-};
-
-static const struct XGI330_LCDDataTablStruct XGI_EPLLCDDataPtr[] = {
-	{Panel_1024x768, 0x0018, 0x0000, XGI_LVDS1024x768Data_1 },
-	{Panel_1024x768, 0x0018, 0x0010, XGI_LVDS1024x768Data_2 },
-	{Panel_1280x1024, 0x0018, 0x0000, XGI_LVDS1280x1024Data_1 },
-	{Panel_1280x1024, 0x0018, 0x0010, XGI_LVDS1280x1024Data_2 },
-	{Panel_1400x1050, 0x0018, 0x0000, XGI_LVDS1400x1050Data_1 },
-	{Panel_1400x1050, 0x0018, 0x0010, XGI_LVDS1400x1050Data_2 },
-	{Panel_1600x1200, 0x0018, 0x0000, XGI_LVDS1600x1200Data_1 },
-	{PanelRef60Hz, 0x0008, 0x0008, XGI_LVDSNoScalingData },
-	{Panel_1024x768x75, 0x0018, 0x0000, XGI_LVDS1024x768Data_1x75 },
-	{Panel_1024x768x75, 0x0018, 0x0010, XGI_LVDS1024x768Data_2x75 },
-	{Panel_1280x1024x75, 0x0018, 0x0000, XGI_LVDS1280x1024Data_1x75 },
-	{Panel_1280x1024x75, 0x0018, 0x0010, XGI_LVDS1280x1024Data_2x75 },
-	{PanelRef75Hz, 0x0008, 0x0008, XGI_LVDSNoScalingDatax75 },
-	{0xFF, 0x0000, 0x0000, NULL }
-};
-
-static const struct XGI330_LCDDataTablStruct XGI_EPLLCDDesDataPtr[] = {
-	{Panel_1024x768, 0x0018, 0x0000, XGI_LVDS1024x768Des_1 },
-	{Panel_1024x768, 0x0618, 0x0410, XGI_LVDS1024x768Des_3 },
-	{Panel_1024x768, 0x0018, 0x0010, XGI_LVDS1024x768Des_2 },
-	{Panel_1280x1024, 0x0018, 0x0000, XGI_LVDS1280x1024Des_1 },
-	{Panel_1280x1024, 0x0018, 0x0010, XGI_LVDS1280x1024Des_2 },
-	{Panel_1400x1050, 0x0018, 0x0000, XGI_LVDS1400x1050Des_1 },
-	{Panel_1400x1050, 0x0018, 0x0010, XGI_LVDS1400x1050Des_2 },
-	{Panel_1600x1200, 0x0018, 0x0000, XGI_LVDS1600x1200Des_1 },
-	{PanelRef60Hz, 0x0008, 0x0008, XGI_LVDSNoScalingDesData },
-	{Panel_1024x768x75, 0x0018, 0x0000, XGI_LVDS1024x768Des_1x75 },
-	{Panel_1024x768x75, 0x0618, 0x0410, XGI_LVDS1024x768Des_3x75 },
-	{Panel_1024x768x75, 0x0018, 0x0010, XGI_LVDS1024x768Des_2x75 },
-	{Panel_1280x1024x75, 0x0018, 0x0000, XGI_LVDS1280x1024Des_1x75 },
-	{Panel_1280x1024x75, 0x0018, 0x0010, XGI_LVDS1280x1024Des_2x75 },
-	{PanelRef75Hz, 0x0008, 0x0008, XGI_LVDSNoScalingDesDatax75 },
-	{0xFF, 0x0000, 0x0000, NULL }
+static struct XGI330_LCDDataTablStruct XGI_EPLLCDDesDataPtr[] = {
+	{Panel_1024x768, 0x0018, 0x0000, 0}, /* XGI_LVDS1024x768Des_1 */
+	{Panel_1024x768, 0x0618, 0x0410, 1}, /* XGI_LVDS1024x768Des_3 */
+	{Panel_1024x768, 0x0018, 0x0010, 2}, /* XGI_LVDS1024x768Des_2 */
+	{Panel_1280x1024, 0x0018, 0x0000, 3}, /* XGI_LVDS1280x1024Des_1 */
+	{Panel_1280x1024, 0x0018, 0x0010, 4}, /* XGI_LVDS1280x1024Des_2 */
+	{Panel_1400x1050, 0x0018, 0x0000, 5}, /* XGI_LVDS1400x1050Des_1 */
+	{Panel_1400x1050, 0x0018, 0x0010, 6}, /* XGI_LVDS1400x1050Des_2 */
+	{Panel_1600x1200, 0x0018, 0x0000, 7}, /* XGI_LVDS1600x1200Des_1 */
+	{PanelRef60Hz, 0x0008, 0x0008, 8},  /* XGI_LVDSNoScalingDesData */
+	{Panel_1024x768x75, 0x0018, 0x0000, 9}, /* XGI_LVDS1024x768Des_1x75 */
+	{Panel_1024x768x75, 0x0618, 0x0410, 10}, /* XGI_LVDS1024x768Des_3x75 */
+	{Panel_1024x768x75, 0x0018, 0x0010, 11}, /* XGI_LVDS1024x768Des_2x75 */
+	/* XGI_LVDS1280x1024Des_1x75 */
+	{Panel_1280x1024x75, 0x0018, 0x0000, 12},
+	/* XGI_LVDS1280x1024Des_2x75 */
+	{Panel_1280x1024x75, 0x0018, 0x0010, 13},
+	{PanelRef75Hz, 0x0008, 0x0008, 14}, /* XGI_LVDSNoScalingDesDatax75 */
+	{0xFF, 0x0000, 0x0000, 0}
 };
 
 static const struct XGI330_TVDataTablStruct XGI_TVDataTable[] = {
@@ -1865,7 +1877,7 @@ static const struct XGI330_TVDataTablStruct XGI_TVDataTable[] = {
 };
 
 /* Dual link only */
-static const struct XGI330_LCDCapStruct XGI_LCDDLCapList[] = {
+static struct XGI330_LCDCapStruct  XGI_LCDDLCapList[] = {
 /* LCDCap1024x768 */
 	{Panel_1024x768, DefaultLCDCap, 0, 0x88, 0x06, VCLK65_315,
 	0x6C, 0xC3, 0x35, 0x62, 0x02, 0x14, 0x0A, 0x02, 0x00,
@@ -1900,7 +1912,7 @@ static const struct XGI330_LCDCapStruct XGI_LCDDLCapList[] = {
 	0x30, 0x10, 0x5A, 0x10, 0x10, 0x0A, 0xC0, 0x28, 0x10}
 };
 
-static const struct XGI330_LCDCapStruct XGI_LCDCapList[] = {
+static struct XGI330_LCDCapStruct  XGI_LCDCapList[] = {
 /* LCDCap1024x768 */
 	{Panel_1024x768, DefaultLCDCap, 0, 0x88, 0x06, VCLK65_315,
 	0x6C, 0xC3, 0x35, 0x62, 0x02, 0x14, 0x0A, 0x02, 0x00,
@@ -1935,7 +1947,7 @@ static const struct XGI330_LCDCapStruct XGI_LCDCapList[] = {
 	0x30, 0x10, 0x5A, 0x10, 0x10, 0x0A, 0xC0, 0x28, 0x10}
 };
 
-const struct XGI_Ext2Struct XGI330_RefIndex[] = {
+static struct XGI_Ext2Struct XGI330_RefIndex[] = {
 	{Mode32Bpp + SupportAllCRT2 + SyncPN, RES320x200, VCLK25_175,
 	0x00, 0x10, 0x59, 320, 200},/* 00 */
 	{Mode32Bpp + SupportAllCRT2 + SyncPN, RES320x200, VCLK25_175,
@@ -2089,13 +2101,21 @@ const struct XGI_Ext2Struct XGI330_RefIndex[] = {
 	0x30, 0x47, 0x37, 1024, 768},/* 48 1024x768x160Hz */
 };
 
-static const unsigned char XGI330_ScreenOffset[] = {
+static unsigned char XGI330_ScreenOffset[] = {
 	0x14, 0x19, 0x20, 0x28, 0x32, 0x40,
 	0x50, 0x64, 0x78, 0x80, 0x2d, 0x35,
 	0x57, 0x48
 };
 
-static const struct SiS_ModeResInfo_S XGI330_ModeResInfo[] = {
+static struct SiS_StResInfo_S XGI330_StResInfo[] = {
+	{640, 400},
+	{640, 350},
+	{720, 400},
+	{720, 350},
+	{640, 480}
+};
+
+static struct SiS_ModeResInfo_S XGI330_ModeResInfo[] = {
 	{ 320,  200, 8,  8},
 	{ 320,  240, 8,  8},
 	{ 320,  400, 8,  8},
@@ -2121,7 +2141,7 @@ static const struct SiS_ModeResInfo_S XGI330_ModeResInfo[] = {
 	{1152,  864, 8, 16}
 };
 
-const struct SiS_VCLKData XGI_VCLKData[] = {
+static struct SiS_VCLKData XGI_VCLKData[] = {
 	/* SR2B,SR2C,SR2D */
 	{0x1B, 0xE1,  25}, /* 00 (25.175MHz) */
 	{0x4E, 0xE4,  28}, /* 01 (28.322MHz) */
@@ -2214,7 +2234,7 @@ const struct SiS_VCLKData XGI_VCLKData[] = {
 	{0xFF, 0x00,   0}  /* End mark */
 };
 
-static const struct SiS_VBVCLKData XGI_VBVCLKData[] = {
+static struct SiS_VBVCLKData XGI_VBVCLKData[] = {
 	{0x1B, 0xE1,  25}, /* 00 (25.175MHz) */
 	{0x4E, 0xE4,  28}, /* 01 (28.322MHz) */
 	{0x57, 0xE4,  31}, /* 02 (31.500MHz) */
@@ -2309,7 +2329,7 @@ static const struct SiS_VBVCLKData XGI_VBVCLKData[] = {
 #define XGI301TVDelay 0x22
 #define XGI301LCDDelay 0x12
 
-static const unsigned char TVAntiFlickList[] = {/* NTSCAntiFlicker */
+static unsigned char TVAntiFlickList[] = {/* NTSCAntiFlicker */
 	0x04, /* ; 0 Adaptive */
 	0x00, /* ; 1 new anti-flicker ? */
 
@@ -2321,7 +2341,7 @@ static const unsigned char TVAntiFlickList[] = {/* NTSCAntiFlicker */
 };
 
 
-static const unsigned char TVEdgeList[] = {
+static unsigned char TVEdgeList[] = {
 	0x00, /* ; 0 NTSC No Edge enhance */
 	0x04, /* ; 1 NTSC Adaptive Edge enhance */
 	0x00, /* ; 0 PAL No Edge enhance */
@@ -2330,7 +2350,7 @@ static const unsigned char TVEdgeList[] = {
 	0x00  /* ; 1 HiTV */
 };
 
-static const unsigned long TVPhaseList[] = {
+static unsigned long TVPhaseList[] = {
 	0x08BAED21, /* ; 0 NTSC phase */
 	0x00E3052A, /* ; 1 PAL phase */
 	0x9B2EE421, /* ; 2 PAL-M phase */
@@ -2347,7 +2367,7 @@ static const unsigned long TVPhaseList[] = {
 	0xE00A831E  /* ; D PAL-M 1024x768 */
 };
 
-static const unsigned char NTSCYFilter1[] = {
+static unsigned char NTSCYFilter1[] = {
 	0x00, 0xF4, 0x10, 0x38, /* 0 : 320x text mode */
 	0x00, 0xF4, 0x10, 0x38, /* 1 : 360x text mode */
 	0xEB, 0x04, 0x25, 0x18, /* 2 : 640x text mode */
@@ -2357,7 +2377,7 @@ static const unsigned char NTSCYFilter1[] = {
 	0xEB, 0x15, 0x25, 0xF6  /* 6 : 800x gra. mode */
 };
 
-static const unsigned char PALYFilter1[] = {
+static unsigned char PALYFilter1[] = {
 	0x00, 0xF4, 0x10, 0x38, /* 0 : 320x text mode */
 	0x00, 0xF4, 0x10, 0x38, /* 1 : 360x text mode */
 	0xF1, 0xF7, 0x1F, 0x32, /* 2 : 640x text mode */
@@ -2367,7 +2387,7 @@ static const unsigned char PALYFilter1[] = {
 	0xFC, 0xFB, 0x14, 0x2A  /* 6 : 800x gra. mode */
 };
 
-static const unsigned char xgifb_palmn_yfilter1[] = {
+static unsigned char xgifb_palmn_yfilter1[] = {
 	0x00, 0xF4, 0x10, 0x38, /* 0 : 320x text mode */
 	0x00, 0xF4, 0x10, 0x38, /* 1 : 360x text mode */
 	0xEB, 0x04, 0x10, 0x18, /* 2 : 640x text mode */
@@ -2378,7 +2398,7 @@ static const unsigned char xgifb_palmn_yfilter1[] = {
 	0xFF, 0xFF, 0xFF, 0xFF  /* End of Table */
 };
 
-static const unsigned char xgifb_yfilter2[] = {
+static unsigned char xgifb_yfilter2[] = {
 	0xFF, 0x03, 0x02, 0xF6, 0xFC, 0x27, 0x46, /* 0 : 320x text mode */
 	0x01, 0x02, 0xFE, 0xF7, 0x03, 0x27, 0x3C, /* 1 : 360x text mode */
 	0xFF, 0x03, 0x02, 0xF6, 0xFC, 0x27, 0x46, /* 2 : 640x text mode */
@@ -2389,13 +2409,13 @@ static const unsigned char xgifb_yfilter2[] = {
 	0xFF, 0xFF, 0xFC, 0x00, 0x0F, 0x22, 0x28  /* 7 : 1024xgra. mode */
 };
 
-static const unsigned char XGI_NTSC1024AdjTime[] = {
+static unsigned char XGI_NTSC1024AdjTime[] = {
 	0xa7, 0x07, 0xf2, 0x6e, 0x17, 0x8b, 0x73, 0x53,
 	0x13, 0x40, 0x34, 0xF4, 0x63, 0xBB, 0xCC, 0x7A,
 	0x58, 0xe4, 0x73, 0xd0, 0x13
 };
 
-static const struct XGI301C_Tap4TimingStruct xgifb_tap4_timing[] = {
+static struct XGI301C_Tap4TimingStruct xgifb_tap4_timing[] = {
 	{0, {
 	0x00, 0x20, 0x00, 0x00, 0x7F, 0x20, 0x02, 0x7F, /* ; C0-C7 */
 	0x7D, 0x20, 0x04, 0x7F, 0x7D, 0x1F, 0x06, 0x7E, /* ; C8-CF */
@@ -2409,7 +2429,7 @@ static const struct XGI301C_Tap4TimingStruct xgifb_tap4_timing[] = {
 	}
 };
 
-static const struct XGI301C_Tap4TimingStruct PALTap4Timing[] = {
+static struct XGI301C_Tap4TimingStruct PALTap4Timing[] = {
 	{600,	{
 		0x05, 0x19, 0x05, 0x7D, 0x03, 0x19, 0x06, 0x7E, /* ; C0-C7 */
 		0x02, 0x19, 0x08, 0x7D, 0x01, 0x18, 0x0A, 0x7D, /* ; C8-CF */
@@ -2445,7 +2465,7 @@ static const struct XGI301C_Tap4TimingStruct PALTap4Timing[] = {
 	}
 };
 
-static const struct XGI301C_Tap4TimingStruct xgifb_ntsc_525_tap4_timing[] = {
+static struct XGI301C_Tap4TimingStruct xgifb_ntsc_525_tap4_timing[] = {
 	{480,	{
 		0x04, 0x1A, 0x04, 0x7E, 0x03, 0x1A, 0x06, 0x7D, /* ; C0-C7 */
 		0x01, 0x1A, 0x08, 0x7D, 0x00, 0x19, 0x0A, 0x7D, /* ; C8-CF */
@@ -2481,7 +2501,7 @@ static const struct XGI301C_Tap4TimingStruct xgifb_ntsc_525_tap4_timing[] = {
 	}
 };
 
-static const struct XGI301C_Tap4TimingStruct YPbPr750pTap4Timing[] = {
+static struct XGI301C_Tap4TimingStruct YPbPr750pTap4Timing[] = {
 	{0xFFFF, {
 		 0x05, 0x19, 0x05, 0x7D, 0x03, 0x19, 0x06, 0x7E, /* ; C0-C7 */
 		 0x02, 0x19, 0x08, 0x7D, 0x01, 0x18, 0x0A, 0x7D, /* ; C8-CF */

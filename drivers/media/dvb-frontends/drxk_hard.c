@@ -65,6 +65,16 @@ static bool IsQAM(struct drxk_state *state)
 	    state->m_OperationMode == OM_QAM_ITU_C;
 }
 
+bool IsA1WithPatchCode(struct drxk_state *state)
+{
+	return state->m_DRXK_A1_PATCH_CODE;
+}
+
+bool IsA1WithRomCode(struct drxk_state *state)
+{
+	return state->m_DRXK_A1_ROM_CODE;
+}
+
 #define NOA1ROM 0
 
 #define DRXDAP_FASI_SHORT_FORMAT(addr) (((addr) & 0xFC30FF80) == 0)
@@ -179,7 +189,7 @@ static inline u32 MulDiv32(u32 a, u32 b, u32 c)
 	return (u32) tmp64;
 }
 
-static inline u32 Frac28a(u32 a, u32 c)
+inline u32 Frac28a(u32 a, u32 c)
 {
 	int i = 0;
 	u32 Q1 = 0;
@@ -577,7 +587,7 @@ static int write_block(struct drxk_state *state, u32 Address,
 #define DRXK_MAX_RETRIES_POWERUP 20
 #endif
 
-static int PowerUpDevice(struct drxk_state *state)
+int PowerUpDevice(struct drxk_state *state)
 {
 	int status;
 	u8 data = 0;
@@ -710,6 +720,11 @@ static int init_state(struct drxk_state *state)
 
 	state->m_bPowerDown = (ulPowerDown != 0);
 
+	state->m_DRXK_A1_PATCH_CODE = false;
+	state->m_DRXK_A1_ROM_CODE = false;
+	state->m_DRXK_A2_ROM_CODE = false;
+	state->m_DRXK_A3_ROM_CODE = false;
+	state->m_DRXK_A2_PATCH_CODE = false;
 	state->m_DRXK_A3_PATCH_CODE = false;
 
 	/* Init AGC and PGA parameters */
@@ -906,7 +921,7 @@ static int GetDeviceCapabilities(struct drxk_state *state)
 	status = write16(state, SCU_RAM_GPIO__A, SCU_RAM_GPIO_HW_LOCK_IND_DISABLE);
 	if (status < 0)
 		goto error;
-	status = write16(state, SIO_TOP_COMM_KEY__A, SIO_TOP_COMM_KEY_KEY);
+	status = write16(state, SIO_TOP_COMM_KEY__A, 0xFABA);
 	if (status < 0)
 		goto error;
 	status = read16(state, SIO_PDR_OHW_CFG__A, &sioPdrOhwCfg);
@@ -933,7 +948,7 @@ static int GetDeviceCapabilities(struct drxk_state *state)
 		state->m_oscClockFreq = 20250;
 		break;
 	default:
-		printk(KERN_ERR "drxk: Clock Frequency is unknown\n");
+		printk(KERN_ERR "drxk: Clock Frequency is unkonwn\n");
 		return -EINVAL;
 	}
 	/*
@@ -1202,7 +1217,7 @@ static int MPEGTSConfigurePins(struct drxk_state *state, bool mpegEnable)
 		goto error;
 
 	/*  MPEG TS pad configuration */
-	status = write16(state, SIO_TOP_COMM_KEY__A, SIO_TOP_COMM_KEY_KEY);
+	status = write16(state, SIO_TOP_COMM_KEY__A, 0xFABA);
 	if (status < 0)
 		goto error;
 
@@ -5446,7 +5461,6 @@ static int QAMDemodulatorCommand(struct drxk_state *state,
 	} else {
 		printk(KERN_WARNING "drxk: Unknown QAM demodulator parameter "
 			"count %d\n", numberOfParameters);
-		status = -EINVAL;
 	}
 
 error:

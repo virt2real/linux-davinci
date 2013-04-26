@@ -1249,6 +1249,9 @@ ks8695_open(struct net_device *ndev)
 	struct ks8695_priv *ksp = netdev_priv(ndev);
 	int ret;
 
+	if (!is_valid_ether_addr(ndev->dev_addr))
+		return -EADDRNOTAVAIL;
+
 	ks8695_reset(ksp);
 
 	ks8695_update_mac(ksp);
@@ -1274,7 +1277,7 @@ ks8695_open(struct net_device *ndev)
  *	This initialises the LAN switch in the KS8695 to a known-good
  *	set of defaults.
  */
-static void
+static void __devinit
 ks8695_init_switch(struct ks8695_priv *ksp)
 {
 	u32 ctrl;
@@ -1302,7 +1305,7 @@ ks8695_init_switch(struct ks8695_priv *ksp)
  *	This initialises a KS8695's WAN phy to sensible values for
  *	autonegotiation etc.
  */
-static void
+static void __devinit
 ks8695_init_wan_phy(struct ks8695_priv *ksp)
 {
 	u32 ctrl;
@@ -1346,7 +1349,7 @@ static const struct net_device_ops ks8695_netdev_ops = {
  *	wan ports, and an IORESOURCE_IRQ for the link IRQ for the wan
  *	port.
  */
-static int
+static int __devinit
 ks8695_probe(struct platform_device *pdev)
 {
 	struct ks8695_priv *ksp;
@@ -1594,7 +1597,7 @@ ks8695_drv_resume(struct platform_device *pdev)
  *
  *	This unregisters and releases a KS8695 ethernet device.
  */
-static int
+static int __devexit
 ks8695_drv_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
@@ -1617,7 +1620,7 @@ static struct platform_driver ks8695_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= ks8695_probe,
-	.remove		= ks8695_drv_remove,
+	.remove		= __devexit_p(ks8695_drv_remove),
 	.suspend	= ks8695_drv_suspend,
 	.resume		= ks8695_drv_resume,
 };

@@ -17,6 +17,8 @@
 #ifndef __MACH_ZYNQ_COMMON_H__
 #define __MACH_ZYNQ_COMMON_H__
 
-void __init xttcps_timer_init(void);
+#include <asm/mach/time.h>
+
+extern struct sys_timer xttcpss_sys_timer;
 
 #endif

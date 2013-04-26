@@ -1,6 +1,6 @@
 all:
 
 run_tests:
-	@./on-off-test.sh || echo "cpu-hotplug selftests: [FAIL]"
+	./on-off-test.sh
 
 clean:

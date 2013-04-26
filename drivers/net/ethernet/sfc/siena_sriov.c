@@ -695,7 +695,8 @@ static int efx_vfdi_fini_all_queues(struct efx_vf *vf)
 		return VFDI_RC_ENOMEM;
 
 	rtnl_lock();
-	siena_prepare_flush(efx);
+	if (efx->fc_disable++ == 0)
+		efx_mcdi_set_mac(efx);
 	rtnl_unlock();
 
 	/* Flush all the initialized queues */
@@ -732,7 +733,8 @@ static int efx_vfdi_fini_all_queues(struct efx_vf *vf)
 	}
 
 	rtnl_lock();
-	siena_finish_flush(efx);
+	if (--efx->fc_disable == 0)
+		efx_mcdi_set_mac(efx);
 	rtnl_unlock();
 
 	/* Irrespective of success/failure, fini the queues */
@@ -993,7 +995,7 @@ static void efx_sriov_reset_vf(struct efx_vf *vf, struct efx_buffer *buffer)
 			     FRF_AZ_EVQ_BUF_BASE_ID, buftbl);
 	efx_writeo_table(efx, &reg, FR_BZ_EVQ_PTR_TBL, abs_evq);
 	EFX_POPULATE_DWORD_1(ptr, FRF_AZ_EVQ_RPTR, 0);
-	efx_writed(efx, &ptr, FR_BZ_EVQ_RPTR + FR_BZ_EVQ_RPTR_STEP * abs_evq);
+	efx_writed_table(efx, &ptr, FR_BZ_EVQ_RPTR, abs_evq);
 
 	mutex_unlock(&vf->status_lock);
 }

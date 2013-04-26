@@ -569,6 +569,7 @@ static int bt_seq_show(struct seq_file *seq, void *v)
 {
 	struct bt_seq_state *s = seq->private;
 	struct bt_sock_list *l = s->l;
+	bdaddr_t src_baswapped, dst_baswapped;
 
 	if (v == SEQ_START_TOKEN) {
 		seq_puts(seq ,"sk               RefCnt Rmem   Wmem   User   Inode  Src Dst Parent");
@@ -582,17 +583,18 @@ static int bt_seq_show(struct seq_file *seq, void *v)
 	} else {
 		struct sock *sk = sk_entry(v);
 		struct bt_sock *bt = bt_sk(sk);
+		baswap(&src_baswapped, &bt->src);
+		baswap(&dst_baswapped, &bt->dst);
 
-		seq_printf(seq,
-			   "%pK %-6d %-6u %-6u %-6u %-6lu %pMR %pMR %-6lu",
+		seq_printf(seq, "%pK %-6d %-6u %-6u %-6u %-6lu %pM %pM %-6lu",
 			   sk,
 			   atomic_read(&sk->sk_refcnt),
 			   sk_rmem_alloc_get(sk),
 			   sk_wmem_alloc_get(sk),
 			   from_kuid(seq_user_ns(seq), sock_i_uid(sk)),
 			   sock_i_ino(sk),
-			   &bt->src,
-			   &bt->dst,
+			   &src_baswapped,
+			   &dst_baswapped,
 			   bt->parent? sock_i_ino(bt->parent): 0LU);
 
 		if (l->custom_seq_show) {
@@ -641,7 +643,7 @@ int bt_procfs_init(struct module* module, struct net *net, const char *name,
 	sk_list->fops.llseek    = seq_lseek;
 	sk_list->fops.release   = seq_release_private;
 
-	pde = proc_create(name, 0, net->proc_net, &sk_list->fops);
+	pde = proc_net_fops_create(net, name, 0, &sk_list->fops);
 	if (!pde)
 		return -ENOMEM;
 
@@ -652,7 +654,7 @@ int bt_procfs_init(struct module* module, struct net *net, const char *name,
 
 void bt_procfs_cleanup(struct net *net, const char *name)
 {
-	remove_proc_entry(name, net->proc_net);
+	proc_net_remove(net, name);
 }
 #else
 int bt_procfs_init(struct module* module, struct net *net, const char *name,

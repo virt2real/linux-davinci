@@ -47,4 +47,4 @@ static int __init emu_init(void)
 	return 0;
 }
 
-omap_subsys_initcall(emu_init);
+subsys_initcall(emu_init);

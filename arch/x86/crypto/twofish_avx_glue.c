@@ -45,23 +45,66 @@
 
 #define TWOFISH_PARALLEL_BLOCKS 8
 
-/* 8-way parallel cipher functions */
-asmlinkage void twofish_ecb_enc_8way(struct twofish_ctx *ctx, u8 *dst,
-				     const u8 *src);
-asmlinkage void twofish_ecb_dec_8way(struct twofish_ctx *ctx, u8 *dst,
-				     const u8 *src);
-
-asmlinkage void twofish_cbc_dec_8way(struct twofish_ctx *ctx, u8 *dst,
-				     const u8 *src);
-asmlinkage void twofish_ctr_8way(struct twofish_ctx *ctx, u8 *dst,
-				 const u8 *src, le128 *iv);
-
 static inline void twofish_enc_blk_3way(struct twofish_ctx *ctx, u8 *dst,
 					const u8 *src)
 {
 	__twofish_enc_blk_3way(ctx, dst, src, false);
 }
 
+/* 8-way parallel cipher functions */
+asmlinkage void __twofish_enc_blk_8way(struct twofish_ctx *ctx, u8 *dst,
+				       const u8 *src, bool xor);
+asmlinkage void twofish_dec_blk_8way(struct twofish_ctx *ctx, u8 *dst,
+				     const u8 *src);
+
+static inline void twofish_enc_blk_xway(struct twofish_ctx *ctx, u8 *dst,
+					const u8 *src)
+{
+	__twofish_enc_blk_8way(ctx, dst, src, false);
+}
+
+static inline void twofish_enc_blk_xway_xor(struct twofish_ctx *ctx, u8 *dst,
+					    const u8 *src)
+{
+	__twofish_enc_blk_8way(ctx, dst, src, true);
+}
+
+static inline void twofish_dec_blk_xway(struct twofish_ctx *ctx, u8 *dst,
+					const u8 *src)
+{
+	twofish_dec_blk_8way(ctx, dst, src);
+}
+
+static void twofish_dec_blk_cbc_xway(void *ctx, u128 *dst, const u128 *src)
+{
+	u128 ivs[TWOFISH_PARALLEL_BLOCKS - 1];
+	unsigned int j;
+
+	for (j = 0; j < TWOFISH_PARALLEL_BLOCKS - 1; j++)
+		ivs[j] = src[j];
+
+	twofish_dec_blk_xway(ctx, (u8 *)dst, (u8 *)src);
+
+	for (j = 0; j < TWOFISH_PARALLEL_BLOCKS - 1; j++)
+		u128_xor(dst + (j + 1), dst + (j + 1), ivs + j);
+}
+
+static void twofish_enc_blk_ctr_xway(void *ctx, u128 *dst, const u128 *src,
+				     u128 *iv)
+{
+	be128 ctrblks[TWOFISH_PARALLEL_BLOCKS];
+	unsigned int i;
+
+	for (i = 0; i < TWOFISH_PARALLEL_BLOCKS; i++) {
+		if (dst != src)
+			dst[i] = src[i];
+
+		u128_to_be128(&ctrblks[i], iv);
+		u128_inc(iv);
+	}
+
+	twofish_enc_blk_xway_xor(ctx, (u8 *)dst, (u8 *)ctrblks);
+}
 
 static const struct common_glue_ctx twofish_enc = {
 	.num_funcs = 3,
@@ -69,7 +112,7 @@ static const struct common_glue_ctx twofish_enc = {
 
 	.funcs = { {
 		.num_blocks = TWOFISH_PARALLEL_BLOCKS,
-		.fn_u = { .ecb = GLUE_FUNC_CAST(twofish_ecb_enc_8way) }
+		.fn_u = { .ecb = GLUE_FUNC_CAST(twofish_enc_blk_xway) }
 	}, {
 		.num_blocks = 3,
 		.fn_u = { .ecb = GLUE_FUNC_CAST(twofish_enc_blk_3way) }
@@ -85,7 +128,7 @@ static const struct common_glue_ctx twofish_ctr = {
 
 	.funcs = { {
 		.num_blocks = TWOFISH_PARALLEL_BLOCKS,
-		.fn_u = { .ctr = GLUE_CTR_FUNC_CAST(twofish_ctr_8way) }
+		.fn_u = { .ctr = GLUE_CTR_FUNC_CAST(twofish_enc_blk_ctr_xway) }
 	}, {
 		.num_blocks = 3,
 		.fn_u = { .ctr = GLUE_CTR_FUNC_CAST(twofish_enc_blk_ctr_3way) }
@@ -101,7 +144,7 @@ static const struct common_glue_ctx twofish_dec = {
 
 	.funcs = { {
 		.num_blocks = TWOFISH_PARALLEL_BLOCKS,
-		.fn_u = { .ecb = GLUE_FUNC_CAST(twofish_ecb_dec_8way) }
+		.fn_u = { .ecb = GLUE_FUNC_CAST(twofish_dec_blk_xway) }
 	}, {
 		.num_blocks = 3,
 		.fn_u = { .ecb = GLUE_FUNC_CAST(twofish_dec_blk_3way) }
@@ -117,7 +160,7 @@ static const struct common_glue_ctx twofish_dec_cbc = {
 
 	.funcs = { {
 		.num_blocks = TWOFISH_PARALLEL_BLOCKS,
-		.fn_u = { .cbc = GLUE_CBC_FUNC_CAST(twofish_cbc_dec_8way) }
+		.fn_u = { .cbc = GLUE_CBC_FUNC_CAST(twofish_dec_blk_cbc_xway) }
 	}, {
 		.num_blocks = 3,
 		.fn_u = { .cbc = GLUE_CBC_FUNC_CAST(twofish_dec_blk_cbc_3way) }
@@ -184,7 +227,7 @@ static void encrypt_callback(void *priv, u8 *srcdst, unsigned int nbytes)
 	ctx->fpu_enabled = twofish_fpu_begin(ctx->fpu_enabled, nbytes);
 
 	if (nbytes == bsize * TWOFISH_PARALLEL_BLOCKS) {
-		twofish_ecb_enc_8way(ctx->ctx, srcdst, srcdst);
+		twofish_enc_blk_xway(ctx->ctx, srcdst, srcdst);
 		return;
 	}
 
@@ -206,7 +249,7 @@ static void decrypt_callback(void *priv, u8 *srcdst, unsigned int nbytes)
 	ctx->fpu_enabled = twofish_fpu_begin(ctx->fpu_enabled, nbytes);
 
 	if (nbytes == bsize * TWOFISH_PARALLEL_BLOCKS) {
-		twofish_ecb_dec_8way(ctx->ctx, srcdst, srcdst);
+		twofish_dec_blk_xway(ctx->ctx, srcdst, srcdst);
 		return;
 	}
 

@@ -13,6 +13,10 @@
 #ifndef CSR_WIFI_NME_CONVERTER_INIT_H__
 #define CSR_WIFI_NME_CONVERTER_INIT_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef CSR_WIFI_NME_ENABLE
 #error CSR_WIFI_NME_ENABLE MUST be defined inorder to use csr_wifi_nme_converter_init.h
 #endif
@@ -34,5 +38,9 @@ extern void CsrWifiNmeConverterInit(void);
 #define CsrWifiNmeConverterInit()
 
 #endif /* EXCLUDE_CSR_WIFI_NME_MODULE */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CSR_WIFI_NME_CONVERTER_INIT_H__ */

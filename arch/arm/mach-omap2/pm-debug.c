@@ -27,12 +27,12 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 
-#include "clock.h"
+#include <plat/clock.h>
 #include "powerdomain.h"
 #include "clockdomain.h"
-#include "omap-pm.h"
+#include <plat/dmtimer.h>
+#include <plat/omap-pm.h>
 
-#include "soc.h"
 #include "cm2xxx_3xxx.h"
 #include "prm2xxx_3xxx.h"
 #include "pm.h"
@@ -83,8 +83,10 @@ static int clkdm_dbg_show_counter(struct clockdomain *clkdm, void *user)
 		strncmp(clkdm->name, "dpll", 4) == 0)
 		return 0;
 
-	seq_printf(s, "%s->%s (%d)\n", clkdm->name, clkdm->pwrdm.ptr->name,
-		   clkdm->usecount);
+	seq_printf(s, "%s->%s (%d)", clkdm->name,
+			clkdm->pwrdm.ptr->name,
+			atomic_read(&clkdm->usecount));
+	seq_printf(s, "\n");
 
 	return 0;
 }
@@ -277,6 +279,6 @@ static int __init pm_dbg_init(void)
 
 	return 0;
 }
-omap_arch_initcall(pm_dbg_init);
+arch_initcall(pm_dbg_init);
 
 #endif

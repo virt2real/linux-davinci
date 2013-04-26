@@ -49,7 +49,7 @@ static void rtl871x_load_fw_cb(const struct firmware *firmware, void *context)
 	if (!firmware) {
 		struct usb_device *udev = padapter->dvobjpriv.pusbdev;
 		struct usb_interface *pusb_intf = padapter->pusb_intf;
-		dev_err(&udev->dev, "r8712u: Firmware request failed\n");
+		printk(KERN_ERR "r8712u: Firmware request failed\n");
 		padapter->fw_found = false;
 		usb_put_dev(udev);
 		usb_set_intfdata(pusb_intf, NULL);
@@ -69,11 +69,12 @@ int rtl871x_load_fw(struct _adapter *padapter)
 	int rc;
 
 	init_completion(&padapter->rtl8712_fw_ready);
-	dev_info(dev, "r8712u: Loading firmware from \"%s\"\n", firmware_file);
+	printk(KERN_INFO "r8712u: Loading firmware from \"%s\"\n",
+	       firmware_file);
 	rc = request_firmware_nowait(THIS_MODULE, 1, firmware_file, dev,
 				     GFP_KERNEL, padapter, rtl871x_load_fw_cb);
 	if (rc)
-		dev_err(dev, "r8712u: Firmware request error %d\n", rc);
+		printk(KERN_ERR "r8712u: Firmware request error %d\n", rc);
 	return rc;
 }
 MODULE_FIRMWARE("rtlwifi/rtl8712u.bin");
@@ -83,8 +84,8 @@ static u32 rtl871x_open_fw(struct _adapter *padapter, const u8 **ppmappedfw)
 	const struct firmware **praw = &padapter->fw;
 
 	if (padapter->fw->size > 200000) {
-		dev_err(&padapter->pnetdev->dev, "r8172u: Badfw->size of %d\n",
-			(int)padapter->fw->size);
+		printk(KERN_ERR "r8172u: Badfw->size of %d\n",
+		       (int)padapter->fw->size);
 		return 0;
 	}
 	*ppmappedfw = (u8 *)((*praw)->data);
@@ -333,13 +334,11 @@ uint rtl8712_hal_init(struct _adapter *padapter)
 	if (rtl8712_dl_fw(padapter) != _SUCCESS)
 		return _FAIL;
 
-	netdev_info(padapter->pnetdev, "1 RCR=0x%x\n",
-		    r8712_read32(padapter, RCR));
+	printk(KERN_INFO "r8712u: 1 RCR=0x%x\n",  r8712_read32(padapter, RCR));
 	val32 = r8712_read32(padapter, RCR);
 	r8712_write32(padapter, RCR, (val32 | BIT(26))); /* Enable RX TCP
 							    Checksum offload */
-	netdev_info(padapter->pnetdev, "2 RCR=0x%x\n",
-		    r8712_read32(padapter, RCR));
+	printk(KERN_INFO "r8712u: 2 RCR=0x%x\n", r8712_read32(padapter, RCR));
 	val32 = r8712_read32(padapter, RCR);
 	r8712_write32(padapter, RCR, (val32|BIT(25))); /* Append PHY status */
 	val32 = 0;

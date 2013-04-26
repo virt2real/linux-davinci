@@ -75,7 +75,7 @@ static void __init mahimahi_init_late(void)
 	smd_debugfs_init();
 }
 
-void msm_timer_init(void);
+extern struct sys_timer msm_timer;
 
 MACHINE_START(MAHIMAHI, "mahimahi")
 	.atag_offset	= 0x100,
@@ -84,5 +84,5 @@ MACHINE_START(MAHIMAHI, "mahimahi")
 	.init_irq	= msm_init_irq,
 	.init_machine	= mahimahi_init,
 	.init_late	= mahimahi_init_late,
-	.init_time	= msm_timer_init,
+	.timer		= &msm_timer,
 MACHINE_END

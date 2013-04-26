@@ -410,12 +410,19 @@ static int acm_submit_read_urbs(struct acm *acm, gfp_t mem_flags)
 
 static void acm_process_read_urb(struct acm *acm, struct urb *urb)
 {
+	struct tty_struct *tty;
+
 	if (!urb->actual_length)
 		return;
 
-	tty_insert_flip_string(&acm->port, urb->transfer_buffer,
-			urb->actual_length);
-	tty_flip_buffer_push(&acm->port);
+	tty = tty_port_tty_get(&acm->port);
+	if (!tty)
+		return;
+
+	tty_insert_flip_string(tty, urb->transfer_buffer, urb->actual_length);
+	tty_flip_buffer_push(tty);
+
+	tty_kref_put(tty);
 }
 
 static void acm_read_bulk_callback(struct urb *urb)
@@ -593,6 +600,7 @@ static void acm_port_destruct(struct tty_port *port)
 
 	dev_dbg(&acm->control->dev, "%s\n", __func__);
 
+	tty_unregister_device(acm_tty_driver, acm->minor);
 	acm_release_minor(acm);
 	usb_put_intf(acm->control);
 	kfree(acm->country_codes);
@@ -779,46 +787,11 @@ static int get_serial_info(struct acm *acm, struct serial_struct __user *info)
 	tmp.flags = ASYNC_LOW_LATENCY;
 	tmp.xmit_fifo_size = acm->writesize;
 	tmp.baud_base = le32_to_cpu(acm->line.dwDTERate);
-	tmp.close_delay	= acm->port.close_delay / 10;
-	tmp.closing_wait = acm->port.closing_wait == ASYNC_CLOSING_WAIT_NONE ?
-				ASYNC_CLOSING_WAIT_NONE :
-				acm->port.closing_wait / 10;
 
 	if (copy_to_user(info, &tmp, sizeof(tmp)))
 		return -EFAULT;
 	else
 		return 0;
-}
-
-static int set_serial_info(struct acm *acm,
-				struct serial_struct __user *newinfo)
-{
-	struct serial_struct new_serial;
-	unsigned int closing_wait, close_delay;
-	int retval = 0;
-
-	if (copy_from_user(&new_serial, newinfo, sizeof(new_serial)))
-		return -EFAULT;
-
-	close_delay = new_serial.close_delay * 10;
-	closing_wait = new_serial.closing_wait == ASYNC_CLOSING_WAIT_NONE ?
-			ASYNC_CLOSING_WAIT_NONE : new_serial.closing_wait * 10;
-
-	mutex_lock(&acm->port.mutex);
-
-	if (!capable(CAP_SYS_ADMIN)) {
-		if ((close_delay != acm->port.close_delay) ||
-		    (closing_wait != acm->port.closing_wait))
-			retval = -EPERM;
-		else
-			retval = -EOPNOTSUPP;
-	} else {
-		acm->port.close_delay  = close_delay;
-		acm->port.closing_wait = closing_wait;
-	}
-
-	mutex_unlock(&acm->port.mutex);
-	return retval;
 }
 
 static int acm_tty_ioctl(struct tty_struct *tty,
@@ -830,9 +803,6 @@ static int acm_tty_ioctl(struct tty_struct *tty,
 	switch (cmd) {
 	case TIOCGSERIAL: /* gets serial port data */
 		rv = get_serial_info(acm, (struct serial_struct __user *) arg);
-		break;
-	case TIOCSSERIAL:
-		rv = set_serial_info(acm, (struct serial_struct __user *) arg);
 		break;
 	}
 
@@ -976,8 +946,6 @@ static int acm_probe(struct usb_interface *intf,
 	int num_rx_buf;
 	int i;
 	int combined_interfaces = 0;
-	struct device *tty_dev;
-	int rv = -ENOMEM;
 
 	/* normal quirks */
 	quirks = (unsigned long)id->driver_info;
@@ -1340,24 +1308,11 @@ skip_countries:
 	usb_set_intfdata(data_interface, acm);
 
 	usb_get_intf(control_interface);
-	tty_dev = tty_port_register_device(&acm->port, acm_tty_driver, minor,
+	tty_port_register_device(&acm->port, acm_tty_driver, minor,
 			&control_interface->dev);
-	if (IS_ERR(tty_dev)) {
-		rv = PTR_ERR(tty_dev);
-		goto alloc_fail8;
-	}
 
 	return 0;
-alloc_fail8:
-	if (acm->country_codes) {
-		device_remove_file(&acm->control->dev,
-				&dev_attr_wCountryCodes);
-		device_remove_file(&acm->control->dev,
-				&dev_attr_iCountryCodeRelDate);
-	}
-	device_remove_file(&acm->control->dev, &dev_attr_bmCapabilities);
 alloc_fail7:
-	usb_set_intfdata(intf, NULL);
 	for (i = 0; i < ACM_NW; i++)
 		usb_free_urb(acm->wb[i].urb);
 alloc_fail6:
@@ -1373,7 +1328,7 @@ alloc_fail2:
 	acm_release_minor(acm);
 	kfree(acm);
 alloc_fail:
-	return rv;
+	return -ENOMEM;
 }
 
 static void stop_data_traffic(struct acm *acm)
@@ -1424,8 +1379,6 @@ static void acm_disconnect(struct usb_interface *intf)
 	}
 
 	stop_data_traffic(acm);
-
-	tty_unregister_device(acm_tty_driver, acm->minor);
 
 	usb_free_urb(acm->ctrlurb);
 	for (i = 0; i < ACM_NW; i++)
@@ -1609,9 +1562,6 @@ static const struct usb_device_id acm_ids[] = {
 					   quirk for this. */
 	},
 	{ USB_DEVICE(0x0572, 0x1340), /* Conexant CX93010-2x UCMxx */
-	.driver_info = NO_UNION_NORMAL,
-	},
-	{ USB_DEVICE(0x05f9, 0x4002), /* PSC Scanning, Magellan 800i */
 	.driver_info = NO_UNION_NORMAL,
 	},
 	{ USB_DEVICE(0x1bbb, 0x0003), /* Alcatel OT-I650 */

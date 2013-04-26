@@ -789,7 +789,8 @@ static const struct block_device_operations mm_fops = {
 	.revalidate_disk = mm_revalidate,
 };
 
-static int mm_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
+static int __devinit mm_pci_probe(struct pci_dev *dev,
+				const struct pci_device_id *id)
 {
 	int ret = -ENODEV;
 	struct cardinfo *card = &cards[num_cards];

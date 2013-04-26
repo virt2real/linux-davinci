@@ -1,7 +1,7 @@
 /*
  * Generic waiting primitives.
  *
- * (C) 2004 Nadia Yvette Chambers, Oracle
+ * (C) 2004 William Irwin, Oracle
  */
 #include <linux/init.h>
 #include <linux/export.h>

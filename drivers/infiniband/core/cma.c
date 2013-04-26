@@ -345,17 +345,17 @@ static int find_gid_port(struct ib_device *device, union ib_gid *gid, u8 port_nu
 
 	err = ib_query_port(device, port_num, &props);
 	if (err)
-		return err;
+		return 1;
 
 	for (i = 0; i < props.gid_tbl_len; ++i) {
 		err = ib_query_gid(device, port_num, i, &tmp);
 		if (err)
-			return err;
+			return 1;
 		if (!memcmp(&tmp, gid, sizeof tmp))
 			return 0;
 	}
 
-	return -EADDRNOTAVAIL;
+	return -EAGAIN;
 }
 
 static int cma_acquire_dev(struct rdma_id_private *id_priv)
@@ -388,7 +388,8 @@ static int cma_acquire_dev(struct rdma_id_private *id_priv)
 				if (!ret) {
 					id_priv->id.port_num = port;
 					goto out;
-				}
+				} else if (ret == 1)
+					break;
 			}
 		}
 	}
@@ -2143,23 +2144,33 @@ static int cma_alloc_port(struct idr *ps, struct rdma_id_private *id_priv,
 			  unsigned short snum)
 {
 	struct rdma_bind_list *bind_list;
-	int ret;
+	int port, ret;
 
 	bind_list = kzalloc(sizeof *bind_list, GFP_KERNEL);
 	if (!bind_list)
 		return -ENOMEM;
 
-	ret = idr_alloc(ps, bind_list, snum, snum + 1, GFP_KERNEL);
-	if (ret < 0)
-		goto err;
+	do {
+		ret = idr_get_new_above(ps, bind_list, snum, &port);
+	} while ((ret == -EAGAIN) && idr_pre_get(ps, GFP_KERNEL));
+
+	if (ret)
+		goto err1;
+
+	if (port != snum) {
+		ret = -EADDRNOTAVAIL;
+		goto err2;
+	}
 
 	bind_list->ps = ps;
-	bind_list->port = (unsigned short)ret;
+	bind_list->port = (unsigned short) port;
 	cma_bind_port(bind_list, id_priv);
 	return 0;
-err:
+err2:
+	idr_remove(ps, port);
+err1:
 	kfree(bind_list);
-	return ret == -ENOSPC ? -EADDRNOTAVAIL : ret;
+	return ret;
 }
 
 static int cma_alloc_any_port(struct idr *ps, struct rdma_id_private *id_priv)
@@ -2204,9 +2215,10 @@ static int cma_check_port(struct rdma_bind_list *bind_list,
 {
 	struct rdma_id_private *cur_id;
 	struct sockaddr *addr, *cur_addr;
+	struct hlist_node *node;
 
 	addr = (struct sockaddr *) &id_priv->id.route.addr.src_addr;
-	hlist_for_each_entry(cur_id, &bind_list->owners, node) {
+	hlist_for_each_entry(cur_id, node, &bind_list->owners, node) {
 		if (id_priv == cur_id)
 			continue;
 

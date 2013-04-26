@@ -11,10 +11,9 @@
 
 #include <linux/module.h>
 #include <linux/io.h>
-
-#include "common.h"
-#include "hardware.h"
-#include "iim.h"
+#include <mach/hardware.h>
+#include <mach/iim.h>
+#include <mach/common.h>
 
 static int mx31_cpu_rev = -1;
 

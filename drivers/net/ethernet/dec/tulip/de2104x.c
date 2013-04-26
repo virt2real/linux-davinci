@@ -1700,7 +1700,7 @@ static const struct ethtool_ops de_ethtool_ops = {
 	.get_regs		= de_get_regs,
 };
 
-static void de21040_get_mac_address(struct de_private *de)
+static void __devinit de21040_get_mac_address (struct de_private *de)
 {
 	unsigned i;
 
@@ -1721,7 +1721,7 @@ static void de21040_get_mac_address(struct de_private *de)
 	}
 }
 
-static void de21040_get_media_info(struct de_private *de)
+static void __devinit de21040_get_media_info(struct de_private *de)
 {
 	unsigned int i;
 
@@ -1748,8 +1748,7 @@ static void de21040_get_media_info(struct de_private *de)
 }
 
 /* Note: this routine returns extra data bits for size detection. */
-static unsigned tulip_read_eeprom(void __iomem *regs, int location,
-				  int addr_len)
+static unsigned __devinit tulip_read_eeprom(void __iomem *regs, int location, int addr_len)
 {
 	int i;
 	unsigned retval = 0;
@@ -1784,7 +1783,7 @@ static unsigned tulip_read_eeprom(void __iomem *regs, int location,
 	return retval;
 }
 
-static void de21041_get_srom_info(struct de_private *de)
+static void __devinit de21041_get_srom_info (struct de_private *de)
 {
 	unsigned i, sa_offset = 0, ofs;
 	u8 ee_data[DE_EEPROM_SIZE + 6] = {};
@@ -1962,7 +1961,8 @@ static const struct net_device_ops de_netdev_ops = {
 	.ndo_validate_addr	= eth_validate_addr,
 };
 
-static int de_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit de_init_one (struct pci_dev *pdev,
+				  const struct pci_device_id *ent)
 {
 	struct net_device *dev;
 	struct de_private *de;
@@ -2099,7 +2099,7 @@ err_out_free:
 	return rc;
 }
 
-static void de_remove_one(struct pci_dev *pdev)
+static void __devexit de_remove_one (struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
 	struct de_private *de = netdev_priv(dev);
@@ -2184,7 +2184,7 @@ static struct pci_driver de_driver = {
 	.name		= DRV_NAME,
 	.id_table	= de_pci_tbl,
 	.probe		= de_init_one,
-	.remove		= de_remove_one,
+	.remove		= __devexit_p(de_remove_one),
 #ifdef CONFIG_PM
 	.suspend	= de_suspend,
 	.resume		= de_resume,

@@ -15,7 +15,7 @@ struct intlist {
 	struct rblist rblist;
 };
 
-struct intlist *intlist__new(const char *slist);
+struct intlist *intlist__new(void);
 void intlist__delete(struct intlist *ilist);
 
 void intlist__remove(struct intlist *ilist, struct int_node *in);

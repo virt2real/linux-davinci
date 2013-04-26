@@ -1,4 +1,5 @@
-/*
+/* linux/arch/arm/mach-s3c2440/mach-osiris.c
+ *
  * Copyright (c) 2005-2008 Simtec Electronics
  *	http://armlinux.simtec.co.uk/
  *	Ben Dooks <ben@simtec.co.uk>
@@ -21,16 +22,25 @@
 #include <linux/clk.h>
 #include <linux/i2c.h>
 #include <linux/io.h>
-#include <linux/platform_device.h>
 
 #include <linux/i2c/tps65010.h>
 
-#include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
-#include <asm/irq.h>
 
+#include <mach/osiris-map.h>
+#include <mach/osiris-cpld.h>
+
+#include <mach/hardware.h>
+#include <asm/irq.h>
+#include <asm/mach-types.h>
+
+#include <plat/cpu-freq.h>
+#include <plat/regs-serial.h>
+#include <mach/regs-gpio.h>
+#include <mach/regs-mem.h>
+#include <mach/regs-lcd.h>
 #include <linux/platform_data/mtd-nand-s3c2410.h>
 #include <linux/platform_data/i2c-s3c2410.h>
 
@@ -39,20 +49,12 @@
 #include <linux/mtd/nand_ecc.h>
 #include <linux/mtd/partitions.h>
 
-#include <plat/clock.h>
-#include <plat/cpu.h>
-#include <plat/cpu-freq.h>
-#include <plat/devs.h>
 #include <plat/gpio-cfg.h>
-#include <plat/regs-serial.h>
-
-#include <mach/hardware.h>
-#include <mach/regs-gpio.h>
-#include <mach/regs-lcd.h>
+#include <plat/clock.h>
+#include <plat/devs.h>
+#include <plat/cpu.h>
 
 #include "common.h"
-#include "osiris.h"
-#include "regs-mem.h"
 
 /* onboard perihperal map */
 
@@ -426,6 +428,6 @@ MACHINE_START(OSIRIS, "Simtec-OSIRIS")
 	.map_io		= osiris_map_io,
 	.init_irq	= s3c24xx_init_irq,
 	.init_machine	= osiris_init,
-	.init_time	= s3c24xx_timer_init,
+	.timer		= &s3c24xx_timer,
 	.restart	= s3c244x_restart,
 MACHINE_END

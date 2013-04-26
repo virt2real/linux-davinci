@@ -132,14 +132,14 @@ static void __flow_cache_shrink(struct flow_cache *fc,
 				int shrink_to)
 {
 	struct flow_cache_entry *fle;
-	struct hlist_node *tmp;
+	struct hlist_node *entry, *tmp;
 	LIST_HEAD(gc_list);
 	int i, deleted = 0;
 
 	for (i = 0; i < flow_cache_hash_size(fc); i++) {
 		int saved = 0;
 
-		hlist_for_each_entry_safe(fle, tmp,
+		hlist_for_each_entry_safe(fle, entry, tmp,
 					  &fcp->hash_table[i], u.hlist) {
 			if (saved < shrink_to &&
 			    flow_entry_valid(fle)) {
@@ -211,6 +211,7 @@ flow_cache_lookup(struct net *net, const struct flowi *key, u16 family, u8 dir,
 	struct flow_cache *fc = &flow_cache_global;
 	struct flow_cache_percpu *fcp;
 	struct flow_cache_entry *fle, *tfle;
+	struct hlist_node *entry;
 	struct flow_cache_object *flo;
 	size_t keysize;
 	unsigned int hash;
@@ -234,7 +235,7 @@ flow_cache_lookup(struct net *net, const struct flowi *key, u16 family, u8 dir,
 		flow_new_hash_rnd(fc, fcp);
 
 	hash = flow_hash_code(fc, fcp, key, keysize);
-	hlist_for_each_entry(tfle, &fcp->hash_table[hash], u.hlist) {
+	hlist_for_each_entry(tfle, entry, &fcp->hash_table[hash], u.hlist) {
 		if (tfle->net == net &&
 		    tfle->family == family &&
 		    tfle->dir == dir &&
@@ -285,7 +286,7 @@ nocache:
 		else
 			fle->genid--;
 	} else {
-		if (!IS_ERR_OR_NULL(flo))
+		if (flo && !IS_ERR(flo))
 			flo->ops->delete(flo);
 	}
 ret_object:
@@ -300,13 +301,13 @@ static void flow_cache_flush_tasklet(unsigned long data)
 	struct flow_cache *fc = info->cache;
 	struct flow_cache_percpu *fcp;
 	struct flow_cache_entry *fle;
-	struct hlist_node *tmp;
+	struct hlist_node *entry, *tmp;
 	LIST_HEAD(gc_list);
 	int i, deleted = 0;
 
 	fcp = this_cpu_ptr(fc->percpu);
 	for (i = 0; i < flow_cache_hash_size(fc); i++) {
-		hlist_for_each_entry_safe(fle, tmp,
+		hlist_for_each_entry_safe(fle, entry, tmp,
 					  &fcp->hash_table[i], u.hlist) {
 			if (flow_entry_valid(fle))
 				continue;
@@ -326,9 +327,11 @@ static void flow_cache_flush_tasklet(unsigned long data)
 static void flow_cache_flush_per_cpu(void *data)
 {
 	struct flow_flush_info *info = data;
+	int cpu;
 	struct tasklet_struct *tasklet;
 
-	tasklet = &this_cpu_ptr(info->cache->percpu)->flush_tasklet;
+	cpu = smp_processor_id();
+	tasklet = &per_cpu_ptr(info->cache->percpu, cpu)->flush_tasklet;
 	tasklet->data = (unsigned long)info;
 	tasklet_schedule(tasklet);
 }

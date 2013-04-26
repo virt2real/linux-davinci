@@ -318,3 +318,4 @@ l_fixup:
 	/* Ignore memset return value in a6. */
 	/* a2 still contains bytes not copied. */
 	retw
+

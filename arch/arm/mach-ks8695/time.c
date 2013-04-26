@@ -146,13 +146,17 @@ static void ks8695_timer_setup(void)
 					0xFFFFFFFFU);
 }
 
-void __init ks8695_timer_init(void)
+static void __init ks8695_timer_init (void)
 {
 	ks8695_timer_setup();
 
 	/* Enable timer interrupts */
 	setup_irq(KS8695_IRQ_TIMER1, &ks8695_timer_irq);
 }
+
+struct sys_timer ks8695_timer = {
+	.init		= ks8695_timer_init,
+};
 
 void ks8695_restart(char mode, const char *cmd)
 {

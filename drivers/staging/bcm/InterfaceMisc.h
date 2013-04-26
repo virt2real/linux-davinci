@@ -2,13 +2,13 @@
 #define __INTERFACE_MISC_H
 
 INT
-InterfaceRDM(struct bcm_interface_adapter *psIntfAdapter,
+InterfaceRDM(PS_INTERFACE_ADAPTER psIntfAdapter,
 			UINT addr,
 			PVOID buff,
 			INT len);
 
 INT
-InterfaceWRM(struct bcm_interface_adapter *psIntfAdapter,
+InterfaceWRM(PS_INTERFACE_ADAPTER psIntfAdapter,
 			UINT addr,
 			PVOID buff,
 			INT len);
@@ -35,7 +35,7 @@ int BcmWRM(PVOID arg,
 
 INT Bcm_clear_halt_of_endpoints(struct bcm_mini_adapter *Adapter);
 
-VOID Bcm_kill_all_URBs(struct bcm_interface_adapter *psIntfAdapter);
+VOID Bcm_kill_all_URBs(PS_INTERFACE_ADAPTER psIntfAdapter);
 
 #define DISABLE_USB_ZERO_LEN_INT 0x0F011878
 

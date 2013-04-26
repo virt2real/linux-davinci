@@ -20,8 +20,6 @@
  *
  */
 
-#include <linux/linkage.h>
-
 .file "twofish-x86_64-asm-3way.S"
 .text
 
@@ -216,7 +214,11 @@
 	rorq $32,			RAB2; \
 	outunpack3(mov, RIO, 2, RAB, 2);
 
-ENTRY(__twofish_enc_blk_3way)
+.align 8
+.global __twofish_enc_blk_3way
+.type   __twofish_enc_blk_3way,@function;
+
+__twofish_enc_blk_3way:
 	/* input:
 	 *	%rdi: ctx, CTX
 	 *	%rsi: dst
@@ -248,7 +250,7 @@ ENTRY(__twofish_enc_blk_3way)
 	popq %rbp; /* bool xor */
 
 	testb %bpl, %bpl;
-	jnz .L__enc_xor3;
+	jnz __enc_xor3;
 
 	outunpack_enc3(mov);
 
@@ -260,7 +262,7 @@ ENTRY(__twofish_enc_blk_3way)
 	popq %r15;
 	ret;
 
-.L__enc_xor3:
+__enc_xor3:
 	outunpack_enc3(xor);
 
 	popq %rbx;
@@ -270,9 +272,11 @@ ENTRY(__twofish_enc_blk_3way)
 	popq %r14;
 	popq %r15;
 	ret;
-ENDPROC(__twofish_enc_blk_3way)
 
-ENTRY(twofish_dec_blk_3way)
+.global twofish_dec_blk_3way
+.type   twofish_dec_blk_3way,@function;
+
+twofish_dec_blk_3way:
 	/* input:
 	 *	%rdi: ctx, CTX
 	 *	%rsi: dst
@@ -309,4 +313,4 @@ ENTRY(twofish_dec_blk_3way)
 	popq %r14;
 	popq %r15;
 	ret;
-ENDPROC(twofish_dec_blk_3way)
+

@@ -36,7 +36,6 @@
 #include <linux/serial_mfd.h>
 #include <linux/dma-mapping.h>
 #include <linux/pci.h>
-#include <linux/nmi.h>
 #include <linux/io.h>
 #include <linux/debugfs.h>
 #include <linux/pm_runtime.h>
@@ -387,8 +386,11 @@ void hsu_dma_rx(struct uart_hsu_port *up, u32 int_sts)
 	struct hsu_dma_buffer *dbuf = &up->rxbuf;
 	struct hsu_dma_chan *chan = up->rxc;
 	struct uart_port *port = &up->port;
-	struct tty_port *tport = &port->state->port;
+	struct tty_struct *tty = port->state->port.tty;
 	int count;
+
+	if (!tty)
+		return;
 
 	/*
 	 * First need to know how many is already transferred,
@@ -420,7 +422,7 @@ void hsu_dma_rx(struct uart_hsu_port *up, u32 int_sts)
 	 * explicitly set tail to 0. So head will
 	 * always be greater than tail.
 	 */
-	tty_insert_flip_string(tport, dbuf->buf, count);
+	tty_insert_flip_string(tty, dbuf->buf, count);
 	port->icount.rx += count;
 
 	dma_sync_single_for_device(up->port.dev, dbuf->dma_addr,
@@ -434,7 +436,7 @@ void hsu_dma_rx(struct uart_hsu_port *up, u32 int_sts)
 					 | (0x1 << 16)
 					 | (0x1 << 24)	/* timeout bit, see HSU Errata 1 */
 					 );
-	tty_flip_buffer_push(tport);
+	tty_flip_buffer_push(tty);
 
 	chan_writel(chan, HSU_CH_CR, 0x3);
 
@@ -457,8 +459,12 @@ static void serial_hsu_stop_rx(struct uart_port *port)
 
 static inline void receive_chars(struct uart_hsu_port *up, int *status)
 {
+	struct tty_struct *tty = up->port.state->port.tty;
 	unsigned int ch, flag;
 	unsigned int max_count = 256;
+
+	if (!tty)
+		return;
 
 	do {
 		ch = serial_in(up, UART_RX);
@@ -515,7 +521,7 @@ static inline void receive_chars(struct uart_hsu_port *up, int *status)
 	ignore_char:
 		*status = serial_in(up, UART_LSR);
 	} while ((*status & UART_LSR_DR) && max_count--);
-	tty_flip_buffer_push(&up->port.state->port);
+	tty_flip_buffer_push(tty);
 }
 
 static void transmit_chars(struct uart_hsu_port *up)
@@ -1107,8 +1113,6 @@ serial_hsu_console_write(struct console *co, const char *s, unsigned int count)
 	unsigned int ier;
 	int locked = 1;
 
-	touch_nmi_watchdog();
-
 	local_irq_save(flags);
 	if (up->port.sysrq)
 		locked = 0;
@@ -1452,7 +1456,7 @@ static void serial_hsu_remove(struct pci_dev *pdev)
 }
 
 /* First 3 are UART ports, and the 4th is the DMA */
-static const struct pci_device_id pci_ids[] = {
+static const struct pci_device_id pci_ids[] __devinitconst = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x081B) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x081C) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x081D) },
@@ -1464,7 +1468,7 @@ static struct pci_driver hsu_pci_driver = {
 	.name =		"HSU serial",
 	.id_table =	pci_ids,
 	.probe =	serial_hsu_probe,
-	.remove =	serial_hsu_remove,
+	.remove =	__devexit_p(serial_hsu_remove),
 	.suspend =	serial_hsu_suspend,
 	.resume	=	serial_hsu_resume,
 	.driver = {

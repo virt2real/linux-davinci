@@ -895,8 +895,6 @@ static int moxa_init_board(struct moxa_board_conf *brd, struct device *dev)
 
 	return 0;
 err_free:
-	for (i = 0; i < MAX_PORTS_PER_BOARD; i++)
-		tty_port_destroy(&brd->ports[i].port);
 	kfree(brd->ports);
 err:
 	return ret;
@@ -921,8 +919,6 @@ static void moxa_board_deinit(struct moxa_board_conf *brd)
 				tty_kref_put(tty);
 			}
 		}
-	for (a = 0; a < MAX_PORTS_PER_BOARD; a++)
-		tty_port_destroy(&brd->ports[a].port);
 	while (1) {
 		opened = 0;
 		for (a = 0; a < brd->numPorts; a++)
@@ -945,7 +941,7 @@ static void moxa_board_deinit(struct moxa_board_conf *brd)
 }
 
 #ifdef CONFIG_PCI
-static int moxa_pci_probe(struct pci_dev *pdev,
+static int __devinit moxa_pci_probe(struct pci_dev *pdev,
 		const struct pci_device_id *ent)
 {
 	struct moxa_board_conf *board;
@@ -1020,7 +1016,7 @@ err:
 	return retval;
 }
 
-static void moxa_pci_remove(struct pci_dev *pdev)
+static void __devexit moxa_pci_remove(struct pci_dev *pdev)
 {
 	struct moxa_board_conf *brd = pci_get_drvdata(pdev);
 
@@ -1033,7 +1029,7 @@ static struct pci_driver moxa_pci_driver = {
 	.name = "moxa",
 	.id_table = moxa_pcibrds,
 	.probe = moxa_pci_probe,
-	.remove = moxa_pci_remove
+	.remove = __devexit_p(moxa_pci_remove)
 };
 #endif /* CONFIG_PCI */
 
@@ -1374,7 +1370,7 @@ static void moxa_new_dcdstate(struct moxa_port *p, u8 dcd)
         	p->DCDState = dcd;
         	spin_unlock_irqrestore(&p->port.lock, flags);
 		tty = tty_port_tty_get(&p->port);
-		if (tty && !C_CLOCAL(tty) && !dcd)
+		if (tty && C_CLOCAL(tty) && !dcd)
 			tty_hangup(tty);
 		tty_kref_put(tty);
 	}
@@ -1405,7 +1401,7 @@ static int moxa_poll_port(struct moxa_port *p, unsigned int handle,
 		if (inited && !test_bit(TTY_THROTTLED, &tty->flags) &&
 				MoxaPortRxQueue(p) > 0) { /* RX */
 			MoxaPortReadData(p);
-			tty_schedule_flip(&p->port);
+			tty_schedule_flip(tty);
 		}
 	} else {
 		clear_bit(EMPTYWAIT, &p->statusflags);
@@ -1429,8 +1425,8 @@ static int moxa_poll_port(struct moxa_port *p, unsigned int handle,
 		goto put;
 
 	if (tty && (intr & IntrBreak) && !I_IGNBRK(tty)) { /* BREAK */
-		tty_insert_flip_char(&p->port, 0, TTY_BREAK);
-		tty_schedule_flip(&p->port);
+		tty_insert_flip_char(tty, 0, TTY_BREAK);
+		tty_schedule_flip(tty);
 	}
 
 	if (intr & IntrLine)
@@ -1966,7 +1962,7 @@ static int MoxaPortReadData(struct moxa_port *port)
 			ofs = baseAddr + DynPage_addr + bufhead + head;
 			len = (tail >= head) ? (tail - head) :
 					(rx_mask + 1 - head);
-			len = tty_prepare_flip_string(&port->port, &dst,
+			len = tty_prepare_flip_string(tty, &dst,
 					min(len, count));
 			memcpy_fromio(dst, ofs, len);
 			head = (head + len) & rx_mask;
@@ -1978,7 +1974,7 @@ static int MoxaPortReadData(struct moxa_port *port)
 		while (count > 0) {
 			writew(pageno, baseAddr + Control_reg);
 			ofs = baseAddr + DynPage_addr + pageofs;
-			len = tty_prepare_flip_string(&port->port, &dst,
+			len = tty_prepare_flip_string(tty, &dst,
 					min(Page_size - pageofs, count));
 			memcpy_fromio(dst, ofs, len);
 

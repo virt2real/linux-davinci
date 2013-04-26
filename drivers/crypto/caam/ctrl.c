@@ -420,7 +420,7 @@ static struct platform_driver caam_driver = {
 		.of_match_table = caam_match,
 	},
 	.probe       = caam_probe,
-	.remove      = caam_remove,
+	.remove      = __devexit_p(caam_remove),
 };
 
 module_platform_driver(caam_driver);

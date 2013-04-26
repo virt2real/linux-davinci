@@ -105,10 +105,11 @@ static struct xen_blkif *xen_blkif_alloc(domid_t domid)
 {
 	struct xen_blkif *blkif;
 
-	blkif = kmem_cache_zalloc(xen_blkif_cachep, GFP_KERNEL);
+	blkif = kmem_cache_alloc(xen_blkif_cachep, GFP_KERNEL);
 	if (!blkif)
 		return ERR_PTR(-ENOMEM);
 
+	memset(blkif, 0, sizeof(*blkif));
 	blkif->domid = domid;
 	spin_lock_init(&blkif->blk_ring_lock);
 	atomic_set(&blkif->refcnt, 1);
@@ -117,7 +118,6 @@ static struct xen_blkif *xen_blkif_alloc(domid_t domid)
 	atomic_set(&blkif->drain, 0);
 	blkif->st_print = jiffies;
 	init_waitqueue_head(&blkif->waiting_to_free);
-	blkif->persistent_gnts.rb_node = NULL;
 
 	return blkif;
 }
@@ -196,7 +196,7 @@ static void xen_blkif_disconnect(struct xen_blkif *blkif)
 	}
 }
 
-static void xen_blkif_free(struct xen_blkif *blkif)
+void xen_blkif_free(struct xen_blkif *blkif)
 {
 	if (!atomic_dec_and_test(&blkif->refcnt))
 		BUG();
@@ -230,13 +230,13 @@ int __init xen_blkif_interface_init(void)
 	}								\
 	static DEVICE_ATTR(name, S_IRUGO, show_##name, NULL)
 
-VBD_SHOW(oo_req,  "%llu\n", be->blkif->st_oo_req);
-VBD_SHOW(rd_req,  "%llu\n", be->blkif->st_rd_req);
-VBD_SHOW(wr_req,  "%llu\n", be->blkif->st_wr_req);
-VBD_SHOW(f_req,  "%llu\n", be->blkif->st_f_req);
-VBD_SHOW(ds_req,  "%llu\n", be->blkif->st_ds_req);
-VBD_SHOW(rd_sect, "%llu\n", be->blkif->st_rd_sect);
-VBD_SHOW(wr_sect, "%llu\n", be->blkif->st_wr_sect);
+VBD_SHOW(oo_req,  "%d\n", be->blkif->st_oo_req);
+VBD_SHOW(rd_req,  "%d\n", be->blkif->st_rd_req);
+VBD_SHOW(wr_req,  "%d\n", be->blkif->st_wr_req);
+VBD_SHOW(f_req,  "%d\n", be->blkif->st_f_req);
+VBD_SHOW(ds_req,  "%d\n", be->blkif->st_ds_req);
+VBD_SHOW(rd_sect, "%d\n", be->blkif->st_rd_sect);
+VBD_SHOW(wr_sect, "%d\n", be->blkif->st_wr_sect);
 
 static struct attribute *xen_vbdstat_attrs[] = {
 	&dev_attr_oo_req.attr,
@@ -257,7 +257,7 @@ static struct attribute_group xen_vbdstat_group = {
 VBD_SHOW(physical_device, "%x:%x\n", be->major, be->minor);
 VBD_SHOW(mode, "%s\n", be->mode);
 
-static int xenvbd_sysfs_addif(struct xenbus_device *dev)
+int xenvbd_sysfs_addif(struct xenbus_device *dev)
 {
 	int error;
 
@@ -281,7 +281,7 @@ fail1:	device_remove_file(&dev->dev, &dev_attr_physical_device);
 	return error;
 }
 
-static void xenvbd_sysfs_delif(struct xenbus_device *dev)
+void xenvbd_sysfs_delif(struct xenbus_device *dev)
 {
 	sysfs_remove_group(&dev->dev.kobj, &xen_vbdstat_group);
 	device_remove_file(&dev->dev, &dev_attr_mode);
@@ -367,7 +367,6 @@ static int xen_blkbk_remove(struct xenbus_device *dev)
 		be->blkif = NULL;
 	}
 
-	kfree(be->mode);
 	kfree(be);
 	dev_set_drvdata(&dev->dev, NULL);
 	return 0;
@@ -503,7 +502,6 @@ static void backend_changed(struct xenbus_watch *watch,
 		= container_of(watch, struct backend_info, backend_watch);
 	struct xenbus_device *dev = be->dev;
 	int cdrom = 0;
-	unsigned long handle;
 	char *device_type;
 
 	DPRINTK("");
@@ -523,10 +521,10 @@ static void backend_changed(struct xenbus_watch *watch,
 		return;
 	}
 
-	if (be->major | be->minor) {
-		if (be->major != major || be->minor != minor)
-			pr_warn(DRV_PFX "changing physical device (from %x:%x to %x:%x) not supported.\n",
-				be->major, be->minor, major, minor);
+	if ((be->major || be->minor) &&
+	    ((be->major != major) || (be->minor != minor))) {
+		pr_warn(DRV_PFX "changing physical device (from %x:%x to %x:%x) not supported.\n",
+			be->major, be->minor, major, minor);
 		return;
 	}
 
@@ -544,33 +542,36 @@ static void backend_changed(struct xenbus_watch *watch,
 		kfree(device_type);
 	}
 
-	/* Front end dir is a number, which is used as the handle. */
-	err = strict_strtoul(strrchr(dev->otherend, '/') + 1, 0, &handle);
-	if (err)
-		return;
+	if (be->major == 0 && be->minor == 0) {
+		/* Front end dir is a number, which is used as the handle. */
 
-	be->major = major;
-	be->minor = minor;
+		char *p = strrchr(dev->otherend, '/') + 1;
+		long handle;
+		err = strict_strtoul(p, 0, &handle);
+		if (err)
+			return;
 
-	err = xen_vbd_create(be->blkif, handle, major, minor,
-			     !strchr(be->mode, 'w'), cdrom);
+		be->major = major;
+		be->minor = minor;
 
-	if (err)
-		xenbus_dev_fatal(dev, err, "creating vbd structure");
-	else {
+		err = xen_vbd_create(be->blkif, handle, major, minor,
+				 (NULL == strchr(be->mode, 'w')), cdrom);
+		if (err) {
+			be->major = 0;
+			be->minor = 0;
+			xenbus_dev_fatal(dev, err, "creating vbd structure");
+			return;
+		}
+
 		err = xenvbd_sysfs_addif(dev);
 		if (err) {
 			xen_vbd_free(&be->blkif->vbd);
+			be->major = 0;
+			be->minor = 0;
 			xenbus_dev_fatal(dev, err, "creating sysfs entries");
+			return;
 		}
-	}
 
-	if (err) {
-		kfree(be->mode);
-		be->mode = NULL;
-		be->major = 0;
-		be->minor = 0;
-	} else {
 		/* We're potentially connected now */
 		xen_update_blkif_status(be->blkif);
 	}
@@ -672,13 +673,6 @@ again:
 
 	xen_blkbk_barrier(xbt, be, be->blkif->vbd.flush_support);
 
-	err = xenbus_printf(xbt, dev->nodename, "feature-persistent", "%u", 1);
-	if (err) {
-		xenbus_dev_fatal(dev, err, "writing %s/feature-persistent",
-				 dev->nodename);
-		goto abort;
-	}
-
 	err = xenbus_printf(xbt, dev->nodename, "sectors", "%llu",
 			    (unsigned long long)vbd_sz(&be->blkif->vbd));
 	if (err) {
@@ -727,7 +721,6 @@ static int connect_ring(struct backend_info *be)
 	struct xenbus_device *dev = be->dev;
 	unsigned long ring_ref;
 	unsigned int evtchn;
-	unsigned int pers_grants;
 	char protocol[64] = "";
 	int err;
 
@@ -757,18 +750,8 @@ static int connect_ring(struct backend_info *be)
 		xenbus_dev_fatal(dev, err, "unknown fe protocol %s", protocol);
 		return -1;
 	}
-	err = xenbus_gather(XBT_NIL, dev->otherend,
-			    "feature-persistent", "%u",
-			    &pers_grants, NULL);
-	if (err)
-		pers_grants = 0;
-
-	be->blkif->vbd.feature_gnt_persistent = pers_grants;
-	be->blkif->vbd.overflow_max_grants = 0;
-
-	pr_info(DRV_PFX "ring-ref %ld, event-channel %d, protocol %d (%s) %s\n",
-		ring_ref, evtchn, be->blkif->blk_protocol, protocol,
-		pers_grants ? "persistent grants" : "");
+	pr_info(DRV_PFX "ring-ref %ld, event-channel %d, protocol %d (%s)\n",
+		ring_ref, evtchn, be->blkif->blk_protocol, protocol);
 
 	/* Map the shared frame, irq etc. */
 	err = xen_blkif_map(be->blkif, ring_ref, evtchn);

@@ -15,7 +15,9 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 
-extern void davinci_timer_init(void);
+struct sys_timer;
+
+extern struct sys_timer davinci_timer;
 
 extern void davinci_irq_init(void);
 extern void __iomem *davinci_intc_base;

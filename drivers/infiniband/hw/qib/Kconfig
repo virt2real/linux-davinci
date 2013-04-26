@@ -1,7 +1,7 @@
 config INFINIBAND_QIB
-	tristate "Intel PCIe HCA support"
+	tristate "QLogic PCIe HCA support"
 	depends on 64BIT
 	---help---
-	This is a low-level driver for Intel PCIe QLE InfiniBand host
-	channel adapters.  This driver does not support the Intel
+	This is a low-level driver for QLogic PCIe QLE InfiniBand host
+	channel adapters.  This driver does not support the QLogic
 	HyperTransport card (model QHT7140).

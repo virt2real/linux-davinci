@@ -289,7 +289,7 @@ int cod_get_base_name(struct cod_manager *cod_mgr_obj, char *sz_name,
 	int status = 0;
 
 	if (usize <= COD_MAXPATHLENGTH)
-		strlcpy(sz_name, cod_mgr_obj->sz_zl_file, usize);
+		strncpy(sz_name, cod_mgr_obj->sz_zl_file, usize);
 	else
 		status = -EPERM;
 

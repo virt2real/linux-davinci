@@ -28,7 +28,6 @@
 #include <linux/io.h>
 #include <linux/smsc911x.h>
 #include <linux/mmc/host.h>
-#include <linux/usb/phy.h>
 #include <linux/platform_data/spi-omap2-mcspi.h>
 
 #include <asm/mach-types.h>
@@ -36,8 +35,9 @@
 #include <asm/mach/map.h>
 
 #include "common.h"
-#include "board-zoom.h"
-#include "gpmc.h"
+#include <plat/gpmc.h>
+#include <mach/board-zoom.h>
+#include <plat/usb.h>
 #include "gpmc-smsc911x.h"
 
 #include <video/omapdss.h>
@@ -419,10 +419,9 @@ static void __init omap_ldp_init(void)
 	omap_ads7846_init(1, 54, 310, NULL);
 	omap_serial_init();
 	omap_sdrc_init(NULL, NULL);
-	usb_bind_phy("musb-hdrc.0.auto", 0, "twl4030_usb");
 	usb_musb_init(NULL);
-	board_nand_init(ldp_nand_partitions, ARRAY_SIZE(ldp_nand_partitions),
-			ZOOM_NAND_CS, 0, nand_default_timings);
+	board_nand_init(ldp_nand_partitions,
+		ARRAY_SIZE(ldp_nand_partitions), ZOOM_NAND_CS, 0);
 
 	omap_hsmmc_init(mmc);
 	ldp_display_init();
@@ -437,6 +436,6 @@ MACHINE_START(OMAP_LDP, "OMAP LDP board")
 	.handle_irq	= omap3_intc_handle_irq,
 	.init_machine	= omap_ldp_init,
 	.init_late	= omap3430_init_late,
-	.init_time	= omap3_sync32k_timer_init,
-	.restart	= omap3xxx_restart,
+	.timer		= &omap3_timer,
+	.restart	= omap_prcm_restart,
 MACHINE_END

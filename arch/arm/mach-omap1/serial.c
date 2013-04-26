@@ -23,6 +23,7 @@
 #include <asm/mach-types.h>
 
 #include <mach/mux.h>
+#include <plat/fpga.h>
 
 #include "pm.h"
 

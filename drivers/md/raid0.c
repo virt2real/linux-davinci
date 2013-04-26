@@ -175,13 +175,7 @@ static int create_strip_zones(struct mddev *mddev, struct r0conf **private_conf)
 			rdev1->new_raid_disk = j;
 		}
 
-		if (j < 0) {
-			printk(KERN_ERR
-			       "md/raid0:%s: remove inactive devices before converting to RAID0\n",
-			       mdname(mddev));
-			goto abort;
-		}
-		if (j >= mddev->raid_disks) {
+		if (j < 0 || j >= mddev->raid_disks) {
 			printk(KERN_ERR "md/raid0:%s: bad disk number %d - "
 			       "aborting!\n", mdname(mddev), j);
 			goto abort;
@@ -295,7 +289,7 @@ abort:
 	kfree(conf->strip_zone);
 	kfree(conf->devlist);
 	kfree(conf);
-	*private_conf = ERR_PTR(err);
+	*private_conf = NULL;
 	return err;
 }
 
@@ -417,8 +411,7 @@ static sector_t raid0_size(struct mddev *mddev, sector_t sectors, int raid_disks
 		  "%s does not support generic reshape\n", __func__);
 
 	rdev_for_each(rdev, mddev)
-		array_sectors += (rdev->sectors &
-				  ~(sector_t)(mddev->chunk_sectors-1));
+		array_sectors += rdev->sectors;
 
 	return array_sectors;
 }

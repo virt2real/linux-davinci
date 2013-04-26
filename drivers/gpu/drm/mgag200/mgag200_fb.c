@@ -13,7 +13,6 @@
 #include <linux/module.h>
 #include <drm/drmP.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_crtc_helper.h>
 
 #include <linux/fb.h>
 
@@ -121,10 +120,9 @@ static int mgag200fb_create_object(struct mga_fbdev *afbdev,
 	return ret;
 }
 
-static int mgag200fb_create(struct drm_fb_helper *helper,
+static int mgag200fb_create(struct mga_fbdev *mfbdev,
 			   struct drm_fb_helper_surface_size *sizes)
 {
-	struct mga_fbdev *mfbdev = (struct mga_fbdev *)helper;
 	struct drm_device *dev = mfbdev->helper.dev;
 	struct drm_mode_fb_cmd2 mode_cmd;
 	struct mga_device *mdev = dev->dev_private;
@@ -211,6 +209,23 @@ out:
 	return ret;
 }
 
+static int mga_fb_find_or_create_single(struct drm_fb_helper *helper,
+					   struct drm_fb_helper_surface_size
+					   *sizes)
+{
+	struct mga_fbdev *mfbdev = (struct mga_fbdev *)helper;
+	int new_fb = 0;
+	int ret;
+
+	if (!helper->fb) {
+		ret = mgag200fb_create(mfbdev, sizes);
+		if (ret)
+			return ret;
+		new_fb = 1;
+	}
+	return new_fb;
+}
+
 static int mga_fbdev_destroy(struct drm_device *dev,
 				struct mga_fbdev *mfbdev)
 {
@@ -232,7 +247,6 @@ static int mga_fbdev_destroy(struct drm_device *dev,
 	}
 	drm_fb_helper_fini(&mfbdev->helper);
 	vfree(mfbdev->sysram);
-	drm_framebuffer_unregister_private(&mfb->base);
 	drm_framebuffer_cleanup(&mfb->base);
 
 	return 0;
@@ -241,7 +255,7 @@ static int mga_fbdev_destroy(struct drm_device *dev,
 static struct drm_fb_helper_funcs mga_fb_helper_funcs = {
 	.gamma_set = mga_crtc_fb_gamma_set,
 	.gamma_get = mga_crtc_fb_gamma_get,
-	.fb_probe = mgag200fb_create,
+	.fb_probe = mga_fb_find_or_create_single,
 };
 
 int mgag200_fbdev_init(struct mga_device *mdev)
@@ -263,10 +277,6 @@ int mgag200_fbdev_init(struct mga_device *mdev)
 		return ret;
 	}
 	drm_fb_helper_single_add_all_connectors(&mfbdev->helper);
-
-	/* disable all the possible outputs/crtcs before entering KMS mode */
-	drm_helper_disable_unused_functions(mdev->dev);
-
 	drm_fb_helper_initial_config(&mfbdev->helper, 32);
 
 	return 0;

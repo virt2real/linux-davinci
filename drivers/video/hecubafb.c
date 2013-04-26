@@ -47,7 +47,7 @@
 #define DPY_W 600
 #define DPY_H 800
 
-static struct fb_fix_screeninfo hecubafb_fix = {
+static struct fb_fix_screeninfo hecubafb_fix __devinitdata = {
 	.id =		"hecubafb",
 	.type =		FB_TYPE_PACKED_PIXELS,
 	.visual =	FB_VISUAL_MONO01,
@@ -58,7 +58,7 @@ static struct fb_fix_screeninfo hecubafb_fix = {
 	.accel =	FB_ACCEL_NONE,
 };
 
-static struct fb_var_screeninfo hecubafb_var = {
+static struct fb_var_screeninfo hecubafb_var __devinitdata = {
 	.xres		= DPY_W,
 	.yres		= DPY_H,
 	.xres_virtual	= DPY_W,
@@ -211,7 +211,7 @@ static struct fb_deferred_io hecubafb_defio = {
 	.deferred_io	= hecubafb_dpy_deferred_io,
 };
 
-static int hecubafb_probe(struct platform_device *dev)
+static int __devinit hecubafb_probe(struct platform_device *dev)
 {
 	struct fb_info *info;
 	struct hecuba_board *board;
@@ -280,7 +280,7 @@ err_videomem_alloc:
 	return retval;
 }
 
-static int hecubafb_remove(struct platform_device *dev)
+static int __devexit hecubafb_remove(struct platform_device *dev)
 {
 	struct fb_info *info = platform_get_drvdata(dev);
 
@@ -299,7 +299,7 @@ static int hecubafb_remove(struct platform_device *dev)
 
 static struct platform_driver hecubafb_driver = {
 	.probe	= hecubafb_probe,
-	.remove = hecubafb_remove,
+	.remove = __devexit_p(hecubafb_remove),
 	.driver	= {
 		.owner	= THIS_MODULE,
 		.name	= "hecubafb",

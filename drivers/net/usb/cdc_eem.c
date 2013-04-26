@@ -31,7 +31,6 @@
 #include <linux/usb/cdc.h>
 #include <linux/usb/usbnet.h>
 #include <linux/gfp.h>
-#include <linux/if_vlan.h>
 
 
 /*
@@ -93,7 +92,7 @@ static int eem_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	/* no jumbogram (16K) support for now */
 
-	dev->net->hard_header_len += EEM_HEAD + ETH_FCS_LEN + VLAN_HLEN;
+	dev->net->hard_header_len += EEM_HEAD + ETH_FCS_LEN;
 	dev->hard_mtu = dev->net->mtu + dev->net->hard_header_len;
 
 	return 0;

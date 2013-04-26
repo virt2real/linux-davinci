@@ -430,7 +430,7 @@ static void dino_choose_irq(struct parisc_device *dev, void *ctrl)
  * Cirrus 6832 Cardbus reports wrong irq on RDI Tadpole PARISC Laptop (deller@gmx.de)
  * (the irqs are off-by-one, not sure yet if this is a cirrus, dino-hardware or dino-driver problem...)
  */
-static void quirk_cirrus_cardbus(struct pci_dev *dev)
+static void __devinit quirk_cirrus_cardbus(struct pci_dev *dev)
 {
 	u8 new_irq = dev->irq - 1;
 	printk(KERN_INFO "PCI: Cirrus Cardbus IRQ fixup for %s, from %d to %d\n",
@@ -580,13 +580,15 @@ dino_fixup_bus(struct pci_bus *bus)
 				
 			}
 					
-			DBG("DEBUG %s assigning %d [%pR]\n",
+			DBG("DEBUG %s assigning %d [0x%lx,0x%lx]\n",
 			    dev_name(&bus->self->dev), i,
-			    &bus->self->resource[i]);
+			    bus->self->resource[i].start,
+			    bus->self->resource[i].end);
 			WARN_ON(pci_assign_resource(bus->self, i));
-			DBG("DEBUG %s after assign %d [%pR]\n",
+			DBG("DEBUG %s after assign %d [0x%lx,0x%lx]\n",
 			    dev_name(&bus->self->dev), i,
-			    &bus->self->resource[i]);
+			    bus->self->resource[i].start,
+			    bus->self->resource[i].end);
 		}
 	}
 
@@ -770,7 +772,8 @@ dino_bridge_init(struct dino_device *dino_dev, const char *name)
 		result = ccio_request_resource(dino_dev->hba.dev, &res[i]);
 		if (result < 0) {
 			printk(KERN_ERR "%s: failed to claim PCI Bus address "
-			       "space %d (%pR)!\n", name, i, &res[i]);
+			       "space %d (0x%lx-0x%lx)!\n", name, i,
+			       (unsigned long)res[i].start, (unsigned long)res[i].end);
 			return result;
 		}
 	}

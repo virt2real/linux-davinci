@@ -54,8 +54,6 @@ static struct clockdomain *cpu_clkdm[NR_CPUS];
 static atomic_t abort_barrier;
 static bool cpu_done[NR_CPUS];
 
-/* Private functions */
-
 /**
  * omap4_enter_idle_coupled_[simple/coupled] - OMAP4 cpuidle entry functions
  * @dev: cpuidle device
@@ -163,19 +161,9 @@ fail:
 	return index;
 }
 
-/*
- * For each cpu, setup the broadcast timer because local timers
- * stops for the states above C1.
- */
-static void omap_setup_broadcast_timer(void *arg)
-{
-	int cpu = smp_processor_id();
-	clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_ON, &cpu);
-}
+DEFINE_PER_CPU(struct cpuidle_device, omap4_idle_dev);
 
-static DEFINE_PER_CPU(struct cpuidle_device, omap4_idle_dev);
-
-static struct cpuidle_driver omap4_idle_driver = {
+struct cpuidle_driver omap4_idle_driver = {
 	.name				= "omap4_idle",
 	.owner				= THIS_MODULE,
 	.en_core_tk_irqen		= 1,
@@ -190,7 +178,7 @@ static struct cpuidle_driver omap4_idle_driver = {
 			.desc = "MPUSS ON"
 		},
 		{
-			/* C2 - CPU0 OFF + CPU1 OFF + MPU CSWR */
+                        /* C2 - CPU0 OFF + CPU1 OFF + MPU CSWR */
 			.exit_latency = 328 + 440,
 			.target_residency = 960,
 			.flags = CPUIDLE_FLAG_TIME_VALID | CPUIDLE_FLAG_COUPLED,
@@ -212,7 +200,15 @@ static struct cpuidle_driver omap4_idle_driver = {
 	.safe_state_index = 0,
 };
 
-/* Public functions */
+/*
+ * For each cpu, setup the broadcast timer because local timers
+ * stops for the states above C1.
+ */
+static void omap_setup_broadcast_timer(void *arg)
+{
+	int cpu = smp_processor_id();
+	clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_ON, &cpu);
+}
 
 /**
  * omap4_idle_init - Init routine for OMAP4 idle

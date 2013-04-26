@@ -81,7 +81,7 @@ EXPORT_SYMBOL(pcibios_align_resource);
  * controller_id is the controller number, config type is 0 or 1 for
  * config0 or config1 operations.
  */
-static int tile_pcie_open(int controller_id, int config_type)
+static int __devinit tile_pcie_open(int controller_id, int config_type)
 {
 	char filename[32];
 	int fd;
@@ -97,7 +97,8 @@ static int tile_pcie_open(int controller_id, int config_type)
 /*
  * Get the IRQ numbers from the HV and set up the handlers for them.
  */
-static int tile_init_irqs(int controller_id, struct pci_controller *controller)
+static int __devinit tile_init_irqs(int controller_id,
+				 struct pci_controller *controller)
 {
 	char filename[32];
 	int fd;
@@ -236,7 +237,7 @@ static int tile_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 }
 
 
-static void fixup_read_and_payload_sizes(void)
+static void __devinit fixup_read_and_payload_sizes(void)
 {
 	struct pci_dev *dev = NULL;
 	int smallest_max_payload = 0x1; /* Tile maxes out at 256 bytes. */
@@ -244,7 +245,7 @@ static void fixup_read_and_payload_sizes(void)
 	u16 new_values;
 
 	/* Scan for the smallest maximum payload size. */
-	for_each_pci_dev(dev) {
+	while ((dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, dev)) != NULL) {
 		u32 devcap;
 		int max_payload;
 
@@ -259,7 +260,7 @@ static void fixup_read_and_payload_sizes(void)
 
 	/* Now, set the max_payload_size for all devices to that value. */
 	new_values = (max_read_size << 12) | (smallest_max_payload << 5);
-	for_each_pci_dev(dev)
+	while ((dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, dev)) != NULL)
 		pcie_capability_clear_and_set_word(dev, PCI_EXP_DEVCTL,
 				PCI_EXP_DEVCTL_PAYLOAD | PCI_EXP_DEVCTL_READRQ,
 				new_values);
@@ -378,7 +379,7 @@ subsys_initcall(pcibios_init);
 /*
  * No bus fixups needed.
  */
-void pcibios_fixup_bus(struct pci_bus *bus)
+void __devinit pcibios_fixup_bus(struct pci_bus *bus)
 {
 	/* Nothing needs to be done. */
 }
@@ -457,8 +458,11 @@ int pcibios_enable_device(struct pci_dev *dev, int mask)
  * specified bus & slot.
  */
 
-static int tile_cfg_read(struct pci_bus *bus, unsigned int devfn, int offset,
-			 int size, u32 *val)
+static int __devinit tile_cfg_read(struct pci_bus *bus,
+				   unsigned int devfn,
+				   int offset,
+				   int size,
+				   u32 *val)
 {
 	struct pci_controller *controller = bus->sysdata;
 	int busnum = bus->number & 0xff;
@@ -500,8 +504,11 @@ static int tile_cfg_read(struct pci_bus *bus, unsigned int devfn, int offset,
  * See tile_cfg_read() for relevant comments.
  * Note that "val" is the value to write, not a pointer to that value.
  */
-static int tile_cfg_write(struct pci_bus *bus, unsigned int devfn, int offset,
-			  int size, u32 val)
+static int __devinit tile_cfg_write(struct pci_bus *bus,
+				    unsigned int devfn,
+				    int offset,
+				    int size,
+				    u32 val)
 {
 	struct pci_controller *controller = bus->sysdata;
 	int busnum = bus->number & 0xff;

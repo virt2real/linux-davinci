@@ -1,1 +1,1 @@
-extern void u300_timer_init(void);
+extern struct sys_timer u300_timer;

@@ -33,6 +33,7 @@
 #include <linux/scatterlist.h>
 #include <linux/device.h>
 #include <linux/of.h>
+#include <asm/pSeries_reconfig.h>
 #include <asm/hvcall.h>
 #include <asm/vio.h>
 
@@ -634,7 +635,8 @@ void nx_crypto_ctx_exit(struct crypto_tfm *tfm)
 	nx_ctx->out_sg = NULL;
 }
 
-static int nx_probe(struct vio_dev *viodev, const struct vio_device_id *id)
+static int __devinit nx_probe(struct vio_dev *viodev,
+			      const struct vio_device_id *id)
 {
 	dev_dbg(&viodev->dev, "driver probed: %s resource id: 0x%x\n",
 		viodev->name, viodev->resource_id);
@@ -652,7 +654,7 @@ static int nx_probe(struct vio_dev *viodev, const struct vio_device_id *id)
 	return nx_register_algs();
 }
 
-static int nx_remove(struct vio_dev *viodev)
+static int __devexit nx_remove(struct vio_dev *viodev)
 {
 	dev_dbg(&viodev->dev, "entering nx_remove for UA 0x%x\n",
 		viodev->unit_address);
@@ -688,7 +690,7 @@ static void __exit nx_fini(void)
 	vio_unregister_driver(&nx_driver.viodriver);
 }
 
-static struct vio_device_id nx_crypto_driver_ids[] = {
+static struct vio_device_id nx_crypto_driver_ids[] __devinitdata = {
 	{ "ibm,sym-encryption-v1", "ibm,sym-encryption" },
 	{ "", "" }
 };

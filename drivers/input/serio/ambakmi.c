@@ -107,7 +107,7 @@ static void amba_kmi_close(struct serio *io)
 	clk_disable_unprepare(kmi->clk);
 }
 
-static int amba_kmi_probe(struct amba_device *dev,
+static int __devinit amba_kmi_probe(struct amba_device *dev,
 	const struct amba_id *id)
 {
 	struct amba_kmi_port *kmi;
@@ -163,7 +163,7 @@ static int amba_kmi_probe(struct amba_device *dev,
 	return ret;
 }
 
-static int amba_kmi_remove(struct amba_device *dev)
+static int __devexit amba_kmi_remove(struct amba_device *dev)
 {
 	struct amba_kmi_port *kmi = amba_get_drvdata(dev);
 
@@ -204,7 +204,7 @@ static struct amba_driver ambakmi_driver = {
 	},
 	.id_table	= amba_kmi_idtable,
 	.probe		= amba_kmi_probe,
-	.remove		= amba_kmi_remove,
+	.remove		= __devexit_p(amba_kmi_remove),
 	.resume		= amba_kmi_resume,
 };
 

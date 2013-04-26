@@ -1074,8 +1074,7 @@ void fc_rport_terminate_io(struct fc_rport *);
 /*
  * DISCOVERY LAYER
  *****************************/
-void fc_disc_init(struct fc_lport *);
-void fc_disc_config(struct fc_lport *, void *);
+int fc_disc_init(struct fc_lport *);
 
 static inline struct fc_lport *fc_disc_lport(struct fc_disc *disc)
 {

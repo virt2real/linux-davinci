@@ -63,9 +63,6 @@ struct tpo_td043_device {
 	u32 power_on_resume:1;
 };
 
-/* used to pass spi_device from SPI to DSS portion of the driver */
-static struct tpo_td043_device *g_tpo_td043;
-
 static int tpo_td043_write(struct spi_device *spi, u8 addr, u8 data)
 {
 	struct spi_message	m;
@@ -404,9 +401,27 @@ static void tpo_td043_disable(struct omap_dss_device *dssdev)
 	dssdev->state = OMAP_DSS_DISPLAY_DISABLED;
 }
 
+static int tpo_td043_suspend(struct omap_dss_device *dssdev)
+{
+	dev_dbg(&dssdev->dev, "suspend\n");
+
+	tpo_td043_disable_dss(dssdev);
+
+	dssdev->state = OMAP_DSS_DISPLAY_SUSPENDED;
+
+	return 0;
+}
+
+static int tpo_td043_resume(struct omap_dss_device *dssdev)
+{
+	dev_dbg(&dssdev->dev, "resume\n");
+
+	return tpo_td043_enable_dss(dssdev);
+}
+
 static int tpo_td043_probe(struct omap_dss_device *dssdev)
 {
-	struct tpo_td043_device *tpo_td043 = g_tpo_td043;
+	struct tpo_td043_device *tpo_td043 = dev_get_drvdata(&dssdev->dev);
 	int nreset_gpio = dssdev->reset_gpio;
 	int ret = 0;
 
@@ -442,8 +457,6 @@ static int tpo_td043_probe(struct omap_dss_device *dssdev)
 	ret = sysfs_create_group(&dssdev->dev.kobj, &tpo_td043_attr_group);
 	if (ret)
 		dev_warn(&dssdev->dev, "failed to create sysfs files\n");
-
-	dev_set_drvdata(&dssdev->dev, tpo_td043);
 
 	return 0;
 
@@ -487,6 +500,8 @@ static struct omap_dss_driver tpo_td043_driver = {
 
 	.enable		= tpo_td043_enable,
 	.disable	= tpo_td043_disable,
+	.suspend	= tpo_td043_suspend,
+	.resume		= tpo_td043_resume,
 	.set_mirror	= tpo_td043_set_hmirror,
 	.get_mirror	= tpo_td043_get_hmirror,
 
@@ -510,9 +525,6 @@ static int tpo_td043_spi_probe(struct spi_device *spi)
 		return -ENODEV;
 	}
 
-	if (g_tpo_td043 != NULL)
-		return -EBUSY;
-
 	spi->bits_per_word = 16;
 	spi->mode = SPI_MODE_0;
 
@@ -529,20 +541,19 @@ static int tpo_td043_spi_probe(struct spi_device *spi)
 	tpo_td043->spi = spi;
 	tpo_td043->nreset_gpio = dssdev->reset_gpio;
 	dev_set_drvdata(&spi->dev, tpo_td043);
-	g_tpo_td043 = tpo_td043;
+	dev_set_drvdata(&dssdev->dev, tpo_td043);
 
 	omap_dss_register_driver(&tpo_td043_driver);
 
 	return 0;
 }
 
-static int tpo_td043_spi_remove(struct spi_device *spi)
+static int __devexit tpo_td043_spi_remove(struct spi_device *spi)
 {
 	struct tpo_td043_device *tpo_td043 = dev_get_drvdata(&spi->dev);
 
 	omap_dss_unregister_driver(&tpo_td043_driver);
 	kfree(tpo_td043);
-	g_tpo_td043 = NULL;
 
 	return 0;
 }
@@ -589,7 +600,7 @@ static struct spi_driver tpo_td043_spi_driver = {
 		.pm	= &tpo_td043_spi_pm,
 	},
 	.probe	= tpo_td043_spi_probe,
-	.remove	= tpo_td043_spi_remove,
+	.remove	= __devexit_p(tpo_td043_spi_remove),
 };
 
 module_spi_driver(tpo_td043_spi_driver);

@@ -154,8 +154,6 @@ static u32 asle_set_backlight(struct drm_device *dev, u32 bclp)
 	struct opregion_asle __iomem *asle = dev_priv->opregion.asle;
 	u32 max;
 
-	DRM_DEBUG_DRIVER("bclp = 0x%08x\n", bclp);
-
 	if (!(bclp & ASLE_BCLP_VALID))
 		return ASLE_BACKLIGHT_FAILED;
 
@@ -347,7 +345,7 @@ static void intel_didl_outputs(struct drm_device *dev)
 	int i = 0;
 
 	handle = DEVICE_ACPI_HANDLE(&dev->pdev->dev);
-	if (!handle || acpi_bus_get_device(handle, &acpi_dev))
+	if (!handle || ACPI_FAILURE(acpi_bus_get_device(handle, &acpi_dev)))
 		return;
 
 	if (acpi_is_video_device(acpi_dev))

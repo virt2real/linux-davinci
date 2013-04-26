@@ -9,7 +9,6 @@ config UNICORE32
 	select GENERIC_ATOMIC64
 	select HAVE_KERNEL_LZO
 	select HAVE_KERNEL_LZMA
-	select VIRT_TO_BUS
 	select ARCH_HAVE_CUSTOM_GPIO_H
 	select GENERIC_FIND_FIRST_BIT
 	select GENERIC_IRQ_PROBE
@@ -64,9 +63,6 @@ config GENERIC_CALIBRATE_DELAY
 
 config ARCH_MAY_HAVE_PC_FDC
 	bool
-
-config ZONE_DMA
-	def_bool y
 
 config NEED_DMA_MAP_STATE
        def_bool y
@@ -220,7 +216,7 @@ config PUV3_GPIO
 	bool
 	depends on !ARCH_FPGA
 	select GENERIC_GPIO
-	select GPIO_SYSFS
+	select GPIO_SYSFS if EXPERIMENTAL
 	default y
 
 if PUV3_NB0916

@@ -984,8 +984,7 @@ out:
 	return ret;
 }
 
-static int saa7164_vbi_fmt(struct file *file, void *priv,
-			   struct v4l2_format *f)
+int saa7164_vbi_fmt(struct file *file, void *priv, struct v4l2_format *f)
 {
 	/* ntsc */
 	f->fmt.vbi.samples_per_line = 1600;
@@ -1048,8 +1047,7 @@ static int fops_release(struct file *file)
 	return 0;
 }
 
-static struct
-saa7164_user_buffer *saa7164_vbi_next_buf(struct saa7164_port *port)
+struct saa7164_user_buffer *saa7164_vbi_next_buf(struct saa7164_port *port)
 {
 	struct saa7164_user_buffer *ubuf = NULL;
 	struct saa7164_dev *dev = port->dev;

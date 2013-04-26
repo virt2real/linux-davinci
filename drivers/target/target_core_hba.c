@@ -3,7 +3,10 @@
  *
  * This file contains the TCM HBA Transport related functions.
  *
- * (c) Copyright 2003-2012 RisingTide Systems LLC.
+ * Copyright (c) 2003, 2004, 2005 PyX Technologies, Inc.
+ * Copyright (c) 2005, 2006, 2007 SBE, Inc.
+ * Copyright (c) 2007-2010 Rising Tide Systems
+ * Copyright (c) 2008-2010 Linux-iSCSI.org
  *
  * Nicholas A. Bellinger <nab@kernel.org>
  *
@@ -110,6 +113,7 @@ core_alloc_hba(const char *plugin_name, u32 plugin_dep_id, u32 hba_flags)
 		return ERR_PTR(-ENOMEM);
 	}
 
+	INIT_LIST_HEAD(&hba->hba_dev_list);
 	spin_lock_init(&hba->device_lock);
 	mutex_init(&hba->hba_access_mutex);
 
@@ -148,7 +152,8 @@ out_free_hba:
 int
 core_delete_hba(struct se_hba *hba)
 {
-	WARN_ON(hba->dev_count);
+	if (!list_empty(&hba->hba_dev_list))
+		dump_stack();
 
 	hba->transport->detach_hba(hba);
 

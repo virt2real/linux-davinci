@@ -3,7 +3,7 @@
 #
 
 menu "Input device support"
-	depends on !UML
+	depends on !S390 && !UML
 
 config INPUT
 	tristate "Generic input layer (needed for keyboard, mouse, ...)" if EXPERT

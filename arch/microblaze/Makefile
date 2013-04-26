@@ -57,7 +57,7 @@ boot := arch/microblaze/boot
 DTB:=$(subst simpleImage.,,$(filter simpleImage.%, $(MAKECMDGOALS)))
 
 ifneq ($(DTB),)
-	core-y	+= $(boot)/dts/
+	core-y	+= $(boot)/
 endif
 
 # defines filename extension depending memory management type
@@ -69,13 +69,16 @@ export MMU DTB
 
 all: linux.bin
 
+# With make 3.82 we cannot mix normal and wildcard targets
+BOOT_TARGETS1 = linux.bin linux.bin.gz
+BOOT_TARGETS2 = simpleImage.%
+
 archclean:
 	$(Q)$(MAKE) $(clean)=$(boot)
 
-linux.bin linux.bin.gz: vmlinux
+$(BOOT_TARGETS1): vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-
-simpleImage.%: vmlinux
+$(BOOT_TARGETS2): vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 define archhelp

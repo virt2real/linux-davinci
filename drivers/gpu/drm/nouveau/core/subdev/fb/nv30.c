@@ -34,36 +34,17 @@ void
 nv30_fb_tile_init(struct nouveau_fb *pfb, int i, u32 addr, u32 size, u32 pitch,
 		  u32 flags, struct nouveau_fb_tile *tile)
 {
-	/* for performance, select alternate bank offset for zeta */
-	if (!(flags & 4)) {
-		tile->addr = (0 << 4);
-	} else {
-		if (pfb->tile.comp) /* z compression */
-			pfb->tile.comp(pfb, i, size, flags, tile);
-		tile->addr = (1 << 4);
-	}
-
-	tile->addr |= 0x00000001; /* enable */
-	tile->addr |= addr;
+	tile->addr = addr | 1;
 	tile->limit = max(1u, addr + size) - 1;
 	tile->pitch = pitch;
 }
 
-static void
-nv30_fb_tile_comp(struct nouveau_fb *pfb, int i, u32 size, u32 flags,
-		  struct nouveau_fb_tile *tile)
+void
+nv30_fb_tile_fini(struct nouveau_fb *pfb, int i, struct nouveau_fb_tile *tile)
 {
-	u32 tiles = DIV_ROUND_UP(size, 0x40);
-	u32 tags  = round_up(tiles / pfb->ram.parts, 0x40);
-	if (!nouveau_mm_head(&pfb->tags, 1, tags, tags, 1, &tile->tag)) {
-		if (flags & 2) tile->zcomp |= 0x01000000; /* Z16 */
-		else           tile->zcomp |= 0x02000000; /* Z24S8 */
-		tile->zcomp |= ((tile->tag->offset           ) >> 6);
-		tile->zcomp |= ((tile->tag->offset + tags - 1) >> 6) << 12;
-#ifdef __BIG_ENDIAN
-		tile->zcomp |= 0x10000000;
-#endif
-	}
+	tile->addr  = 0;
+	tile->limit = 0;
+	tile->pitch = 0;
 }
 
 static int
@@ -91,7 +72,7 @@ calc_ref(struct nv30_fb_priv *priv, int l, int k, int i)
 	return x;
 }
 
-int
+static int
 nv30_fb_init(struct nouveau_object *object)
 {
 	struct nouveau_device *device = nv_device(object);
@@ -130,6 +111,7 @@ nv30_fb_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 	     struct nouveau_object **pobject)
 {
 	struct nv30_fb_priv *priv;
+	u32 pbus1218;
 	int ret;
 
 	ret = nouveau_fb_create(parent, engine, oclass, &priv);
@@ -137,14 +119,21 @@ nv30_fb_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 	if (ret)
 		return ret;
 
+	pbus1218 = nv_rd32(priv, 0x001218);
+	switch (pbus1218 & 0x00000300) {
+	case 0x00000000: priv->base.ram.type = NV_MEM_TYPE_SDRAM; break;
+	case 0x00000100: priv->base.ram.type = NV_MEM_TYPE_DDR1; break;
+	case 0x00000200: priv->base.ram.type = NV_MEM_TYPE_GDDR3; break;
+	case 0x00000300: priv->base.ram.type = NV_MEM_TYPE_GDDR2; break;
+	}
+	priv->base.ram.size = nv_rd32(priv, 0x10020c) & 0xff000000;
+
 	priv->base.memtype_valid = nv04_fb_memtype_valid;
-	priv->base.ram.init = nv20_fb_vram_init;
 	priv->base.tile.regions = 8;
 	priv->base.tile.init = nv30_fb_tile_init;
-	priv->base.tile.comp = nv30_fb_tile_comp;
-	priv->base.tile.fini = nv20_fb_tile_fini;
-	priv->base.tile.prog = nv20_fb_tile_prog;
-	return nouveau_fb_preinit(&priv->base);
+	priv->base.tile.fini = nv30_fb_tile_fini;
+	priv->base.tile.prog = nv10_fb_tile_prog;
+	return nouveau_fb_created(&priv->base);
 }
 
 struct nouveau_oclass

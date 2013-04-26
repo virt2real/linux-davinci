@@ -57,7 +57,7 @@ static u8 dtl_event_mask = 0x7;
  */
 static int dtl_buf_entries = N_DISPATCH_LOG;
 
-#ifdef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
+#ifdef CONFIG_VIRT_CPU_ACCOUNTING
 struct dtl_ring {
 	u64	write_index;
 	struct dtl_entry *write_ptr;
@@ -142,7 +142,7 @@ static u64 dtl_current_index(struct dtl *dtl)
 	return per_cpu(dtl_rings, dtl->cpu).write_index;
 }
 
-#else /* CONFIG_VIRT_CPU_ACCOUNTING_NATIVE */
+#else /* CONFIG_VIRT_CPU_ACCOUNTING */
 
 static int dtl_start(struct dtl *dtl)
 {
@@ -188,7 +188,7 @@ static u64 dtl_current_index(struct dtl *dtl)
 {
 	return lppaca_of(dtl->cpu).dtl_idx;
 }
-#endif /* CONFIG_VIRT_CPU_ACCOUNTING_NATIVE */
+#endif /* CONFIG_VIRT_CPU_ACCOUNTING */
 
 static int dtl_enable(struct dtl *dtl)
 {

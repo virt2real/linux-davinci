@@ -40,7 +40,6 @@
 #include <linux/pagevec.h>
 
 #include "../pnfs.h"
-#include "../nfs4session.h"
 #include "../internal.h"
 #include "blocklayout.h"
 
@@ -1273,7 +1272,6 @@ static const struct nfs_pageio_ops bl_pg_write_ops = {
 static struct pnfs_layoutdriver_type blocklayout_type = {
 	.id				= LAYOUT_BLOCK_VOLUME,
 	.name				= "LAYOUT_BLOCK_VOLUME",
-	.owner				= THIS_MODULE,
 	.read_pagelist			= bl_read_pagelist,
 	.write_pagelist			= bl_write_pagelist,
 	.alloc_layout_hdr		= bl_alloc_layout_hdr,

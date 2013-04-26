@@ -63,7 +63,7 @@
 /*
  * Driver data
  */
-static char *mode_option;
+static char *mode_option __devinitdata;
 
 /*
  *  If your driver supports multiple boards, you should make the  
@@ -84,7 +84,7 @@ struct xxx_par;
  * if we don't use modedb. If we do use modedb see xxxfb_init how to use it
  * to get a fb_var_screeninfo. Otherwise define a default var as well. 
  */
-static struct fb_fix_screeninfo xxxfb_fix = {
+static struct fb_fix_screeninfo xxxfb_fix __devinitdata = {
 	.id =		"FB's name", 
 	.type =		FB_TYPE_PACKED_PIXELS,
 	.visual =	FB_VISUAL_PSEUDOCOLOR,
@@ -678,7 +678,8 @@ static struct fb_ops xxxfb_ops = {
      */
 
 /* static int __init xxfb_probe (struct platform_device *pdev) -- for platform devs */
-static int xxxfb_probe(struct pci_dev *dev, const struct pci_device_id *ent)
+static int __devinit xxxfb_probe(struct pci_dev *dev,
+			      const struct pci_device_id *ent)
 {
     struct fb_info *info;
     struct xxx_par *par;
@@ -704,7 +705,9 @@ static int xxxfb_probe(struct pci_dev *dev, const struct pci_device_id *ent)
      */
     info->screen_base = framebuffer_virtual_memory;
     info->fbops = &xxxfb_ops;
-    info->fix = xxxfb_fix;
+    info->fix = xxxfb_fix; /* this will be the only time xxxfb_fix will be
+			    * used, so mark it as __devinitdata
+			    */
     info->pseudo_palette = pseudo_palette; /* The pseudopalette is an
 					    * 16-member array
 					    */
@@ -833,8 +836,8 @@ static int xxxfb_probe(struct pci_dev *dev, const struct pci_device_id *ent)
     /*
      *  Cleanup
      */
-/* static void xxxfb_remove(struct platform_device *pdev) */
-static void xxxfb_remove(struct pci_dev *dev)
+/* static void __devexit xxxfb_remove(struct platform_device *pdev) */
+static void __devexit xxxfb_remove(struct pci_dev *dev)
 {
 	struct fb_info *info = pci_get_drvdata(dev);
 	/* or platform_get_drvdata(pdev); */
@@ -896,7 +899,7 @@ static struct pci_driver xxxfb_driver = {
 	.name =		"xxxfb",
 	.id_table =	xxxfb_id_table,
 	.probe =	xxxfb_probe,
-	.remove =	xxxfb_remove,
+	.remove =	__devexit_p(xxxfb_remove),
 	.suspend =      xxxfb_suspend, /* optional but recommended */
 	.resume =       xxxfb_resume,  /* optional but recommended */
 };

@@ -141,9 +141,7 @@ static inline void map_dma_buffer(struct musb_request *request,
 static inline void unmap_dma_buffer(struct musb_request *request,
 				struct musb *musb)
 {
-	struct musb_ep *musb_ep = request->ep;
-
-	if (!is_buffer_mapped(request) || !musb_ep->dma)
+	if (!is_buffer_mapped(request))
 		return;
 
 	if (request->request.dma == DMA_ADDR_INVALID) {
@@ -197,10 +195,7 @@ __acquires(ep->musb->lock)
 
 	ep->busy = 1;
 	spin_unlock(&musb->lock);
-
-	if (!dma_mapping_error(&musb->g.dev, request->dma))
-		unmap_dma_buffer(req, musb);
-
+	unmap_dma_buffer(req, musb);
 	if (request->status == 0)
 		dev_dbg(musb->controller, "%s done request %p,  %d/%d\n",
 				ep->end_point.name, request,
@@ -413,19 +408,7 @@ static void txstate(struct musb *musb, struct musb_request *req)
 					csr |= (MUSB_TXCSR_DMAENAB
 							| MUSB_TXCSR_DMAMODE
 							| MUSB_TXCSR_MODE);
-					/*
-					 * Enable Autoset according to table
-					 * below
-					 * bulk_split hb_mult	Autoset_Enable
-					 *	0	0	Yes(Normal)
-					 *	0	>0	No(High BW ISO)
-					 *	1	0	Yes(HS bulk)
-					 *	1	>0	Yes(FS bulk)
-					 */
-					if (!musb_ep->hb_mult ||
-						(musb_ep->hb_mult &&
-						 can_bulk_split(musb,
-						    musb_ep->type)))
+					if (!musb_ep->hb_mult)
 						csr |= MUSB_TXCSR_AUTOSET;
 				}
 				csr &= ~MUSB_TXCSR_P_UNDERRUN;
@@ -724,12 +707,11 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 		fifo_count = musb_readw(epio, MUSB_RXCOUNT);
 
 		/*
-		 * Enable Mode 1 on RX transfers only when short_not_ok flag
-		 * is set. Currently short_not_ok flag is set only from
-		 * file_storage and f_mass_storage drivers
+		 *  use mode 1 only if we expect data of at least ep packet_sz
+		 *  and have not yet received a short packet
 		 */
-
-		if (request->short_not_ok && fifo_count == musb_ep->packet_sz)
+		if ((request->length - request->actual >= musb_ep->packet_sz) &&
+			(fifo_count >= musb_ep->packet_sz))
 			use_mode_1 = 1;
 		else
 			use_mode_1 = 0;
@@ -744,27 +726,6 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 
 				c = musb->dma_controller;
 				channel = musb_ep->dma;
-
-	/* We use DMA Req mode 0 in rx_csr, and DMA controller operates in
-	 * mode 0 only. So we do not get endpoint interrupts due to DMA
-	 * completion. We only get interrupts from DMA controller.
-	 *
-	 * We could operate in DMA mode 1 if we knew the size of the tranfer
-	 * in advance. For mass storage class, request->length = what the host
-	 * sends, so that'd work.  But for pretty much everything else,
-	 * request->length is routinely more than what the host sends. For
-	 * most these gadgets, end of is signified either by a short packet,
-	 * or filling the last byte of the buffer.  (Sending extra data in
-	 * that last pckate should trigger an overflow fault.)  But in mode 1,
-	 * we don't get DMA completion interrupt for short packets.
-	 *
-	 * Theoretically, we could enable DMAReq irq (MUSB_RXCSR_DMAMODE = 1),
-	 * to get endpoint interrupt on every DMA req, but that didn't seem
-	 * to work reliably.
-	 *
-	 * REVISIT an updated g_file_storage can set req->short_not_ok, which
-	 * then becomes usable as a runtime "use mode 1" hint...
-	 */
 
 				/* Experimental: Mode1 works with mass storage use cases */
 				if (use_mode_1) {
@@ -1107,6 +1068,7 @@ static int musb_gadget_enable(struct usb_ep *ep,
 	 */
 	musb_ep_select(mbase, epnum);
 	if (usb_endpoint_dir_in(desc)) {
+		u16 int_txe = musb_readw(mbase, MUSB_INTRTXE);
 
 		if (hw_ep->is_shared_fifo)
 			musb_ep->is_in = 1;
@@ -1118,8 +1080,8 @@ static int musb_gadget_enable(struct usb_ep *ep,
 			goto fail;
 		}
 
-		musb->intrtxe |= (1 << epnum);
-		musb_writew(mbase, MUSB_INTRTXE, musb->intrtxe);
+		int_txe |= (1 << epnum);
+		musb_writew(mbase, MUSB_INTRTXE, int_txe);
 
 		/* REVISIT if can_bulk_split(), use by updating "tmp";
 		 * likewise high bandwidth periodic tx
@@ -1127,15 +1089,11 @@ static int musb_gadget_enable(struct usb_ep *ep,
 		/* Set TXMAXP with the FIFO size of the endpoint
 		 * to disable double buffering mode.
 		 */
-		if (musb->double_buffer_not_ok) {
+		if (musb->double_buffer_not_ok)
 			musb_writew(regs, MUSB_TXMAXP, hw_ep->max_packet_sz_tx);
-		} else {
-			if (can_bulk_split(musb, musb_ep->type))
-				musb_ep->hb_mult = (hw_ep->max_packet_sz_tx /
-							musb_ep->packet_sz) - 1;
+		else
 			musb_writew(regs, MUSB_TXMAXP, musb_ep->packet_sz
 					| (musb_ep->hb_mult << 11));
-		}
 
 		csr = MUSB_TXCSR_MODE | MUSB_TXCSR_CLRDATATOG;
 		if (musb_readw(regs, MUSB_TXCSR)
@@ -1150,6 +1108,7 @@ static int musb_gadget_enable(struct usb_ep *ep,
 		musb_writew(regs, MUSB_TXCSR, csr);
 
 	} else {
+		u16 int_rxe = musb_readw(mbase, MUSB_INTRRXE);
 
 		if (hw_ep->is_shared_fifo)
 			musb_ep->is_in = 0;
@@ -1161,8 +1120,8 @@ static int musb_gadget_enable(struct usb_ep *ep,
 			goto fail;
 		}
 
-		musb->intrrxe |= (1 << epnum);
-		musb_writew(mbase, MUSB_INTRRXE, musb->intrrxe);
+		int_rxe |= (1 << epnum);
+		musb_writew(mbase, MUSB_INTRRXE, int_rxe);
 
 		/* REVISIT if can_bulk_combine() use by updating "tmp"
 		 * likewise high bandwidth periodic rx
@@ -1250,12 +1209,14 @@ static int musb_gadget_disable(struct usb_ep *ep)
 
 	/* zero the endpoint sizes */
 	if (musb_ep->is_in) {
-		musb->intrtxe &= ~(1 << epnum);
-		musb_writew(musb->mregs, MUSB_INTRTXE, musb->intrtxe);
+		u16 int_txe = musb_readw(musb->mregs, MUSB_INTRTXE);
+		int_txe &= ~(1 << epnum);
+		musb_writew(musb->mregs, MUSB_INTRTXE, int_txe);
 		musb_writew(epio, MUSB_TXMAXP, 0);
 	} else {
-		musb->intrrxe &= ~(1 << epnum);
-		musb_writew(musb->mregs, MUSB_INTRRXE, musb->intrrxe);
+		u16 int_rxe = musb_readw(musb->mregs, MUSB_INTRRXE);
+		int_rxe &= ~(1 << epnum);
+		musb_writew(musb->mregs, MUSB_INTRRXE, int_rxe);
 		musb_writew(epio, MUSB_RXMAXP, 0);
 	}
 
@@ -1571,7 +1532,7 @@ static void musb_gadget_fifo_flush(struct usb_ep *ep)
 	void __iomem	*epio = musb->endpoints[epnum].regs;
 	void __iomem	*mbase;
 	unsigned long	flags;
-	u16		csr;
+	u16		csr, int_txe;
 
 	mbase = musb->mregs;
 
@@ -1579,7 +1540,8 @@ static void musb_gadget_fifo_flush(struct usb_ep *ep)
 	musb_ep_select(mbase, (u8) epnum);
 
 	/* disable interrupts */
-	musb_writew(mbase, MUSB_INTRTXE, musb->intrtxe & ~(1 << epnum));
+	int_txe = musb_readw(mbase, MUSB_INTRTXE);
+	musb_writew(mbase, MUSB_INTRTXE, int_txe & ~(1 << epnum));
 
 	if (musb_ep->is_in) {
 		csr = musb_readw(epio, MUSB_TXCSR);
@@ -1603,7 +1565,7 @@ static void musb_gadget_fifo_flush(struct usb_ep *ep)
 	}
 
 	/* re-enable interrupt */
-	musb_writew(mbase, MUSB_INTRTXE, musb->intrtxe);
+	musb_writew(mbase, MUSB_INTRTXE, int_txe);
 	spin_unlock_irqrestore(&musb->lock, flags);
 }
 
@@ -1808,7 +1770,7 @@ static void musb_gadget_release(struct device *dev)
 }
 
 
-static void
+static void __devinit
 init_peripheral_ep(struct musb *musb, struct musb_ep *ep, u8 epnum, int is_in)
 {
 	struct musb_hw_ep	*hw_ep = musb->endpoints + epnum;
@@ -1845,7 +1807,7 @@ init_peripheral_ep(struct musb *musb, struct musb_ep *ep, u8 epnum, int is_in)
  * Initialize the endpoints exposed to peripheral drivers, with backlinks
  * to the rest of the driver state.
  */
-static inline void musb_g_init_endpoints(struct musb *musb)
+static inline void __devinit musb_g_init_endpoints(struct musb *musb)
 {
 	u8			epnum;
 	struct musb_hw_ep	*hw_ep;
@@ -1878,7 +1840,7 @@ static inline void musb_g_init_endpoints(struct musb *musb)
 /* called once during driver setup to initialize and link into
  * the driver model; memory is zeroed.
  */
-int musb_gadget_setup(struct musb *musb)
+int __devinit musb_gadget_setup(struct musb *musb)
 {
 	int status;
 
@@ -2192,9 +2154,10 @@ __acquires(musb->lock)
 	u8		devctl = musb_readb(mbase, MUSB_DEVCTL);
 	u8		power;
 
-	dev_dbg(musb->controller, "<== %s driver '%s'\n",
+	dev_dbg(musb->controller, "<== %s addr=%x driver '%s'\n",
 			(devctl & MUSB_DEVCTL_BDEVICE)
 				? "B-Device" : "A-Device",
+			musb_readb(mbase, MUSB_FADDR),
 			musb->gadget_driver
 				? musb->gadget_driver->driver.name
 				: NULL

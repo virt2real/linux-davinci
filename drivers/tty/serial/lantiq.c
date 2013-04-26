@@ -162,16 +162,21 @@ lqasc_enable_ms(struct uart_port *port)
 static int
 lqasc_rx_chars(struct uart_port *port)
 {
-	struct tty_port *tport = &port->state->port;
+	struct tty_struct *tty = tty_port_tty_get(&port->state->port);
 	unsigned int ch = 0, rsr = 0, fifocnt;
 
-	fifocnt = ltq_r32(port->membase + LTQ_ASC_FSTAT) & ASCFSTAT_RXFFLMASK;
+	if (!tty) {
+		dev_dbg(port->dev, "%s:tty is busy now", __func__);
+		return -EBUSY;
+	}
+	fifocnt =
+		ltq_r32(port->membase + LTQ_ASC_FSTAT) & ASCFSTAT_RXFFLMASK;
 	while (fifocnt--) {
 		u8 flag = TTY_NORMAL;
 		ch = ltq_r8(port->membase + LTQ_ASC_RBUF);
 		rsr = (ltq_r32(port->membase + LTQ_ASC_STATE)
 			& ASCSTATE_ANY) | UART_DUMMY_UER_RX;
-		tty_flip_buffer_push(tport);
+		tty_flip_buffer_push(tty);
 		port->icount.rx++;
 
 		/*
@@ -203,7 +208,7 @@ lqasc_rx_chars(struct uart_port *port)
 		}
 
 		if ((rsr & port->ignore_status_mask) == 0)
-			tty_insert_flip_char(tport, ch, flag);
+			tty_insert_flip_char(tty, ch, flag);
 
 		if (rsr & ASCSTATE_ROE)
 			/*
@@ -211,12 +216,11 @@ lqasc_rx_chars(struct uart_port *port)
 			 * immediately, and doesn't affect the current
 			 * character
 			 */
-			tty_insert_flip_char(tport, 0, TTY_OVERRUN);
+			tty_insert_flip_char(tty, 0, TTY_OVERRUN);
 	}
-
 	if (ch != 0)
-		tty_flip_buffer_push(tport);
-
+		tty_flip_buffer_push(tty);
+	tty_kref_put(tty);
 	return 0;
 }
 

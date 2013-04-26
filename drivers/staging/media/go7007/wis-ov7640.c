@@ -29,7 +29,8 @@ struct wis_ov7640 {
 	int hue;
 };
 
-static u8 initial_registers[] = {
+static u8 initial_registers[] =
+{
 	0x12, 0x80,
 	0x12, 0x54,
 	0x14, 0x24,
@@ -59,12 +60,12 @@ static int wis_ov7640_probe(struct i2c_client *client,
 
 	client->flags = I2C_CLIENT_SCCB;
 
-	dev_dbg(&client->dev,
+	printk(KERN_DEBUG
 		"wis-ov7640: initializing OV7640 at address %d on %s\n",
 		client->addr, adapter->name);
 
 	if (write_regs(client, initial_registers) < 0) {
-		dev_err(&client->dev, "wis-ov7640: error initializing OV7640\n");
+		printk(KERN_ERR "wis-ov7640: error initializing OV7640\n");
 		return -ENODEV;
 	}
 
@@ -91,6 +92,17 @@ static struct i2c_driver wis_ov7640_driver = {
 	.id_table	= wis_ov7640_id,
 };
 
-module_i2c_driver(wis_ov7640_driver);
+static int __init wis_ov7640_init(void)
+{
+	return i2c_add_driver(&wis_ov7640_driver);
+}
+
+static void __exit wis_ov7640_cleanup(void)
+{
+	i2c_del_driver(&wis_ov7640_driver);
+}
+
+module_init(wis_ov7640_init);
+module_exit(wis_ov7640_cleanup);
 
 MODULE_LICENSE("GPL v2");

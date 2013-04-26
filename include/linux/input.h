@@ -112,11 +112,6 @@ struct input_value {
  * @h_list: list of input handles associated with the device. When
  *	accessing the list dev->mutex must be held
  * @node: used to place the device onto input_dev_list
- * @num_vals: number of values queued in the current frame
- * @max_vals: maximum number of values queued in a frame
- * @vals: array of values queued in the current frame
- * @devres_managed: indicates that devices is managed with devres framework
- *	and needs not be explicitly unregistered or freed.
  */
 struct input_dev {
 	const char *name;
@@ -185,8 +180,6 @@ struct input_dev {
 	unsigned int num_vals;
 	unsigned int max_vals;
 	struct input_value *vals;
-
-	bool devres_managed;
 };
 #define to_input_dev(d) container_of(d, struct input_dev, dev)
 
@@ -330,8 +323,7 @@ struct input_handle {
 	struct list_head	h_node;
 };
 
-struct input_dev __must_check *input_allocate_device(void);
-struct input_dev __must_check *devm_input_allocate_device(struct device *);
+struct input_dev *input_allocate_device(void);
 void input_free_device(struct input_dev *dev);
 
 static inline struct input_dev *input_get_device(struct input_dev *dev)

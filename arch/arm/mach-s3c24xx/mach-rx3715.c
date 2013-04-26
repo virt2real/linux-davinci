@@ -31,27 +31,27 @@
 #include <linux/mtd/partitions.h>
 
 #include <asm/mach/arch.h>
-#include <asm/mach/irq.h>
 #include <asm/mach/map.h>
+#include <asm/mach/irq.h>
 
-#include <linux/platform_data/mtd-nand-s3c2410.h>
-
+#include <mach/hardware.h>
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 
-#include <mach/fb.h>
-#include <mach/hardware.h>
+#include <plat/regs-serial.h>
 #include <mach/regs-gpio.h>
 #include <mach/regs-lcd.h>
 
+#include <mach/h1940.h>
+#include <linux/platform_data/mtd-nand-s3c2410.h>
+#include <mach/fb.h>
+
 #include <plat/clock.h>
-#include <plat/cpu.h>
 #include <plat/devs.h>
+#include <plat/cpu.h>
 #include <plat/pm.h>
-#include <plat/regs-serial.h>
 
 #include "common.h"
-#include "h1940.h"
 
 static struct map_desc rx3715_iodesc[] __initdata = {
 	/* dump ISA space somewhere unused */
@@ -212,6 +212,6 @@ MACHINE_START(RX3715, "IPAQ-RX3715")
 	.reserve	= rx3715_reserve,
 	.init_irq	= rx3715_init_irq,
 	.init_machine	= rx3715_init_machine,
-	.init_time	= s3c24xx_timer_init,
+	.timer		= &s3c24xx_timer,
 	.restart	= s3c244x_restart,
 MACHINE_END

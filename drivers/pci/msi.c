@@ -207,8 +207,6 @@ static void msix_mask_irq(struct msi_desc *desc, u32 flag)
 	desc->masked = __msix_mask_irq(desc, flag);
 }
 
-#ifdef CONFIG_GENERIC_HARDIRQS
-
 static void msi_set_mask_bit(struct irq_data *data, u32 flag)
 {
 	struct msi_desc *desc = irq_data_get_msi(data);
@@ -231,8 +229,6 @@ void unmask_msi_irq(struct irq_data *data)
 {
 	msi_set_mask_bit(data, 0);
 }
-
-#endif /* CONFIG_GENERIC_HARDIRQS */
 
 void __read_msi_msg(struct msi_desc *entry, struct msi_msg *msg)
 {
@@ -341,10 +337,8 @@ static void free_msi_irqs(struct pci_dev *dev)
 		if (!entry->irq)
 			continue;
 		nvec = 1 << entry->msi_attrib.multiple;
-#ifdef CONFIG_GENERIC_HARDIRQS
 		for (i = 0; i < nvec; i++)
 			BUG_ON(irq_has_action(entry->irq + i));
-#endif
 	}
 
 	arch_teardown_msi_irqs(dev);
@@ -844,32 +838,6 @@ int pci_enable_msi_block(struct pci_dev *dev, unsigned int nvec)
 	return status;
 }
 EXPORT_SYMBOL(pci_enable_msi_block);
-
-int pci_enable_msi_block_auto(struct pci_dev *dev, unsigned int *maxvec)
-{
-	int ret, pos, nvec;
-	u16 msgctl;
-
-	pos = pci_find_capability(dev, PCI_CAP_ID_MSI);
-	if (!pos)
-		return -EINVAL;
-
-	pci_read_config_word(dev, pos + PCI_MSI_FLAGS, &msgctl);
-	ret = 1 << ((msgctl & PCI_MSI_FLAGS_QMASK) >> 1);
-
-	if (maxvec)
-		*maxvec = ret;
-
-	do {
-		nvec = ret;
-		ret = pci_enable_msi_block(dev, nvec);
-	} while (ret > 0);
-
-	if (ret < 0)
-		return ret;
-	return nvec;
-}
-EXPORT_SYMBOL(pci_enable_msi_block_auto);
 
 void pci_msi_shutdown(struct pci_dev *dev)
 {

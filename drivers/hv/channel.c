@@ -33,6 +33,14 @@
 #define NUM_PAGES_SPANNED(addr, len) \
 ((PAGE_ALIGN(addr + len) >> PAGE_SHIFT) - (addr >> PAGE_SHIFT))
 
+/* Internal routines */
+static int create_gpadl_header(
+	void *kbuffer,	/* must be phys and virt contiguous */
+	u32 size,	/* page-size multiple */
+	struct vmbus_channel_msginfo **msginfo,
+	u32 *messagecount);
+static void vmbus_setevent(struct vmbus_channel *channel);
+
 /*
  * vmbus_setevent- Trigger an event notification on the specified
  * channel.
@@ -55,7 +63,7 @@ static void vmbus_setevent(struct vmbus_channel *channel)
 					[channel->monitor_grp].pending);
 
 	} else {
-		vmbus_set_event(channel);
+		vmbus_set_event(channel->offermsg.child_relid);
 	}
 }
 
@@ -138,14 +146,14 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 
 	if (ret != 0) {
 		err = ret;
-		goto error0;
+		goto errorout;
 	}
 
 	ret = hv_ringbuffer_init(
 		&newchannel->inbound, in, recv_ringbuffer_size);
 	if (ret != 0) {
 		err = ret;
-		goto error0;
+		goto errorout;
 	}
 
 
@@ -160,7 +168,7 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 
 	if (ret != 0) {
 		err = ret;
-		goto error0;
+		goto errorout;
 	}
 
 	/* Create and init the channel open message */
@@ -169,7 +177,7 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 			   GFP_KERNEL);
 	if (!open_info) {
 		err = -ENOMEM;
-		goto error0;
+		goto errorout;
 	}
 
 	init_completion(&open_info->waitevent);
@@ -181,11 +189,11 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 	open_msg->ringbuffer_gpadlhandle = newchannel->ringbuffer_gpadlhandle;
 	open_msg->downstream_ringbuffer_pageoffset = send_ringbuffer_size >>
 						  PAGE_SHIFT;
-	open_msg->target_vp = newchannel->target_vp;
+	open_msg->server_contextarea_gpadlhandle = 0;
 
 	if (userdatalen > MAX_USER_DEFINED_BYTES) {
 		err = -EINVAL;
-		goto error0;
+		goto errorout;
 	}
 
 	if (userdatalen)
@@ -200,18 +208,19 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 			       sizeof(struct vmbus_channel_open_channel));
 
 	if (ret != 0)
-		goto error1;
+		goto cleanup;
 
 	t = wait_for_completion_timeout(&open_info->waitevent, 5*HZ);
 	if (t == 0) {
 		err = -ETIMEDOUT;
-		goto error1;
+		goto errorout;
 	}
 
 
 	if (open_info->response.open_result.status)
 		err = open_info->response.open_result.status;
 
+cleanup:
 	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
 	list_del(&open_info->msglistentry);
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
@@ -219,12 +228,9 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 	kfree(open_info);
 	return err;
 
-error1:
-	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
-	list_del(&open_info->msglistentry);
-	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
-
-error0:
+errorout:
+	hv_ringbuffer_cleanup(&newchannel->outbound);
+	hv_ringbuffer_cleanup(&newchannel->inbound);
 	free_pages((unsigned long)out,
 		get_order(send_ringbuffer_size + recv_ringbuffer_size));
 	kfree(open_info);
@@ -564,7 +570,6 @@ int vmbus_sendpacket(struct vmbus_channel *channel, const void *buffer,
 	struct scatterlist bufferlist[3];
 	u64 aligned_data = 0;
 	int ret;
-	bool signal = false;
 
 
 	/* Setup the descriptor */
@@ -581,9 +586,9 @@ int vmbus_sendpacket(struct vmbus_channel *channel, const void *buffer,
 	sg_set_buf(&bufferlist[2], &aligned_data,
 		   packetlen_aligned - packetlen);
 
-	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3, &signal);
+	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3);
 
-	if (ret == 0 && signal)
+	if (ret == 0 && !hv_get_ringbuffer_interrupt_mask(&channel->outbound))
 		vmbus_setevent(channel);
 
 	return ret;
@@ -607,7 +612,6 @@ int vmbus_sendpacket_pagebuffer(struct vmbus_channel *channel,
 	u32 packetlen_aligned;
 	struct scatterlist bufferlist[3];
 	u64 aligned_data = 0;
-	bool signal = false;
 
 	if (pagecount > MAX_PAGE_BUFFER_COUNT)
 		return -EINVAL;
@@ -643,9 +647,9 @@ int vmbus_sendpacket_pagebuffer(struct vmbus_channel *channel,
 	sg_set_buf(&bufferlist[2], &aligned_data,
 		packetlen_aligned - packetlen);
 
-	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3, &signal);
+	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3);
 
-	if (ret == 0 && signal)
+	if (ret == 0 && !hv_get_ringbuffer_interrupt_mask(&channel->outbound))
 		vmbus_setevent(channel);
 
 	return ret;
@@ -667,7 +671,6 @@ int vmbus_sendpacket_multipagebuffer(struct vmbus_channel *channel,
 	u32 packetlen_aligned;
 	struct scatterlist bufferlist[3];
 	u64 aligned_data = 0;
-	bool signal = false;
 	u32 pfncount = NUM_PAGES_SPANNED(multi_pagebuffer->offset,
 					 multi_pagebuffer->len);
 
@@ -706,9 +709,9 @@ int vmbus_sendpacket_multipagebuffer(struct vmbus_channel *channel,
 	sg_set_buf(&bufferlist[2], &aligned_data,
 		packetlen_aligned - packetlen);
 
-	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3, &signal);
+	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3);
 
-	if (ret == 0 && signal)
+	if (ret == 0 && !hv_get_ringbuffer_interrupt_mask(&channel->outbound))
 		vmbus_setevent(channel);
 
 	return ret;
@@ -735,7 +738,6 @@ int vmbus_recvpacket(struct vmbus_channel *channel, void *buffer,
 	u32 packetlen;
 	u32 userlen;
 	int ret;
-	bool signal = false;
 
 	*buffer_actual_len = 0;
 	*requestid = 0;
@@ -762,10 +764,8 @@ int vmbus_recvpacket(struct vmbus_channel *channel, void *buffer,
 
 	/* Copy over the packet to the user buffer */
 	ret = hv_ringbuffer_read(&channel->inbound, buffer, userlen,
-			     (desc.offset8 << 3), &signal);
+			     (desc.offset8 << 3));
 
-	if (signal)
-		vmbus_setevent(channel);
 
 	return 0;
 }
@@ -780,8 +780,8 @@ int vmbus_recvpacket_raw(struct vmbus_channel *channel, void *buffer,
 {
 	struct vmpacket_descriptor desc;
 	u32 packetlen;
+	u32 userlen;
 	int ret;
-	bool signal = false;
 
 	*buffer_actual_len = 0;
 	*requestid = 0;
@@ -794,6 +794,7 @@ int vmbus_recvpacket_raw(struct vmbus_channel *channel, void *buffer,
 
 
 	packetlen = desc.len8 << 3;
+	userlen = packetlen - (desc.offset8 << 3);
 
 	*buffer_actual_len = packetlen;
 
@@ -807,11 +808,7 @@ int vmbus_recvpacket_raw(struct vmbus_channel *channel, void *buffer,
 	*requestid = desc.trans_id;
 
 	/* Copy over the entire packet to the user buffer */
-	ret = hv_ringbuffer_read(&channel->inbound, buffer, packetlen, 0,
-				 &signal);
-
-	if (signal)
-		vmbus_setevent(channel);
+	ret = hv_ringbuffer_read(&channel->inbound, buffer, packetlen, 0);
 
 	return 0;
 }

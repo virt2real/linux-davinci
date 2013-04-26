@@ -4,6 +4,7 @@
 #  include <asm/unistd_64.h>
 # endif
 
+# define __ARCH_WANT_SYS_RT_SIGSUSPEND
 # define __ARCH_WANT_OLD_READDIR
 # define __ARCH_WANT_OLD_STAT
 # define __ARCH_WANT_STAT64
@@ -26,9 +27,7 @@
 # define __ARCH_WANT_SYS_OLDUMOUNT
 # define __ARCH_WANT_SYS_SIGPENDING
 # define __ARCH_WANT_SYS_SIGPROCMASK
-# define __ARCH_WANT_SYS_FORK
-# define __ARCH_WANT_SYS_VFORK
-# define __ARCH_WANT_SYS_CLONE
+# define __ARCH_WANT_SYS_RT_SIGACTION
 
 /*
  * "Conditional" syscalls

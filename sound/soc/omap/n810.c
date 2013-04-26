@@ -29,6 +29,7 @@
 #include <sound/soc.h>
 
 #include <asm/mach-types.h>
+#include <mach/hardware.h>
 #include <linux/gpio.h>
 #include <linux/module.h>
 #include <linux/platform_data/asoc-ti-mcbsp.h>
@@ -230,8 +231,8 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"Ext Spk", NULL, "LLOUT"},
 	{"Ext Spk", NULL, "RLOUT"},
 
-	{"DMic Rate 64", NULL, "Mic Bias"},
-	{"Mic Bias", NULL, "DMic"},
+	{"DMic Rate 64", NULL, "Mic Bias 2V"},
+	{"Mic Bias 2V", NULL, "DMic"},
 };
 
 static const char *spk_function[] = {"Off", "On"};

@@ -61,7 +61,7 @@ MODULE_AUTHOR("Jes Sorensen <jes@wildopensource.com>");
 MODULE_DESCRIPTION("Essential RoadRunner HIPPI driver");
 MODULE_LICENSE("GPL");
 
-static char version[] = "rrunner.c: v0.50 11/11/2002  Jes Sorensen (jes@wildopensource.com)\n";
+static char version[] __devinitdata = "rrunner.c: v0.50 11/11/2002  Jes Sorensen (jes@wildopensource.com)\n";
 
 
 static const struct net_device_ops rr_netdev_ops = {
@@ -88,7 +88,8 @@ static const struct net_device_ops rr_netdev_ops = {
  * stack will need to know about I/O vectors or something similar.
  */
 
-static int rr_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit rr_init_one(struct pci_dev *pdev,
+	const struct pci_device_id *ent)
 {
 	struct net_device *dev;
 	static int version_disp;
@@ -202,9 +203,6 @@ static int rr_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 
  out:
-	if (rrpriv->evt_ring)
-		pci_free_consistent(pdev, EVT_RING_SIZE, rrpriv->evt_ring,
-				    rrpriv->evt_ring_dma);
 	if (rrpriv->rx_ring)
 		pci_free_consistent(pdev, RX_TOTAL_SIZE, rrpriv->rx_ring,
 				    rrpriv->rx_ring_dma);
@@ -223,7 +221,7 @@ static int rr_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return ret;
 }
 
-static void rr_remove_one(struct pci_dev *pdev)
+static void __devexit rr_remove_one (struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
 	struct rr_private *rr = netdev_priv(dev);
@@ -505,7 +503,7 @@ static unsigned int write_eeprom(struct rr_private *rrpriv,
 }
 
 
-static int rr_init(struct net_device *dev)
+static int __devinit rr_init(struct net_device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs __iomem *regs;
@@ -1683,7 +1681,7 @@ static struct pci_driver rr_driver = {
 	.name		= "rrunner",
 	.id_table	= rr_pci_tbl,
 	.probe		= rr_init_one,
-	.remove		= rr_remove_one,
+	.remove		= __devexit_p(rr_remove_one),
 };
 
 static int __init rr_init_module(void)

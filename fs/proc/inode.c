@@ -13,7 +13,6 @@
 #include <linux/stat.h>
 #include <linux/completion.h>
 #include <linux/poll.h>
-#include <linux/printk.h>
 #include <linux/file.h>
 #include <linux/limits.h>
 #include <linux/init.h>
@@ -32,7 +31,6 @@ static void proc_evict_inode(struct inode *inode)
 	struct proc_dir_entry *de;
 	struct ctl_table_header *head;
 	const struct proc_ns_operations *ns_ops;
-	void *ns;
 
 	truncate_inode_pages(&inode->i_data, 0);
 	clear_inode(inode);
@@ -51,9 +49,8 @@ static void proc_evict_inode(struct inode *inode)
 	}
 	/* Release any associated namespace */
 	ns_ops = PROC_I(inode)->ns_ops;
-	ns = PROC_I(inode)->ns;
-	if (ns_ops && ns)
-		ns_ops->put(ns);
+	if (ns_ops && ns_ops->put)
+		ns_ops->put(PROC_I(inode)->ns);
 }
 
 static struct kmem_cache * proc_inode_cachep;
@@ -145,7 +142,7 @@ void pde_users_dec(struct proc_dir_entry *pde)
 
 static loff_t proc_reg_llseek(struct file *file, loff_t offset, int whence)
 {
-	struct proc_dir_entry *pde = PDE(file_inode(file));
+	struct proc_dir_entry *pde = PDE(file->f_path.dentry->d_inode);
 	loff_t rv = -EINVAL;
 	loff_t (*llseek)(struct file *, loff_t, int);
 
@@ -180,7 +177,7 @@ static loff_t proc_reg_llseek(struct file *file, loff_t offset, int whence)
 
 static ssize_t proc_reg_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
-	struct proc_dir_entry *pde = PDE(file_inode(file));
+	struct proc_dir_entry *pde = PDE(file->f_path.dentry->d_inode);
 	ssize_t rv = -EIO;
 	ssize_t (*read)(struct file *, char __user *, size_t, loff_t *);
 
@@ -202,7 +199,7 @@ static ssize_t proc_reg_read(struct file *file, char __user *buf, size_t count, 
 
 static ssize_t proc_reg_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
-	struct proc_dir_entry *pde = PDE(file_inode(file));
+	struct proc_dir_entry *pde = PDE(file->f_path.dentry->d_inode);
 	ssize_t rv = -EIO;
 	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *);
 
@@ -224,7 +221,7 @@ static ssize_t proc_reg_write(struct file *file, const char __user *buf, size_t 
 
 static unsigned int proc_reg_poll(struct file *file, struct poll_table_struct *pts)
 {
-	struct proc_dir_entry *pde = PDE(file_inode(file));
+	struct proc_dir_entry *pde = PDE(file->f_path.dentry->d_inode);
 	unsigned int rv = DEFAULT_POLLMASK;
 	unsigned int (*poll)(struct file *, struct poll_table_struct *);
 
@@ -246,7 +243,7 @@ static unsigned int proc_reg_poll(struct file *file, struct poll_table_struct *p
 
 static long proc_reg_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct proc_dir_entry *pde = PDE(file_inode(file));
+	struct proc_dir_entry *pde = PDE(file->f_path.dentry->d_inode);
 	long rv = -ENOTTY;
 	long (*ioctl)(struct file *, unsigned int, unsigned long);
 
@@ -269,7 +266,7 @@ static long proc_reg_unlocked_ioctl(struct file *file, unsigned int cmd, unsigne
 #ifdef CONFIG_COMPAT
 static long proc_reg_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct proc_dir_entry *pde = PDE(file_inode(file));
+	struct proc_dir_entry *pde = PDE(file->f_path.dentry->d_inode);
 	long rv = -ENOTTY;
 	long (*compat_ioctl)(struct file *, unsigned int, unsigned long);
 
@@ -292,7 +289,7 @@ static long proc_reg_compat_ioctl(struct file *file, unsigned int cmd, unsigned 
 
 static int proc_reg_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct proc_dir_entry *pde = PDE(file_inode(file));
+	struct proc_dir_entry *pde = PDE(file->f_path.dentry->d_inode);
 	int rv = -EIO;
 	int (*mmap)(struct file *, struct vm_area_struct *);
 
@@ -446,10 +443,12 @@ static const struct file_operations proc_reg_file_ops_no_compat = {
 
 struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 {
-	struct inode *inode = new_inode_pseudo(sb);
+	struct inode * inode;
 
-	if (inode) {
-		inode->i_ino = de->low_ino;
+	inode = iget_locked(sb, de->low_ino);
+	if (!inode)
+		return NULL;
+	if (inode->i_state & I_NEW) {
 		inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 		PROC_I(inode)->pde = de;
 
@@ -477,15 +476,14 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 				inode->i_fop = de->proc_fops;
 			}
 		}
+		unlock_new_inode(inode);
 	} else
 	       pde_put(de);
 	return inode;
-}
+}			
 
 int proc_fill_super(struct super_block *s)
 {
-	struct inode *root_inode;
-
 	s->s_flags |= MS_NODIRATIME | MS_NOSUID | MS_NOEXEC;
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
@@ -494,17 +492,11 @@ int proc_fill_super(struct super_block *s)
 	s->s_time_gran = 1;
 	
 	pde_get(&proc_root);
-	root_inode = proc_get_inode(s, &proc_root);
-	if (!root_inode) {
-		pr_err("proc_fill_super: get root inode failed\n");
-		return -ENOMEM;
-	}
+	s->s_root = d_make_root(proc_get_inode(s, &proc_root));
+	if (s->s_root)
+		return 0;
 
-	s->s_root = d_make_root(root_inode);
-	if (!s->s_root) {
-		pr_err("proc_fill_super: allocate dentry failed\n");
-		return -ENOMEM;
-	}
-
-	return 0;
+	printk("proc_read_super: get root inode failed\n");
+	pde_put(&proc_root);
+	return -ENOMEM;
 }

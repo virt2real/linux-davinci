@@ -41,6 +41,7 @@
 #include <linux/platform_data/mmc-mxcmmc.h>
 
 #include <linux/platform_data/dma-imx.h>
+#include <mach/hardware.h>
 
 #define DRIVER_NAME "mxc-mmc"
 #define MXCMCI_TIMEOUT_MS 10000
@@ -112,11 +113,6 @@
 #define INT_WRITE_OP_DONE_EN		(1 << 1)
 #define INT_READ_OP_EN			(1 << 0)
 
-enum mxcmci_type {
-	IMX21_MMC,
-	IMX31_MMC,
-};
-
 struct mxcmci_host {
 	struct mmc_host		*mmc;
 	struct resource		*res;
@@ -157,26 +153,7 @@ struct mxcmci_host {
 	struct imx_dma_data	dma_data;
 
 	struct timer_list	watchdog;
-	enum mxcmci_type	devtype;
 };
-
-static struct platform_device_id mxcmci_devtype[] = {
-	{
-		.name = "imx21-mmc",
-		.driver_data = IMX21_MMC,
-	}, {
-		.name = "imx31-mmc",
-		.driver_data = IMX31_MMC,
-	}, {
-		/* sentinel */
-	}
-};
-MODULE_DEVICE_TABLE(platform, mxcmci_devtype);
-
-static inline int is_imx31_mmc(struct mxcmci_host *host)
-{
-	return host->devtype == IMX31_MMC;
-}
 
 static void mxcmci_set_clk_rate(struct mxcmci_host *host, unsigned int clk_ios);
 
@@ -263,7 +240,7 @@ static int mxcmci_setup_data(struct mxcmci_host *host, struct mmc_data *data)
 		return 0;
 
 	for_each_sg(data->sg, sg, data->sg_len, i) {
-		if (sg->offset & 3 || sg->length & 3 || sg->length < 512) {
+		if (sg->offset & 3 || sg->length & 3) {
 			host->do_dma = 0;
 			return 0;
 		}
@@ -866,8 +843,6 @@ static void mxcmci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 
 static void mxcmci_init_card(struct mmc_host *host, struct mmc_card *card)
 {
-	struct mxcmci_host *mxcmci = mmc_priv(host);
-
 	/*
 	 * MX3 SoCs have a silicon bug which corrupts CRC calculation of
 	 * multi-block transfers when connected SDIO peripheral doesn't
@@ -875,7 +850,7 @@ static void mxcmci_init_card(struct mmc_host *host, struct mmc_card *card)
 	 * One way to prevent this is to only allow 1-bit transfers.
 	 */
 
-	if (is_imx31_mmc(mxcmci) && card->type == MMC_TYPE_SDIO)
+	if (cpu_is_mx3() && card->type == MMC_TYPE_SDIO)
 		host->caps &= ~MMC_CAP_4_BIT_DATA;
 	else
 		host->caps |= MMC_CAP_4_BIT_DATA;
@@ -973,7 +948,6 @@ static int mxcmci_probe(struct platform_device *pdev)
 
 	host->mmc = mmc;
 	host->pdata = pdev->dev.platform_data;
-	host->devtype = pdev->id_entry->driver_data;
 	spin_lock_init(&host->lock);
 
 	mxcmci_init_ocr(host);
@@ -1146,7 +1120,6 @@ static const struct dev_pm_ops mxcmci_pm_ops = {
 static struct platform_driver mxcmci_driver = {
 	.probe		= mxcmci_probe,
 	.remove		= mxcmci_remove,
-	.id_table	= mxcmci_devtype,
 	.driver		= {
 		.name		= DRIVER_NAME,
 		.owner		= THIS_MODULE,
@@ -1161,4 +1134,4 @@ module_platform_driver(mxcmci_driver);
 MODULE_DESCRIPTION("i.MX Multimedia Card Interface Driver");
 MODULE_AUTHOR("Sascha Hauer, Pengutronix");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("platform:mxc-mmc");
+MODULE_ALIAS("platform:imx-mmc");

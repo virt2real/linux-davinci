@@ -2036,8 +2036,10 @@ static void collect_usb_address_map(struct usb_device *udev, unsigned long *map)
 	    udev->parent->descriptor.bDeviceClass == USB_CLASS_HUB)
 		map[udev->devnum/32] |= (1 << (udev->devnum % 32));
 
-	usb_hub_for_each_child(udev, chix, childdev)
-		collect_usb_address_map(childdev, map);
+	usb_hub_for_each_child(udev, chix, childdev) {
+		if (childdev)
+			collect_usb_address_map(childdev, map);
+	}
 }
 
 /* this function must be called with interrupt disabled */
@@ -2391,7 +2393,7 @@ static const struct dev_pm_ops r8a66597_dev_pm_ops = {
 #define R8A66597_DEV_PM_OPS	NULL
 #endif
 
-static int r8a66597_remove(struct platform_device *pdev)
+static int __devexit r8a66597_remove(struct platform_device *pdev)
 {
 	struct r8a66597		*r8a66597 = dev_get_drvdata(&pdev->dev);
 	struct usb_hcd		*hcd = r8a66597_to_hcd(r8a66597);
@@ -2405,7 +2407,7 @@ static int r8a66597_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int r8a66597_probe(struct platform_device *pdev)
+static int __devinit r8a66597_probe(struct platform_device *pdev)
 {
 	char clk_name[8];
 	struct resource *res = NULL, *ires;
@@ -2532,7 +2534,7 @@ clean_up:
 
 static struct platform_driver r8a66597_driver = {
 	.probe =	r8a66597_probe,
-	.remove =	r8a66597_remove,
+	.remove =	__devexit_p(r8a66597_remove),
 	.driver		= {
 		.name = (char *) hcd_name,
 		.owner	= THIS_MODULE,

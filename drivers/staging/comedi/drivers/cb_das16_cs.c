@@ -40,9 +40,8 @@ Status: experimental
 
 #include <linux/interrupt.h>
 #include <linux/slab.h>
-#include <linux/delay.h>
-
 #include "../comedidev.h"
+#include <linux/delay.h>
 
 #include <pcmcia/cistpl.h>
 #include <pcmcia/ds.h>
@@ -89,6 +88,8 @@ struct das16cs_private {
 	unsigned short status1;
 	unsigned short status2;
 };
+
+static struct pcmcia_device *cur_dev;
 
 static const struct comedi_lrange das16cs_ai_range = {
 	4, {
@@ -193,41 +194,67 @@ static int das16cs_ai_cmdtest(struct comedi_device *dev,
 	if (err)
 		return 2;
 
-	/* Step 3: check if arguments are trivially valid */
+	/* step 3: make sure arguments are trivially compatible */
 
-	err |= cfc_check_trigger_arg_is(&cmd->start_arg, 0);
-
+	if (cmd->start_arg != 0) {
+		cmd->start_arg = 0;
+		err++;
+	}
 #define MAX_SPEED	10000	/* in nanoseconds */
 #define MIN_SPEED	1000000000	/* in nanoseconds */
 
 	if (cmd->scan_begin_src == TRIG_TIMER) {
-		err |= cfc_check_trigger_arg_min(&cmd->scan_begin_arg,
-						 MAX_SPEED);
-		err |= cfc_check_trigger_arg_max(&cmd->scan_begin_arg,
-						 MIN_SPEED);
+		if (cmd->scan_begin_arg < MAX_SPEED) {
+			cmd->scan_begin_arg = MAX_SPEED;
+			err++;
+		}
+		if (cmd->scan_begin_arg > MIN_SPEED) {
+			cmd->scan_begin_arg = MIN_SPEED;
+			err++;
+		}
 	} else {
 		/* external trigger */
 		/* should be level/edge, hi/lo specification here */
 		/* should specify multiple external triggers */
-		err |= cfc_check_trigger_arg_max(&cmd->scan_begin_arg, 9);
+		if (cmd->scan_begin_arg > 9) {
+			cmd->scan_begin_arg = 9;
+			err++;
+		}
 	}
 	if (cmd->convert_src == TRIG_TIMER) {
-		err |= cfc_check_trigger_arg_min(&cmd->convert_arg,
-						 MAX_SPEED);
-		err |= cfc_check_trigger_arg_max(&cmd->convert_arg,
-						 MIN_SPEED);
+		if (cmd->convert_arg < MAX_SPEED) {
+			cmd->convert_arg = MAX_SPEED;
+			err++;
+		}
+		if (cmd->convert_arg > MIN_SPEED) {
+			cmd->convert_arg = MIN_SPEED;
+			err++;
+		}
 	} else {
 		/* external trigger */
 		/* see above */
-		err |= cfc_check_trigger_arg_max(&cmd->convert_arg, 9);
+		if (cmd->convert_arg > 9) {
+			cmd->convert_arg = 9;
+			err++;
+		}
 	}
 
-	err |= cfc_check_trigger_arg_is(&cmd->scan_end_arg, cmd->chanlist_len);
-
-	if (cmd->stop_src == TRIG_COUNT)
-		err |= cfc_check_trigger_arg_max(&cmd->stop_arg, 0x00ffffff);
-	else	/* TRIG_NONE */
-		err |= cfc_check_trigger_arg_is(&cmd->stop_arg, 0);
+	if (cmd->scan_end_arg != cmd->chanlist_len) {
+		cmd->scan_end_arg = cmd->chanlist_len;
+		err++;
+	}
+	if (cmd->stop_src == TRIG_COUNT) {
+		if (cmd->stop_arg > 0x00ffffff) {
+			cmd->stop_arg = 0x00ffffff;
+			err++;
+		}
+	} else {
+		/* TRIG_NONE */
+		if (cmd->stop_arg != 0) {
+			cmd->stop_arg = 0;
+			err++;
+		}
+	}
 
 	if (err)
 		return 3;
@@ -382,52 +409,50 @@ static int das16cs_dio_insn_config(struct comedi_device *dev,
 	return insn->n;
 }
 
-static const void *das16cs_find_boardinfo(struct comedi_device *dev,
-					  struct pcmcia_device *link)
+static const struct das16cs_board *das16cs_probe(struct comedi_device *dev,
+						 struct pcmcia_device *link)
 {
-	const struct das16cs_board *board;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(das16cs_boards); i++) {
-		board = &das16cs_boards[i];
-		if (board->device_id == link->card_id)
-			return board;
+		if (das16cs_boards[i].device_id == link->card_id)
+			return das16cs_boards + i;
 	}
+
+	dev_dbg(dev->class_dev, "unknown board!\n");
 
 	return NULL;
 }
 
-static int das16cs_auto_attach(struct comedi_device *dev,
-			       unsigned long context)
+static int das16cs_attach(struct comedi_device *dev,
+			  struct comedi_devconfig *it)
 {
-	struct pcmcia_device *link = comedi_to_pcmcia_dev(dev);
-	const struct das16cs_board *board;
-	struct das16cs_private *devpriv;
+	const struct das16cs_board *thisboard;
+	struct pcmcia_device *link;
 	struct comedi_subdevice *s;
 	int ret;
 
-	board = das16cs_find_boardinfo(dev, link);
-	if (!board)
-		return -ENODEV;
-	dev->board_ptr = board;
-	dev->board_name = board->name;
+	link = cur_dev;		/* XXX hack */
+	if (!link)
+		return -EIO;
 
-	link->config_flags |= CONF_AUTO_SET_IO | CONF_ENABLE_IRQ;
-	ret = comedi_pcmcia_enable(dev, NULL);
-	if (ret)
-		return ret;
+	dev->board_ptr = das16cs_probe(dev, link);
+	if (!dev->board_ptr)
+		return -EIO;
+	thisboard = comedi_board(dev);
+
+	dev->board_name = thisboard->name;
+
 	dev->iobase = link->resource[0]->start;
 
-	link->priv = dev;
-	ret = pcmcia_request_irq(link, das16cs_interrupt);
-	if (ret)
+	ret = request_irq(link->irq, das16cs_interrupt,
+			  IRQF_SHARED, "cb_das16_cs", dev);
+	if (ret < 0)
 		return ret;
 	dev->irq = link->irq;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
+	if (alloc_private(dev, sizeof(struct das16cs_private)) < 0)
 		return -ENOMEM;
-	dev->private = devpriv;
 
 	ret = comedi_alloc_subdevices(dev, 3);
 	if (ret)
@@ -448,10 +473,10 @@ static int das16cs_auto_attach(struct comedi_device *dev,
 
 	s = &dev->subdevices[1];
 	/* analog output subdevice */
-	if (board->n_ao_chans) {
+	if (thisboard->n_ao_chans) {
 		s->type		= COMEDI_SUBD_AO;
 		s->subdev_flags	= SDF_WRITABLE;
-		s->n_chan	= board->n_ao_chans;
+		s->n_chan	= thisboard->n_ao_chans;
 		s->maxdata	= 0xffff;
 		s->range_table	= &range_bipolar10;
 		s->insn_write	= &das16cs_ao_winsn;
@@ -477,16 +502,58 @@ static int das16cs_auto_attach(struct comedi_device *dev,
 	return 0;
 }
 
+static void das16cs_detach(struct comedi_device *dev)
+{
+	if (dev->irq)
+		free_irq(dev->irq, dev);
+}
+
 static struct comedi_driver driver_das16cs = {
 	.driver_name	= "cb_das16_cs",
 	.module		= THIS_MODULE,
-	.auto_attach	= das16cs_auto_attach,
-	.detach		= comedi_pcmcia_disable,
+	.attach		= das16cs_attach,
+	.detach		= das16cs_detach,
 };
+
+static int das16cs_pcmcia_config_loop(struct pcmcia_device *p_dev,
+				void *priv_data)
+{
+	if (p_dev->config_index == 0)
+		return -EINVAL;
+
+	return pcmcia_request_io(p_dev);
+}
 
 static int das16cs_pcmcia_attach(struct pcmcia_device *link)
 {
-	return comedi_pcmcia_auto_config(link, &driver_das16cs);
+	int ret;
+
+	/* Do we need to allocate an interrupt? */
+	link->config_flags |= CONF_ENABLE_IRQ | CONF_AUTO_SET_IO;
+
+	ret = pcmcia_loop_config(link, das16cs_pcmcia_config_loop, NULL);
+	if (ret)
+		goto failed;
+
+	if (!link->irq)
+		goto failed;
+
+	ret = pcmcia_enable_device(link);
+	if (ret)
+		goto failed;
+
+	cur_dev = link;
+	return 0;
+
+failed:
+	pcmcia_disable_device(link);
+	return ret;
+}
+
+static void das16cs_pcmcia_detach(struct pcmcia_device *link)
+{
+	pcmcia_disable_device(link);
+	cur_dev = NULL;
 }
 
 static const struct pcmcia_device_id das16cs_id_table[] = {
@@ -499,11 +566,35 @@ MODULE_DEVICE_TABLE(pcmcia, das16cs_id_table);
 static struct pcmcia_driver das16cs_driver = {
 	.name		= "cb_das16_cs",
 	.owner		= THIS_MODULE,
-	.id_table	= das16cs_id_table,
 	.probe		= das16cs_pcmcia_attach,
-	.remove		= comedi_pcmcia_auto_unconfig,
+	.remove		= das16cs_pcmcia_detach,
+	.id_table	= das16cs_id_table,
 };
-module_comedi_pcmcia_driver(driver_das16cs, das16cs_driver);
+
+static int __init das16cs_init(void)
+{
+	int ret;
+
+	ret = comedi_driver_register(&driver_das16cs);
+	if (ret < 0)
+		return ret;
+
+	ret = pcmcia_register_driver(&das16cs_driver);
+	if (ret < 0) {
+		comedi_driver_unregister(&driver_das16cs);
+		return ret;
+	}
+
+	return 0;
+}
+module_init(das16cs_init);
+
+static void __exit das16cs_exit(void)
+{
+	pcmcia_unregister_driver(&das16cs_driver);
+	comedi_driver_unregister(&driver_das16cs);
+}
+module_exit(das16cs_exit);
 
 MODULE_AUTHOR("David A. Schleef <ds@schleef.org>");
 MODULE_DESCRIPTION("Comedi driver for Computer Boards PC-CARD DAS16/16");

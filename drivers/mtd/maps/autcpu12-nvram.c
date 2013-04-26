@@ -16,7 +16,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#include <linux/err.h>
 #include <linux/sizes.h>
 
 #include <linux/types.h>
@@ -34,7 +33,7 @@ struct autcpu12_nvram_priv {
 	struct map_info map;
 };
 
-static int autcpu12_nvram_probe(struct platform_device *pdev)
+static int __devinit autcpu12_nvram_probe(struct platform_device *pdev)
 {
 	map_word tmp, save0, save1;
 	struct resource *res;
@@ -56,10 +55,12 @@ static int autcpu12_nvram_probe(struct platform_device *pdev)
 	priv->map.bankwidth	= 4;
 	priv->map.phys		= res->start;
 	priv->map.size		= resource_size(res);
-	priv->map.virt = devm_ioremap_resource(&pdev->dev, res);
+	priv->map.virt		= devm_request_and_ioremap(&pdev->dev, res);
 	strcpy((char *)priv->map.name, res->name);
-	if (IS_ERR(priv->map.virt))
-		return PTR_ERR(priv->map.virt);
+	if (!priv->map.virt) {
+		dev_err(&pdev->dev, "failed to remap mem resource\n");
+		return -EBUSY;
+	}
 
 	simple_map_init(&priv->map);
 
@@ -104,7 +105,7 @@ static int autcpu12_nvram_probe(struct platform_device *pdev)
 	return -ENOMEM;
 }
 
-static int autcpu12_nvram_remove(struct platform_device *pdev)
+static int __devexit autcpu12_nvram_remove(struct platform_device *pdev)
 {
 	struct autcpu12_nvram_priv *priv = platform_get_drvdata(pdev);
 
@@ -120,7 +121,7 @@ static struct platform_driver autcpu12_nvram_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= autcpu12_nvram_probe,
-	.remove		= autcpu12_nvram_remove,
+	.remove		= __devexit_p(autcpu12_nvram_remove),
 };
 module_platform_driver(autcpu12_nvram_driver);
 

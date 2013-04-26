@@ -1511,7 +1511,8 @@ error_exit_with_cleanup:
 
 	if (hcr_base)
 		iounmap(hcr_base);
-	kfree(host_priv);
+	if (host_priv)
+		kfree(host_priv);
 
 	return retval;
 }

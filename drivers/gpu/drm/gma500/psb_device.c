@@ -194,7 +194,7 @@ static int psb_save_display_registers(struct drm_device *dev)
 	regs->saveCHICKENBIT = PSB_RVDC32(DSPCHICKENBIT);
 
 	/* Save crtc and output state */
-	drm_modeset_lock_all(dev);
+	mutex_lock(&dev->mode_config.mutex);
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		if (drm_helper_crtc_in_use(crtc))
 			crtc->funcs->save(crtc);
@@ -204,7 +204,7 @@ static int psb_save_display_registers(struct drm_device *dev)
 		if (connector->funcs->save)
 			connector->funcs->save(connector);
 
-	drm_modeset_unlock_all(dev);
+	mutex_unlock(&dev->mode_config.mutex);
 	return 0;
 }
 
@@ -234,7 +234,7 @@ static int psb_restore_display_registers(struct drm_device *dev)
 	/*make sure VGA plane is off. it initializes to on after reset!*/
 	PSB_WVDC32(0x80000000, VGACNTRL);
 
-	drm_modeset_lock_all(dev);
+	mutex_lock(&dev->mode_config.mutex);
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
 		if (drm_helper_crtc_in_use(crtc))
 			crtc->funcs->restore(crtc);
@@ -243,7 +243,7 @@ static int psb_restore_display_registers(struct drm_device *dev)
 		if (connector->funcs->restore)
 			connector->funcs->restore(connector);
 
-	drm_modeset_unlock_all(dev);
+	mutex_unlock(&dev->mode_config.mutex);
 	return 0;
 }
 

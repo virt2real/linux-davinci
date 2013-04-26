@@ -69,11 +69,8 @@ struct nf_conntrack_expect_policy {
 
 #define NF_CT_EXPECT_CLASS_DEFAULT	0
 
-int nf_conntrack_expect_pernet_init(struct net *net);
-void nf_conntrack_expect_pernet_fini(struct net *net);
-
-int nf_conntrack_expect_init(void);
-void nf_conntrack_expect_fini(void);
+int nf_conntrack_expect_init(struct net *net);
+void nf_conntrack_expect_fini(struct net *net);
 
 struct nf_conntrack_expect *
 __nf_ct_expect_find(struct net *net, u16 zone,

@@ -14,8 +14,11 @@
 #define pr_fmt(fmt) "SPEAr3xx: " fmt
 
 #include <linux/amba/pl022.h>
-#include <linux/amba/pl080.h>
+#include <linux/amba/pl08x.h>
+#include <linux/of_irq.h>
 #include <linux/io.h>
+#include <asm/hardware/pl080.h>
+#include <asm/hardware/vic.h>
 #include <plat/pl080.h>
 #include <mach/generic.h>
 #include <mach/spear.h>
@@ -83,7 +86,7 @@ void __init spear3xx_map_io(void)
 	iotable_init(spear3xx_io_desc, ARRAY_SIZE(spear3xx_io_desc));
 }
 
-void __init spear3xx_timer_init(void)
+static void __init spear3xx_timer_init(void)
 {
 	char pclk_name[] = "pll3_clk";
 	struct clk *gpt_clk, *pclk;
@@ -110,4 +113,18 @@ void __init spear3xx_timer_init(void)
 	clk_put(pclk);
 
 	spear_setup_of_timer();
+}
+
+struct sys_timer spear3xx_timer = {
+	.init = spear3xx_timer_init,
+};
+
+static const struct of_device_id vic_of_match[] __initconst = {
+	{ .compatible = "arm,pl190-vic", .data = vic_of_init, },
+	{ /* Sentinel */ }
+};
+
+void __init spear3xx_dt_init_irq(void)
+{
+	of_irq_init(vic_of_match);
 }

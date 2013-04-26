@@ -35,6 +35,7 @@
 #include <mach/regs-gpio.h>
 #include <mach/regs-lcd.h>
 
+#include <mach/idle.h>
 #include <mach/fb.h>
 #include <linux/platform_data/i2c-s3c2410.h>
 
@@ -140,9 +141,9 @@ MACHINE_START(SMDK2443, "SMDK2443")
 	/* Maintainer: Ben Dooks <ben-linux@fluff.org> */
 	.atag_offset	= 0x100,
 
-	.init_irq	= s3c2443_init_irq,
+	.init_irq	= s3c24xx_init_irq,
 	.map_io		= smdk2443_map_io,
 	.init_machine	= smdk2443_machine_init,
-	.init_time	= s3c24xx_timer_init,
+	.timer		= &s3c24xx_timer,
 	.restart	= s3c2443_restart,
 MACHINE_END

@@ -842,7 +842,7 @@ static const struct snd_pcm_chmap_elem clfe_map[] = {
 	{ }
 };
 
-static int snd_emu10k1x_pcm(struct emu10k1x *emu, int device, struct snd_pcm **rpcm)
+static int __devinit snd_emu10k1x_pcm(struct emu10k1x *emu, int device, struct snd_pcm **rpcm)
 {
 	struct snd_pcm *pcm;
 	const struct snd_pcm_chmap_elem *map = NULL;
@@ -902,9 +902,9 @@ static int snd_emu10k1x_pcm(struct emu10k1x *emu, int device, struct snd_pcm **r
 	return 0;
 }
 
-static int snd_emu10k1x_create(struct snd_card *card,
-			       struct pci_dev *pci,
-			       struct emu10k1x **rchip)
+static int __devinit snd_emu10k1x_create(struct snd_card *card,
+					 struct pci_dev *pci,
+					 struct emu10k1x **rchip)
 {
 	struct emu10k1x *chip;
 	int err;
@@ -1066,7 +1066,7 @@ static void snd_emu10k1x_proc_reg_write(struct snd_info_entry *entry,
 	}
 }
 
-static int snd_emu10k1x_proc_init(struct emu10k1x *emu)
+static int __devinit snd_emu10k1x_proc_init(struct emu10k1x * emu)
 {
 	struct snd_info_entry *entry;
 	
@@ -1115,7 +1115,7 @@ static int snd_emu10k1x_shared_spdif_put(struct snd_kcontrol *kcontrol,
 	return change;
 }
 
-static struct snd_kcontrol_new snd_emu10k1x_shared_spdif =
+static struct snd_kcontrol_new snd_emu10k1x_shared_spdif __devinitdata =
 {
 	.iface =	SNDRV_CTL_ELEM_IFACE_MIXER,
 	.name =		"Analog/Digital Output Jack",
@@ -1194,7 +1194,7 @@ static struct snd_kcontrol_new snd_emu10k1x_spdif_control =
 	.put =          snd_emu10k1x_spdif_put
 };
 
-static int snd_emu10k1x_mixer(struct emu10k1x *emu)
+static int __devinit snd_emu10k1x_mixer(struct emu10k1x *emu)
 {
 	int err;
 	struct snd_kcontrol *kctl;
@@ -1507,9 +1507,8 @@ static void snd_emu10k1x_midi_free(struct snd_rawmidi *rmidi)
 	midi->rmidi = NULL;
 }
 
-static int emu10k1x_midi_init(struct emu10k1x *emu,
-			      struct emu10k1x_midi *midi, int device,
-			      char *name)
+static int __devinit emu10k1x_midi_init(struct emu10k1x *emu,
+					struct emu10k1x_midi *midi, int device, char *name)
 {
 	struct snd_rawmidi *rmidi;
 	int err;
@@ -1532,7 +1531,7 @@ static int emu10k1x_midi_init(struct emu10k1x *emu,
 	return 0;
 }
 
-static int snd_emu10k1x_midi(struct emu10k1x *emu)
+static int __devinit snd_emu10k1x_midi(struct emu10k1x *emu)
 {
 	struct emu10k1x_midi *midi = &emu->midi;
 	int err;
@@ -1549,8 +1548,8 @@ static int snd_emu10k1x_midi(struct emu10k1x *emu)
 	return 0;
 }
 
-static int snd_emu10k1x_probe(struct pci_dev *pci,
-			      const struct pci_device_id *pci_id)
+static int __devinit snd_emu10k1x_probe(struct pci_dev *pci,
+					const struct pci_device_id *pci_id)
 {
 	static int dev;
 	struct snd_card *card;
@@ -1620,7 +1619,7 @@ static int snd_emu10k1x_probe(struct pci_dev *pci,
 	return 0;
 }
 
-static void snd_emu10k1x_remove(struct pci_dev *pci)
+static void __devexit snd_emu10k1x_remove(struct pci_dev *pci)
 {
 	snd_card_free(pci_get_drvdata(pci));
 	pci_set_drvdata(pci, NULL);
@@ -1638,7 +1637,7 @@ static struct pci_driver emu10k1x_driver = {
 	.name = KBUILD_MODNAME,
 	.id_table = snd_emu10k1x_ids,
 	.probe = snd_emu10k1x_probe,
-	.remove = snd_emu10k1x_remove,
+	.remove = __devexit_p(snd_emu10k1x_remove),
 };
 
 module_pci_driver(emu10k1x_driver);

@@ -6,6 +6,9 @@ Required properties:
 - interrupts: rtc timer, alarm interrupts in order
 - interrupt-parent: phandle for the interrupt controller
 
+Alternative for reg and interrupt properties on OMAP:
+- ti,hwmods: Name of the hwmod associated to the RTC
+
 Example:
 
 rtc@1c23000 {

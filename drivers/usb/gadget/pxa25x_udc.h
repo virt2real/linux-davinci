@@ -126,7 +126,6 @@ struct pxa25x_udc {
 	struct dentry				*debugfs_udc;
 #endif
 };
-#define to_pxa25x(g)	(container_of((g), struct pxa25x_udc, gadget))
 
 /*-------------------------------------------------------------------------*/
 

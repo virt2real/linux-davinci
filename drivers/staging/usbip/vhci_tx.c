@@ -46,17 +46,18 @@ static void setup_cmd_submit_pdu(struct usbip_header *pdup,  struct urb *urb)
 
 static struct vhci_priv *dequeue_from_priv_tx(struct vhci_device *vdev)
 {
+	unsigned long flags;
 	struct vhci_priv *priv, *tmp;
 
-	spin_lock(&vdev->priv_lock);
+	spin_lock_irqsave(&vdev->priv_lock, flags);
 
 	list_for_each_entry_safe(priv, tmp, &vdev->priv_tx, list) {
 		list_move_tail(&priv->list, &vdev->priv_rx);
-		spin_unlock(&vdev->priv_lock);
+		spin_unlock_irqrestore(&vdev->priv_lock, flags);
 		return priv;
 	}
 
-	spin_unlock(&vdev->priv_lock);
+	spin_unlock_irqrestore(&vdev->priv_lock, flags);
 
 	return NULL;
 }
@@ -75,7 +76,7 @@ static int vhci_send_cmd_submit(struct vhci_device *vdev)
 		int ret;
 		struct urb *urb = priv->urb;
 		struct usbip_header pdu_header;
-		struct usbip_iso_packet_descriptor *iso_buffer = NULL;
+		void *iso_buffer = NULL;
 
 		txsize = 0;
 		memset(&pdu_header, 0, sizeof(pdu_header));
@@ -135,17 +136,18 @@ static int vhci_send_cmd_submit(struct vhci_device *vdev)
 
 static struct vhci_unlink *dequeue_from_unlink_tx(struct vhci_device *vdev)
 {
+	unsigned long flags;
 	struct vhci_unlink *unlink, *tmp;
 
-	spin_lock(&vdev->priv_lock);
+	spin_lock_irqsave(&vdev->priv_lock, flags);
 
 	list_for_each_entry_safe(unlink, tmp, &vdev->unlink_tx, list) {
 		list_move_tail(&unlink->list, &vdev->unlink_rx);
-		spin_unlock(&vdev->priv_lock);
+		spin_unlock_irqrestore(&vdev->priv_lock, flags);
 		return unlink;
 	}
 
-	spin_unlock(&vdev->priv_lock);
+	spin_unlock_irqrestore(&vdev->priv_lock, flags);
 
 	return NULL;
 }

@@ -761,7 +761,7 @@ static int vidioc_querybuf(struct file *file,
 	if (vb->index >= usbvision->num_frames)
 		return -EINVAL;
 	/* Updating the corresponding frame state */
-	vb->flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+	vb->flags = 0;
 	frame = &usbvision->frame[vb->index];
 	if (frame->grabstate >= frame_state_ready)
 		vb->flags |= V4L2_BUF_FLAG_QUEUED;
@@ -843,8 +843,7 @@ static int vidioc_dqbuf(struct file *file, void *priv, struct v4l2_buffer *vb)
 	vb->memory = V4L2_MEMORY_MMAP;
 	vb->flags = V4L2_BUF_FLAG_MAPPED |
 		V4L2_BUF_FLAG_QUEUED |
-		V4L2_BUF_FLAG_DONE |
-		V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+		V4L2_BUF_FLAG_DONE;
 	vb->index = f->index;
 	vb->sequence = f->sequence;
 	vb->timestamp = f->timestamp;
@@ -1364,7 +1363,7 @@ static void usbvision_unregister_video(struct usb_usbvision *usbvision)
 }
 
 /* register video4linux devices */
-static int usbvision_register_video(struct usb_usbvision *usbvision)
+static int __devinit usbvision_register_video(struct usb_usbvision *usbvision)
 {
 	/* Video Device: */
 	usbvision->vdev = usbvision_vdev_init(usbvision,
@@ -1511,8 +1510,8 @@ static void usbvision_configure_video(struct usb_usbvision *usbvision)
  * if it looks like USBVISION video device
  *
  */
-static int usbvision_probe(struct usb_interface *intf,
-			   const struct usb_device_id *devid)
+static int __devinit usbvision_probe(struct usb_interface *intf,
+				     const struct usb_device_id *devid)
 {
 	struct usb_device *dev = usb_get_dev(interface_to_usbdev(intf));
 	struct usb_interface *uif;
@@ -1620,7 +1619,7 @@ static int usbvision_probe(struct usb_interface *intf,
  * with no ill consequences.
  *
  */
-static void usbvision_disconnect(struct usb_interface *intf)
+static void __devexit usbvision_disconnect(struct usb_interface *intf)
 {
 	struct usb_usbvision *usbvision = to_usbvision(usb_get_intfdata(intf));
 
@@ -1665,7 +1664,7 @@ static struct usb_driver usbvision_driver = {
 	.name		= "usbvision",
 	.id_table	= usbvision_table,
 	.probe		= usbvision_probe,
-	.disconnect	= usbvision_disconnect,
+	.disconnect	= __devexit_p(usbvision_disconnect),
 };
 
 /*

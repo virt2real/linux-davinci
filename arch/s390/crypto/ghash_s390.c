@@ -72,16 +72,14 @@ static int ghash_update(struct shash_desc *desc,
 		if (!dctx->bytes) {
 			ret = crypt_s390_kimd(KIMD_GHASH, ctx, buf,
 					      GHASH_BLOCK_SIZE);
-			if (ret != GHASH_BLOCK_SIZE)
-				return -EIO;
+			BUG_ON(ret != GHASH_BLOCK_SIZE);
 		}
 	}
 
 	n = srclen & ~(GHASH_BLOCK_SIZE - 1);
 	if (n) {
 		ret = crypt_s390_kimd(KIMD_GHASH, ctx, src, n);
-		if (ret != n)
-			return -EIO;
+		BUG_ON(ret != n);
 		src += n;
 		srclen -= n;
 	}
@@ -94,7 +92,7 @@ static int ghash_update(struct shash_desc *desc,
 	return 0;
 }
 
-static int ghash_flush(struct ghash_ctx *ctx, struct ghash_desc_ctx *dctx)
+static void ghash_flush(struct ghash_ctx *ctx, struct ghash_desc_ctx *dctx)
 {
 	u8 *buf = dctx->buffer;
 	int ret;
@@ -105,24 +103,21 @@ static int ghash_flush(struct ghash_ctx *ctx, struct ghash_desc_ctx *dctx)
 		memset(pos, 0, dctx->bytes);
 
 		ret = crypt_s390_kimd(KIMD_GHASH, ctx, buf, GHASH_BLOCK_SIZE);
-		if (ret != GHASH_BLOCK_SIZE)
-			return -EIO;
+		BUG_ON(ret != GHASH_BLOCK_SIZE);
 	}
 
 	dctx->bytes = 0;
-	return 0;
 }
 
 static int ghash_final(struct shash_desc *desc, u8 *dst)
 {
 	struct ghash_desc_ctx *dctx = shash_desc_ctx(desc);
 	struct ghash_ctx *ctx = crypto_shash_ctx(desc->tfm);
-	int ret;
 
-	ret = ghash_flush(ctx, dctx);
-	if (!ret)
-		memcpy(dst, ctx->icv, GHASH_BLOCK_SIZE);
-	return ret;
+	ghash_flush(ctx, dctx);
+	memcpy(dst, ctx->icv, GHASH_BLOCK_SIZE);
+
+	return 0;
 }
 
 static struct shash_alg ghash_alg = {

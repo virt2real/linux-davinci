@@ -927,6 +927,8 @@ static void tosa_restart(char mode, const char *cmd)
 
 static void __init tosa_init(void)
 {
+	int dummy;
+
 	pxa2xx_mfp_config(ARRAY_AND_SIZE(tosa_pin_config));
 
 	pxa_set_ffuart_info(NULL);
@@ -944,6 +946,10 @@ static void __init tosa_init(void)
 
 	/* enable batt_fault */
 	PMCR = 0x01;
+
+	dummy = gpiochip_reserve(TOSA_SCOOP_GPIO_BASE, 12);
+	dummy = gpiochip_reserve(TOSA_SCOOP_JC_GPIO_BASE, 12);
+	dummy = gpiochip_reserve(TOSA_TC6393XB_GPIO_BASE, 16);
 
 	pxa_set_mci_info(&tosa_mci_platform_data);
 	pxa_set_ficp_info(&tosa_ficp_platform_data);
@@ -976,6 +982,6 @@ MACHINE_START(TOSA, "SHARP Tosa")
 	.init_irq       = pxa25x_init_irq,
 	.handle_irq       = pxa25x_handle_irq,
 	.init_machine   = tosa_init,
-	.init_time	= pxa_timer_init,
+	.timer          = &pxa_timer,
 	.restart	= tosa_restart,
 MACHINE_END

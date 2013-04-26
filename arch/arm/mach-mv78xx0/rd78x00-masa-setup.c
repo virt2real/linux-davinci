@@ -83,6 +83,6 @@ MACHINE_START(RD78X00_MASA, "Marvell RD-78x00-MASA Development Board")
 	.map_io		= mv78xx0_map_io,
 	.init_early	= mv78xx0_init_early,
 	.init_irq	= mv78xx0_init_irq,
-	.init_time	= mv78xx0_timer_init,
+	.timer		= &mv78xx0_timer,
 	.restart	= mv78xx0_restart,
 MACHINE_END

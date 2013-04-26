@@ -164,6 +164,7 @@ static int tweak_set_configuration_cmd(struct urb *urb)
 		 config, dev_name(&urb->dev->dev));
 
 	return 0;
+	/* return usb_driver_set_configuration(urb->dev, config); */
 }
 
 static int tweak_reset_device_cmd(struct urb *urb)
@@ -307,12 +308,12 @@ static int valid_request(struct stub_device *sdev, struct usbip_header *pdu)
 	int valid = 0;
 
 	if (pdu->base.devid == sdev->devid) {
-		spin_lock_irq(&ud->lock);
+		spin_lock(&ud->lock);
 		if (ud->status == SDEV_ST_USED) {
 			/* A request is valid. */
 			valid = 1;
 		}
-		spin_unlock_irq(&ud->lock);
+		spin_unlock(&ud->lock);
 	}
 
 	return valid;
@@ -479,18 +480,19 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 		return;
 	}
 
-	/* allocate urb transfer buffer, if needed */
+	/* set priv->urb->transfer_buffer */
 	if (pdu->u.cmd_submit.transfer_buffer_length > 0) {
 		priv->urb->transfer_buffer =
 			kzalloc(pdu->u.cmd_submit.transfer_buffer_length,
 				GFP_KERNEL);
 		if (!priv->urb->transfer_buffer) {
+			dev_err(&sdev->interface->dev, "malloc x_buff\n");
 			usbip_event_add(ud, SDEV_EVENT_ERROR_MALLOC);
 			return;
 		}
 	}
 
-	/* copy urb setup packet */
+	/* set priv->urb->setup_packet */
 	priv->urb->setup_packet = kmemdup(&pdu->u.cmd_submit.setup, 8,
 					  GFP_KERNEL);
 	if (!priv->urb->setup_packet) {

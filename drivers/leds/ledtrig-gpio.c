@@ -110,7 +110,7 @@ static ssize_t gpio_trig_inverted_store(struct device *dev,
 	unsigned long inverted;
 	int ret;
 
-	ret = kstrtoul(buf, 10, &inverted);
+	ret = strict_strtoul(buf, 10, &inverted);
 	if (ret < 0)
 		return ret;
 

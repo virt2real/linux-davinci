@@ -23,7 +23,6 @@
 #endif
 #include <net/netns/xfrm.h>
 
-struct user_namespace;
 struct proc_dir_entry;
 struct net_device;
 struct sock;
@@ -53,10 +52,6 @@ struct net {
 	struct list_head	list;		/* list of network namespaces */
 	struct list_head	cleanup_list;	/* namespaces on death row */
 	struct list_head	exit_list;	/* Use only net_mutex */
-
-	struct user_namespace   *user_ns;	/* Owning user namespace */
-
-	unsigned int		proc_inum;
 
 	struct proc_dir_entry 	*proc_net;
 	struct proc_dir_entry 	*proc_net_stat;
@@ -131,21 +126,16 @@ struct net {
 /* Init's network namespace */
 extern struct net init_net;
 
-#ifdef CONFIG_NET_NS
-extern struct net *copy_net_ns(unsigned long flags,
-	struct user_namespace *user_ns, struct net *old_net);
+#ifdef CONFIG_NET
+extern struct net *copy_net_ns(unsigned long flags, struct net *net_ns);
 
-#else /* CONFIG_NET_NS */
-#include <linux/sched.h>
-#include <linux/nsproxy.h>
-static inline struct net *copy_net_ns(unsigned long flags,
-	struct user_namespace *user_ns, struct net *old_net)
+#else /* CONFIG_NET */
+static inline struct net *copy_net_ns(unsigned long flags, struct net *net_ns)
 {
-	if (flags & CLONE_NEWNET)
-		return ERR_PTR(-EINVAL);
-	return old_net;
+	/* There is nothing to copy so this is a noop */
+	return net_ns;
 }
-#endif /* CONFIG_NET_NS */
+#endif /* CONFIG_NET */
 
 
 extern struct list_head net_namespace_list;

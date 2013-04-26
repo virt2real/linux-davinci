@@ -2088,18 +2088,11 @@ static void b43_print_fw_helptext(struct b43_wl *wl, bool error)
 		b43warn(wl, text);
 }
 
-static void b43_fw_cb(const struct firmware *firmware, void *context)
-{
-	struct b43_request_fw_context *ctx = context;
-
-	ctx->blob = firmware;
-	complete(&ctx->fw_load_complete);
-}
-
 int b43_do_request_fw(struct b43_request_fw_context *ctx,
 		      const char *name,
-		      struct b43_firmware_file *fw, bool async)
+		      struct b43_firmware_file *fw)
 {
+	const struct firmware *blob;
 	struct b43_fw_header *hdr;
 	u32 size;
 	int err;
@@ -2138,31 +2131,11 @@ int b43_do_request_fw(struct b43_request_fw_context *ctx,
 		B43_WARN_ON(1);
 		return -ENOSYS;
 	}
-	if (async) {
-		/* do this part asynchronously */
-		init_completion(&ctx->fw_load_complete);
-		err = request_firmware_nowait(THIS_MODULE, 1, ctx->fwname,
-					      ctx->dev->dev->dev, GFP_KERNEL,
-					      ctx, b43_fw_cb);
-		if (err < 0) {
-			pr_err("Unable to load firmware\n");
-			return err;
-		}
-		/* stall here until fw ready */
-		wait_for_completion(&ctx->fw_load_complete);
-		if (ctx->blob)
-			goto fw_ready;
-	/* On some ARM systems, the async request will fail, but the next sync
-	 * request works. For this reason, we dall through here
-	 */
-	}
-	err = request_firmware(&ctx->blob, ctx->fwname,
-			       ctx->dev->dev->dev);
+	err = request_firmware(&blob, ctx->fwname, ctx->dev->dev->dev);
 	if (err == -ENOENT) {
 		snprintf(ctx->errors[ctx->req_type],
 			 sizeof(ctx->errors[ctx->req_type]),
-			 "Firmware file \"%s\" not found\n",
-			 ctx->fwname);
+			 "Firmware file \"%s\" not found\n", ctx->fwname);
 		return err;
 	} else if (err) {
 		snprintf(ctx->errors[ctx->req_type],
@@ -2171,15 +2144,14 @@ int b43_do_request_fw(struct b43_request_fw_context *ctx,
 			 ctx->fwname, err);
 		return err;
 	}
-fw_ready:
-	if (ctx->blob->size < sizeof(struct b43_fw_header))
+	if (blob->size < sizeof(struct b43_fw_header))
 		goto err_format;
-	hdr = (struct b43_fw_header *)(ctx->blob->data);
+	hdr = (struct b43_fw_header *)(blob->data);
 	switch (hdr->type) {
 	case B43_FW_TYPE_UCODE:
 	case B43_FW_TYPE_PCM:
 		size = be32_to_cpu(hdr->size);
-		if (size != ctx->blob->size - sizeof(struct b43_fw_header))
+		if (size != blob->size - sizeof(struct b43_fw_header))
 			goto err_format;
 		/* fallthrough */
 	case B43_FW_TYPE_IV:
@@ -2190,7 +2162,7 @@ fw_ready:
 		goto err_format;
 	}
 
-	fw->data = ctx->blob;
+	fw->data = blob;
 	fw->filename = name;
 	fw->type = ctx->req_type;
 
@@ -2200,7 +2172,7 @@ err_format:
 	snprintf(ctx->errors[ctx->req_type],
 		 sizeof(ctx->errors[ctx->req_type]),
 		 "Firmware file \"%s\" format error.\n", ctx->fwname);
-	release_firmware(ctx->blob);
+	release_firmware(blob);
 
 	return -EPROTO;
 }
@@ -2251,7 +2223,7 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 			goto err_no_ucode;
 		}
 	}
-	err = b43_do_request_fw(ctx, filename, &fw->ucode, true);
+	err = b43_do_request_fw(ctx, filename, &fw->ucode);
 	if (err)
 		goto err_load;
 
@@ -2263,7 +2235,7 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 	else
 		goto err_no_pcm;
 	fw->pcm_request_failed = false;
-	err = b43_do_request_fw(ctx, filename, &fw->pcm, false);
+	err = b43_do_request_fw(ctx, filename, &fw->pcm);
 	if (err == -ENOENT) {
 		/* We did not find a PCM file? Not fatal, but
 		 * core rev <= 10 must do without hwcrypto then. */
@@ -2324,7 +2296,7 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 	default:
 		goto err_no_initvals;
 	}
-	err = b43_do_request_fw(ctx, filename, &fw->initvals, false);
+	err = b43_do_request_fw(ctx, filename, &fw->initvals);
 	if (err)
 		goto err_load;
 
@@ -2383,7 +2355,7 @@ static int b43_try_request_fw(struct b43_request_fw_context *ctx)
 	default:
 		goto err_no_initvals;
 	}
-	err = b43_do_request_fw(ctx, filename, &fw->initvals_band, false);
+	err = b43_do_request_fw(ctx, filename, &fw->initvals_band);
 	if (err)
 		goto err_load;
 
@@ -3425,7 +3397,7 @@ static void b43_tx_work(struct work_struct *work)
 				break;
 			}
 			if (unlikely(err))
-				ieee80211_free_txskb(wl->hw, skb);
+				dev_kfree_skb(skb); /* Drop it */
 			err = 0;
 		}
 
@@ -3447,7 +3419,7 @@ static void b43_op_tx(struct ieee80211_hw *hw,
 
 	if (unlikely(skb->len < 2 + 2 + 6)) {
 		/* Too short, this can't be a valid frame. */
-		ieee80211_free_txskb(hw, skb);
+		dev_kfree_skb_any(skb);
 		return;
 	}
 	B43_WARN_ON(skb_shinfo(skb)->nr_frags);
@@ -4214,6 +4186,7 @@ redo:
 	mutex_unlock(&wl->mutex);
 	cancel_delayed_work_sync(&dev->periodic_work);
 	cancel_work_sync(&wl->tx_work);
+	cancel_work_sync(&wl->firmware_load);
 	mutex_lock(&wl->mutex);
 	dev = wl->current_dev;
 	if (!dev || b43_status(dev) < B43_STAT_STARTED) {
@@ -4256,12 +4229,8 @@ redo:
 
 	/* Drain all TX queues. */
 	for (queue_num = 0; queue_num < B43_QOS_QUEUE_NUM; queue_num++) {
-		while (skb_queue_len(&wl->tx_queue[queue_num])) {
-			struct sk_buff *skb;
-
-			skb = skb_dequeue(&wl->tx_queue[queue_num]);
-			ieee80211_free_txskb(wl->hw, skb);
-		}
+		while (skb_queue_len(&wl->tx_queue[queue_num]))
+			dev_kfree_skb(skb_dequeue(&wl->tx_queue[queue_num]));
 	}
 
 	b43_mac_suspend(dev);
@@ -4683,7 +4652,7 @@ static int b43_wireless_core_init(struct b43_wldev *dev)
 	switch (dev->dev->bus_type) {
 #ifdef CONFIG_B43_BCMA
 	case B43_BUS_BCMA:
-		bcma_core_pci_irq_ctl(&dev->dev->bdev->bus->drv_pci[0],
+		bcma_core_pci_irq_ctl(&dev->dev->bdev->bus->drv_pci,
 				      dev->dev->bdev, true);
 		break;
 #endif
@@ -5433,11 +5402,8 @@ static void b43_bcma_remove(struct bcma_device *core)
 	/* We must cancel any work here before unregistering from ieee80211,
 	 * as the ieee80211 unreg will destroy the workqueue. */
 	cancel_work_sync(&wldev->restart_work);
-	cancel_work_sync(&wl->firmware_load);
 
 	B43_WARN_ON(!wl);
-	if (!wldev->fw.ucode.data)
-		return;			/* NULL if firmware never loaded */
 	if (wl->current_dev == wldev && wl->hw_registred) {
 		b43_leds_stop(wldev);
 		ieee80211_unregister_hw(wl->hw);
@@ -5510,11 +5476,8 @@ static void b43_ssb_remove(struct ssb_device *sdev)
 	/* We must cancel any work here before unregistering from ieee80211,
 	 * as the ieee80211 unreg will destroy the workqueue. */
 	cancel_work_sync(&wldev->restart_work);
-	cancel_work_sync(&wl->firmware_load);
 
 	B43_WARN_ON(!wl);
-	if (!wldev->fw.ucode.data)
-		return;			/* NULL if firmware never loaded */
 	if (wl->current_dev == wldev && wl->hw_registred) {
 		b43_leds_stop(wldev);
 		ieee80211_unregister_hw(wl->hw);

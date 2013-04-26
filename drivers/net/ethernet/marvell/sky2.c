@@ -1067,7 +1067,7 @@ static void sky2_ramset(struct sky2_hw *hw, u16 q, u32 start, u32 space)
 		sky2_write32(hw, RB_ADDR(q, RB_RX_UTHP), tp);
 		sky2_write32(hw, RB_ADDR(q, RB_RX_LTHP), space/2);
 
-		tp = space - 8192/8;
+		tp = space - 2048/8;
 		sky2_write32(hw, RB_ADDR(q, RB_RX_UTPP), tp);
 		sky2_write32(hw, RB_ADDR(q, RB_RX_LTPP), space/4);
 	} else {
@@ -3140,7 +3140,7 @@ static inline u32 sky2_clk2us(const struct sky2_hw *hw, u32 clk)
 }
 
 
-static int sky2_init(struct sky2_hw *hw)
+static int __devinit sky2_init(struct sky2_hw *hw)
 {
 	u8 t8;
 
@@ -4741,8 +4741,9 @@ static const struct net_device_ops sky2_netdev_ops[2] = {
 };
 
 /* Initialize network device */
-static struct net_device *sky2_init_netdev(struct sky2_hw *hw, unsigned port,
-					   int highmem, int wol)
+static __devinit struct net_device *sky2_init_netdev(struct sky2_hw *hw,
+						     unsigned port,
+						     int highmem, int wol)
 {
 	struct sky2_port *sky2;
 	struct net_device *dev = alloc_etherdev(sizeof(*sky2));
@@ -4801,11 +4802,12 @@ static struct net_device *sky2_init_netdev(struct sky2_hw *hw, unsigned port,
 
 	/* read the mac address */
 	memcpy_fromio(dev->dev_addr, hw->regs + B2_MAC_1 + port * 8, ETH_ALEN);
+	memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 
 	return dev;
 }
 
-static void sky2_show_addr(struct net_device *dev)
+static void __devinit sky2_show_addr(struct net_device *dev)
 {
 	const struct sky2_port *sky2 = netdev_priv(dev);
 
@@ -4813,7 +4815,7 @@ static void sky2_show_addr(struct net_device *dev)
 }
 
 /* Handle software interrupt used during MSI test */
-static irqreturn_t sky2_test_intr(int irq, void *dev_id)
+static irqreturn_t __devinit sky2_test_intr(int irq, void *dev_id)
 {
 	struct sky2_hw *hw = dev_id;
 	u32 status = sky2_read32(hw, B0_Y2_SP_ISRC2);
@@ -4832,7 +4834,7 @@ static irqreturn_t sky2_test_intr(int irq, void *dev_id)
 }
 
 /* Test interrupt path by forcing a a software IRQ */
-static int sky2_test_msi(struct sky2_hw *hw)
+static int __devinit sky2_test_msi(struct sky2_hw *hw)
 {
 	struct pci_dev *pdev = hw->pdev;
 	int err;
@@ -4894,7 +4896,8 @@ static const char *sky2_name(u8 chipid, char *buf, int sz)
 	return buf;
 }
 
-static int sky2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit sky2_probe(struct pci_dev *pdev,
+				const struct pci_device_id *ent)
 {
 	struct net_device *dev, *dev1;
 	struct sky2_hw *hw;
@@ -4916,13 +4919,13 @@ static int sky2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = pci_read_config_dword(pdev, PCI_DEV_REG2, &reg);
 	if (err) {
 		dev_err(&pdev->dev, "PCI read config failed\n");
-		goto err_out_disable;
+		goto err_out;
 	}
 
 	if (~reg == 0) {
 		dev_err(&pdev->dev, "PCI configuration read error\n");
 		err = -EIO;
-		goto err_out_disable;
+		goto err_out;
 	}
 
 	err = pci_request_regions(pdev, DRV_NAME);
@@ -4969,8 +4972,10 @@ static int sky2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	hw = kzalloc(sizeof(*hw) + strlen(DRV_NAME "@pci:")
 		     + strlen(pci_name(pdev)) + 1, GFP_KERNEL);
-	if (!hw)
+	if (!hw) {
+		dev_err(&pdev->dev, "cannot allocate hardware struct\n");
 		goto err_out_free_regions;
+	}
 
 	hw->pdev = pdev;
 	sprintf(hw->irq_name, DRV_NAME "@pci:%s", pci_name(pdev));
@@ -5007,11 +5012,10 @@ static int sky2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	if (!disable_msi && pci_enable_msi(pdev) == 0) {
 		err = sky2_test_msi(hw);
-		if (err) {
+		if (err == -EOPNOTSUPP)
  			pci_disable_msi(pdev);
-			if (err != -EOPNOTSUPP)
-				goto err_out_free_netdev;
-		}
+		else if (err)
+			goto err_out_free_netdev;
  	}
 
 	err = register_netdev(dev);
@@ -5059,10 +5063,10 @@ err_out_unregister_dev1:
 err_out_free_dev1:
 	free_netdev(dev1);
 err_out_unregister:
-	unregister_netdev(dev);
-err_out_free_netdev:
 	if (hw->flags & SKY2_HW_USE_MSI)
 		pci_disable_msi(pdev);
+	unregister_netdev(dev);
+err_out_free_netdev:
 	free_netdev(dev);
 err_out_free_pci:
 	pci_free_consistent(pdev, hw->st_size * sizeof(struct sky2_status_le),
@@ -5082,7 +5086,7 @@ err_out:
 	return err;
 }
 
-static void sky2_remove(struct pci_dev *pdev)
+static void __devexit sky2_remove(struct pci_dev *pdev)
 {
 	struct sky2_hw *hw = pci_get_drvdata(pdev);
 	int i;
@@ -5203,7 +5207,7 @@ static struct pci_driver sky2_driver = {
 	.name = DRV_NAME,
 	.id_table = sky2_id_table,
 	.probe = sky2_probe,
-	.remove = sky2_remove,
+	.remove = __devexit_p(sky2_remove),
 	.shutdown = sky2_shutdown,
 	.driver.pm = SKY2_PM_OPS,
 };

@@ -292,7 +292,7 @@ static void __init chips_hw_init(void)
 		write_fr(chips_init_fr[i].addr, chips_init_fr[i].data);
 }
 
-static struct fb_fix_screeninfo chipsfb_fix = {
+static struct fb_fix_screeninfo chipsfb_fix __devinitdata = {
 	.id =		"C&T 65550",
 	.type =		FB_TYPE_PACKED_PIXELS,
 	.visual =	FB_VISUAL_PSEUDOCOLOR,
@@ -309,7 +309,7 @@ static struct fb_fix_screeninfo chipsfb_fix = {
 	.smem_len =	0x100000,	/* 1MB */
 };
 
-static struct fb_var_screeninfo chipsfb_var = {
+static struct fb_var_screeninfo chipsfb_var __devinitdata = {
 	.xres = 800,
 	.yres = 600,
 	.xres_virtual = 800,
@@ -330,7 +330,7 @@ static struct fb_var_screeninfo chipsfb_var = {
 	.vsync_len = 8,
 };
 
-static void init_chips(struct fb_info *p, unsigned long addr)
+static void __devinit init_chips(struct fb_info *p, unsigned long addr)
 {
 	memset(p->screen_base, 0, 0x100000);
 
@@ -347,7 +347,8 @@ static void init_chips(struct fb_info *p, unsigned long addr)
 	chips_hw_init();
 }
 
-static int chipsfb_pci_init(struct pci_dev *dp, const struct pci_device_id *ent)
+static int __devinit
+chipsfb_pci_init(struct pci_dev *dp, const struct pci_device_id *ent)
 {
 	struct fb_info *p;
 	unsigned long addr, size;
@@ -437,7 +438,7 @@ static int chipsfb_pci_init(struct pci_dev *dp, const struct pci_device_id *ent)
 	return rc;
 }
 
-static void chipsfb_remove(struct pci_dev *dp)
+static void __devexit chipsfb_remove(struct pci_dev *dp)
 {
 	struct fb_info *p = pci_get_drvdata(dp);
 
@@ -494,7 +495,7 @@ static struct pci_driver chipsfb_driver = {
 	.name =		"chipsfb",
 	.id_table =	chipsfb_pci_tbl,
 	.probe =	chipsfb_pci_init,
-	.remove =	chipsfb_remove,
+	.remove =	__devexit_p(chipsfb_remove),
 #ifdef CONFIG_PM
 	.suspend =	chipsfb_pci_suspend,
 	.resume =	chipsfb_pci_resume,

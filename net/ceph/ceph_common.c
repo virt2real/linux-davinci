@@ -15,8 +15,6 @@
 #include <linux/slab.h>
 #include <linux/statfs.h>
 #include <linux/string.h>
-#include <linux/nsproxy.h>
-#include <net/net_namespace.h>
 
 
 #include <linux/ceph/ceph_features.h>
@@ -28,22 +26,6 @@
 #include "crypto.h"
 
 
-/*
- * Module compatibility interface.  For now it doesn't do anything,
- * but its existence signals a certain level of functionality.
- *
- * The data buffer is used to pass information both to and from
- * libceph.  The return value indicates whether libceph determines
- * it is compatible with the caller (from another kernel module),
- * given the provided data.
- *
- * The data pointer can be null.
- */
-bool libceph_compatible(void *data)
-{
-	return true;
-}
-EXPORT_SYMBOL(libceph_compatible);
 
 /*
  * find filename portion of a path (/foo/bar/baz -> baz)
@@ -310,9 +292,6 @@ ceph_parse_options(char *options, const char *dev_name,
 	int err = -ENOMEM;
 	substring_t argstr[MAX_OPT_ARGS];
 
-	if (current->nsproxy->net_ns != &init_net)
-		return ERR_PTR(-EINVAL);
-
 	opt = kzalloc(sizeof(*opt), GFP_KERNEL);
 	if (!opt)
 		return ERR_PTR(-ENOMEM);
@@ -326,6 +305,7 @@ ceph_parse_options(char *options, const char *dev_name,
 
 	/* start with defaults */
 	opt->flags = CEPH_OPT_DEFAULT;
+	opt->osd_timeout = CEPH_OSD_TIMEOUT_DEFAULT;
 	opt->osd_keepalive_timeout = CEPH_OSD_KEEPALIVE_DEFAULT;
 	opt->mount_timeout = CEPH_MOUNT_TIMEOUT_DEFAULT; /* seconds */
 	opt->osd_idle_ttl = CEPH_OSD_IDLE_TTL_DEFAULT;   /* seconds */
@@ -411,7 +391,7 @@ ceph_parse_options(char *options, const char *dev_name,
 
 			/* misc */
 		case Opt_osdtimeout:
-			pr_warning("ignoring deprecated osdtimeout option\n");
+			opt->osd_timeout = intval;
 			break;
 		case Opt_osdkeepalivetimeout:
 			opt->osd_keepalive_timeout = intval;
@@ -606,8 +586,10 @@ static int __init init_ceph_lib(void)
 	if (ret < 0)
 		goto out_crypto;
 
-	pr_info("loaded (mon/osd proto %d/%d)\n",
-		CEPH_MONC_PROTOCOL, CEPH_OSDC_PROTOCOL);
+	pr_info("loaded (mon/osd proto %d/%d, osdmap %d/%d %d/%d)\n",
+		CEPH_MONC_PROTOCOL, CEPH_OSDC_PROTOCOL,
+		CEPH_OSDMAP_VERSION, CEPH_OSDMAP_VERSION_EXT,
+		CEPH_OSDMAP_INC_VERSION, CEPH_OSDMAP_INC_VERSION_EXT);
 
 	return 0;
 

@@ -25,7 +25,6 @@
 #include <linux/mmc/sdio_ids.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/card.h>
-#include <linux/mmc/host.h>
 
 #include "main.h"
 

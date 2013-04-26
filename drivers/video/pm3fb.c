@@ -56,12 +56,12 @@
  * Driver data
  */
 static int hwcursor = 1;
-static char *mode_option;
-static bool noaccel;
+static char *mode_option __devinitdata;
+static bool noaccel __devinitdata;
 
 /* mtrr option */
 #ifdef CONFIG_MTRR
-static bool nomtrr;
+static bool nomtrr __devinitdata;
 #endif
 
 /*
@@ -84,7 +84,7 @@ struct pm3_par {
  * if we don't use modedb. If we do use modedb see pm3fb_init how to use it
  * to get a fb_var_screeninfo. Otherwise define a default var as well.
  */
-static struct fb_fix_screeninfo pm3fb_fix = {
+static struct fb_fix_screeninfo pm3fb_fix __devinitdata = {
 	.id =		"Permedia3",
 	.type =		FB_TYPE_PACKED_PIXELS,
 	.visual =	FB_VISUAL_PSEUDOCOLOR,
@@ -1229,7 +1229,7 @@ static struct fb_ops pm3fb_ops = {
 
 /* mmio register are already mapped when this function is called */
 /* the pm3fb_fix.smem_start is also set */
-static unsigned long pm3fb_size_memory(struct pm3_par *par)
+static unsigned long __devinit pm3fb_size_memory(struct pm3_par *par)
 {
 	unsigned long	memsize = 0;
 	unsigned long	tempBypass, i, temp1, temp2;
@@ -1314,7 +1314,8 @@ static unsigned long pm3fb_size_memory(struct pm3_par *par)
 	return memsize;
 }
 
-static int pm3fb_probe(struct pci_dev *dev, const struct pci_device_id *ent)
+static int __devinit pm3fb_probe(struct pci_dev *dev,
+				  const struct pci_device_id *ent)
 {
 	struct fb_info *info;
 	struct pm3_par *par;
@@ -1468,7 +1469,7 @@ static int pm3fb_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 	/*
 	 *  Cleanup
 	 */
-static void pm3fb_remove(struct pci_dev *dev)
+static void __devexit pm3fb_remove(struct pci_dev *dev)
 {
 	struct fb_info *info = pci_get_drvdata(dev);
 
@@ -1506,7 +1507,7 @@ static struct pci_driver pm3fb_driver = {
 	.name =		"pm3fb",
 	.id_table =	pm3fb_id_table,
 	.probe =	pm3fb_probe,
-	.remove =	pm3fb_remove,
+	.remove =	__devexit_p(pm3fb_remove),
 };
 
 MODULE_DEVICE_TABLE(pci, pm3fb_id_table);

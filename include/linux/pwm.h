@@ -146,8 +146,6 @@ struct pwm_ops {
  * @base: number of first PWM controlled by this chip
  * @npwm: number of PWMs controlled by this chip
  * @pwms: array of PWM devices allocated by the framework
- * @can_sleep: must be true if the .config(), .enable() or .disable()
- *             operations may sleep
  */
 struct pwm_chip {
 	struct device		*dev;
@@ -161,7 +159,6 @@ struct pwm_chip {
 	struct pwm_device *	(*of_xlate)(struct pwm_chip *pc,
 					    const struct of_phandle_args *args);
 	unsigned int		of_pwm_n_cells;
-	bool			can_sleep;
 };
 
 #if IS_ENABLED(CONFIG_PWM)
@@ -174,19 +171,11 @@ struct pwm_device *pwm_request_from_chip(struct pwm_chip *chip,
 					 unsigned int index,
 					 const char *label);
 
-struct pwm_device *of_pwm_xlate_with_flags(struct pwm_chip *pc,
-		const struct of_phandle_args *args);
-
-struct pwm_device *pwm_get(struct device *dev, const char *con_id);
-struct pwm_device *of_pwm_get(struct device_node *np, const char *con_id);
+struct pwm_device *pwm_get(struct device *dev, const char *consumer);
 void pwm_put(struct pwm_device *pwm);
 
-struct pwm_device *devm_pwm_get(struct device *dev, const char *con_id);
-struct pwm_device *devm_of_pwm_get(struct device *dev, struct device_node *np,
-				   const char *con_id);
+struct pwm_device *devm_pwm_get(struct device *dev, const char *consumer);
 void devm_pwm_put(struct device *dev, struct pwm_device *pwm);
-
-bool pwm_can_sleep(struct pwm_device *pwm);
 #else
 static inline int pwm_set_chip_data(struct pwm_device *pwm, void *data)
 {
@@ -221,12 +210,6 @@ static inline struct pwm_device *pwm_get(struct device *dev,
 	return ERR_PTR(-ENODEV);
 }
 
-static inline struct pwm_device *of_pwm_get(struct device_node *np,
-					    const char *con_id)
-{
-	return ERR_PTR(-ENODEV);
-}
-
 static inline void pwm_put(struct pwm_device *pwm)
 {
 }
@@ -237,20 +220,8 @@ static inline struct pwm_device *devm_pwm_get(struct device *dev,
 	return ERR_PTR(-ENODEV);
 }
 
-static inline struct pwm_device *devm_of_pwm_get(struct device *dev,
-						 struct device_node *np,
-						 const char *con_id)
-{
-	return ERR_PTR(-ENODEV);
-}
-
 static inline void devm_pwm_put(struct device *dev, struct pwm_device *pwm)
 {
-}
-
-static inline bool pwm_can_sleep(struct pwm_device *pwm)
-{
-	return false;
 }
 #endif
 

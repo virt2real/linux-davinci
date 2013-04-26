@@ -226,8 +226,7 @@ enum ath9k_phyerr {
 	ATH9K_PHYERR_HT_LENGTH_ILLEGAL    = 35,
 	ATH9K_PHYERR_HT_RATE_ILLEGAL      = 36,
 
-	ATH9K_PHYERR_SPECTRAL		  = 38,
-	ATH9K_PHYERR_MAX                  = 39,
+	ATH9K_PHYERR_MAX                  = 37,
 };
 
 struct ath_desc {

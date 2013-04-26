@@ -39,6 +39,7 @@ struct vidi_win_data {
 	unsigned int		fb_height;
 	unsigned int		bpp;
 	dma_addr_t		dma_addr;
+	void __iomem		*vaddr;
 	unsigned int		buf_offsize;
 	unsigned int		line_size;	/* bytes */
 	bool			enabled;
@@ -98,12 +99,10 @@ static bool vidi_display_is_connected(struct device *dev)
 	return ctx->connected ? true : false;
 }
 
-static struct edid *vidi_get_edid(struct device *dev,
-			struct drm_connector *connector)
+static int vidi_get_edid(struct device *dev, struct drm_connector *connector,
+				u8 *edid, int len)
 {
 	struct vidi_context *ctx = get_vidi_context(dev);
-	struct edid *edid;
-	int edid_len;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -113,17 +112,13 @@ static struct edid *vidi_get_edid(struct device *dev,
 	 */
 	if (!ctx->raw_edid) {
 		DRM_DEBUG_KMS("raw_edid is null.\n");
-		return ERR_PTR(-EFAULT);
+		return -EFAULT;
 	}
 
-	edid_len = (1 + ctx->raw_edid->extensions) * EDID_LENGTH;
-	edid = kmemdup(ctx->raw_edid, edid_len, GFP_KERNEL);
-	if (!edid) {
-		DRM_DEBUG_KMS("failed to allocate edid\n");
-		return ERR_PTR(-ENOMEM);
-	}
+	memcpy(edid, ctx->raw_edid, min((1 + ctx->raw_edid->extensions)
+					* EDID_LENGTH, len));
 
-	return edid;
+	return 0;
 }
 
 static void *vidi_get_panel(struct device *dev)
@@ -299,6 +294,7 @@ static void vidi_win_mode_set(struct device *dev,
 	win_data->fb_width = overlay->fb_width;
 	win_data->fb_height = overlay->fb_height;
 	win_data->dma_addr = overlay->dma_addr[0] + offset;
+	win_data->vaddr = overlay->vaddr[0] + offset;
 	win_data->bpp = overlay->bpp;
 	win_data->buf_offsize = (overlay->fb_width - overlay->crtc_width) *
 				(overlay->bpp >> 3);
@@ -313,7 +309,9 @@ static void vidi_win_mode_set(struct device *dev,
 			win_data->offset_x, win_data->offset_y);
 	DRM_DEBUG_KMS("ovl_width = %d, ovl_height = %d\n",
 			win_data->ovl_width, win_data->ovl_height);
-	DRM_DEBUG_KMS("paddr = 0x%lx\n", (unsigned long)win_data->dma_addr);
+	DRM_DEBUG_KMS("paddr = 0x%lx, vaddr = 0x%lx\n",
+			(unsigned long)win_data->dma_addr,
+			(unsigned long)win_data->vaddr);
 	DRM_DEBUG_KMS("fb_width = %d, crtc_width = %d\n",
 			overlay->fb_width, overlay->crtc_width);
 }
@@ -378,6 +376,52 @@ static struct exynos_drm_manager vidi_manager = {
 	.display_ops	= &vidi_display_ops,
 };
 
+static void vidi_finish_pageflip(struct drm_device *drm_dev, int crtc)
+{
+	struct exynos_drm_private *dev_priv = drm_dev->dev_private;
+	struct drm_pending_vblank_event *e, *t;
+	struct timeval now;
+	unsigned long flags;
+	bool is_checked = false;
+
+	spin_lock_irqsave(&drm_dev->event_lock, flags);
+
+	list_for_each_entry_safe(e, t, &dev_priv->pageflip_event_list,
+			base.link) {
+		/* if event's pipe isn't same as crtc then ignore it. */
+		if (crtc != e->pipe)
+			continue;
+
+		is_checked = true;
+
+		do_gettimeofday(&now);
+		e->event.sequence = 0;
+		e->event.tv_sec = now.tv_sec;
+		e->event.tv_usec = now.tv_usec;
+
+		list_move_tail(&e->base.link, &e->base.file_priv->event_list);
+		wake_up_interruptible(&e->base.file_priv->event_wait);
+	}
+
+	if (is_checked) {
+		/*
+		 * call drm_vblank_put only in case that drm_vblank_get was
+		 * called.
+		 */
+		if (atomic_read(&drm_dev->vblank_refcount[crtc]) > 0)
+			drm_vblank_put(drm_dev, crtc);
+
+		/*
+		 * don't off vblank if vblank_disable_allowed is 1,
+		 * because vblank would be off by timer handler.
+		 */
+		if (!drm_dev->vblank_disable_allowed)
+			drm_vblank_off(drm_dev, crtc);
+	}
+
+	spin_unlock_irqrestore(&drm_dev->event_lock, flags);
+}
+
 static void vidi_fake_vblank_handler(struct work_struct *work)
 {
 	struct vidi_context *ctx = container_of(work, struct vidi_context,
@@ -402,7 +446,7 @@ static void vidi_fake_vblank_handler(struct work_struct *work)
 
 	mutex_unlock(&ctx->lock);
 
-	exynos_drm_crtc_finish_pageflip(subdrv->drm_dev, manager->pipe);
+	vidi_finish_pageflip(subdrv->drm_dev, manager->pipe);
 }
 
 static int vidi_subdrv_probe(struct drm_device *drm_dev, struct device *dev)
@@ -520,6 +564,7 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 	struct exynos_drm_manager *manager;
 	struct exynos_drm_display_ops *display_ops;
 	struct drm_exynos_vidi_connection *vidi = data;
+	struct edid *raw_edid;
 	int edid_len;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -556,17 +601,18 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 	}
 
 	if (vidi->connection) {
-		struct edid *raw_edid  = (struct edid *)(uint32_t)vidi->edid;
-		if (!drm_edid_is_valid(raw_edid)) {
-			DRM_DEBUG_KMS("edid data is invalid.\n");
+		if (!vidi->edid) {
+			DRM_DEBUG_KMS("edid data is null.\n");
 			return -EINVAL;
 		}
+		raw_edid = (struct edid *)(uint32_t)vidi->edid;
 		edid_len = (1 + raw_edid->extensions) * EDID_LENGTH;
-		ctx->raw_edid = kmemdup(raw_edid, edid_len, GFP_KERNEL);
+		ctx->raw_edid = kzalloc(edid_len, GFP_KERNEL);
 		if (!ctx->raw_edid) {
 			DRM_DEBUG_KMS("failed to allocate raw_edid.\n");
 			return -ENOMEM;
 		}
+		memcpy(ctx->raw_edid, raw_edid, edid_len);
 	} else {
 		/*
 		 * with connection = 0, free raw_edid
@@ -585,7 +631,7 @@ int vidi_connection_ioctl(struct drm_device *drm_dev, void *data,
 	return 0;
 }
 
-static int vidi_probe(struct platform_device *pdev)
+static int __devinit vidi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct vidi_context *ctx;
@@ -621,7 +667,7 @@ static int vidi_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int vidi_remove(struct platform_device *pdev)
+static int __devexit vidi_remove(struct platform_device *pdev)
 {
 	struct vidi_context *ctx = platform_get_drvdata(pdev);
 
@@ -659,7 +705,7 @@ static const struct dev_pm_ops vidi_pm_ops = {
 
 struct platform_driver vidi_driver = {
 	.probe		= vidi_probe,
-	.remove		= vidi_remove,
+	.remove		= __devexit_p(vidi_remove),
 	.driver		= {
 		.name	= "exynos-drm-vidi",
 		.owner	= THIS_MODULE,

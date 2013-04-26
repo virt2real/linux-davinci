@@ -146,7 +146,7 @@ xfs_qm_newmount(
 			 * inode goes inactive and wants to free blocks,
 			 * or via xfs_log_mount_finish.
 			 */
-			*needquotamount = true;
+			*needquotamount = B_TRUE;
 			*quotaflags = mp->m_qflags;
 			mp->m_qflags = 0;
 		}

@@ -30,6 +30,17 @@
 static struct kmem_cache *cred_jar;
 
 /*
+ * The common credentials for the initial task's thread group
+ */
+#ifdef CONFIG_KEYS
+static struct thread_group_cred init_tgcred = {
+	.usage	= ATOMIC_INIT(2),
+	.tgid	= 0,
+	.lock	= __SPIN_LOCK_UNLOCKED(init_cred.tgcred.lock),
+};
+#endif
+
+/*
  * The initial credentials for the initial task
  */
 struct cred init_cred = {
@@ -54,6 +65,9 @@ struct cred init_cred = {
 	.user			= INIT_USER,
 	.user_ns		= &init_user_ns,
 	.group_info		= &init_groups,
+#ifdef CONFIG_KEYS
+	.tgcred			= &init_tgcred,
+#endif
 };
 
 static inline void set_cred_subscribers(struct cred *cred, int n)
@@ -82,6 +96,36 @@ static inline void alter_cred_subscribers(const struct cred *_cred, int n)
 }
 
 /*
+ * Dispose of the shared task group credentials
+ */
+#ifdef CONFIG_KEYS
+static void release_tgcred_rcu(struct rcu_head *rcu)
+{
+	struct thread_group_cred *tgcred =
+		container_of(rcu, struct thread_group_cred, rcu);
+
+	BUG_ON(atomic_read(&tgcred->usage) != 0);
+
+	key_put(tgcred->session_keyring);
+	key_put(tgcred->process_keyring);
+	kfree(tgcred);
+}
+#endif
+
+/*
+ * Release a set of thread group credentials.
+ */
+static void release_tgcred(struct cred *cred)
+{
+#ifdef CONFIG_KEYS
+	struct thread_group_cred *tgcred = cred->tgcred;
+
+	if (atomic_dec_and_test(&tgcred->usage))
+		call_rcu(&tgcred->rcu, release_tgcred_rcu);
+#endif
+}
+
+/*
  * The RCU callback to actually dispose of a set of credentials
  */
 static void put_cred_rcu(struct rcu_head *rcu)
@@ -106,10 +150,9 @@ static void put_cred_rcu(struct rcu_head *rcu)
 #endif
 
 	security_cred_free(cred);
-	key_put(cred->session_keyring);
-	key_put(cred->process_keyring);
 	key_put(cred->thread_keyring);
 	key_put(cred->request_key_auth);
+	release_tgcred(cred);
 	if (cred->group_info)
 		put_group_info(cred->group_info);
 	free_uid(cred->user);
@@ -203,6 +246,15 @@ struct cred *cred_alloc_blank(void)
 	if (!new)
 		return NULL;
 
+#ifdef CONFIG_KEYS
+	new->tgcred = kzalloc(sizeof(*new->tgcred), GFP_KERNEL);
+	if (!new->tgcred) {
+		kmem_cache_free(cred_jar, new);
+		return NULL;
+	}
+	atomic_set(&new->tgcred->usage, 1);
+#endif
+
 	atomic_set(&new->usage, 1);
 #ifdef CONFIG_DEBUG_CREDENTIALS
 	new->magic = CRED_MAGIC;
@@ -256,10 +308,9 @@ struct cred *prepare_creds(void)
 	get_user_ns(new->user_ns);
 
 #ifdef CONFIG_KEYS
-	key_get(new->session_keyring);
-	key_get(new->process_keyring);
 	key_get(new->thread_keyring);
 	key_get(new->request_key_auth);
+	atomic_inc(&new->tgcred->usage);
 #endif
 
 #ifdef CONFIG_SECURITY
@@ -283,20 +334,39 @@ EXPORT_SYMBOL(prepare_creds);
  */
 struct cred *prepare_exec_creds(void)
 {
+	struct thread_group_cred *tgcred = NULL;
 	struct cred *new;
 
+#ifdef CONFIG_KEYS
+	tgcred = kmalloc(sizeof(*tgcred), GFP_KERNEL);
+	if (!tgcred)
+		return NULL;
+#endif
+
 	new = prepare_creds();
-	if (!new)
+	if (!new) {
+		kfree(tgcred);
 		return new;
+	}
 
 #ifdef CONFIG_KEYS
 	/* newly exec'd tasks don't get a thread keyring */
 	key_put(new->thread_keyring);
 	new->thread_keyring = NULL;
 
+	/* create a new per-thread-group creds for all this set of threads to
+	 * share */
+	memcpy(tgcred, new->tgcred, sizeof(struct thread_group_cred));
+
+	atomic_set(&tgcred->usage, 1);
+	spin_lock_init(&tgcred->lock);
+
 	/* inherit the session keyring; new process keyring */
-	key_put(new->process_keyring);
-	new->process_keyring = NULL;
+	key_get(tgcred->session_keyring);
+	tgcred->process_keyring = NULL;
+
+	release_tgcred(new);
+	new->tgcred = tgcred;
 #endif
 
 	return new;
@@ -313,6 +383,9 @@ struct cred *prepare_exec_creds(void)
  */
 int copy_creds(struct task_struct *p, unsigned long clone_flags)
 {
+#ifdef CONFIG_KEYS
+	struct thread_group_cred *tgcred;
+#endif
 	struct cred *new;
 	int ret;
 
@@ -352,12 +425,22 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 			install_thread_keyring_to_cred(new);
 	}
 
-	/* The process keyring is only shared between the threads in a process;
-	 * anything outside of those threads doesn't inherit.
-	 */
+	/* we share the process and session keyrings between all the threads in
+	 * a process - this is slightly icky as we violate COW credentials a
+	 * bit */
 	if (!(clone_flags & CLONE_THREAD)) {
-		key_put(new->process_keyring);
-		new->process_keyring = NULL;
+		tgcred = kmalloc(sizeof(*tgcred), GFP_KERNEL);
+		if (!tgcred) {
+			ret = -ENOMEM;
+			goto error_put;
+		}
+		atomic_set(&tgcred->usage, 1);
+		spin_lock_init(&tgcred->lock);
+		tgcred->process_keyring = NULL;
+		tgcred->session_keyring = key_get(new->tgcred->session_keyring);
+
+		release_tgcred(new);
+		new->tgcred = tgcred;
 	}
 #endif
 
@@ -370,31 +453,6 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 error_put:
 	put_cred(new);
 	return ret;
-}
-
-static bool cred_cap_issubset(const struct cred *set, const struct cred *subset)
-{
-	const struct user_namespace *set_ns = set->user_ns;
-	const struct user_namespace *subset_ns = subset->user_ns;
-
-	/* If the two credentials are in the same user namespace see if
-	 * the capabilities of subset are a subset of set.
-	 */
-	if (set_ns == subset_ns)
-		return cap_issubset(subset->cap_permitted, set->cap_permitted);
-
-	/* The credentials are in a different user namespaces
-	 * therefore one is a subset of the other only if a set is an
-	 * ancestor of subset and set->euid is owner of subset or one
-	 * of subsets ancestors.
-	 */
-	for (;subset_ns != &init_user_ns; subset_ns = subset_ns->parent) {
-		if ((set_ns == subset_ns->parent)  &&
-		    uid_eq(subset_ns->owner, set->euid))
-			return true;
-	}
-
-	return false;
 }
 
 /**
@@ -435,7 +493,7 @@ int commit_creds(struct cred *new)
 	    !gid_eq(old->egid, new->egid) ||
 	    !uid_eq(old->fsuid, new->fsuid) ||
 	    !gid_eq(old->fsgid, new->fsgid) ||
-	    !cred_cap_issubset(old, new)) {
+	    !cap_issubset(new->cap_permitted, old->cap_permitted)) {
 		if (task->mm)
 			set_dumpable(task->mm, suid_dumpable);
 		task->pdeath_signal = 0;
@@ -585,12 +643,23 @@ void __init cred_init(void)
  */
 struct cred *prepare_kernel_cred(struct task_struct *daemon)
 {
+#ifdef CONFIG_KEYS
+	struct thread_group_cred *tgcred;
+#endif
 	const struct cred *old;
 	struct cred *new;
 
 	new = kmem_cache_alloc(cred_jar, GFP_KERNEL);
 	if (!new)
 		return NULL;
+
+#ifdef CONFIG_KEYS
+	tgcred = kmalloc(sizeof(*tgcred), GFP_KERNEL);
+	if (!tgcred) {
+		kmem_cache_free(cred_jar, new);
+		return NULL;
+	}
+#endif
 
 	kdebug("prepare_kernel_cred() alloc %p", new);
 
@@ -609,10 +678,13 @@ struct cred *prepare_kernel_cred(struct task_struct *daemon)
 	get_group_info(new->group_info);
 
 #ifdef CONFIG_KEYS
-	new->session_keyring = NULL;
-	new->process_keyring = NULL;
-	new->thread_keyring = NULL;
+	atomic_set(&tgcred->usage, 1);
+	spin_lock_init(&tgcred->lock);
+	tgcred->process_keyring = NULL;
+	tgcred->session_keyring = NULL;
+	new->tgcred = tgcred;
 	new->request_key_auth = NULL;
+	new->thread_keyring = NULL;
 	new->jit_keyring = KEY_REQKEY_DEFL_THREAD_KEYRING;
 #endif
 

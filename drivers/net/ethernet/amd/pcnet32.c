@@ -494,15 +494,19 @@ static void pcnet32_realloc_tx_ring(struct net_device *dev,
 	}
 	memset(new_tx_ring, 0, sizeof(struct pcnet32_tx_head) * (1 << size));
 
-	new_dma_addr_list = kcalloc(1 << size, sizeof(dma_addr_t),
-				    GFP_ATOMIC);
-	if (!new_dma_addr_list)
+	new_dma_addr_list = kcalloc((1 << size), sizeof(dma_addr_t),
+				GFP_ATOMIC);
+	if (!new_dma_addr_list) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		goto free_new_tx_ring;
+	}
 
-	new_skb_list = kcalloc(1 << size, sizeof(struct sk_buff *),
-			       GFP_ATOMIC);
-	if (!new_skb_list)
+	new_skb_list = kcalloc((1 << size), sizeof(struct sk_buff *),
+				GFP_ATOMIC);
+	if (!new_skb_list) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		goto free_new_lists;
+	}
 
 	kfree(lp->tx_skbuff);
 	kfree(lp->tx_dma_addr);
@@ -560,14 +564,19 @@ static void pcnet32_realloc_rx_ring(struct net_device *dev,
 	}
 	memset(new_rx_ring, 0, sizeof(struct pcnet32_rx_head) * (1 << size));
 
-	new_dma_addr_list = kcalloc(1 << size, sizeof(dma_addr_t), GFP_ATOMIC);
-	if (!new_dma_addr_list)
+	new_dma_addr_list = kcalloc((1 << size), sizeof(dma_addr_t),
+				GFP_ATOMIC);
+	if (!new_dma_addr_list) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		goto free_new_rx_ring;
+	}
 
-	new_skb_list = kcalloc(1 << size, sizeof(struct sk_buff *),
-			       GFP_ATOMIC);
-	if (!new_skb_list)
+	new_skb_list = kcalloc((1 << size), sizeof(struct sk_buff *),
+				GFP_ATOMIC);
+	if (!new_skb_list) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		goto free_new_lists;
+	}
 
 	/* first copy the current receive buffers */
 	overlap = min(size, lp->rx_ring_size);
@@ -1434,7 +1443,7 @@ static const struct ethtool_ops pcnet32_ethtool_ops = {
 /* only probes for non-PCI devices, the rest are handled by
  * pci_register_driver via pcnet32_probe_pci */
 
-static void pcnet32_probe_vlbus(unsigned int *pcnet32_portlist)
+static void __devinit pcnet32_probe_vlbus(unsigned int *pcnet32_portlist)
 {
 	unsigned int *port, ioaddr;
 
@@ -1453,7 +1462,7 @@ static void pcnet32_probe_vlbus(unsigned int *pcnet32_portlist)
 	}
 }
 
-static int
+static int __devinit
 pcnet32_probe_pci(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	unsigned long ioaddr;
@@ -1512,7 +1521,7 @@ static const struct net_device_ops pcnet32_netdev_ops = {
  *  Called from both pcnet32_probe_vlbus and pcnet_probe_pci.
  *  pdev will be NULL when called from pcnet32_probe_vlbus.
  */
-static int
+static int __devinit
 pcnet32_probe1(unsigned long ioaddr, int shared, struct pci_dev *pdev)
 {
 	struct pcnet32_private *lp;
@@ -1679,9 +1688,10 @@ pcnet32_probe1(unsigned long ioaddr, int shared, struct pci_dev *pdev)
 			memcpy(dev->dev_addr, promaddr, 6);
 		}
 	}
+	memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 
 	/* if the ethernet address is not valid, force to 00:00:00:00:00:00 */
-	if (!is_valid_ether_addr(dev->dev_addr))
+	if (!is_valid_ether_addr(dev->perm_addr))
 		memset(dev->dev_addr, 0, ETH_ALEN);
 
 	if (pcnet32_debug & NETIF_MSG_PROBE) {
@@ -1924,23 +1934,31 @@ static int pcnet32_alloc_ring(struct net_device *dev, const char *name)
 
 	lp->tx_dma_addr = kcalloc(lp->tx_ring_size, sizeof(dma_addr_t),
 				  GFP_ATOMIC);
-	if (!lp->tx_dma_addr)
+	if (!lp->tx_dma_addr) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		return -ENOMEM;
+	}
 
 	lp->rx_dma_addr = kcalloc(lp->rx_ring_size, sizeof(dma_addr_t),
 				  GFP_ATOMIC);
-	if (!lp->rx_dma_addr)
+	if (!lp->rx_dma_addr) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		return -ENOMEM;
+	}
 
 	lp->tx_skbuff = kcalloc(lp->tx_ring_size, sizeof(struct sk_buff *),
 				GFP_ATOMIC);
-	if (!lp->tx_skbuff)
+	if (!lp->tx_skbuff) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		return -ENOMEM;
+	}
 
 	lp->rx_skbuff = kcalloc(lp->rx_ring_size, sizeof(struct sk_buff *),
 				GFP_ATOMIC);
-	if (!lp->rx_skbuff)
+	if (!lp->rx_skbuff) {
+		netif_err(lp, drv, dev, "Memory allocation failed\n");
 		return -ENOMEM;
+	}
 
 	return 0;
 }
@@ -2805,7 +2823,7 @@ static int pcnet32_pm_resume(struct pci_dev *pdev)
 	return 0;
 }
 
-static void pcnet32_remove_one(struct pci_dev *pdev)
+static void __devexit pcnet32_remove_one(struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
 
@@ -2826,7 +2844,7 @@ static void pcnet32_remove_one(struct pci_dev *pdev)
 static struct pci_driver pcnet32_driver = {
 	.name = DRV_NAME,
 	.probe = pcnet32_probe_pci,
-	.remove = pcnet32_remove_one,
+	.remove = __devexit_p(pcnet32_remove_one),
 	.id_table = pcnet32_pci_tbl,
 	.suspend = pcnet32_pm_suspend,
 	.resume = pcnet32_pm_resume,

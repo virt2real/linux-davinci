@@ -220,8 +220,7 @@ static struct device_node *find_pe_dn(struct pci_dev *dev, int *total)
 
 	/* Get the top level device in the PE */
 	edev = of_node_to_eeh_dev(dn);
-	if (edev->pe)
-		edev = list_first_entry(&edev->pe->edevs, struct eeh_dev, list);
+	edev = list_first_entry(&edev->pe->edevs, struct eeh_dev, list);
 	dn = eeh_dev_to_of_node(edev);
 	if (!dn)
 		return NULL;

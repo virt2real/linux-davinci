@@ -207,11 +207,9 @@ nf_ct_expect_event(enum ip_conntrack_expect_events event,
 	nf_ct_expect_event_report(event, exp, 0, 0);
 }
 
-extern int nf_conntrack_ecache_pernet_init(struct net *net);
-extern void nf_conntrack_ecache_pernet_fini(struct net *net);
+extern int nf_conntrack_ecache_init(struct net *net);
+extern void nf_conntrack_ecache_fini(struct net *net);
 
-extern int nf_conntrack_ecache_init(void);
-extern void nf_conntrack_ecache_fini(void);
 #else /* CONFIG_NF_CONNTRACK_EVENTS */
 
 static inline void nf_conntrack_event_cache(enum ip_conntrack_events event,
@@ -234,21 +232,12 @@ static inline void nf_ct_expect_event_report(enum ip_conntrack_expect_events e,
  					     u32 portid,
  					     int report) {}
 
-static inline int nf_conntrack_ecache_pernet_init(struct net *net)
+static inline int nf_conntrack_ecache_init(struct net *net)
 {
 	return 0;
 }
 
-static inline void nf_conntrack_ecache_pernet_fini(struct net *net)
-{
-}
-
-static inline int nf_conntrack_ecache_init(void)
-{
-	return 0;
-}
-
-static inline void nf_conntrack_ecache_fini(void)
+static inline void nf_conntrack_ecache_fini(struct net *net)
 {
 }
 #endif /* CONFIG_NF_CONNTRACK_EVENTS */

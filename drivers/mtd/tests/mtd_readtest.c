@@ -19,8 +19,6 @@
  * Author: Adrian Hunter <ext-adrian.hunter@nokia.com>
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -28,6 +26,8 @@
 #include <linux/mtd/mtd.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+
+#define PRINT_PREF KERN_INFO "mtd_readtest: "
 
 static int dev = -EINVAL;
 module_param(dev, int, S_IRUGO);
@@ -51,12 +51,12 @@ static int read_eraseblock_by_page(int ebnum)
 	void *oobbuf = iobuf1;
 
 	for (i = 0; i < pgcnt; i++) {
-		memset(buf, 0 , pgsize);
+		memset(buf, 0 , pgcnt);
 		ret = mtd_read(mtd, addr, pgsize, &read, buf);
 		if (ret == -EUCLEAN)
 			ret = 0;
 		if (ret || read != pgsize) {
-			pr_err("error: read failed at %#llx\n",
+			printk(PRINT_PREF "error: read failed at %#llx\n",
 			       (long long)addr);
 			if (!err)
 				err = ret;
@@ -77,7 +77,7 @@ static int read_eraseblock_by_page(int ebnum)
 			ret = mtd_read_oob(mtd, addr, &ops);
 			if ((ret && !mtd_is_bitflip(ret)) ||
 					ops.oobretlen != mtd->oobsize) {
-				pr_err("error: read oob failed at "
+				printk(PRINT_PREF "error: read oob failed at "
 						  "%#llx\n", (long long)addr);
 				if (!err)
 					err = ret;
@@ -99,7 +99,7 @@ static void dump_eraseblock(int ebnum)
 	char line[128];
 	int pg, oob;
 
-	pr_info("dumping eraseblock %d\n", ebnum);
+	printk(PRINT_PREF "dumping eraseblock %d\n", ebnum);
 	n = mtd->erasesize;
 	for (i = 0; i < n;) {
 		char *p = line;
@@ -112,7 +112,7 @@ static void dump_eraseblock(int ebnum)
 	}
 	if (!mtd->oobsize)
 		return;
-	pr_info("dumping oob from eraseblock %d\n", ebnum);
+	printk(PRINT_PREF "dumping oob from eraseblock %d\n", ebnum);
 	n = mtd->oobsize;
 	for (pg = 0, i = 0; pg < pgcnt; pg++)
 		for (oob = 0; oob < n;) {
@@ -134,7 +134,7 @@ static int is_block_bad(int ebnum)
 
 	ret = mtd_block_isbad(mtd, addr);
 	if (ret)
-		pr_info("block %d is bad\n", ebnum);
+		printk(PRINT_PREF "block %d is bad\n", ebnum);
 	return ret;
 }
 
@@ -144,21 +144,21 @@ static int scan_for_bad_eraseblocks(void)
 
 	bbt = kzalloc(ebcnt, GFP_KERNEL);
 	if (!bbt) {
-		pr_err("error: cannot allocate memory\n");
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		return -ENOMEM;
 	}
 
 	if (!mtd_can_have_bb(mtd))
 		return 0;
 
-	pr_info("scanning for bad eraseblocks\n");
+	printk(PRINT_PREF "scanning for bad eraseblocks\n");
 	for (i = 0; i < ebcnt; ++i) {
 		bbt[i] = is_block_bad(i) ? 1 : 0;
 		if (bbt[i])
 			bad += 1;
 		cond_resched();
 	}
-	pr_info("scanned %d eraseblocks, %d are bad\n", i, bad);
+	printk(PRINT_PREF "scanned %d eraseblocks, %d are bad\n", i, bad);
 	return 0;
 }
 
@@ -171,21 +171,21 @@ static int __init mtd_readtest_init(void)
 	printk(KERN_INFO "=================================================\n");
 
 	if (dev < 0) {
-		pr_info("Please specify a valid mtd-device via module parameter\n");
+		printk(PRINT_PREF "Please specify a valid mtd-device via module paramter\n");
 		return -EINVAL;
 	}
 
-	pr_info("MTD device: %d\n", dev);
+	printk(PRINT_PREF "MTD device: %d\n", dev);
 
 	mtd = get_mtd_device(NULL, dev);
 	if (IS_ERR(mtd)) {
 		err = PTR_ERR(mtd);
-		pr_err("error: Cannot get MTD device\n");
+		printk(PRINT_PREF "error: Cannot get MTD device\n");
 		return err;
 	}
 
 	if (mtd->writesize == 1) {
-		pr_info("not NAND flash, assume page size is 512 "
+		printk(PRINT_PREF "not NAND flash, assume page size is 512 "
 		       "bytes.\n");
 		pgsize = 512;
 	} else
@@ -196,7 +196,7 @@ static int __init mtd_readtest_init(void)
 	ebcnt = tmp;
 	pgcnt = mtd->erasesize / pgsize;
 
-	pr_info("MTD device size %llu, eraseblock size %u, "
+	printk(PRINT_PREF "MTD device size %llu, eraseblock size %u, "
 	       "page size %u, count of eraseblocks %u, pages per "
 	       "eraseblock %u, OOB size %u\n",
 	       (unsigned long long)mtd->size, mtd->erasesize,
@@ -205,12 +205,12 @@ static int __init mtd_readtest_init(void)
 	err = -ENOMEM;
 	iobuf = kmalloc(mtd->erasesize, GFP_KERNEL);
 	if (!iobuf) {
-		pr_err("error: cannot allocate memory\n");
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		goto out;
 	}
 	iobuf1 = kmalloc(mtd->erasesize, GFP_KERNEL);
 	if (!iobuf1) {
-		pr_err("error: cannot allocate memory\n");
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		goto out;
 	}
 
@@ -219,7 +219,7 @@ static int __init mtd_readtest_init(void)
 		goto out;
 
 	/* Read all eraseblocks 1 page at a time */
-	pr_info("testing page read\n");
+	printk(PRINT_PREF "testing page read\n");
 	for (i = 0; i < ebcnt; ++i) {
 		int ret;
 
@@ -235,9 +235,9 @@ static int __init mtd_readtest_init(void)
 	}
 
 	if (err)
-		pr_info("finished with errors\n");
+		printk(PRINT_PREF "finished with errors\n");
 	else
-		pr_info("finished\n");
+		printk(PRINT_PREF "finished\n");
 
 out:
 
@@ -246,7 +246,7 @@ out:
 	kfree(bbt);
 	put_mtd_device(mtd);
 	if (err)
-		pr_info("error %d occurred\n", err);
+		printk(PRINT_PREF "error %d occurred\n", err);
 	printk(KERN_INFO "=================================================\n");
 	return err;
 }

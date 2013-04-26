@@ -835,11 +835,6 @@ static struct tua9001_config rtl2832u_tua9001_config = {
 	.i2c_addr = 0x60,
 };
 
-static const struct fc0012_config rtl2832u_fc0012_config = {
-	.i2c_address = 0x63, /* 0xc6 >> 1 */
-	.xtal_freq = FC_XTAL_28_8_MHZ,
-};
-
 static int rtl2832u_tuner_attach(struct dvb_usb_adapter *adap)
 {
 	int ret;
@@ -852,7 +847,7 @@ static int rtl2832u_tuner_attach(struct dvb_usb_adapter *adap)
 	switch (priv->tuner) {
 	case TUNER_RTL2832_FC0012:
 		fe = dvb_attach(fc0012_attach, adap->fe[0],
-			&d->i2c_adap, &rtl2832u_fc0012_config);
+			&d->i2c_adap, 0xc6>>1, 0, FC_XTAL_28_8_MHZ);
 
 		/* since fc0012 includs reading the signal strength delegate
 		 * that to the tuner driver */
@@ -1125,7 +1120,7 @@ err:
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_RC_CORE)
+
 static int rtl2831u_rc_query(struct dvb_usb_device *d)
 {
 	int ret, i;
@@ -1202,17 +1197,13 @@ static int rtl2831u_get_rc_config(struct dvb_usb_device *d,
 		struct dvb_usb_rc *rc)
 {
 	rc->map_name = RC_MAP_EMPTY;
-	rc->allowed_protos = RC_BIT_NEC;
+	rc->allowed_protos = RC_TYPE_NEC;
 	rc->query = rtl2831u_rc_query;
 	rc->interval = 400;
 
 	return 0;
 }
-#else
-	#define rtl2831u_get_rc_config NULL
-#endif
 
-#if IS_ENABLED(CONFIG_RC_CORE)
 static int rtl2832u_rc_query(struct dvb_usb_device *d)
 {
 	int ret, i;
@@ -1278,15 +1269,12 @@ static int rtl2832u_get_rc_config(struct dvb_usb_device *d,
 		struct dvb_usb_rc *rc)
 {
 	rc->map_name = RC_MAP_EMPTY;
-	rc->allowed_protos = RC_BIT_NEC;
+	rc->allowed_protos = RC_TYPE_NEC;
 	rc->query = rtl2832u_rc_query;
 	rc->interval = 400;
 
 	return 0;
 }
-#else
-	#define rtl2832u_get_rc_config NULL
-#endif
 
 static const struct dvb_usb_device_properties rtl2831u_props = {
 	.driver_name = KBUILD_MODNAME,
@@ -1345,13 +1333,11 @@ static const struct usb_device_id rtl28xxu_id_table[] = {
 	{ DVB_USB_DEVICE(USB_VID_REALTEK, 0x2838,
 		&rtl2832u_props, "Realtek RTL2832U reference design", NULL) },
 	{ DVB_USB_DEVICE(USB_VID_TERRATEC, USB_PID_TERRATEC_CINERGY_T_STICK_BLACK_REV1,
-		&rtl2832u_props, "TerraTec Cinergy T Stick Black", NULL) },
+		&rtl2832u_props, "Terratec Cinergy T Stick Black", NULL) },
 	{ DVB_USB_DEVICE(USB_VID_GTEK, USB_PID_DELOCK_USB2_DVBT,
 		&rtl2832u_props, "G-Tek Electronics Group Lifeview LV5TDLX DVB-T", NULL) },
 	{ DVB_USB_DEVICE(USB_VID_TERRATEC, USB_PID_NOXON_DAB_STICK,
-		&rtl2832u_props, "TerraTec NOXON DAB Stick", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_TERRATEC, USB_PID_NOXON_DAB_STICK_REV2,
-		&rtl2832u_props, "TerraTec NOXON DAB Stick (rev 2)", NULL) },
+		&rtl2832u_props, "NOXON DAB/DAB+ USB dongle", NULL) },
 	{ DVB_USB_DEVICE(USB_VID_GTEK, USB_PID_TREKSTOR_TERRES_2_0,
 		&rtl2832u_props, "Trekstor DVB-T Stick Terres 2.0", NULL) },
 	{ DVB_USB_DEVICE(USB_VID_DEXATEK, 0x1101,
@@ -1360,18 +1346,6 @@ static const struct usb_device_id rtl28xxu_id_table[] = {
 		&rtl2832u_props, "DigitalNow Quad DVB-T Receiver", NULL) },
 	{ DVB_USB_DEVICE(USB_VID_TERRATEC, 0x00d3,
 		&rtl2832u_props, "TerraTec Cinergy T Stick RC (Rev. 3)", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_DEXATEK, 0x1102,
-		&rtl2832u_props, "Dexatek DK mini DVB-T Dongle", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_TERRATEC, 0x00d7,
-		&rtl2832u_props, "TerraTec Cinergy T Stick+", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_KWORLD_2, 0xd3a8,
-		&rtl2832u_props, "ASUS My Cinema-U3100Mini Plus V2", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_KWORLD_2, 0xd393,
-		&rtl2832u_props, "GIGABYTE U7300", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_DEXATEK, 0x1104,
-		&rtl2832u_props, "Digivox Micro Hd", NULL) },
-	{ DVB_USB_DEVICE(USB_VID_COMPRO, 0x0620,
-		&rtl2832u_props, "Compro VideoMate U620F", NULL) },
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, rtl28xxu_id_table);

@@ -1,5 +1,6 @@
 menuconfig NET_TEAM
-	tristate "Ethernet team driver support"
+	tristate "Ethernet team driver support (EXPERIMENTAL)"
+	depends on EXPERIMENTAL
 	---help---
 	  This allows one to create virtual interfaces that teams together
 	  multiple ethernet devices.

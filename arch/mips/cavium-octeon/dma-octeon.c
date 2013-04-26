@@ -317,8 +317,7 @@ void __init plat_swiotlb_setup(void)
 
 	octeon_swiotlb = alloc_bootmem_low_pages(swiotlbsize);
 
-	if (swiotlb_init_with_tbl(octeon_swiotlb, swiotlb_nslabs, 1) == -ENOMEM)
-		panic("Cannot allocate SWIOTLB buffer");
+	swiotlb_init_with_tbl(octeon_swiotlb, swiotlb_nslabs, 1);
 
 	mips_dma_map_ops = &octeon_linear_dma_map_ops.dma_map_ops;
 }

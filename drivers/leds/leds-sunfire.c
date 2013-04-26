@@ -3,8 +3,6 @@
  * Copyright (C) 2008 David S. Miller <davem@davemloft.net>
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -15,6 +13,9 @@
 
 #include <asm/fhc.h>
 #include <asm/upa.h>
+
+#define DRIVER_NAME	"leds-sunfire"
+#define PFX		DRIVER_NAME ": "
 
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_DESCRIPTION("Sun Fire LED driver");
@@ -122,21 +123,21 @@ struct sunfire_drvdata {
 	struct sunfire_led	leds[NUM_LEDS_PER_BOARD];
 };
 
-static int sunfire_led_generic_probe(struct platform_device *pdev,
+static int __devinit sunfire_led_generic_probe(struct platform_device *pdev,
 					       struct led_type *types)
 {
 	struct sunfire_drvdata *p;
 	int i, err;
 
 	if (pdev->num_resources != 1) {
-		dev_err(&pdev->dev, "Wrong number of resources %d, should be 1\n",
+		printk(KERN_ERR PFX "Wrong number of resources %d, should be 1\n",
 		       pdev->num_resources);
 		return -EINVAL;
 	}
 
 	p = devm_kzalloc(&pdev->dev, sizeof(*p), GFP_KERNEL);
 	if (!p) {
-		dev_err(&pdev->dev, "Could not allocate struct sunfire_drvdata\n");
+		printk(KERN_ERR PFX "Could not allocate struct sunfire_drvdata\n");
 		return -ENOMEM;
 	}
 
@@ -151,7 +152,7 @@ static int sunfire_led_generic_probe(struct platform_device *pdev,
 
 		err = led_classdev_register(&pdev->dev, lp);
 		if (err) {
-			dev_err(&pdev->dev, "Could not register %s LED\n",
+			printk(KERN_ERR PFX "Could not register %s LED\n",
 			       lp->name);
 			for (i--; i >= 0; i--)
 				led_classdev_unregister(&p->leds[i].led_cdev);
@@ -164,7 +165,7 @@ static int sunfire_led_generic_probe(struct platform_device *pdev,
 	return 0;
 }
 
-static int sunfire_led_generic_remove(struct platform_device *pdev)
+static int __devexit sunfire_led_generic_remove(struct platform_device *pdev)
 {
 	struct sunfire_drvdata *p = dev_get_drvdata(&pdev->dev);
 	int i;
@@ -187,11 +188,11 @@ static struct led_type clockboard_led_types[NUM_LEDS_PER_BOARD] = {
 	{
 		.name		= "clockboard-right",
 		.handler	= clockboard_right_set,
-		.default_trigger = "heartbeat",
+		.default_trigger= "heartbeat",
 	},
 };
 
-static int sunfire_clockboard_led_probe(struct platform_device *pdev)
+static int __devinit sunfire_clockboard_led_probe(struct platform_device *pdev)
 {
 	return sunfire_led_generic_probe(pdev, clockboard_led_types);
 }
@@ -208,11 +209,11 @@ static struct led_type fhc_led_types[NUM_LEDS_PER_BOARD] = {
 	{
 		.name		= "fhc-right",
 		.handler	= fhc_right_set,
-		.default_trigger = "heartbeat",
+		.default_trigger= "heartbeat",
 	},
 };
 
-static int sunfire_fhc_led_probe(struct platform_device *pdev)
+static int __devinit sunfire_fhc_led_probe(struct platform_device *pdev)
 {
 	return sunfire_led_generic_probe(pdev, fhc_led_types);
 }
@@ -222,7 +223,7 @@ MODULE_ALIAS("platform:sunfire-fhc-leds");
 
 static struct platform_driver sunfire_clockboard_led_driver = {
 	.probe		= sunfire_clockboard_led_probe,
-	.remove		= sunfire_led_generic_remove,
+	.remove		= __devexit_p(sunfire_led_generic_remove),
 	.driver		= {
 		.name	= "sunfire-clockboard-leds",
 		.owner	= THIS_MODULE,
@@ -231,7 +232,7 @@ static struct platform_driver sunfire_clockboard_led_driver = {
 
 static struct platform_driver sunfire_fhc_led_driver = {
 	.probe		= sunfire_fhc_led_probe,
-	.remove		= sunfire_led_generic_remove,
+	.remove		= __devexit_p(sunfire_led_generic_remove),
 	.driver		= {
 		.name	= "sunfire-fhc-leds",
 		.owner	= THIS_MODULE,
@@ -243,13 +244,13 @@ static int __init sunfire_leds_init(void)
 	int err = platform_driver_register(&sunfire_clockboard_led_driver);
 
 	if (err) {
-		pr_err("Could not register clock board LED driver\n");
+		printk(KERN_ERR PFX "Could not register clock board LED driver\n");
 		return err;
 	}
 
 	err = platform_driver_register(&sunfire_fhc_led_driver);
 	if (err) {
-		pr_err("Could not register FHC LED driver\n");
+		printk(KERN_ERR PFX "Could not register FHC LED driver\n");
 		platform_driver_unregister(&sunfire_clockboard_led_driver);
 	}
 

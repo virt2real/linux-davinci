@@ -17,7 +17,5 @@ struct imx_ssi_platform_data {
 	void (*ac97_warm_reset)(struct snd_ac97 *ac97);
 };
 
-extern int mxc_set_irq_fiq(unsigned int irq, unsigned int type);
-
 #endif /* __MACH_SSI_H */
 

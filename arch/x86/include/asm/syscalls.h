@@ -18,13 +18,25 @@
 /* Common in X86_32 and X86_64 */
 /* kernel/ioport.c */
 asmlinkage long sys_ioperm(unsigned long, unsigned long, int);
-asmlinkage long sys_iopl(unsigned int);
+long sys_iopl(unsigned int, struct pt_regs *);
+
+/* kernel/process.c */
+int sys_fork(struct pt_regs *);
+int sys_vfork(struct pt_regs *);
+long sys_execve(const char __user *,
+		const char __user *const __user *,
+		const char __user *const __user *);
+long sys_clone(unsigned long, unsigned long, void __user *,
+	       void __user *, struct pt_regs *);
 
 /* kernel/ldt.c */
 asmlinkage int sys_modify_ldt(int, void __user *, unsigned long);
 
 /* kernel/signal.c */
-long sys_rt_sigreturn(void);
+long sys_rt_sigreturn(struct pt_regs *);
+long sys_sigaltstack(const stack_t __user *, stack_t __user *,
+		     struct pt_regs *);
+
 
 /* kernel/tls.c */
 asmlinkage int sys_set_thread_area(struct user_desc __user *);
@@ -34,11 +46,14 @@ asmlinkage int sys_get_thread_area(struct user_desc __user *);
 #ifdef CONFIG_X86_32
 
 /* kernel/signal.c */
-unsigned long sys_sigreturn(void);
+asmlinkage int sys_sigsuspend(int, int, old_sigset_t);
+asmlinkage int sys_sigaction(int, const struct old_sigaction __user *,
+			     struct old_sigaction __user *);
+unsigned long sys_sigreturn(struct pt_regs *);
 
 /* kernel/vm86_32.c */
-int sys_vm86old(struct vm86_struct __user *);
-int sys_vm86(unsigned long, unsigned long);
+int sys_vm86old(struct vm86_struct __user *, struct pt_regs *);
+int sys_vm86(unsigned long, unsigned long, struct pt_regs *);
 
 #else /* CONFIG_X86_32 */
 

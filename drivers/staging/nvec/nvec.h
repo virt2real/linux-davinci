@@ -71,12 +71,9 @@ enum nvec_event_size {
 enum nvec_msg_type {
 	NVEC_SYS = 1,
 	NVEC_BAT,
-	NVEC_GPIO,
-	NVEC_SLEEP,
-	NVEC_KBD,
+	NVEC_KBD = 5,
 	NVEC_PS2,
 	NVEC_CNTL,
-	NVEC_OEM0 = 0x0d,
 	NVEC_KB_EVT = 0x80,
 	NVEC_PS2_EVT,
 };

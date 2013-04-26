@@ -221,6 +221,10 @@ struct stripe_head {
 	struct stripe_operations {
 		int 		     target, target2;
 		enum sum_check_flags zero_sum_result;
+		#ifdef CONFIG_MULTICORE_RAID456
+		unsigned long	     request;
+		wait_queue_head_t    wait_for_ops;
+		#endif
 	} ops;
 	struct r5dev {
 		/* rreq and rvec are used for the replacement device when
@@ -319,7 +323,6 @@ enum {
 	STRIPE_COMPUTE_RUN,
 	STRIPE_OPS_REQ_PENDING,
 	STRIPE_ON_UNPLUG_LIST,
-	STRIPE_DISCARD,
 };
 
 /*

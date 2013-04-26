@@ -22,7 +22,6 @@
 #include <linux/irq.h>
 #include <linux/profile.h>
 #include <linux/delay.h>
-#include <linux/irqdomain.h>
 
 #include <asm/timex.h>
 #include <asm/platform.h>
@@ -32,7 +31,7 @@ unsigned long ccount_per_jiffy;		/* per 1/HZ */
 unsigned long nsec_per_ccount;		/* nsec per ccount increment */
 #endif
 
-static cycle_t ccount_read(struct clocksource *cs)
+static cycle_t ccount_read(void)
 {
 	return (cycle_t)get_ccount();
 }
@@ -53,7 +52,6 @@ static struct irqaction timer_irqaction = {
 
 void __init time_init(void)
 {
-	unsigned int irq;
 #ifdef CONFIG_XTENSA_CALIBRATE_CCOUNT
 	printk("Calibrating CPU frequency ");
 	platform_calibrate_ccount();
@@ -64,8 +62,7 @@ void __init time_init(void)
 
 	/* Initialize the linux timer interrupt. */
 
-	irq = irq_create_mapping(NULL, LINUX_TIMER_INT);
-	setup_irq(irq, &timer_irqaction);
+	setup_irq(LINUX_TIMER_INT, &timer_irqaction);
 	set_linux_timer(get_ccount() + CCOUNT_PER_JIFFY);
 }
 

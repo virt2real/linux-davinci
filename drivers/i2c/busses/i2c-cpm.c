@@ -426,7 +426,7 @@ static const struct i2c_adapter cpm_ops = {
 	.algo		= &cpm_i2c_algo,
 };
 
-static int cpm_i2c_setup(struct cpm_i2c *cpm)
+static int __devinit cpm_i2c_setup(struct cpm_i2c *cpm)
 {
 	struct platform_device *ofdev = cpm->ofdev;
 	const u32 *data;
@@ -634,7 +634,7 @@ static void cpm_i2c_shutdown(struct cpm_i2c *cpm)
 		cpm_muram_free(cpm->i2c_addr);
 }
 
-static int cpm_i2c_probe(struct platform_device *ofdev)
+static int __devinit cpm_i2c_probe(struct platform_device *ofdev)
 {
 	int result, len;
 	struct cpm_i2c *cpm;
@@ -682,12 +682,13 @@ static int cpm_i2c_probe(struct platform_device *ofdev)
 out_shut:
 	cpm_i2c_shutdown(cpm);
 out_free:
+	dev_set_drvdata(&ofdev->dev, NULL);
 	kfree(cpm);
 
 	return result;
 }
 
-static int cpm_i2c_remove(struct platform_device *ofdev)
+static int __devexit cpm_i2c_remove(struct platform_device *ofdev)
 {
 	struct cpm_i2c *cpm = dev_get_drvdata(&ofdev->dev);
 
@@ -695,6 +696,7 @@ static int cpm_i2c_remove(struct platform_device *ofdev)
 
 	cpm_i2c_shutdown(cpm);
 
+	dev_set_drvdata(&ofdev->dev, NULL);
 	kfree(cpm);
 
 	return 0;
@@ -714,7 +716,7 @@ MODULE_DEVICE_TABLE(of, cpm_i2c_match);
 
 static struct platform_driver cpm_i2c_driver = {
 	.probe		= cpm_i2c_probe,
-	.remove		= cpm_i2c_remove,
+	.remove		= __devexit_p(cpm_i2c_remove),
 	.driver = {
 		.name = "fsl-i2c-cpm",
 		.owner = THIS_MODULE,

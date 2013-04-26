@@ -28,16 +28,15 @@
 #include "util/hist.h"
 #include "util/session.h"
 #include "util/tool.h"
-#include "arch/common.h"
 
 #include <linux/bitmap.h>
 
 struct perf_annotate {
 	struct perf_tool tool;
-	bool	   force, use_tui, use_stdio, use_gtk;
+	char const *input_name;
+	bool	   force, use_tui, use_stdio;
 	bool	   full_paths;
 	bool	   print_line;
-	bool	   skip_missing;
 	const char *sym_hist_filter;
 	const char *cpu_list;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
@@ -139,22 +138,9 @@ find_next:
 			continue;
 		}
 
-		if (use_browser == 2) {
-			int ret;
-
-			ret = hist_entry__gtk_annotate(he, evidx, NULL);
-			if (!ret || !ann->skip_missing)
-				return;
-
-			/* skip missing symbols */
-			nd = rb_next(nd);
-		} else if (use_browser == 1) {
-			key = hist_entry__tui_annotate(he, evidx, NULL);
+		if (use_browser > 0) {
+			key = hist_entry__tui_annotate(he, evidx, NULL, NULL, 0);
 			switch (key) {
-			case -1:
-				if (!ann->skip_missing)
-					return;
-				/* fall through */
 			case K_RIGHT:
 				next = rb_next(nd);
 				break;
@@ -188,7 +174,7 @@ static int __cmd_annotate(struct perf_annotate *ann)
 	struct perf_evsel *pos;
 	u64 total_nr_samples;
 
-	session = perf_session__new(input_name, O_RDONLY,
+	session = perf_session__new(ann->input_name, O_RDONLY,
 				    ann->force, false, &ann->tool);
 	if (session == NULL)
 		return -ENOMEM;
@@ -196,12 +182,6 @@ static int __cmd_annotate(struct perf_annotate *ann)
 	if (ann->cpu_list) {
 		ret = perf_session__cpu_bitmap(session, ann->cpu_list,
 					       ann->cpu_bitmap);
-		if (ret)
-			goto out_delete;
-	}
-
-	if (!objdump_path) {
-		ret = perf_session_env__lookup_objdump(&session->header.env);
 		if (ret)
 			goto out_delete;
 	}
@@ -238,10 +218,6 @@ static int __cmd_annotate(struct perf_annotate *ann)
 		ui__error("The %s file has no samples!\n", session->filename);
 		goto out_delete;
 	}
-
-	if (use_browser == 2)
-		perf_gtk__show_annotations();
-
 out_delete:
 	/*
 	 * Speed up the exit process, for large files this can
@@ -270,14 +246,13 @@ int cmd_annotate(int argc, const char **argv, const char *prefix __maybe_unused)
 			.sample	= process_sample_event,
 			.mmap	= perf_event__process_mmap,
 			.comm	= perf_event__process_comm,
-			.exit	= perf_event__process_exit,
-			.fork	= perf_event__process_fork,
+			.fork	= perf_event__process_task,
 			.ordered_samples = true,
 			.ordering_requires_timestamps = true,
 		},
 	};
 	const struct option options[] = {
-	OPT_STRING('i', "input", &input_name, "file",
+	OPT_STRING('i', "input", &annotate.input_name, "file",
 		    "input file name"),
 	OPT_STRING('d', "dsos", &symbol_conf.dso_list_str, "dso[,dso...]",
 		   "only consider symbols in these dsos"),
@@ -288,7 +263,6 @@ int cmd_annotate(int argc, const char **argv, const char *prefix __maybe_unused)
 		    "be more verbose (show symbol address, etc)"),
 	OPT_BOOLEAN('D', "dump-raw-trace", &dump_trace,
 		    "dump raw trace in ASCII"),
-	OPT_BOOLEAN(0, "gtk", &annotate.use_gtk, "Use the GTK interface"),
 	OPT_BOOLEAN(0, "tui", &annotate.use_tui, "Use the TUI interface"),
 	OPT_BOOLEAN(0, "stdio", &annotate.use_stdio, "Use the stdio interface"),
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
@@ -299,8 +273,6 @@ int cmd_annotate(int argc, const char **argv, const char *prefix __maybe_unused)
 		    "print matching source lines (may be slow)"),
 	OPT_BOOLEAN('P', "full-paths", &annotate.full_paths,
 		    "Don't shorten the displayed pathnames"),
-	OPT_BOOLEAN(0, "skip-missing", &annotate.skip_missing,
-		    "Skip symbols that cannot be annotated"),
 	OPT_STRING('C', "cpu", &annotate.cpu_list, "cpu", "list of cpus to profile"),
 	OPT_STRING(0, "symfs", &symbol_conf.symfs, "directory",
 		   "Look for files with symbols relative to this directory"),
@@ -321,8 +293,6 @@ int cmd_annotate(int argc, const char **argv, const char *prefix __maybe_unused)
 		use_browser = 0;
 	else if (annotate.use_tui)
 		use_browser = 1;
-	else if (annotate.use_gtk)
-		use_browser = 2;
 
 	setup_browser(true);
 
@@ -332,8 +302,7 @@ int cmd_annotate(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (symbol__init() < 0)
 		return -1;
 
-	if (setup_sorting() < 0)
-		usage_with_options(annotate_usage, options);
+	setup_sorting(annotate_usage, options);
 
 	if (argc) {
 		/*

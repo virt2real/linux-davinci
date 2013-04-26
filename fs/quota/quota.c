@@ -307,8 +307,6 @@ static int do_quotactl(struct super_block *sb, int type, int cmd, qid_t id,
 	}
 }
 
-#ifdef CONFIG_BLOCK
-
 /* Return 1 if 'cmd' will block on frozen filesystem */
 static int quotactl_cmd_write(int cmd)
 {
@@ -323,8 +321,6 @@ static int quotactl_cmd_write(int cmd)
 	}
 	return 1;
 }
-
-#endif /* CONFIG_BLOCK */
 
 /*
  * look up a superblock on which quota ops will be performed

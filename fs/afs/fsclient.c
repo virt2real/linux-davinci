@@ -42,8 +42,6 @@ static void xdr_decode_AFSFetchStatus(const __be32 **_bp,
 	umode_t mode;
 	u64 data_version, size;
 	u32 changed = 0; /* becomes non-zero if ctime-type changes seen */
-	kuid_t owner;
-	kgid_t group;
 
 #define EXTRACT(DST)				\
 	do {					\
@@ -58,9 +56,7 @@ static void xdr_decode_AFSFetchStatus(const __be32 **_bp,
 	size = ntohl(*bp++);
 	data_version = ntohl(*bp++);
 	EXTRACT(status->author);
-	owner = make_kuid(&init_user_ns, ntohl(*bp++));
-	changed |= !uid_eq(owner, status->owner);
-	status->owner = owner;
+	EXTRACT(status->owner);
 	EXTRACT(status->caller_access); /* call ticket dependent */
 	EXTRACT(status->anon_access);
 	EXTRACT(status->mode);
@@ -69,9 +65,7 @@ static void xdr_decode_AFSFetchStatus(const __be32 **_bp,
 	bp++; /* seg size */
 	status->mtime_client = ntohl(*bp++);
 	status->mtime_server = ntohl(*bp++);
-	group = make_kgid(&init_user_ns, ntohl(*bp++));
-	changed |= !gid_eq(group, status->group);
-	status->group = group;
+	EXTRACT(status->group);
 	bp++; /* sync counter */
 	data_version |= (u64) ntohl(*bp++) << 32;
 	EXTRACT(status->lock_count);
@@ -187,12 +181,12 @@ static void xdr_encode_AFS_StoreStatus(__be32 **_bp, struct iattr *attr)
 
 	if (attr->ia_valid & ATTR_UID) {
 		mask |= AFS_SET_OWNER;
-		owner = from_kuid(&init_user_ns, attr->ia_uid);
+		owner = attr->ia_uid;
 	}
 
 	if (attr->ia_valid & ATTR_GID) {
 		mask |= AFS_SET_GROUP;
-		group = from_kgid(&init_user_ns, attr->ia_gid);
+		group = attr->ia_gid;
 	}
 
 	if (attr->ia_valid & ATTR_MODE) {

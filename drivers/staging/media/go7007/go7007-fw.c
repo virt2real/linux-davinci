@@ -381,8 +381,11 @@ static int gen_mjpeghdr_to_package(struct go7007 *go, __le16 *code, int space)
 	int size = 0, i, off = 0, chunk;
 
 	buf = kzalloc(4096, GFP_KERNEL);
-	if (buf == NULL)
+	if (buf == NULL) {
+		printk(KERN_ERR "go7007: unable to allocate 4096 bytes for "
+				"firmware construction\n");
 		return -1;
+	}
 
 	for (i = 1; i < 32; ++i) {
 		mjpeg_frame_header(go, buf + size, i);
@@ -648,9 +651,11 @@ static int gen_mpeg1hdr_to_package(struct go7007 *go,
 	int i, off = 0, chunk;
 
 	buf = kzalloc(5120, GFP_KERNEL);
-	if (buf == NULL)
+	if (buf == NULL) {
+		printk(KERN_ERR "go7007: unable to allocate 5120 bytes for "
+				"firmware construction\n");
 		return -1;
-
+	}
 	framelen[0] = mpeg1_frame_header(go, buf, 0, 1, PFRAME);
 	if (go->interlace_coding)
 		framelen[0] += mpeg1_frame_header(go, buf + framelen[0] / 8,
@@ -833,9 +838,11 @@ static int gen_mpeg4hdr_to_package(struct go7007 *go,
 	int i, off = 0, chunk;
 
 	buf = kzalloc(5120, GFP_KERNEL);
-	if (buf == NULL)
+	if (buf == NULL) {
+		printk(KERN_ERR "go7007: unable to allocate 5120 bytes for "
+				"firmware construction\n");
 		return -1;
-
+	}
 	framelen[0] = mpeg4_frame_header(go, buf, 0, PFRAME);
 	i = 368;
 	framelen[1] = mpeg4_frame_header(go, buf + i, 0, BFRAME_PRE);
@@ -1538,8 +1545,9 @@ static int do_special(struct go7007 *go, u16 type, __le16 *code, int space,
 	case SPECIAL_MODET:
 		return modet_to_package(go, code, space);
 	}
-	dev_err(go->dev,
-		"firmware file contains unsupported feature %04x\n", type);
+	printk(KERN_ERR
+		"go7007: firmware file contains unsupported feature %04x\n",
+		type);
 	return -1;
 }
 
@@ -1569,24 +1577,26 @@ int go7007_construct_fw_image(struct go7007 *go, u8 **fw, int *fwlen)
 		return -1;
 	}
 	if (request_firmware(&fw_entry, go->board_info->firmware, go->dev)) {
-		dev_err(go->dev,
-			"unable to load firmware from file \"%s\"\n",
+		printk(KERN_ERR
+			"go7007: unable to load firmware from file \"%s\"\n",
 			go->board_info->firmware);
 		return -1;
 	}
 	code = kzalloc(codespace * 2, GFP_KERNEL);
-	if (code == NULL)
+	if (code == NULL) {
+		printk(KERN_ERR "go7007: unable to allocate %d bytes for "
+				"firmware construction\n", codespace * 2);
 		goto fw_failed;
-
+	}
 	src = (__le16 *)fw_entry->data;
 	srclen = fw_entry->size / 2;
 	while (srclen >= 2) {
 		chunk_flags = __le16_to_cpu(src[0]);
 		chunk_len = __le16_to_cpu(src[1]);
 		if (chunk_len + 2 > srclen) {
-			dev_err(go->dev,
-				"firmware file \"%s\" appears to be corrupted\n",
-				go->board_info->firmware);
+			printk(KERN_ERR "go7007: firmware file \"%s\" "
+					"appears to be corrupted\n",
+					go->board_info->firmware);
 			goto fw_failed;
 		}
 		if (chunk_flags & mode_flag) {
@@ -1594,15 +1604,17 @@ int go7007_construct_fw_image(struct go7007 *go, u8 **fw, int *fwlen)
 				ret = do_special(go, __le16_to_cpu(src[2]),
 					&code[i], codespace - i, framelen);
 				if (ret < 0) {
-					dev_err(go->dev,
-						"insufficient memory for firmware construction\n");
+					printk(KERN_ERR "go7007: insufficient "
+							"memory for firmware "
+							"construction\n");
 					goto fw_failed;
 				}
 				i += ret;
 			} else {
 				if (codespace - i < chunk_len) {
-					dev_err(go->dev,
-						"insufficient memory for firmware construction\n");
+					printk(KERN_ERR "go7007: insufficient "
+							"memory for firmware "
+							"construction\n");
 					goto fw_failed;
 				}
 				memcpy(&code[i], &src[2], chunk_len * 2);

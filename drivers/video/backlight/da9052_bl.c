@@ -34,7 +34,7 @@ enum {
 	DA9052_TYPE_WLED3,
 };
 
-static const unsigned char wled_bank[] = {
+static unsigned char wled_bank[] = {
 	DA9052_LED1_CONF_REG,
 	DA9052_LED2_CONF_REG,
 	DA9052_LED3_CONF_REG,

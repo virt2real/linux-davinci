@@ -282,7 +282,8 @@ search:
 	spin_unlock(&oi->ip_lock);
 
 out:
-	kfree(new_emi);
+	if (new_emi)
+		kfree(new_emi);
 }
 
 static int ocfs2_last_eb_is_empty(struct inode *inode,
@@ -831,7 +832,7 @@ out:
 	return ret;
 }
 
-int ocfs2_seek_data_hole_offset(struct file *file, loff_t *offset, int whence)
+int ocfs2_seek_data_hole_offset(struct file *file, loff_t *offset, int origin)
 {
 	struct inode *inode = file->f_mapping->host;
 	int ret;
@@ -842,7 +843,7 @@ int ocfs2_seek_data_hole_offset(struct file *file, loff_t *offset, int whence)
 	struct buffer_head *di_bh = NULL;
 	struct ocfs2_extent_rec rec;
 
-	BUG_ON(whence != SEEK_DATA && whence != SEEK_HOLE);
+	BUG_ON(origin != SEEK_DATA && origin != SEEK_HOLE);
 
 	ret = ocfs2_inode_lock(inode, &di_bh, 0);
 	if (ret) {
@@ -858,7 +859,7 @@ int ocfs2_seek_data_hole_offset(struct file *file, loff_t *offset, int whence)
 	}
 
 	if (OCFS2_I(inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL) {
-		if (whence == SEEK_HOLE)
+		if (origin == SEEK_HOLE)
 			*offset = inode->i_size;
 		goto out_unlock;
 	}
@@ -887,8 +888,8 @@ int ocfs2_seek_data_hole_offset(struct file *file, loff_t *offset, int whence)
 			is_data = (rec.e_flags & OCFS2_EXT_UNWRITTEN) ?  0 : 1;
 		}
 
-		if ((!is_data && whence == SEEK_HOLE) ||
-		    (is_data && whence == SEEK_DATA)) {
+		if ((!is_data && origin == SEEK_HOLE) ||
+		    (is_data && origin == SEEK_DATA)) {
 			if (extoff > *offset)
 				*offset = extoff;
 			goto out_unlock;
@@ -898,7 +899,7 @@ int ocfs2_seek_data_hole_offset(struct file *file, loff_t *offset, int whence)
 			cpos += clen;
 	}
 
-	if (whence == SEEK_HOLE) {
+	if (origin == SEEK_HOLE) {
 		extoff = cpos;
 		extoff <<= cs_bits;
 		extlen = clen;

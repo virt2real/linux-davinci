@@ -24,7 +24,7 @@
 
 #include <asm/mach/time.h>
 
-static u32 ioc_timer_gettimeoffset(void)
+unsigned long ioc_timer_gettimeoffset(void)
 {
 	unsigned int count1, count2, status;
 	long offset;
@@ -56,7 +56,7 @@ static u32 ioc_timer_gettimeoffset(void)
 	}
 
 	offset = (LATCH - offset) * (tick_nsec / 1000);
-	return ((offset + LATCH/2) / LATCH) * 1000;
+	return (offset + LATCH/2) / LATCH;
 }
 
 void __init ioctime_init(void)
@@ -82,9 +82,14 @@ static struct irqaction ioc_timer_irq = {
 /*
  * Set up timer interrupt.
  */
-void __init ioc_timer_init(void)
+static void __init ioc_timer_init(void)
 {
-	arch_gettimeoffset = ioc_timer_gettimeoffset;
 	ioctime_init();
 	setup_irq(IRQ_TIMER0, &ioc_timer_irq);
 }
+
+struct sys_timer ioc_timer = {
+	.init		= ioc_timer_init,
+	.offset		= ioc_timer_gettimeoffset,
+};
+

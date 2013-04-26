@@ -82,7 +82,7 @@ int smt_enabled_at_boot = 1;
 static void (*crash_ipi_function_ptr)(struct pt_regs *) = NULL;
 
 #ifdef CONFIG_PPC64
-int smp_generic_kick_cpu(int nr)
+int __devinit smp_generic_kick_cpu(int nr)
 {
 	BUG_ON(nr < 0 || nr >= NR_CPUS);
 
@@ -311,7 +311,7 @@ void smp_send_stop(void)
 
 struct thread_info *current_set[NR_CPUS];
 
-static void smp_store_cpu_info(int id)
+static void __devinit smp_store_cpu_info(int id)
 {
 	per_cpu(cpu_pvr, id) = mfspr(SPRN_PVR);
 #ifdef CONFIG_PPC_FSL_BOOK3E
@@ -355,7 +355,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 		max_cpus = 1;
 }
 
-void smp_prepare_boot_cpu(void)
+void __devinit smp_prepare_boot_cpu(void)
 {
 	BUG_ON(smp_processor_id() != boot_cpuid);
 #ifdef CONFIG_PPC64
@@ -427,45 +427,6 @@ int generic_check_cpu_restart(unsigned int cpu)
 {
 	return per_cpu(cpu_state, cpu) == CPU_UP_PREPARE;
 }
-
-static atomic_t secondary_inhibit_count;
-
-/*
- * Don't allow secondary CPU threads to come online
- */
-void inhibit_secondary_onlining(void)
-{
-	/*
-	 * This makes secondary_inhibit_count stable during cpu
-	 * online/offline operations.
-	 */
-	get_online_cpus();
-
-	atomic_inc(&secondary_inhibit_count);
-	put_online_cpus();
-}
-EXPORT_SYMBOL_GPL(inhibit_secondary_onlining);
-
-/*
- * Allow secondary CPU threads to come online again
- */
-void uninhibit_secondary_onlining(void)
-{
-	get_online_cpus();
-	atomic_dec(&secondary_inhibit_count);
-	put_online_cpus();
-}
-EXPORT_SYMBOL_GPL(uninhibit_secondary_onlining);
-
-static int secondaries_inhibited(void)
-{
-	return atomic_read(&secondary_inhibit_count);
-}
-
-#else /* HOTPLUG_CPU */
-
-#define secondaries_inhibited()		0
-
 #endif
 
 static void cpu_idle_thread_init(unsigned int cpu, struct task_struct *idle)
@@ -483,13 +444,6 @@ static void cpu_idle_thread_init(unsigned int cpu, struct task_struct *idle)
 int __cpuinit __cpu_up(unsigned int cpu, struct task_struct *tidle)
 {
 	int rc, c;
-
-	/*
-	 * Don't allow secondary threads to come online if inhibited
-	 */
-	if (threads_per_core > 1 && secondaries_inhibited() &&
-	    cpu % threads_per_core != 0)
-		return -EBUSY;
 
 	if (smp_ops == NULL ||
 	    (smp_ops->cpu_bootable && !smp_ops->cpu_bootable(cpu)))
@@ -610,7 +564,7 @@ static struct device_node *cpu_to_l2cache(int cpu)
 }
 
 /* Activate a secondary processor. */
-__cpuinit void start_secondary(void *unused)
+void __devinit start_secondary(void *unused)
 {
 	unsigned int cpu = smp_processor_id();
 	struct device_node *l2_cache;

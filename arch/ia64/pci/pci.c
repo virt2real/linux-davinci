@@ -116,7 +116,8 @@ struct pci_ops pci_root_ops = {
 
 /* Called by ACPI when it finds a new root bus.  */
 
-static struct pci_controller *alloc_pci_controller(int seg)
+static struct pci_controller * __devinit
+alloc_pci_controller (int seg)
 {
 	struct pci_controller *controller;
 
@@ -164,8 +165,8 @@ new_space (u64 phys_base, int sparse)
 	return i;
 }
 
-static u64 add_io_space(struct pci_root_info *info,
-			struct acpi_resource_address64 *addr)
+static u64 __devinit
+add_io_space (struct pci_root_info *info, struct acpi_resource_address64 *addr)
 {
 	struct resource *resource;
 	char *name;
@@ -225,8 +226,8 @@ out:
 	return ~0;
 }
 
-static acpi_status resource_to_window(struct acpi_resource *resource,
-				      struct acpi_resource_address64 *addr)
+static acpi_status __devinit resource_to_window(struct acpi_resource *resource,
+	struct acpi_resource_address64 *addr)
 {
 	acpi_status status;
 
@@ -248,7 +249,8 @@ static acpi_status resource_to_window(struct acpi_resource *resource,
 	return AE_ERROR;
 }
 
-static acpi_status count_window(struct acpi_resource *resource, void *data)
+static acpi_status __devinit
+count_window (struct acpi_resource *resource, void *data)
 {
 	unsigned int *windows = (unsigned int *) data;
 	struct acpi_resource_address64 addr;
@@ -261,7 +263,7 @@ static acpi_status count_window(struct acpi_resource *resource, void *data)
 	return AE_OK;
 }
 
-static acpi_status add_window(struct acpi_resource *res, void *data)
+static __devinit acpi_status add_window(struct acpi_resource *res, void *data)
 {
 	struct pci_root_info *info = data;
 	struct pci_window *window;
@@ -322,7 +324,8 @@ static acpi_status add_window(struct acpi_resource *res, void *data)
 	return AE_OK;
 }
 
-struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
+struct pci_bus * __devinit
+pci_acpi_scan_root(struct acpi_pci_root *root)
 {
 	struct acpi_device *device = root->device;
 	int domain = root->segment;
@@ -393,15 +396,7 @@ out1:
 	return NULL;
 }
 
-int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
-{
-	struct pci_controller *controller = bridge->bus->sysdata;
-
-	ACPI_HANDLE_SET(&bridge->dev, controller->acpi_handle);
-	return 0;
-}
-
-static int is_valid_resource(struct pci_dev *dev, int idx)
+static int __devinit is_valid_resource(struct pci_dev *dev, int idx)
 {
 	unsigned int i, type_mask = IORESOURCE_IO | IORESOURCE_MEM;
 	struct resource *devr = &dev->resource[idx], *busr;
@@ -419,7 +414,8 @@ static int is_valid_resource(struct pci_dev *dev, int idx)
 	return 0;
 }
 
-static void pcibios_fixup_resources(struct pci_dev *dev, int start, int limit)
+static void __devinit
+pcibios_fixup_resources(struct pci_dev *dev, int start, int limit)
 {
 	int i;
 
@@ -431,13 +427,13 @@ static void pcibios_fixup_resources(struct pci_dev *dev, int start, int limit)
 	}
 }
 
-void pcibios_fixup_device_resources(struct pci_dev *dev)
+void __devinit pcibios_fixup_device_resources(struct pci_dev *dev)
 {
 	pcibios_fixup_resources(dev, 0, PCI_BRIDGE_RESOURCES);
 }
 EXPORT_SYMBOL_GPL(pcibios_fixup_device_resources);
 
-static void pcibios_fixup_bridge_resources(struct pci_dev *dev)
+static void __devinit pcibios_fixup_bridge_resources(struct pci_dev *dev)
 {
 	pcibios_fixup_resources(dev, PCI_BRIDGE_RESOURCES, PCI_NUM_RESOURCES);
 }
@@ -445,7 +441,8 @@ static void pcibios_fixup_bridge_resources(struct pci_dev *dev)
 /*
  *  Called after each bus is probed, but before its children are examined.
  */
-void pcibios_fixup_bus(struct pci_bus *b)
+void __devinit
+pcibios_fixup_bus (struct pci_bus *b)
 {
 	struct pci_dev *dev;
 

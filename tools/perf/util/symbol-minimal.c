@@ -1,5 +1,6 @@
 #include "symbol.h"
 
+#include <elf.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>

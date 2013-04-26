@@ -79,13 +79,12 @@ Configuration Options: not applicable, uses PCI auto config
     -Calin Culianu <calin@ajvar.org>
  */
 
-#include <linux/pci.h>
-
 #include "../comedidev.h"
 
 #include "8255.h"
 
 /* device ids of the cards we support -- currently only 1 card supported */
+#define PCI_VENDOR_ID_COMPUTERBOARDS	0x1307
 #define PCI_ID_PCIM_DDA06_16		0x0053
 
 /*
@@ -153,20 +152,20 @@ static int cb_pcimdda_ao_rinsn(struct comedi_device *dev,
 	return insn->n;
 }
 
-static int cb_pcimdda_auto_attach(struct comedi_device *dev,
-					    unsigned long context_unused)
+static int cb_pcimdda_attach_pci(struct comedi_device *dev,
+				 struct pci_dev *pcidev)
 {
-	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
 	struct cb_pcimdda_private *devpriv;
 	struct comedi_subdevice *s;
 	int ret;
 
+	comedi_set_hw_dev(dev, &pcidev->dev);
 	dev->board_name = dev->driver->driver_name;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(*devpriv));
+	if (ret)
+		return ret;
+	devpriv = dev->private;
 
 	ret = comedi_pci_enable(pcidev, dev->board_name);
 	if (ret)
@@ -214,18 +213,23 @@ static void cb_pcimdda_detach(struct comedi_device *dev)
 static struct comedi_driver cb_pcimdda_driver = {
 	.driver_name	= "cb_pcimdda",
 	.module		= THIS_MODULE,
-	.auto_attach	= cb_pcimdda_auto_attach,
+	.attach_pci	= cb_pcimdda_attach_pci,
 	.detach		= cb_pcimdda_detach,
 };
 
-static int cb_pcimdda_pci_probe(struct pci_dev *dev,
+static int __devinit cb_pcimdda_pci_probe(struct pci_dev *dev,
 					  const struct pci_device_id *ent)
 {
 	return comedi_pci_auto_config(dev, &cb_pcimdda_driver);
 }
 
+static void __devexit cb_pcimdda_pci_remove(struct pci_dev *dev)
+{
+	comedi_pci_auto_unconfig(dev);
+}
+
 static DEFINE_PCI_DEVICE_TABLE(cb_pcimdda_pci_table) = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_CB, PCI_ID_PCIM_DDA06_16) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_COMPUTERBOARDS, PCI_ID_PCIM_DDA06_16) },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, cb_pcimdda_pci_table);
@@ -234,7 +238,7 @@ static struct pci_driver cb_pcimdda_driver_pci_driver = {
 	.name		= "cb_pcimdda",
 	.id_table	= cb_pcimdda_pci_table,
 	.probe		= cb_pcimdda_pci_probe,
-	.remove		= comedi_pci_auto_unconfig,
+	.remove		= __devexit_p(cb_pcimdda_pci_remove),
 };
 module_comedi_pci_driver(cb_pcimdda_driver, cb_pcimdda_driver_pci_driver);
 

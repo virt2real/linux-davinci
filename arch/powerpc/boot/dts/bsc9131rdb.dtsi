@@ -126,7 +126,7 @@
 		};
 	};
 
-	sdhc@2e000 {
+	sdhci@2e000 {
 		status = "disabled";
 	};
 

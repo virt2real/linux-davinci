@@ -126,8 +126,13 @@ static int get_context_size(struct drm_device *dev)
 
 static void do_destroy(struct i915_hw_context *ctx)
 {
+	struct drm_device *dev = ctx->obj->base.dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
 	if (ctx->file_priv)
 		idr_remove(&ctx->file_priv->context_idr, ctx->id);
+	else
+		BUG_ON(ctx != dev_priv->ring[RCS].default_context);
 
 	drm_gem_object_unreference(&ctx->obj->base);
 	kfree(ctx);
@@ -139,9 +144,9 @@ create_hw_context(struct drm_device *dev,
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct i915_hw_context *ctx;
-	int ret;
+	int ret, id;
 
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	ctx = kzalloc(sizeof(struct drm_i915_file_private), GFP_KERNEL);
 	if (ctx == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -164,11 +169,22 @@ create_hw_context(struct drm_device *dev,
 
 	ctx->file_priv = file_priv;
 
-	ret = idr_alloc(&file_priv->context_idr, ctx, DEFAULT_CONTEXT_ID + 1, 0,
-			GFP_KERNEL);
-	if (ret < 0)
+again:
+	if (idr_pre_get(&file_priv->context_idr, GFP_KERNEL) == 0) {
+		ret = -ENOMEM;
+		DRM_DEBUG_DRIVER("idr allocation failed\n");
 		goto err_out;
-	ctx->id = ret;
+	}
+
+	ret = idr_get_new_above(&file_priv->context_idr, ctx,
+				DEFAULT_CONTEXT_ID + 1, &id);
+	if (ret == 0)
+		ctx->id = id;
+
+	if (ret == -EAGAIN)
+		goto again;
+	else if (ret)
+		goto err_out;
 
 	return ctx;
 
@@ -226,6 +242,7 @@ err_destroy:
 void i915_gem_context_init(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	uint32_t ctx_size;
 
 	if (!HAS_HW_CONTEXTS(dev)) {
 		dev_priv->hw_contexts_disabled = true;
@@ -237,9 +254,11 @@ void i915_gem_context_init(struct drm_device *dev)
 	    dev_priv->ring[RCS].default_context)
 		return;
 
-	dev_priv->hw_context_size = round_up(get_context_size(dev), 4096);
+	ctx_size = get_context_size(dev);
+	dev_priv->hw_context_size = get_context_size(dev);
+	dev_priv->hw_context_size = round_up(dev_priv->hw_context_size, 4096);
 
-	if (dev_priv->hw_context_size > (1<<20)) {
+	if (ctx_size <= 0 || ctx_size > (1<<20)) {
 		dev_priv->hw_contexts_disabled = true;
 		return;
 	}
@@ -391,8 +410,9 @@ static int do_switch(struct i915_hw_context *to)
 	 * MI_SET_CONTEXT instead of when the next seqno has completed.
 	 */
 	if (from_obj != NULL) {
+		u32 seqno = i915_gem_next_request_seqno(ring);
 		from_obj->base.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
-		i915_gem_object_move_to_active(from_obj, ring);
+		i915_gem_object_move_to_active(from_obj, ring, seqno);
 		/* As long as MI_SET_CONTEXT is serializing, ie. it flushes the
 		 * whole damn pipeline, we don't need to explicitly mark the
 		 * object dirty. The only exception is that the context must be

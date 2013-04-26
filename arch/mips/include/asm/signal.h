@@ -21,6 +21,6 @@
 #include <asm/sigcontext.h>
 #include <asm/siginfo.h>
 
-#define __ARCH_HAS_IRIX_SIGACTION
+#define ptrace_signal_deliver(regs, cookie) do { } while (0)
 
 #endif /* _ASM_SIGNAL_H */

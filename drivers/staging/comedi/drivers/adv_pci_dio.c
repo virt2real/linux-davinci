@@ -29,13 +29,14 @@ Configuration options:
 
 */
 
-#include <linux/pci.h>
-#include <linux/delay.h>
-
 #include "../comedidev.h"
+
+#include <linux/delay.h>
 
 #include "8255.h"
 #include "8253.h"
+
+#define PCI_VENDOR_ID_ADVANTECH		0x13fe
 
 /* hardware types of the cards */
 enum hw_cards_id {
@@ -1091,14 +1092,15 @@ static const void *pci_dio_find_boardinfo(struct comedi_device *dev,
 	return NULL;
 }
 
-static int pci_dio_auto_attach(struct comedi_device *dev,
-					 unsigned long context_unused)
+static int pci_dio_attach_pci(struct comedi_device *dev,
+			      struct pci_dev *pcidev)
 {
-	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
 	const struct dio_boardtype *this_board;
 	struct pci_dio_private *devpriv;
 	struct comedi_subdevice *s;
 	int ret, subdev, i, j;
+
+	comedi_set_hw_dev(dev, &pcidev->dev);
 
 	this_board = pci_dio_find_boardinfo(dev, pcidev);
 	if (!this_board)
@@ -1106,10 +1108,10 @@ static int pci_dio_auto_attach(struct comedi_device *dev,
 	dev->board_ptr = this_board;
 	dev->board_name = this_board->name;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(*devpriv));
+	if (ret < 0)
+		return ret;
+	devpriv = dev->private;
 
 	ret = comedi_pci_enable(pcidev, dev->board_name);
 	if (ret)
@@ -1197,14 +1199,19 @@ static void pci_dio_detach(struct comedi_device *dev)
 static struct comedi_driver adv_pci_dio_driver = {
 	.driver_name	= "adv_pci_dio",
 	.module		= THIS_MODULE,
-	.auto_attach	= pci_dio_auto_attach,
+	.attach_pci	= pci_dio_attach_pci,
 	.detach		= pci_dio_detach,
 };
 
-static int adv_pci_dio_pci_probe(struct pci_dev *dev,
+static int __devinit adv_pci_dio_pci_probe(struct pci_dev *dev,
 					   const struct pci_device_id *ent)
 {
 	return comedi_pci_auto_config(dev, &adv_pci_dio_driver);
+}
+
+static void __devexit adv_pci_dio_pci_remove(struct pci_dev *dev)
+{
+	comedi_pci_auto_unconfig(dev);
 }
 
 static DEFINE_PCI_DEVICE_TABLE(adv_pci_dio_pci_table) = {
@@ -1230,7 +1237,7 @@ static struct pci_driver adv_pci_dio_pci_driver = {
 	.name		= "adv_pci_dio",
 	.id_table	= adv_pci_dio_pci_table,
 	.probe		= adv_pci_dio_pci_probe,
-	.remove		= comedi_pci_auto_unconfig,
+	.remove		= __devexit_p(adv_pci_dio_pci_remove),
 };
 module_comedi_pci_driver(adv_pci_dio_driver, adv_pci_dio_pci_driver);
 

@@ -11,7 +11,6 @@
 
 #include <linux/types.h>
 #include <linux/slab.h>
-#include <linux/export.h>
 #include <linux/dma-mapping.h>
 #include <linux/list.h>
 #include <linux/pci.h>

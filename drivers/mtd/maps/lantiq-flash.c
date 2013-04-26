@@ -7,7 +7,6 @@
  *  Copyright (C) 2010 John Crispin <blogic@openwrt.org>
  */
 
-#include <linux/err.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -46,7 +45,7 @@ struct ltq_mtd {
 };
 
 static const char ltq_map_name[] = "ltq_nor";
-static const char *ltq_probe_types[] = {
+static const char *ltq_probe_types[] __devinitconst = {
 					"cmdlinepart", "ofpart", NULL };
 
 static map_word
@@ -110,7 +109,7 @@ ltq_copy_to(struct map_info *map, unsigned long to,
 	spin_unlock_irqrestore(&ebu_lock, flags);
 }
 
-static int
+static int __devinit
 ltq_mtd_probe(struct platform_device *pdev)
 {
 	struct mtd_part_parser_data ppdata;
@@ -137,9 +136,10 @@ ltq_mtd_probe(struct platform_device *pdev)
 	ltq_mtd->map = kzalloc(sizeof(struct map_info), GFP_KERNEL);
 	ltq_mtd->map->phys = ltq_mtd->res->start;
 	ltq_mtd->map->size = resource_size(ltq_mtd->res);
-	ltq_mtd->map->virt = devm_ioremap_resource(&pdev->dev, ltq_mtd->res);
-	if (IS_ERR(ltq_mtd->map->virt)) {
-		err = PTR_ERR(ltq_mtd->map->virt);
+	ltq_mtd->map->virt = devm_request_and_ioremap(&pdev->dev, ltq_mtd->res);
+	if (!ltq_mtd->map->virt) {
+		dev_err(&pdev->dev, "failed to remap mem resource\n");
+		err = -EBUSY;
 		goto err_out;
 	}
 
@@ -185,7 +185,7 @@ err_out:
 	return err;
 }
 
-static int
+static int __devexit
 ltq_mtd_remove(struct platform_device *pdev)
 {
 	struct ltq_mtd *ltq_mtd = platform_get_drvdata(pdev);
@@ -209,7 +209,7 @@ MODULE_DEVICE_TABLE(of, ltq_mtd_match);
 
 static struct platform_driver ltq_mtd_driver = {
 	.probe = ltq_mtd_probe,
-	.remove = ltq_mtd_remove,
+	.remove = __devexit_p(ltq_mtd_remove),
 	.driver = {
 		.name = "ltq-nor",
 		.owner = THIS_MODULE,

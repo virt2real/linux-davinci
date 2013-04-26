@@ -374,21 +374,21 @@ static int wm8994_ldo_in_use(struct wm8994_pdata *pdata, int ldo)
 }
 #endif
 
-static const struct reg_default wm8994_revc_patch[] = {
+static const __devinitconst struct reg_default wm8994_revc_patch[] = {
 	{ 0x102, 0x3 },
 	{ 0x56, 0x3 },
 	{ 0x817, 0x0 },
 	{ 0x102, 0x0 },
 };
 
-static const struct reg_default wm8958_reva_patch[] = {
+static const __devinitconst struct reg_default wm8958_reva_patch[] = {
 	{ 0x102, 0x3 },
 	{ 0xcb, 0x81 },
 	{ 0x817, 0x0 },
 	{ 0x102, 0x0 },
 };
 
-static const struct reg_default wm1811_reva_patch[] = {
+static const __devinitconst struct reg_default wm1811_reva_patch[] = {
 	{ 0x102, 0x3 },
 	{ 0x56, 0xc07 },
 	{ 0x5d, 0x7e },
@@ -399,20 +399,14 @@ static const struct reg_default wm1811_reva_patch[] = {
 /*
  * Instantiate the generic non-control parts of the device.
  */
-static int wm8994_device_init(struct wm8994 *wm8994, int irq)
+static __devinit int wm8994_device_init(struct wm8994 *wm8994, int irq)
 {
-	struct wm8994_pdata *pdata;
+	struct wm8994_pdata *pdata = wm8994->dev->platform_data;
 	struct regmap_config *regmap_config;
 	const struct reg_default *regmap_patch = NULL;
 	const char *devname;
 	int ret, i, patch_regs;
 	int pulls = 0;
-
-	if (dev_get_platdata(wm8994->dev)) {
-		pdata = dev_get_platdata(wm8994->dev);
-		wm8994->pdata = *pdata;
-	}
-	pdata = &wm8994->pdata;
 
 	dev_set_drvdata(wm8994->dev, wm8994);
 
@@ -467,7 +461,7 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 		goto err;
 	}
 		
-	ret = devm_regulator_bulk_get(wm8994->dev, wm8994->num_supplies,
+	ret = regulator_bulk_get(wm8994->dev, wm8994->num_supplies,
 				 wm8994->supplies);
 	if (ret != 0) {
 		dev_err(wm8994->dev, "Failed to get supplies: %d\n", ret);
@@ -478,7 +472,7 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 				    wm8994->supplies);
 	if (ret != 0) {
 		dev_err(wm8994->dev, "Failed to enable supplies: %d\n", ret);
-		goto err;
+		goto err_get;
 	}
 
 	ret = wm8994_reg_read(wm8994, WM8994_SOFTWARE_RESET);
@@ -535,9 +529,10 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 			break;
 		case 2:
 		case 3:
-		default:
 			regmap_patch = wm8994_revc_patch;
 			patch_regs = ARRAY_SIZE(wm8994_revc_patch);
+			break;
+		default:
 			break;
 		}
 		break;
@@ -557,9 +552,17 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 		/* Revision C did not change the relevant layer */
 		if (wm8994->revision > 1)
 			wm8994->revision++;
-
-		regmap_patch = wm1811_reva_patch;
-		patch_regs = ARRAY_SIZE(wm1811_reva_patch);
+		switch (wm8994->revision) {
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+			regmap_patch = wm1811_reva_patch;
+			patch_regs = ARRAY_SIZE(wm1811_reva_patch);
+			break;
+		default:
+			break;
+		}
 		break;
 
 	default:
@@ -601,21 +604,24 @@ static int wm8994_device_init(struct wm8994 *wm8994, int irq)
 		}
 	}
 
-	wm8994->irq_base = pdata->irq_base;
-	wm8994->gpio_base = pdata->gpio_base;
+	if (pdata) {
+		wm8994->irq_base = pdata->irq_base;
+		wm8994->gpio_base = pdata->gpio_base;
 
-	/* GPIO configuration is only applied if it's non-zero */
-	for (i = 0; i < ARRAY_SIZE(pdata->gpio_defaults); i++) {
-		if (pdata->gpio_defaults[i]) {
-			wm8994_set_bits(wm8994, WM8994_GPIO_1 + i,
-					0xffff, pdata->gpio_defaults[i]);
+		/* GPIO configuration is only applied if it's non-zero */
+		for (i = 0; i < ARRAY_SIZE(pdata->gpio_defaults); i++) {
+			if (pdata->gpio_defaults[i]) {
+				wm8994_set_bits(wm8994, WM8994_GPIO_1 + i,
+						0xffff,
+						pdata->gpio_defaults[i]);
+			}
 		}
+
+		wm8994->ldo_ena_always_driven = pdata->ldo_ena_always_driven;
+
+		if (pdata->spkmode_pu)
+			pulls |= WM8994_SPKMODE_PU;
 	}
-
-	wm8994->ldo_ena_always_driven = pdata->ldo_ena_always_driven;
-
-	if (pdata->spkmode_pu)
-		pulls |= WM8994_SPKMODE_PU;
 
 	/* Disable unneeded pulls */
 	wm8994_set_bits(wm8994, WM8994_PULL_CONTROL_2,
@@ -658,18 +664,21 @@ err_irq:
 err_enable:
 	regulator_bulk_disable(wm8994->num_supplies,
 			       wm8994->supplies);
+err_get:
+	regulator_bulk_free(wm8994->num_supplies, wm8994->supplies);
 err:
 	mfd_remove_devices(wm8994->dev);
 	return ret;
 }
 
-static void wm8994_device_exit(struct wm8994 *wm8994)
+static __devexit void wm8994_device_exit(struct wm8994 *wm8994)
 {
 	pm_runtime_disable(wm8994->dev);
 	mfd_remove_devices(wm8994->dev);
 	wm8994_irq_exit(wm8994);
 	regulator_bulk_disable(wm8994->num_supplies,
 			       wm8994->supplies);
+	regulator_bulk_free(wm8994->num_supplies, wm8994->supplies);
 }
 
 static const struct of_device_id wm8994_of_match[] = {
@@ -680,7 +689,7 @@ static const struct of_device_id wm8994_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, wm8994_of_match);
 
-static int wm8994_i2c_probe(struct i2c_client *i2c,
+static __devinit int wm8994_i2c_probe(struct i2c_client *i2c,
 				      const struct i2c_device_id *id)
 {
 	struct wm8994 *wm8994;
@@ -706,7 +715,7 @@ static int wm8994_i2c_probe(struct i2c_client *i2c,
 	return wm8994_device_init(wm8994, i2c->irq);
 }
 
-static int wm8994_i2c_remove(struct i2c_client *i2c)
+static __devexit int wm8994_i2c_remove(struct i2c_client *i2c)
 {
 	struct wm8994 *wm8994 = i2c_get_clientdata(i2c);
 
@@ -735,7 +744,7 @@ static struct i2c_driver wm8994_i2c_driver = {
 		.of_match_table = wm8994_of_match,
 	},
 	.probe = wm8994_i2c_probe,
-	.remove = wm8994_i2c_remove,
+	.remove = __devexit_p(wm8994_i2c_remove),
 	.id_table = wm8994_i2c_id,
 };
 

@@ -263,7 +263,7 @@ static int netup_fpga_op_rw(struct fpga_internal *inter, int addr,
 }
 
 /* flag - mem/io, read - read/write */
-static int altera_ci_op_cam(struct dvb_ca_en50221 *en50221, int slot,
+int altera_ci_op_cam(struct dvb_ca_en50221 *en50221, int slot,
 				u8 flag, u8 read, int addr, u8 val)
 {
 
@@ -298,32 +298,31 @@ static int altera_ci_op_cam(struct dvb_ca_en50221 *en50221, int slot,
 	return mem;
 }
 
-static int altera_ci_read_attribute_mem(struct dvb_ca_en50221 *en50221,
-					int slot, int addr)
+int altera_ci_read_attribute_mem(struct dvb_ca_en50221 *en50221,
+						int slot, int addr)
 {
 	return altera_ci_op_cam(en50221, slot, 0, NETUP_CI_FLG_RD, addr, 0);
 }
 
-static int altera_ci_write_attribute_mem(struct dvb_ca_en50221 *en50221,
-					 int slot, int addr, u8 data)
+int altera_ci_write_attribute_mem(struct dvb_ca_en50221 *en50221,
+						int slot, int addr, u8 data)
 {
 	return altera_ci_op_cam(en50221, slot, 0, 0, addr, data);
 }
 
-static int altera_ci_read_cam_ctl(struct dvb_ca_en50221 *en50221,
-				  int slot, u8 addr)
+int altera_ci_read_cam_ctl(struct dvb_ca_en50221 *en50221, int slot, u8 addr)
 {
 	return altera_ci_op_cam(en50221, slot, NETUP_CI_FLG_CTL,
 						NETUP_CI_FLG_RD, addr, 0);
 }
 
-static int altera_ci_write_cam_ctl(struct dvb_ca_en50221 *en50221, int slot,
-				   u8 addr, u8 data)
+int altera_ci_write_cam_ctl(struct dvb_ca_en50221 *en50221, int slot,
+						u8 addr, u8 data)
 {
 	return altera_ci_op_cam(en50221, slot, NETUP_CI_FLG_CTL, 0, addr, data);
 }
 
-static int altera_ci_slot_reset(struct dvb_ca_en50221 *en50221, int slot)
+int altera_ci_slot_reset(struct dvb_ca_en50221 *en50221, int slot)
 {
 	struct altera_ci_state *state = en50221->data;
 	struct fpga_internal *inter = state->internal;
@@ -366,13 +365,13 @@ static int altera_ci_slot_reset(struct dvb_ca_en50221 *en50221, int slot)
 	return 0;
 }
 
-static int altera_ci_slot_shutdown(struct dvb_ca_en50221 *en50221, int slot)
+int altera_ci_slot_shutdown(struct dvb_ca_en50221 *en50221, int slot)
 {
 	/* not implemented */
 	return 0;
 }
 
-static int altera_ci_slot_ts_ctl(struct dvb_ca_en50221 *en50221, int slot)
+int altera_ci_slot_ts_ctl(struct dvb_ca_en50221 *en50221, int slot)
 {
 	struct altera_ci_state *state = en50221->data;
 	struct fpga_internal *inter = state->internal;
@@ -449,8 +448,8 @@ int altera_ci_irq(void *dev)
 }
 EXPORT_SYMBOL(altera_ci_irq);
 
-static int altera_poll_ci_slot_status(struct dvb_ca_en50221 *en50221,
-				      int slot, int open)
+int altera_poll_ci_slot_status(struct dvb_ca_en50221 *en50221, int slot,
+								int open)
 {
 	struct altera_ci_state *state = en50221->data;
 
@@ -460,7 +459,7 @@ static int altera_poll_ci_slot_status(struct dvb_ca_en50221 *en50221,
 	return state->status;
 }
 
-static void altera_hw_filt_release(void *main_dev, int filt_nr)
+void altera_hw_filt_release(void *main_dev, int filt_nr)
 {
 	struct fpga_inode *temp_int = find_inode(main_dev);
 	struct netup_hw_pid_filter *pid_filt = NULL;
@@ -582,7 +581,7 @@ static void altera_toggle_fullts_streaming(struct netup_hw_pid_filter *pid_filt,
 	mutex_unlock(&inter->fpga_mutex);
 }
 
-static int altera_pid_feed_control(void *demux_dev, int filt_nr,
+int altera_pid_feed_control(void *demux_dev, int filt_nr,
 		struct dvb_demux_feed *feed, int onoff)
 {
 	struct fpga_inode *temp_int = find_dinode(demux_dev);
@@ -604,41 +603,41 @@ static int altera_pid_feed_control(void *demux_dev, int filt_nr,
 }
 EXPORT_SYMBOL(altera_pid_feed_control);
 
-static int altera_ci_start_feed(struct dvb_demux_feed *feed, int num)
+int altera_ci_start_feed(struct dvb_demux_feed *feed, int num)
 {
 	altera_pid_feed_control(feed->demux, num, feed, 1);
 
 	return 0;
 }
 
-static int altera_ci_stop_feed(struct dvb_demux_feed *feed, int num)
+int altera_ci_stop_feed(struct dvb_demux_feed *feed, int num)
 {
 	altera_pid_feed_control(feed->demux, num, feed, 0);
 
 	return 0;
 }
 
-static int altera_ci_start_feed_1(struct dvb_demux_feed *feed)
+int altera_ci_start_feed_1(struct dvb_demux_feed *feed)
 {
 	return altera_ci_start_feed(feed, 1);
 }
 
-static int altera_ci_stop_feed_1(struct dvb_demux_feed *feed)
+int altera_ci_stop_feed_1(struct dvb_demux_feed *feed)
 {
 	return altera_ci_stop_feed(feed, 1);
 }
 
-static int altera_ci_start_feed_2(struct dvb_demux_feed *feed)
+int altera_ci_start_feed_2(struct dvb_demux_feed *feed)
 {
 	return altera_ci_start_feed(feed, 2);
 }
 
-static int altera_ci_stop_feed_2(struct dvb_demux_feed *feed)
+int altera_ci_stop_feed_2(struct dvb_demux_feed *feed)
 {
 	return altera_ci_stop_feed(feed, 2);
 }
 
-static int altera_hw_filt_init(struct altera_ci_config *config, int hw_filt_nr)
+int altera_hw_filt_init(struct altera_ci_config *config, int hw_filt_nr)
 {
 	struct netup_hw_pid_filter *pid_filt = NULL;
 	struct fpga_inode *temp_int = find_inode(config->dev);

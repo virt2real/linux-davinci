@@ -23,6 +23,8 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 
+#include <plat/clock.h>
+
 #include "clock.h"
 #include "clock2xxx.h"
 #include "prm2xxx_3xxx.h"
@@ -35,7 +37,7 @@
  * clk_enable/clk_disable()-based usecounting for osc_ck should be
  * replaced with autoidle-based usecounting.
  */
-int omap2_enable_osc_ck(struct clk_hw *clk)
+static int omap2_enable_osc_ck(struct clk *clk)
 {
 	u32 pcc;
 
@@ -53,7 +55,7 @@ int omap2_enable_osc_ck(struct clk_hw *clk)
  * clk_enable/clk_disable()-based usecounting for osc_ck should be
  * replaced with autoidle-based usecounting.
  */
-void omap2_disable_osc_ck(struct clk_hw *clk)
+static void omap2_disable_osc_ck(struct clk *clk)
 {
 	u32 pcc;
 
@@ -62,8 +64,13 @@ void omap2_disable_osc_ck(struct clk_hw *clk)
 	__raw_writel(pcc | OMAP_AUTOEXTCLKMODE_MASK, prcm_clksrc_ctrl);
 }
 
-unsigned long omap2_osc_clk_recalc(struct clk_hw *clk,
-				   unsigned long parent_rate)
+const struct clkops clkops_oscck = {
+	.enable		= omap2_enable_osc_ck,
+	.disable	= omap2_disable_osc_ck,
+};
+
+unsigned long omap2_osc_clk_recalc(struct clk *clk)
 {
 	return omap2xxx_get_apll_clkin() * omap2xxx_get_sysclkdiv();
 }
+

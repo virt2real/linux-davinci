@@ -1,8 +1,7 @@
 #ifndef _ASM_X86_SETUP_H
 #define _ASM_X86_SETUP_H
 
-#include <uapi/asm/setup.h>
-
+#ifdef __KERNEL__
 
 #define COMMAND_LINE_SIZE 2048
 
@@ -124,4 +123,6 @@ void __init x86_64_start_reservations(char *real_mode_data);
 	.size .brk.name,.-1b;				\
 	.popsection
 #endif /* __ASSEMBLY__ */
+#endif  /*  __KERNEL__  */
+
 #endif /* _ASM_X86_SETUP_H */

@@ -31,6 +31,7 @@
 
 #include <mach/regs-gpio.h>
 #include <mach/regs-clock.h>
+#include <mach/regs-mem.h>
 #include <plat/regs-serial.h>
 
 /* CONFIG_DEBUG_RESUME is dangerous if your bootloader does not

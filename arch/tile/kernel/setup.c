@@ -31,7 +31,6 @@
 #include <linux/timex.h>
 #include <linux/hugetlb.h>
 #include <linux/start_kernel.h>
-#include <linux/screen_info.h>
 #include <asm/setup.h>
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
@@ -49,10 +48,6 @@ static inline int ABS(int x) { return x >= 0 ? x : -x; }
 
 /* Chip information */
 char chip_model[64] __write_once;
-
-#ifdef CONFIG_VT
-struct screen_info screen_info;
-#endif
 
 struct pglist_data node_data[MAX_NUMNODES] __read_mostly;
 EXPORT_SYMBOL(node_data);
@@ -1004,8 +999,15 @@ void __cpuinit setup_cpu(int boot)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 
+/*
+ * Note that the kernel can potentially support other compression
+ * techniques than gz, though we don't do so by default.  If we ever
+ * decide to do so we can either look for other filename extensions,
+ * or just allow a file with this name to be compressed with an
+ * arbitrary compressor (somewhat counterintuitively).
+ */
 static int __initdata set_initramfs_file;
-static char __initdata initramfs_file[128] = "initramfs";
+static char __initdata initramfs_file[128] = "initramfs.cpio.gz";
 
 static int __init setup_initramfs_file(char *str)
 {
@@ -1019,9 +1021,9 @@ static int __init setup_initramfs_file(char *str)
 early_param("initramfs_file", setup_initramfs_file);
 
 /*
- * We look for a file called "initramfs" in the hvfs.  If there is one, we
- * allocate some memory for it and it will be unpacked to the initramfs.
- * If it's compressed, the initd code will uncompress it first.
+ * We look for an "initramfs.cpio.gz" file in the hvfs.
+ * If there is one, we allocate some memory for it and it will be
+ * unpacked to the initramfs.
  */
 static void __init load_hv_initrd(void)
 {
@@ -1031,16 +1033,10 @@ static void __init load_hv_initrd(void)
 
 	fd = hv_fs_findfile((HV_VirtAddr) initramfs_file);
 	if (fd == HV_ENOENT) {
-		if (set_initramfs_file) {
+		if (set_initramfs_file)
 			pr_warning("No such hvfs initramfs file '%s'\n",
 				   initramfs_file);
-			return;
-		} else {
-			/* Try old backwards-compatible name. */
-			fd = hv_fs_findfile((HV_VirtAddr)"initramfs.cpio.gz");
-			if (fd == HV_ENOENT)
-				return;
-		}
+		return;
 	}
 	BUG_ON(fd < 0);
 	stat = hv_fs_fstat(fd);

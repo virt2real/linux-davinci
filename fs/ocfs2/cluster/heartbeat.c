@@ -1471,7 +1471,8 @@ static void o2hb_region_release(struct config_item *item)
 
 	mlog(ML_HEARTBEAT, "hb region release (%s)\n", reg->hr_dev_name);
 
-	kfree(reg->hr_tmp_block);
+	if (reg->hr_tmp_block)
+		kfree(reg->hr_tmp_block);
 
 	if (reg->hr_slot_data) {
 		for (i = 0; i < reg->hr_num_pages; i++) {
@@ -1485,7 +1486,8 @@ static void o2hb_region_release(struct config_item *item)
 	if (reg->hr_bdev)
 		blkdev_put(reg->hr_bdev, FMODE_READ|FMODE_WRITE);
 
-	kfree(reg->hr_slots);
+	if (reg->hr_slots)
+		kfree(reg->hr_slots);
 
 	kfree(reg->hr_db_regnum);
 	kfree(reg->hr_db_livenodes);

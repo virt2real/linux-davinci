@@ -30,8 +30,7 @@
 #include <linux/io.h>
 #include <asm/unaligned.h>
 
-#define pr_devinit(fmt, args...) \
-		({ static const char __fmt[] = fmt; printk(__fmt, ## args); })
+#define pr_devinit(fmt, args...) ({ static const __devinitconst char __fmt[] = fmt; printk(__fmt, ## args); })
 
 #define DRIVER_NAME "bfin-async-flash"
 
@@ -124,7 +123,7 @@ static void bfin_flash_copy_to(struct map_info *map, unsigned long to, const voi
 
 static const char *part_probe_types[] = { "cmdlinepart", "RedBoot", NULL };
 
-static int bfin_flash_probe(struct platform_device *pdev)
+static int __devinit bfin_flash_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct physmap_flash_data *pdata = pdev->dev.platform_data;
@@ -173,7 +172,7 @@ static int bfin_flash_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int bfin_flash_remove(struct platform_device *pdev)
+static int __devexit bfin_flash_remove(struct platform_device *pdev)
 {
 	struct async_state *state = platform_get_drvdata(pdev);
 	gpio_free(state->enet_flash_pin);
@@ -185,7 +184,7 @@ static int bfin_flash_remove(struct platform_device *pdev)
 
 static struct platform_driver bfin_flash_driver = {
 	.probe		= bfin_flash_probe,
-	.remove		= bfin_flash_remove,
+	.remove		= __devexit_p(bfin_flash_remove),
 	.driver		= {
 		.name	= DRIVER_NAME,
 	},

@@ -311,7 +311,8 @@ static int rs5c_rtc_alarm_irq_enable(struct device *dev, unsigned int enabled)
 		buf &= ~RS5C_CTRL1_AALE;
 
 	if (i2c_smbus_write_byte_data(client, addr, buf) < 0) {
-		dev_warn(dev, "can't update alarm\n");
+		printk(KERN_WARNING "%s: can't update alarm\n",
+			rs5c->rtc->name);
 		status = -EIO;
 	} else
 		rs5c->regs[RS5C_REG_CTRL1] = buf;
@@ -380,7 +381,7 @@ static int rs5c_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 		addr = RS5C_ADDR(RS5C_REG_CTRL1);
 		buf[0] = rs5c->regs[RS5C_REG_CTRL1] & ~RS5C_CTRL1_AALE;
 		if (i2c_smbus_write_byte_data(client, addr, buf[0]) < 0) {
-			dev_dbg(dev, "can't disable alarm\n");
+			pr_debug("%s: can't disable alarm\n", rs5c->rtc->name);
 			return -EIO;
 		}
 		rs5c->regs[RS5C_REG_CTRL1] = buf[0];
@@ -394,7 +395,7 @@ static int rs5c_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	for (i = 0; i < sizeof(buf); i++) {
 		addr = RS5C_ADDR(RS5C_REG_ALARM_A_MIN + i);
 		if (i2c_smbus_write_byte_data(client, addr, buf[i]) < 0) {
-			dev_dbg(dev, "can't set alarm time\n");
+			pr_debug("%s: can't set alarm time\n", rs5c->rtc->name);
 			return -EIO;
 		}
 	}
@@ -404,7 +405,8 @@ static int rs5c_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 		addr = RS5C_ADDR(RS5C_REG_CTRL1);
 		buf[0] = rs5c->regs[RS5C_REG_CTRL1] | RS5C_CTRL1_AALE;
 		if (i2c_smbus_write_byte_data(client, addr, buf[0]) < 0)
-			dev_warn(dev, "can't enable alarm\n");
+			printk(KERN_WARNING "%s: can't enable alarm\n",
+				rs5c->rtc->name);
 		rs5c->regs[RS5C_REG_CTRL1] = buf[0];
 	}
 

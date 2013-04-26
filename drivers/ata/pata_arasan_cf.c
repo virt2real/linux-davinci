@@ -317,12 +317,6 @@ static int cf_init(struct arasan_cf_dev *acdev)
 		return ret;
 	}
 
-	ret = clk_set_rate(acdev->clk, 166000000);
-	if (ret) {
-		dev_warn(acdev->host->dev, "clock set rate failed");
-		return ret;
-	}
-
 	spin_lock_irqsave(&acdev->host->lock, flags);
 	/* configure CF interface clock */
 	writel((pdata->cf_if_clk <= CF_IF_CLK_200M) ? pdata->cf_if_clk :
@@ -674,16 +668,13 @@ void arasan_cf_error_handler(struct ata_port *ap)
 
 static void arasan_cf_dma_start(struct arasan_cf_dev *acdev)
 {
-	struct ata_queued_cmd *qc = acdev->qc;
-	struct ata_port *ap = qc->ap;
-	struct ata_taskfile *tf = &qc->tf;
 	u32 xfer_ctr = readl(acdev->vbase + XFER_CTR) & ~XFER_DIR_MASK;
-	u32 write = tf->flags & ATA_TFLAG_WRITE;
+	u32 write = acdev->qc->tf.flags & ATA_TFLAG_WRITE;
 
 	xfer_ctr |= write ? XFER_WRITE : XFER_READ;
 	writel(xfer_ctr, acdev->vbase + XFER_CTR);
 
-	ap->ops->sff_exec_command(ap, tf);
+	acdev->qc->ap->ops->sff_exec_command(acdev->qc->ap, &acdev->qc->tf);
 	ata_sff_queue_work(&acdev->work);
 }
 
@@ -791,7 +782,7 @@ static struct ata_port_operations arasan_cf_ops = {
 	.set_dmamode = arasan_cf_set_dmamode,
 };
 
-static int arasan_cf_probe(struct platform_device *pdev)
+static int __devinit arasan_cf_probe(struct platform_device *pdev)
 {
 	struct arasan_cf_dev *acdev;
 	struct arasan_cf_pdata *pdata = dev_get_platdata(&pdev->dev);
@@ -905,7 +896,7 @@ free_clk:
 	return ret;
 }
 
-static int arasan_cf_remove(struct platform_device *pdev)
+static int __devexit arasan_cf_remove(struct platform_device *pdev)
 {
 	struct ata_host *host = dev_get_drvdata(&pdev->dev);
 	struct arasan_cf_dev *acdev = host->ports[0]->private_data;
@@ -917,7 +908,7 @@ static int arasan_cf_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_PM
 static int arasan_cf_suspend(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
@@ -955,7 +946,7 @@ MODULE_DEVICE_TABLE(of, arasan_cf_id_table);
 
 static struct platform_driver arasan_cf_driver = {
 	.probe		= arasan_cf_probe,
-	.remove		= arasan_cf_remove,
+	.remove		= __devexit_p(arasan_cf_remove),
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,

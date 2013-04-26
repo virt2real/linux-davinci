@@ -74,6 +74,8 @@ static int __init pcibios_init(void)
 
 subsys_initcall(pcibios_init);
 
+#ifdef CONFIG_HOTPLUG
+
 int pcibios_unmap_io_space(struct pci_bus *bus)
 {
 	struct pci_controller *hose;
@@ -122,7 +124,9 @@ int pcibios_unmap_io_space(struct pci_bus *bus)
 }
 EXPORT_SYMBOL_GPL(pcibios_unmap_io_space);
 
-static int pcibios_map_phb_io_space(struct pci_controller *hose)
+#endif /* CONFIG_HOTPLUG */
+
+static int __devinit pcibios_map_phb_io_space(struct pci_controller *hose)
 {
 	struct vm_struct *area;
 	unsigned long phys_page;
@@ -173,7 +177,7 @@ static int pcibios_map_phb_io_space(struct pci_controller *hose)
 	return 0;
 }
 
-int pcibios_map_io_space(struct pci_bus *bus)
+int __devinit pcibios_map_io_space(struct pci_bus *bus)
 {
 	WARN_ON(bus == NULL);
 
@@ -193,7 +197,7 @@ int pcibios_map_io_space(struct pci_bus *bus)
 }
 EXPORT_SYMBOL_GPL(pcibios_map_io_space);
 
-void pcibios_setup_phb_io_space(struct pci_controller *hose)
+void __devinit pcibios_setup_phb_io_space(struct pci_controller *hose)
 {
 	pcibios_map_phb_io_space(hose);
 }

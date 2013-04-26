@@ -825,7 +825,8 @@ static int autoresize(struct ubi_device *ubi, int vol_id)
 		 * No available PEBs to re-size the volume, clear the flag on
 		 * flash and exit.
 		 */
-		vtbl_rec = ubi->vtbl[vol_id];
+		memcpy(&vtbl_rec, &ubi->vtbl[vol_id],
+		       sizeof(struct ubi_vtbl_record));
 		err = ubi_change_vtbl_record(ubi, vol_id, &vtbl_rec);
 		if (err)
 			ubi_err("cannot clean auto-resize flag for volume %d",
@@ -985,10 +986,14 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 	if (!ubi->fm_buf)
 		goto out_free;
 #endif
+	err = ubi_debugging_init_dev(ubi);
+	if (err)
+		goto out_free;
+
 	err = ubi_attach(ubi, 0);
 	if (err) {
 		ubi_err("failed to attach mtd%d, error %d", mtd->index, err);
-		goto out_free;
+		goto out_debugging;
 	}
 
 	if (ubi->autoresize_vol_id != -1) {
@@ -1055,6 +1060,8 @@ out_detach:
 	ubi_wl_close(ubi);
 	ubi_free_internal_volumes(ubi);
 	vfree(ubi->vtbl);
+out_debugging:
+	ubi_debugging_exit_dev(ubi);
 out_free:
 	vfree(ubi->peb_buf);
 	vfree(ubi->fm_buf);
@@ -1132,6 +1139,7 @@ int ubi_detach_mtd_dev(int ubi_num, int anyway)
 	ubi_free_internal_volumes(ubi);
 	vfree(ubi->vtbl);
 	put_mtd_device(ubi->mtd);
+	ubi_debugging_exit_dev(ubi);
 	vfree(ubi->peb_buf);
 	vfree(ubi->fm_buf);
 	ubi_msg("mtd%d is detached from ubi%d", ubi->mtd->index, ubi->ubi_num);

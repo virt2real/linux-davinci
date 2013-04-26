@@ -132,7 +132,7 @@ static struct clk *clk_msysclk_sources[] = {
 	[3] = &clk_mpllref,
 };
 
-static struct clksrc_clk clk_msysclk = {
+struct clksrc_clk clk_msysclk = {
 	.clk	= {
 		.name		= "msysclk",
 		.parent		= &clk_xtal,

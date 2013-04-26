@@ -297,10 +297,5 @@ int __meminit vmemmap_populate(struct page *start_page,
 
 	return 0;
 }
-
-void vmemmap_free(struct page *memmap, unsigned long nr_pages)
-{
-}
-
 #endif /* CONFIG_SPARSEMEM_VMEMMAP */
 

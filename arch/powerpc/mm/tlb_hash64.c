@@ -82,11 +82,11 @@ void hpte_need_flush(struct mm_struct *mm, unsigned long addr,
 	if (!is_kernel_addr(addr)) {
 		ssize = user_segment_size(addr);
 		vsid = get_vsid(mm->context.id, addr, ssize);
+		WARN_ON(vsid == 0);
 	} else {
 		vsid = get_kernel_vsid(addr, mmu_kernel_ssize);
 		ssize = mmu_kernel_ssize;
 	}
-	WARN_ON(vsid == 0);
 	vpn = hpt_vpn(addr, vsid, ssize);
 	rpte = __real_pte(__pte(pte), ptep);
 
@@ -186,6 +186,8 @@ void tlb_flush(struct mmu_gather *tlb)
  * Because of that usage pattern, it's only available with CONFIG_HOTPLUG
  * and is implemented for small size rather than speed.
  */
+#ifdef CONFIG_HOTPLUG
+
 void __flush_hash_table_range(struct mm_struct *mm, unsigned long start,
 			      unsigned long end)
 {
@@ -219,3 +221,5 @@ void __flush_hash_table_range(struct mm_struct *mm, unsigned long start,
 	arch_leave_lazy_mmu_mode();
 	local_irq_restore(flags);
 }
+
+#endif /* CONFIG_HOTPLUG */

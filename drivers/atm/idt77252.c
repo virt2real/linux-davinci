@@ -3109,7 +3109,8 @@ deinit_card(struct idt77252_dev *card)
 }
 
 
-static void init_sram(struct idt77252_dev *card)
+static void __devinit
+init_sram(struct idt77252_dev *card)
 {
 	int i;
 
@@ -3256,7 +3257,8 @@ static void init_sram(struct idt77252_dev *card)
 	IPRINTK("%s: SRAM initialization complete.\n", card->name);
 }
 
-static int init_card(struct atm_dev *dev)
+static int __devinit
+init_card(struct atm_dev *dev)
 {
 	struct idt77252_dev *card = dev->dev_data;
 	struct pci_dev *pcidev = card->pcidev;
@@ -3535,7 +3537,8 @@ static int init_card(struct atm_dev *dev)
 /*****************************************************************************/
 
 
-static int idt77252_preset(struct idt77252_dev *card)
+static int __devinit
+idt77252_preset(struct idt77252_dev *card)
 {
 	u16 pci_command;
 
@@ -3576,7 +3579,8 @@ static int idt77252_preset(struct idt77252_dev *card)
 }
 
 
-static unsigned long probe_sram(struct idt77252_dev *card)
+static unsigned long __devinit
+probe_sram(struct idt77252_dev *card)
 {
 	u32 data, addr;
 
@@ -3597,8 +3601,8 @@ static unsigned long probe_sram(struct idt77252_dev *card)
 	return addr * sizeof(u32);
 }
 
-static int idt77252_init_one(struct pci_dev *pcidev,
-			     const struct pci_device_id *id)
+static int __devinit
+idt77252_init_one(struct pci_dev *pcidev, const struct pci_device_id *id)
 {
 	static struct idt77252_dev **last = &idt77252_chain;
 	static int index = 0;

@@ -115,7 +115,7 @@ static void pruss_cleanup(struct platform_device *dev,
 	kfree(gdev);
 }
 
-static int pruss_probe(struct platform_device *dev)
+static int __devinit pruss_probe(struct platform_device *dev)
 {
 	struct uio_info *p;
 	struct uio_pruss_dev *gdev;
@@ -219,7 +219,7 @@ out_free:
 	return ret;
 }
 
-static int pruss_remove(struct platform_device *dev)
+static int __devexit pruss_remove(struct platform_device *dev)
 {
 	struct uio_pruss_dev *gdev = platform_get_drvdata(dev);
 
@@ -230,7 +230,7 @@ static int pruss_remove(struct platform_device *dev)
 
 static struct platform_driver pruss_driver = {
 	.probe = pruss_probe,
-	.remove = pruss_remove,
+	.remove = __devexit_p(pruss_remove),
 	.driver = {
 		   .name = DRV_NAME,
 		   .owner = THIS_MODULE,

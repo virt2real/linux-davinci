@@ -42,15 +42,10 @@ struct radar_types {
 #define MIN_PPB_THRESH	50
 #define PPB_THRESH(PPB) ((PPB * MIN_PPB_THRESH + 50) / 100)
 #define PRF2PRI(PRF) ((1000000 + PRF / 2) / PRF)
-/* percentage of pulse width tolerance */
-#define WIDTH_TOLERANCE 5
-#define WIDTH_LOWER(X) ((X*(100-WIDTH_TOLERANCE)+50)/100)
-#define WIDTH_UPPER(X) ((X*(100+WIDTH_TOLERANCE)+50)/100)
 
 #define ETSI_PATTERN(ID, WMIN, WMAX, PMIN, PMAX, PRF, PPB)	\
 {								\
-	ID, WIDTH_LOWER(WMIN), WIDTH_UPPER(WMAX),		\
-	(PRF2PRI(PMAX) - PRI_TOLERANCE),			\
+	ID, WMIN, WMAX, (PRF2PRI(PMAX) - PRI_TOLERANCE),	\
 	(PRF2PRI(PMIN) * PRF + PRI_TOLERANCE), PRF, PPB * PRF,	\
 	PPB_THRESH(PPB), PRI_TOLERANCE,				\
 }
@@ -279,7 +274,7 @@ static bool dpd_set_domain(struct dfs_pattern_detector *dpd,
 
 static struct dfs_pattern_detector default_dpd = {
 	.exit		= dpd_exit,
-	.set_dfs_domain	= dpd_set_domain,
+	.set_domain	= dpd_set_domain,
 	.add_pulse	= dpd_add_pulse,
 	.region		= NL80211_DFS_UNSET,
 };
@@ -288,19 +283,18 @@ struct dfs_pattern_detector *
 dfs_pattern_detector_init(enum nl80211_dfs_regions region)
 {
 	struct dfs_pattern_detector *dpd;
-
 	dpd = kmalloc(sizeof(*dpd), GFP_KERNEL);
-	if (dpd == NULL)
+	if (dpd == NULL) {
+		pr_err("allocation of dfs_pattern_detector failed\n");
 		return NULL;
-
+	}
 	*dpd = default_dpd;
 	INIT_LIST_HEAD(&dpd->channel_detectors);
 
-	if (dpd->set_dfs_domain(dpd, region))
+	if (dpd->set_domain(dpd, region))
 		return dpd;
 
 	pr_err("Could not set DFS domain to %d. ", region);
-	kfree(dpd);
 	return NULL;
 }
 EXPORT_SYMBOL(dfs_pattern_detector_init);

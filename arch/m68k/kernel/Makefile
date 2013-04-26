@@ -20,5 +20,7 @@ obj-$(CONFIG_MMU_MOTOROLA) += ints.o vectors.o
 obj-$(CONFIG_MMU_SUN3) += ints.o vectors.o
 obj-$(CONFIG_PCI) += pcibios.o
 
-obj-$(CONFIG_HAS_DMA)	+= dma.o
+ifndef CONFIG_MMU_SUN3
+obj-y	+= dma.o
+endif
 

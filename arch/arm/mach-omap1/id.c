@@ -17,7 +17,7 @@
 #include <linux/io.h>
 #include <asm/system_info.h>
 
-#include "soc.h"
+#include <plat/cpu.h>
 
 #include <mach/hardware.h>
 

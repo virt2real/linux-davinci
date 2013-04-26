@@ -43,12 +43,11 @@ int blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 	DECLARE_COMPLETION_ONSTACK(wait);
 	struct request_queue *q = bdev_get_queue(bdev);
 	int type = REQ_WRITE | REQ_DISCARD;
-	sector_t max_discard_sectors;
-	sector_t granularity, alignment;
+	unsigned int max_discard_sectors;
+	unsigned int granularity, alignment, mask;
 	struct bio_batch bb;
 	struct bio *bio;
 	int ret = 0;
-	struct blk_plug plug;
 
 	if (!q)
 		return -ENXIO;
@@ -58,16 +57,15 @@ int blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 
 	/* Zero-sector (unknown) and one-sector granularities are the same.  */
 	granularity = max(q->limits.discard_granularity >> 9, 1U);
-	alignment = bdev_discard_alignment(bdev) >> 9;
-	alignment = sector_div(alignment, granularity);
+	mask = granularity - 1;
+	alignment = (bdev_discard_alignment(bdev) >> 9) & mask;
 
 	/*
 	 * Ensure that max_discard_sectors is of the proper
 	 * granularity, so that requests stay aligned after a split.
 	 */
 	max_discard_sectors = min(q->limits.max_discard_sectors, UINT_MAX >> 9);
-	sector_div(max_discard_sectors, granularity);
-	max_discard_sectors *= granularity;
+	max_discard_sectors = round_down(max_discard_sectors, granularity);
 	if (unlikely(!max_discard_sectors)) {
 		/* Avoid infinite loop below. Being cautious never hurts. */
 		return -EOPNOTSUPP;
@@ -83,10 +81,9 @@ int blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 	bb.flags = 1 << BIO_UPTODATE;
 	bb.wait = &wait;
 
-	blk_start_plug(&plug);
 	while (nr_sects) {
 		unsigned int req_sects;
-		sector_t end_sect, tmp;
+		sector_t end_sect;
 
 		bio = bio_alloc(gfp_mask, 1);
 		if (!bio) {
@@ -101,12 +98,10 @@ int blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 		 * misaligned, stop the discard at the previous aligned sector.
 		 */
 		end_sect = sector + req_sects;
-		tmp = end_sect;
-		if (req_sects < nr_sects &&
-		    sector_div(tmp, granularity) != alignment) {
-			end_sect = end_sect - alignment;
-			sector_div(end_sect, granularity);
-			end_sect = end_sect * granularity + alignment;
+		if (req_sects < nr_sects && (end_sect & mask) != alignment) {
+			end_sect =
+				round_down(end_sect - alignment, granularity)
+				+ alignment;
 			req_sects = end_sect - sector;
 		}
 
@@ -122,11 +117,10 @@ int blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 		atomic_inc(&bb.done);
 		submit_bio(type, bio);
 	}
-	blk_finish_plug(&plug);
 
 	/* Wait for bios in-flight */
 	if (!atomic_dec_and_test(&bb.done))
-		wait_for_completion_io(&wait);
+		wait_for_completion(&wait);
 
 	if (!test_bit(BIO_UPTODATE, &bb.flags))
 		ret = -EIO;
@@ -200,7 +194,7 @@ int blkdev_issue_write_same(struct block_device *bdev, sector_t sector,
 
 	/* Wait for bios in-flight */
 	if (!atomic_dec_and_test(&bb.done))
-		wait_for_completion_io(&wait);
+		wait_for_completion(&wait);
 
 	if (!test_bit(BIO_UPTODATE, &bb.flags))
 		ret = -ENOTSUPP;
@@ -262,7 +256,7 @@ int __blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
 
 	/* Wait for bios in-flight */
 	if (!atomic_dec_and_test(&bb.done))
-		wait_for_completion_io(&wait);
+		wait_for_completion(&wait);
 
 	if (!test_bit(BIO_UPTODATE, &bb.flags))
 		/* One of bios in the batch was completed with error.*/

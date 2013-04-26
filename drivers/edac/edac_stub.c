@@ -5,7 +5,7 @@
  *
  * 2007 (c) MontaVista Software, Inc.
  * 2010 (c) Advanced Micro Devices Inc.
- *	    Borislav Petkov <bp@alien8.de>
+ *	    Borislav Petkov <borislav.petkov@amd.com>
  *
  * This file is licensed under the terms of the GNU General Public
  * License version 2. This program is licensed "as is" without any

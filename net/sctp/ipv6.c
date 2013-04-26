@@ -326,10 +326,9 @@ static void sctp_v6_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 	 */
 	rcu_read_lock();
 	list_for_each_entry_rcu(laddr, &bp->address_list, list) {
-		if (!laddr->valid)
+		if (!laddr->valid && laddr->state != SCTP_ADDR_SRC)
 			continue;
-		if ((laddr->state == SCTP_ADDR_SRC) &&
-		    (laddr->a.sa.sa_family == AF_INET6) &&
+		if ((laddr->a.sa.sa_family == AF_INET6) &&
 		    (scope <= sctp_scope(&laddr->a))) {
 			bmatchlen = sctp_v6_addr_match_len(daddr, &laddr->a);
 			if (!baddr || (matchlen < bmatchlen)) {
@@ -346,7 +345,7 @@ static void sctp_v6_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 	}
 
 out:
-	if (!IS_ERR_OR_NULL(dst)) {
+	if (!IS_ERR(dst)) {
 		struct rt6_info *rt;
 		rt = (struct rt6_info *)dst;
 		t->dst = dst;

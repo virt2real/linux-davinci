@@ -18,12 +18,11 @@
 #include <linux/serial_reg.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
+#include <linux/of_serial.h>
 #include <linux/of_platform.h>
 #include <linux/nwpserial.h>
-#include <linux/clk.h>
 
 struct of_serial_info {
-	struct clk *clk;
 	int type;
 	int line;
 };
@@ -44,18 +43,15 @@ void tegra_serial_handle_break(struct uart_port *p)
 		udelay(1);
 	} while (1);
 }
-#else
-static inline void tegra_serial_handle_break(struct uart_port *port)
-{
-}
+/* FIXME remove this export when tegra finishes conversion to open firmware */
+EXPORT_SYMBOL_GPL(tegra_serial_handle_break);
 #endif
 
 /*
  * Fill a struct uart_port for a given device node
  */
-static int of_platform_serial_setup(struct platform_device *ofdev,
-			int type, struct uart_port *port,
-			struct of_serial_info *info)
+static int __devinit of_platform_serial_setup(struct platform_device *ofdev,
+					int type, struct uart_port *port)
 {
 	struct resource resource;
 	struct device_node *np = ofdev->dev.of_node;
@@ -64,17 +60,8 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 
 	memset(port, 0, sizeof *port);
 	if (of_property_read_u32(np, "clock-frequency", &clk)) {
-
-		/* Get clk rate through clk driver if present */
-		info->clk = clk_get(&ofdev->dev, NULL);
-		if (IS_ERR(info->clk)) {
-			dev_warn(&ofdev->dev,
-				"clk or clock-frequency not defined\n");
-			return PTR_ERR(info->clk);
-		}
-
-		clk_prepare_enable(info->clk);
-		clk = clk_get_rate(info->clk);
+		dev_warn(&ofdev->dev, "no clock-frequency property set\n");
+		return -ENODEV;
 	}
 	/* If current-speed was set, then try not to change it. */
 	if (of_property_read_u32(np, "current-speed", &spd) == 0)
@@ -83,7 +70,7 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 	ret = of_address_to_resource(np, 0, &resource);
 	if (ret) {
 		dev_warn(&ofdev->dev, "invalid address\n");
-		goto out;
+		return ret;
 	}
 
 	spin_lock_init(&port->lock);
@@ -110,8 +97,7 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 		default:
 			dev_warn(&ofdev->dev, "unsupported reg-io-width (%d)\n",
 				 prop);
-			ret = -EINVAL;
-			goto out;
+			return -EINVAL;
 		}
 	}
 
@@ -129,17 +115,13 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 		port->handle_break = tegra_serial_handle_break;
 
 	return 0;
-out:
-	if (info->clk)
-		clk_disable_unprepare(info->clk);
-	return ret;
 }
 
 /*
  * Try to register a serial port
  */
 static struct of_device_id of_platform_serial_table[];
-static int of_platform_serial_probe(struct platform_device *ofdev)
+static int __devinit of_platform_serial_probe(struct platform_device *ofdev)
 {
 	const struct of_device_id *match;
 	struct of_serial_info *info;
@@ -159,7 +141,7 @@ static int of_platform_serial_probe(struct platform_device *ofdev)
 		return -ENOMEM;
 
 	port_type = (unsigned long)match->data;
-	ret = of_platform_serial_setup(ofdev, port_type, &port, info);
+	ret = of_platform_serial_setup(ofdev, port_type, &port);
 	if (ret)
 		goto out;
 
@@ -222,9 +204,6 @@ static int of_platform_serial_remove(struct platform_device *ofdev)
 		/* need to add code for these */
 		break;
 	}
-
-	if (info->clk)
-		clk_disable_unprepare(info->clk);
 	kfree(info);
 	return 0;
 }
@@ -232,7 +211,7 @@ static int of_platform_serial_remove(struct platform_device *ofdev)
 /*
  * A few common types, add more as needed.
  */
-static struct of_device_id of_platform_serial_table[] = {
+static struct of_device_id __devinitdata of_platform_serial_table[] = {
 	{ .compatible = "ns8250",   .data = (void *)PORT_8250, },
 	{ .compatible = "ns16450",  .data = (void *)PORT_16450, },
 	{ .compatible = "ns16550a", .data = (void *)PORT_16550A, },
@@ -241,12 +220,6 @@ static struct of_device_id of_platform_serial_table[] = {
 	{ .compatible = "ns16850",  .data = (void *)PORT_16850, },
 	{ .compatible = "nvidia,tegra20-uart", .data = (void *)PORT_TEGRA, },
 	{ .compatible = "nxp,lpc3220-uart", .data = (void *)PORT_LPC3220, },
-	{ .compatible = "altr,16550-FIFO32",
-		.data = (void *)PORT_ALTR_16550_F32, },
-	{ .compatible = "altr,16550-FIFO64",
-		.data = (void *)PORT_ALTR_16550_F64, },
-	{ .compatible = "altr,16550-FIFO128",
-		.data = (void *)PORT_ALTR_16550_F128, },
 #ifdef CONFIG_SERIAL_OF_PLATFORM_NWPSERIAL
 	{ .compatible = "ibm,qpace-nwp-serial",
 		.data = (void *)PORT_NWPSERIAL, },

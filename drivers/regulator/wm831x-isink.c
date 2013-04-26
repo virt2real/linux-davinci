@@ -148,7 +148,7 @@ static irqreturn_t wm831x_isink_irq(int irq, void *data)
 }
 
 
-static int wm831x_isink_probe(struct platform_device *pdev)
+static __devinit int wm831x_isink_probe(struct platform_device *pdev)
 {
 	struct wm831x *wm831x = dev_get_drvdata(pdev->dev.parent);
 	struct wm831x_pdata *pdata = wm831x->dev->platform_data;
@@ -221,7 +221,7 @@ err:
 	return ret;
 }
 
-static int wm831x_isink_remove(struct platform_device *pdev)
+static __devexit int wm831x_isink_remove(struct platform_device *pdev)
 {
 	struct wm831x_isink *isink = platform_get_drvdata(pdev);
 
@@ -236,7 +236,7 @@ static int wm831x_isink_remove(struct platform_device *pdev)
 
 static struct platform_driver wm831x_isink_driver = {
 	.probe = wm831x_isink_probe,
-	.remove = wm831x_isink_remove,
+	.remove = __devexit_p(wm831x_isink_remove),
 	.driver		= {
 		.name	= "wm831x-isink",
 		.owner	= THIS_MODULE,

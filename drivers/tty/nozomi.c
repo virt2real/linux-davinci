@@ -400,7 +400,7 @@ struct buffer {
 } __attribute__ ((packed));
 
 /*    Global variables */
-static const struct pci_device_id nozomi_pci_tbl[] = {
+static const struct pci_device_id nozomi_pci_tbl[] __devinitconst = {
 	{PCI_DEVICE(0x1931, 0x000c)},	/* Nozomi HSDPA */
 	{},
 };
@@ -827,10 +827,15 @@ static int receive_data(enum port_type index, struct nozomi *dc)
 	struct tty_struct *tty = tty_port_tty_get(&port->port);
 	int i, ret;
 
+	if (unlikely(!tty)) {
+		DBG1("tty not open for port: %d?", index);
+		return 1;
+	}
+
 	read_mem32((u32 *) &size, addr, 4);
 	/*  DBG1( "%d bytes port: %d", size, index); */
 
-	if (tty && test_bit(TTY_THROTTLED, &tty->flags)) {
+	if (test_bit(TTY_THROTTLED, &tty->flags)) {
 		DBG1("No room in tty, don't read data, don't ack interrupt, "
 			"disable interrupt");
 
@@ -850,14 +855,13 @@ static int receive_data(enum port_type index, struct nozomi *dc)
 		read_mem32((u32 *) buf, addr + offset, RECEIVE_BUF_MAX);
 
 		if (size == 1) {
-			tty_insert_flip_char(&port->port, buf[0], TTY_NORMAL);
+			tty_insert_flip_char(tty, buf[0], TTY_NORMAL);
 			size = 0;
 		} else if (size < RECEIVE_BUF_MAX) {
-			size -= tty_insert_flip_string(&port->port,
-					(char *)buf, size);
+			size -= tty_insert_flip_string(tty, (char *) buf, size);
 		} else {
-			i = tty_insert_flip_string(&port->port,
-					(char *)buf, RECEIVE_BUF_MAX);
+			i = tty_insert_flip_string(tty, \
+						(char *) buf, RECEIVE_BUF_MAX);
 			size -= i;
 			offset += i;
 		}
@@ -1272,11 +1276,15 @@ static irqreturn_t interrupt_handler(int irq, void *dev_id)
 
 exit_handler:
 	spin_unlock(&dc->spin_mutex);
-
-	for (a = 0; a < NOZOMI_MAX_PORTS; a++)
-		if (test_and_clear_bit(a, &dc->flip))
-			tty_flip_buffer_push(&dc->port[a].port);
-
+	for (a = 0; a < NOZOMI_MAX_PORTS; a++) {
+		struct tty_struct *tty;
+		if (test_and_clear_bit(a, &dc->flip)) {
+			tty = tty_port_tty_get(&dc->port[a].port);
+			if (tty)
+				tty_flip_buffer_push(tty);
+			tty_kref_put(tty);
+		}
+	}
 	return IRQ_HANDLED;
 none:
 	spin_unlock(&dc->spin_mutex);
@@ -1352,7 +1360,7 @@ static void remove_sysfs_files(struct nozomi *dc)
 }
 
 /* Allocate memory for one device */
-static int nozomi_card_init(struct pci_dev *pdev,
+static int __devinit nozomi_card_init(struct pci_dev *pdev,
 				      const struct pci_device_id *ent)
 {
 	resource_size_t start;
@@ -1471,7 +1479,6 @@ static int nozomi_card_init(struct pci_dev *pdev,
 		if (IS_ERR(tty_dev)) {
 			ret = PTR_ERR(tty_dev);
 			dev_err(&pdev->dev, "Could not allocate tty?\n");
-			tty_port_destroy(&port->port);
 			goto err_free_tty;
 		}
 	}
@@ -1479,10 +1486,8 @@ static int nozomi_card_init(struct pci_dev *pdev,
 	return 0;
 
 err_free_tty:
-	for (i = 0; i < MAX_PORT; ++i) {
-		tty_unregister_device(ntty_driver, dc->index_start + i);
-		tty_port_destroy(&dc->port[i].port);
-	}
+	for (i = dc->index_start; i < dc->index_start + MAX_PORT; ++i)
+		tty_unregister_device(ntty_driver, i);
 err_free_kfifo:
 	for (i = 0; i < MAX_PORT; i++)
 		kfifo_free(&dc->port[i].fifo_ul);
@@ -1499,7 +1504,7 @@ err:
 	return ret;
 }
 
-static void tty_exit(struct nozomi *dc)
+static void __devexit tty_exit(struct nozomi *dc)
 {
 	unsigned int i;
 
@@ -1515,14 +1520,12 @@ static void tty_exit(struct nozomi *dc)
 	   complete off a hangup method ? */
 	while (dc->open_ttys)
 		msleep(1);
-	for (i = 0; i < MAX_PORT; ++i) {
-		tty_unregister_device(ntty_driver, dc->index_start + i);
-		tty_port_destroy(&dc->port[i].port);
-	}
+	for (i = dc->index_start; i < dc->index_start + MAX_PORT; ++i)
+		tty_unregister_device(ntty_driver, i);
 }
 
 /* Deallocate memory for one device */
-static void nozomi_card_exit(struct pci_dev *pdev)
+static void __devexit nozomi_card_exit(struct pci_dev *pdev)
 {
 	int i;
 	struct ctrl_ul ctrl;
@@ -1679,6 +1682,12 @@ static int ntty_write(struct tty_struct *tty, const unsigned char *buffer,
 
 	rval = kfifo_in(&port->fifo_ul, (unsigned char *)buffer, count);
 
+	/* notify card */
+	if (unlikely(dc == NULL)) {
+		DBG1("No device context?");
+		goto exit;
+	}
+
 	spin_lock_irqsave(&dc->spin_mutex, flags);
 	/* CTS is only valid on the modem channel */
 	if (port == &(dc->port[PORT_MDM])) {
@@ -1694,6 +1703,7 @@ static int ntty_write(struct tty_struct *tty, const unsigned char *buffer,
 	}
 	spin_unlock_irqrestore(&dc->spin_mutex, flags);
 
+exit:
 	return rval;
 }
 
@@ -1893,7 +1903,7 @@ static struct pci_driver nozomi_driver = {
 	.name = NOZOMI_NAME,
 	.id_table = nozomi_pci_tbl,
 	.probe = nozomi_card_init,
-	.remove = nozomi_card_exit,
+	.remove = __devexit_p(nozomi_card_exit),
 };
 
 static __init int nozomi_init(void)

@@ -9,8 +9,6 @@
  * more details.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 //#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -20,7 +18,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
-#include <linux/string.h>
+#include <asm/string.h>
 #include <linux/wireless.h>
 
 #include "ieee80211.h"
@@ -66,7 +64,7 @@ void ieee80211_ccmp_aes_encrypt(struct crypto_tfm *tfm,
 	crypto_cipher_encrypt_one((void *)tfm, ct, pt);
 }
 
-static void *ieee80211_ccmp_init(int key_idx)
+static void * ieee80211_ccmp_init(int key_idx)
 {
 	struct ieee80211_ccmp_data *priv;
 
@@ -77,7 +75,8 @@ static void *ieee80211_ccmp_init(int key_idx)
 
 	priv->tfm = (void *)crypto_alloc_cipher("aes", 0, CRYPTO_ALG_ASYNC);
 	if (IS_ERR(priv->tfm)) {
-		pr_debug("could not allocate crypto API aes\n");
+		printk(KERN_DEBUG "ieee80211_crypt_ccmp: could not allocate "
+		       "crypto API aes\n");
 		priv->tfm = NULL;
 		goto fail;
 	}
@@ -129,7 +128,7 @@ static void ccmp_init_blocks(struct crypto_tfm *tfm,
 	/*
 	qc_included = ((WLAN_FC_GET_TYPE(fc) == IEEE80211_FTYPE_DATA) &&
 		       (WLAN_FC_GET_STYPE(fc) & 0x08));
-	*/
+        */
 	// fixed by David :2006.9.6
 	qc_included = ((WLAN_FC_GET_TYPE(fc) == IEEE80211_FTYPE_DATA) &&
 		       (WLAN_FC_GET_STYPE(fc) & 0x80));
@@ -283,22 +282,23 @@ static int ieee80211_ccmp_decrypt(struct sk_buff *skb, int hdr_len, void *priv)
 	keyidx = pos[3];
 	if (!(keyidx & (1 << 5))) {
 		if (net_ratelimit()) {
-			pr_debug("received packet without ExtIV flag from %pM\n",
-				 hdr->addr2);
+			printk(KERN_DEBUG "CCMP: received packet without ExtIV"
+			       " flag from %pM\n", hdr->addr2);
 		}
 		key->dot11RSNAStatsCCMPFormatErrors++;
 		return -2;
 	}
 	keyidx >>= 6;
 	if (key->key_idx != keyidx) {
-		pr_debug("RX tkey->key_idx=%d frame keyidx=%d priv=%p\n",
-			 key->key_idx, keyidx, priv);
+		printk(KERN_DEBUG "CCMP: RX tkey->key_idx=%d frame "
+		       "keyidx=%d priv=%p\n", key->key_idx, keyidx, priv);
 		return -6;
 	}
 	if (!key->key_set) {
 		if (net_ratelimit()) {
-			pr_debug("received packet from %pM with keyid=%d that does not have a configured key\n",
-				 hdr->addr2, keyidx);
+			printk(KERN_DEBUG "CCMP: received packet from %pM"
+			       " with keyid=%d that does not have a configured"
+			       " key\n", hdr->addr2, keyidx);
 		}
 		return -3;
 	}
@@ -313,8 +313,9 @@ static int ieee80211_ccmp_decrypt(struct sk_buff *skb, int hdr_len, void *priv)
 
 	if (memcmp(pn, key->rx_pn, CCMP_PN_LEN) <= 0) {
 		if (net_ratelimit()) {
-			pr_debug("replay detected: STA=%pM previous PN %pm received PN %pm\n",
-				 hdr->addr2, key->rx_pn, pn);
+			printk(KERN_DEBUG "CCMP: replay detected: STA=%pM"
+			       " previous PN %pm received PN %pm\n",
+			       hdr->addr2, key->rx_pn, pn);
 		}
 		key->dot11RSNAStatsCCMPReplays++;
 		return -4;
@@ -340,9 +341,10 @@ static int ieee80211_ccmp_decrypt(struct sk_buff *skb, int hdr_len, void *priv)
 	}
 
 	if (memcmp(mic, a, CCMP_MIC_LEN) != 0) {
-		if (net_ratelimit())
-			pr_debug("decrypt failed: STA=%pM\n", hdr->addr2);
-
+		if (net_ratelimit()) {
+			printk(KERN_DEBUG "CCMP: decrypt failed: STA="
+			       "%pM\n", hdr->addr2);
+		}
 		key->dot11RSNAStatsCCMPDecryptErrors++;
 		return -5;
 	}
@@ -413,7 +415,7 @@ static int ieee80211_ccmp_get_key(void *key, int len, u8 *seq, void *priv)
 }
 
 
-static char *ieee80211_ccmp_print_stats(char *p, void *priv)
+static char * ieee80211_ccmp_print_stats(char *p, void *priv)
 {
 	struct ieee80211_ccmp_data *ccmp = priv;
 	p += sprintf(p, "key[%d] alg=CCMP key_set=%d "

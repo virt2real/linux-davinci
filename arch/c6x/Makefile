@@ -41,7 +41,7 @@ DTB:=$(subst dtbImage.,,$(filter dtbImage.%, $(MAKECMDGOALS)))
 export DTB
 
 ifneq ($(DTB),)
-core-y	+= $(boot)/dts/
+core-y	+= $(boot)/
 endif
 
 # With make 3.82 we cannot mix normal and wildcard targets

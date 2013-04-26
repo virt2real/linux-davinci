@@ -822,7 +822,7 @@ MACHINE_START(BALLOON3, "Balloon3")
 	.nr_irqs	= BALLOON3_NR_IRQS,
 	.init_irq	= balloon3_init_irq,
 	.handle_irq	= pxa27x_handle_irq,
-	.init_time	= pxa_timer_init,
+	.timer		= &pxa_timer,
 	.init_machine	= balloon3_init,
 	.atag_offset	= 0x100,
 	.restart	= pxa_restart,

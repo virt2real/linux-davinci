@@ -24,6 +24,10 @@
 extern void __init mmp_dt_irq_init(void);
 extern void __init mmp_dt_init_timer(void);
 
+static struct sys_timer mmp_dt_timer = {
+	.init	= mmp_dt_init_timer,
+};
+
 static const struct of_dev_auxdata mmp2_auxdata_lookup[] __initconst = {
 	OF_DEV_AUXDATA("mrvl,mmp-uart", 0xd4030000, "pxa2xx-uart.0", NULL),
 	OF_DEV_AUXDATA("mrvl,mmp-uart", 0xd4017000, "pxa2xx-uart.1", NULL),
@@ -50,7 +54,7 @@ static const char *mmp2_dt_board_compat[] __initdata = {
 DT_MACHINE_START(MMP2_DT, "Marvell MMP2 (Device Tree Support)")
 	.map_io		= mmp_map_io,
 	.init_irq	= mmp_dt_irq_init,
-	.init_time	= mmp_dt_init_timer,
+	.timer		= &mmp_dt_timer,
 	.init_machine	= mmp2_dt_init,
 	.dt_compat	= mmp2_dt_board_compat,
 MACHINE_END

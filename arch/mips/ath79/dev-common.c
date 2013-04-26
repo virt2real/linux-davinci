@@ -36,7 +36,7 @@ static struct resource ath79_uart_resources[] = {
 static struct plat_serial8250_port ath79_uart_data[] = {
 	{
 		.mapbase	= AR71XX_UART_BASE,
-		.irq		= ATH79_MISC_IRQ(3),
+		.irq		= ATH79_MISC_IRQ_UART,
 		.flags		= AR71XX_UART_FLAGS,
 		.iotype		= UPIO_MEM32,
 		.regshift	= 2,
@@ -62,8 +62,8 @@ static struct resource ar933x_uart_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		.start	= ATH79_MISC_IRQ(3),
-		.end	= ATH79_MISC_IRQ(3),
+		.start	= ATH79_MISC_IRQ_UART,
+		.end	= ATH79_MISC_IRQ_UART,
 		.flags	= IORESOURCE_IRQ,
 	},
 };
@@ -90,8 +90,7 @@ void __init ath79_register_uart(void)
 	if (soc_is_ar71xx() ||
 	    soc_is_ar724x() ||
 	    soc_is_ar913x() ||
-	    soc_is_ar934x() ||
-	    soc_is_qca955x()) {
+	    soc_is_ar934x()) {
 		ath79_uart_data[0].uartclk = clk_get_rate(clk);
 		platform_device_register(&ath79_uart_device);
 	} else if (soc_is_ar933x()) {
@@ -102,15 +101,12 @@ void __init ath79_register_uart(void)
 	}
 }
 
+static struct platform_device ath79_wdt_device = {
+	.name		= "ath79-wdt",
+	.id		= -1,
+};
+
 void __init ath79_register_wdt(void)
 {
-	struct resource res;
-
-	memset(&res, 0, sizeof(res));
-
-	res.flags = IORESOURCE_MEM;
-	res.start = AR71XX_RESET_BASE + AR71XX_RESET_REG_WDOG_CTRL;
-	res.end = res.start + 0x8 - 1;
-
-	platform_device_register_simple("ath79-wdt", -1, &res, 1);
+	platform_device_register(&ath79_wdt_device);
 }

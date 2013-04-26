@@ -1143,7 +1143,7 @@ static int ioc3_is_menet(struct pci_dev *pdev)
  * Can't use UPF_IOREMAP as the whole of IOC3 resources have already been
  * registered.
  */
-static void ioc3_8250_register(struct ioc3_uartregs __iomem *uart)
+static void __devinit ioc3_8250_register(struct ioc3_uartregs __iomem *uart)
 {
 #define COSMISC_CONSTANT 6
 
@@ -1169,7 +1169,7 @@ static void ioc3_8250_register(struct ioc3_uartregs __iomem *uart)
 	serial8250_register_8250_port(&port);
 }
 
-static void ioc3_serial_probe(struct pci_dev *pdev, struct ioc3 *ioc3)
+static void __devinit ioc3_serial_probe(struct pci_dev *pdev, struct ioc3 *ioc3)
 {
 	/*
 	 * We need to recognice and treat the fourth MENET serial as it
@@ -1229,7 +1229,8 @@ static const struct net_device_ops ioc3_netdev_ops = {
 	.ndo_change_mtu		= eth_change_mtu,
 };
 
-static int ioc3_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit ioc3_probe(struct pci_dev *pdev,
+	const struct pci_device_id *ent)
 {
 	unsigned int sw_physid1, sw_physid2;
 	struct net_device *dev = NULL;
@@ -1367,7 +1368,7 @@ out:
 	return err;
 }
 
-static void ioc3_remove_one(struct pci_dev *pdev)
+static void __devexit ioc3_remove_one (struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
 	struct ioc3_private *ip = netdev_priv(dev);
@@ -1395,7 +1396,7 @@ static struct pci_driver ioc3_driver = {
 	.name		= "ioc3-eth",
 	.id_table	= ioc3_pci_tbl,
 	.probe		= ioc3_probe,
-	.remove		= ioc3_remove_one,
+	.remove		= __devexit_p(ioc3_remove_one),
 };
 
 static int __init ioc3_init_module(void)
@@ -1565,9 +1566,9 @@ static void ioc3_get_drvinfo (struct net_device *dev,
 {
 	struct ioc3_private *ip = netdev_priv(dev);
 
-	strlcpy(info->driver, IOC3_NAME, sizeof(info->driver));
-	strlcpy(info->version, IOC3_VERSION, sizeof(info->version));
-	strlcpy(info->bus_info, pci_name(ip->pdev), sizeof(info->bus_info));
+        strcpy (info->driver, IOC3_NAME);
+        strcpy (info->version, IOC3_VERSION);
+        strcpy (info->bus_info, pci_name(ip->pdev));
 }
 
 static int ioc3_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)

@@ -159,8 +159,10 @@ static void ath6kl_usb_free_urb_to_pipe(struct ath6kl_usb_pipe *pipe,
 
 static void ath6kl_usb_cleanup_recv_urb(struct ath6kl_urb_context *urb_context)
 {
-	dev_kfree_skb(urb_context->skb);
-	urb_context->skb = NULL;
+	if (urb_context->skb != NULL) {
+		dev_kfree_skb(urb_context->skb);
+		urb_context->skb = NULL;
+	}
 
 	ath6kl_usb_free_urb_to_pipe(urb_context->pipe, urb_context);
 }
@@ -183,10 +185,9 @@ static int ath6kl_usb_alloc_pipe_resources(struct ath6kl_usb_pipe *pipe,
 	for (i = 0; i < urb_cnt; i++) {
 		urb_context = kzalloc(sizeof(struct ath6kl_urb_context),
 				      GFP_KERNEL);
-		if (urb_context == NULL) {
-			status = -ENOMEM;
-			goto fail_alloc_pipe_resources;
-		}
+		if (urb_context == NULL)
+			/* FIXME: set status to -ENOMEM */
+			break;
 
 		urb_context->pipe = pipe;
 
@@ -203,7 +204,6 @@ static int ath6kl_usb_alloc_pipe_resources(struct ath6kl_usb_pipe *pipe,
 		   pipe->logical_pipe_num, pipe->usb_pipe_handle,
 		   pipe->urb_alloc);
 
-fail_alloc_pipe_resources:
 	return status;
 }
 
@@ -803,11 +803,7 @@ static int ath6kl_usb_map_service_pipe(struct ath6kl *ar, u16 svc_id,
 		*dl_pipe = ATH6KL_USB_PIPE_RX_DATA;
 		break;
 	case WMI_DATA_VI_SVC:
-
-		if (ar->hw.flags & ATH6KL_HW_MAP_LP_ENDPOINT)
-			*ul_pipe = ATH6KL_USB_PIPE_TX_DATA_LP;
-		else
-			*ul_pipe = ATH6KL_USB_PIPE_TX_DATA_MP;
+		*ul_pipe = ATH6KL_USB_PIPE_TX_DATA_MP;
 		/*
 		* Disable rxdata2 directly, it will be enabled
 		* if FW enable rxdata2
@@ -815,11 +811,7 @@ static int ath6kl_usb_map_service_pipe(struct ath6kl *ar, u16 svc_id,
 		*dl_pipe = ATH6KL_USB_PIPE_RX_DATA;
 		break;
 	case WMI_DATA_VO_SVC:
-
-		if (ar->hw.flags & ATH6KL_HW_MAP_LP_ENDPOINT)
-			*ul_pipe = ATH6KL_USB_PIPE_TX_DATA_LP;
-		else
-			*ul_pipe = ATH6KL_USB_PIPE_TX_DATA_MP;
+		*ul_pipe = ATH6KL_USB_PIPE_TX_DATA_HP;
 		/*
 		* Disable rxdata2 directly, it will be enabled
 		* if FW enable rxdata2
@@ -1204,14 +1196,7 @@ static struct usb_driver ath6kl_usb_driver = {
 
 static int ath6kl_usb_init(void)
 {
-	int ret;
-
-	ret = usb_register(&ath6kl_usb_driver);
-	if (ret) {
-		ath6kl_err("usb registration failed: %d\n", ret);
-		return ret;
-	}
-
+	usb_register(&ath6kl_usb_driver);
 	return 0;
 }
 
@@ -1235,6 +1220,3 @@ MODULE_FIRMWARE(AR6004_HW_1_1_DEFAULT_BOARD_DATA_FILE);
 MODULE_FIRMWARE(AR6004_HW_1_2_FIRMWARE_FILE);
 MODULE_FIRMWARE(AR6004_HW_1_2_BOARD_DATA_FILE);
 MODULE_FIRMWARE(AR6004_HW_1_2_DEFAULT_BOARD_DATA_FILE);
-MODULE_FIRMWARE(AR6004_HW_1_3_FW_DIR "/" AR6004_HW_1_3_FIRMWARE_FILE);
-MODULE_FIRMWARE(AR6004_HW_1_3_BOARD_DATA_FILE);
-MODULE_FIRMWARE(AR6004_HW_1_3_DEFAULT_BOARD_DATA_FILE);

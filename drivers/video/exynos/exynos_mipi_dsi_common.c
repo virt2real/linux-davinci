@@ -25,7 +25,6 @@
 #include <linux/io.h>
 #include <linux/memory.h>
 #include <linux/delay.h>
-#include <linux/irqreturn.h>
 #include <linux/kthread.h>
 
 #include <video/mipi_display.h>

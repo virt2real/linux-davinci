@@ -16,6 +16,7 @@
 #include <linux/spinlock.h>
 #include <linux/irq.h>
 #include <linux/types.h>
+#include <linux/bootmem.h>
 #include <linux/slab.h>
 
 #include <asm/io.h>
@@ -148,7 +149,7 @@ int __init pq2ads_pci_init_irq(void)
 	priv->regs = of_iomap(np, 0);
 	if (!priv->regs) {
 		printk(KERN_ERR "Cannot map PCI PIC registers.\n");
-		goto out_free_kmalloc;
+		goto out_free_bootmem;
 	}
 
 	/* mask all PCI interrupts */
@@ -170,8 +171,9 @@ int __init pq2ads_pci_init_irq(void)
 
 out_unmap_regs:
 	iounmap(priv->regs);
-out_free_kmalloc:
-	kfree(priv);
+out_free_bootmem:
+	free_bootmem((unsigned long)priv,
+	             sizeof(struct pq2ads_pci_pic));
 	of_node_put(np);
 out_unmap_irq:
 	irq_dispose_mapping(irq);

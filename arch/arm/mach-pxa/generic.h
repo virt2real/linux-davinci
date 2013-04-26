@@ -10,8 +10,9 @@
  */
 
 struct irq_data;
+struct sys_timer;
 
-extern void pxa_timer_init(void);
+extern struct sys_timer pxa_timer;
 
 extern void __init pxa_map_io(void);
 

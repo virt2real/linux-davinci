@@ -13,7 +13,6 @@
  */
 #include <linux/bug.h>
 #include <linux/compiler.h>
-#include <linux/kexec.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -164,7 +163,7 @@ static void show_stacktrace(struct task_struct *task,
 	i = 0;
 	while ((unsigned long) sp & (PAGE_SIZE - 1)) {
 		if (i && ((i % (64 / field)) == 0))
-			printk("\n	 ");
+			printk("\n       ");
 		if (i > 39) {
 			printk(" ...");
 			break;
@@ -279,7 +278,7 @@ static void __show_regs(const struct pt_regs *regs)
 	printk("ra    : %0*lx %pS\n", field, regs->regs[31],
 	       (void *) regs->regs[31]);
 
-	printk("Status: %08x	", (uint32_t) regs->cp0_status);
+	printk("Status: %08x    ", (uint32_t) regs->cp0_status);
 
 	if (current_cpu_data.isa_level == MIPS_CPU_ISA_I) {
 		if (regs->cp0_status & ST0_KUO)
@@ -396,7 +395,7 @@ void __noreturn die(const char *str, struct pt_regs *regs)
 
 	printk("%s[#%d]:\n", str, ++die_counter);
 	show_registers(regs);
-	add_taint(TAINT_DIE, LOCKDEP_NOW_UNRELIABLE);
+	add_taint(TAINT_DIE);
 	raw_spin_unlock_irq(&die_lock);
 
 	oops_exit();
@@ -409,9 +408,6 @@ void __noreturn die(const char *str, struct pt_regs *regs)
 		ssleep(5);
 		panic("Fatal exception");
 	}
-
-	if (regs && kexec_should_crash(current))
-		crash_kexec(regs);
 
 	do_exit(sig);
 }
@@ -441,7 +437,7 @@ asmlinkage void do_be(struct pt_regs *regs)
 	int data = regs->cp0_cause & 4;
 	int action = MIPS_BE_FATAL;
 
-	/* XXX For now.	 Fixme, this searches the wrong table ...  */
+	/* XXX For now.  Fixme, this searches the wrong table ...  */
 	if (data && !user_mode(regs))
 		fixup = search_dbe_tables(exception_epc(regs));
 
@@ -518,7 +514,7 @@ static inline int simulate_ll(struct pt_regs *regs, unsigned int opcode)
 	offset >>= 16;
 
 	vaddr = (unsigned long __user *)
-		((unsigned long)(regs->regs[(opcode & BASE) >> 21]) + offset);
+	        ((unsigned long)(regs->regs[(opcode & BASE) >> 21]) + offset);
 
 	if ((unsigned long)vaddr & 3)
 		return SIGBUS;
@@ -558,7 +554,7 @@ static inline int simulate_sc(struct pt_regs *regs, unsigned int opcode)
 	offset >>= 16;
 
 	vaddr = (unsigned long __user *)
-		((unsigned long)(regs->regs[(opcode & BASE) >> 21]) + offset);
+	        ((unsigned long)(regs->regs[(opcode & BASE) >> 21]) + offset);
 	reg = (opcode & RT) >> 16;
 
 	if ((unsigned long)vaddr & 3)
@@ -739,7 +735,7 @@ asmlinkage void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 		current->thread.fpu.fcr31 &= ~FPU_CSR_ALL_X;
 
 		/* Restore the hardware register state */
-		own_fpu(1);	/* Using the FPU again.	 */
+		own_fpu(1);	/* Using the FPU again.  */
 
 		/* If something went wrong, signal */
 		process_fpemu_return(sig, fault_addr);
@@ -966,7 +962,7 @@ int cu2_notifier_call_chain(unsigned long val, void *v)
 }
 
 static int default_cu2_call(struct notifier_block *nfb, unsigned long action,
-	void *data)
+        void *data)
 {
 	struct pt_regs *regs = data;
 
@@ -974,7 +970,7 @@ static int default_cu2_call(struct notifier_block *nfb, unsigned long action,
 	default:
 		die_if_kernel("Unhandled kernel unaligned access or invalid "
 			      "instruction", regs);
-		/* Fall through	 */
+		/* Fall through  */
 
 	case CU2_EXCEPTION:
 		force_sig(SIGILL, current);
@@ -1025,28 +1021,10 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 
 		return;
 
-	case 3:
-		/*
-		 * Old (MIPS I and MIPS II) processors will set this code
-		 * for COP1X opcode instructions that replaced the original
-		 * COP3 space.	We don't limit COP1 space instructions in
-		 * the emulator according to the CPU ISA, so we want to
-		 * treat COP1X instructions consistently regardless of which
-		 * code the CPU chose.	Therefore we redirect this trap to
-		 * the FP emulator too.
-		 *
-		 * Then some newer FPU-less processors use this code
-		 * erroneously too, so they are covered by this choice
-		 * as well.
-		 */
-		if (raw_cpu_has_fpu)
-			break;
-		/* Fall through.  */
-
 	case 1:
-		if (used_math())	/* Using the FPU again.	 */
+		if (used_math())	/* Using the FPU again.  */
 			own_fpu(1);
-		else {			/* First time FPU user.	 */
+		else {			/* First time FPU user.  */
 			init_fpu();
 			set_used_math();
 		}
@@ -1066,6 +1044,9 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 	case 2:
 		raw_notifier_call_chain(&cu2_chain, CU2_EXCEPTION, regs);
 		return;
+
+	case 3:
+		break;
 	}
 
 	force_sig(SIGILL, current);
@@ -1114,7 +1095,7 @@ asmlinkage void do_mcheck(struct pt_regs *regs)
 	show_regs(regs);
 
 	if (multi_match) {
-		printk("Index	: %0x\n", read_c0_index());
+		printk("Index   : %0x\n", read_c0_index());
 		printk("Pagemask: %0x\n", read_c0_pagemask());
 		printk("EntryHi : %0*lx\n", field, read_c0_entryhi());
 		printk("EntryLo0: %0*lx\n", field, read_c0_entrylo0());
@@ -1181,7 +1162,7 @@ asmlinkage void do_dsp(struct pt_regs *regs)
 asmlinkage void do_reserved(struct pt_regs *regs)
 {
 	/*
-	 * Game over - no way to handle this if it ever occurs.	 Most probably
+	 * Game over - no way to handle this if it ever occurs.  Most probably
 	 * caused by a new unknown cpu type or after another deadly
 	 * hard/software error.
 	 */
@@ -1571,7 +1552,7 @@ void __cpuinit per_cpu_trap_init(bool is_boot_cpu)
 #ifdef CONFIG_64BIT
 	status_set |= ST0_FR|ST0_KX|ST0_SX|ST0_UX;
 #endif
-	if (current_cpu_data.isa_level & MIPS_CPU_ISA_IV)
+	if (current_cpu_data.isa_level == MIPS_CPU_ISA_IV)
 		status_set |= ST0_XX;
 	if (cpu_has_dsp)
 		status_set |= ST0_MX;
@@ -1705,7 +1686,7 @@ void __init trap_init(void)
 
 #if defined(CONFIG_KGDB)
 	if (kgdb_early_setup)
-		return; /* Already done */
+		return;	/* Already done */
 #endif
 
 	if (cpu_has_veic || cpu_has_vint) {
@@ -1799,7 +1780,7 @@ void __init trap_init(void)
 		 * The R6000 is the only R-series CPU that features a machine
 		 * check exception (similar to the R4000 cache error) and
 		 * unaligned ldc1/sdc1 exception.  The handlers have not been
-		 * written yet.	 Well, anyway there is no R6000 machine on the
+		 * written yet.  Well, anyway there is no R6000 machine on the
 		 * current list of targets for Linux/MIPS.
 		 * (Duh, crap, there is someone with a triple R6k machine)
 		 */

@@ -1,6 +1,6 @@
 /*
- * This program is free software; you can redistribute	it and/or modify it
- * under  the terms of	the GNU General	 Public License as published by the
+ * This program is free software; you can redistribute  it and/or modify it
+ * under  the terms of  the GNU General  Public License as published by the
  * Free Software Foundation;  either version 2 of the  License, or (at your
  * option) any later version.
  *
@@ -76,7 +76,7 @@ pcibios_align_resource(void *data, const struct resource *res,
 	return start;
 }
 
-static void pcibios_scanbus(struct pci_controller *hose)
+static void __devinit pcibios_scanbus(struct pci_controller *hose)
 {
 	static int next_busno;
 	static int need_domain_info;
@@ -120,7 +120,8 @@ static void pcibios_scanbus(struct pci_controller *hose)
 }
 
 #ifdef CONFIG_OF
-void pci_load_of_ranges(struct pci_controller *hose, struct device_node *node)
+void __devinit pci_load_of_ranges(struct pci_controller *hose,
+				struct device_node *node)
 {
 	const __be32 *ranges;
 	int rlen;
@@ -173,22 +174,11 @@ void pci_load_of_ranges(struct pci_controller *hose, struct device_node *node)
 
 static DEFINE_MUTEX(pci_scan_mutex);
 
-void register_pci_controller(struct pci_controller *hose)
+void __devinit register_pci_controller(struct pci_controller *hose)
 {
-	struct resource *parent;
-
-	parent = hose->mem_resource->parent;
-	if (!parent)
-		parent = &iomem_resource;
-
-	if (request_resource(parent, hose->mem_resource) < 0)
+	if (request_resource(&iomem_resource, hose->mem_resource) < 0)
 		goto out;
-
-	parent = hose->io_resource->parent;
-	if (!parent)
-		parent = &ioport_resource;
-
-	if (request_resource(parent, hose->io_resource) < 0) {
+	if (request_resource(&ioport_resource, hose->io_resource) < 0) {
 		release_resource(hose->mem_resource);
 		goto out;
 	}
@@ -313,7 +303,7 @@ int pcibios_enable_device(struct pci_dev *dev, int mask)
 	return pcibios_plat_dev_init(dev);
 }
 
-void pcibios_fixup_bus(struct pci_bus *bus)
+void __devinit pcibios_fixup_bus(struct pci_bus *bus)
 {
 	struct pci_dev *dev = bus->self;
 
@@ -323,8 +313,10 @@ void pcibios_fixup_bus(struct pci_bus *bus)
 	}
 }
 
+#ifdef CONFIG_HOTPLUG
 EXPORT_SYMBOL(PCIBIOS_MIN_IO);
 EXPORT_SYMBOL(PCIBIOS_MIN_MEM);
+#endif
 
 int pci_mmap_page_range(struct pci_dev *dev, struct vm_area_struct *vma,
 			enum pci_mmap_state mmap_state, int write_combine)

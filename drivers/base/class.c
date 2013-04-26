@@ -420,8 +420,8 @@ EXPORT_SYMBOL_GPL(class_for_each_device);
  * code.  There's no locking restriction.
  */
 struct device *class_find_device(struct class *class, struct device *start,
-				 const void *data,
-				 int (*match)(struct device *, const void *))
+				 void *data,
+				 int (*match)(struct device *, void *))
 {
 	struct class_dev_iter iter;
 	struct device *dev;

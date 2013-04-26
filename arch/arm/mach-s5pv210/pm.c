@@ -104,8 +104,8 @@ static int s5pv210_cpu_suspend(unsigned long arg)
 	    "mcr p15, 0, %0, c7, c10, 4\n\t"
 	    "wfi" : : "r" (tmp));
 
-	pr_info("Failed to suspend the system\n");
-	return 1; /* Aborting suspend */
+	/* we should never get past here */
+	panic("sleep resumed to originator?");
 }
 
 static void s5pv210_pm_prepare(void)

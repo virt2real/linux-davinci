@@ -508,7 +508,7 @@ static inline void ring_fl_db(struct adapter *adap, struct sge_fl *q)
 {
 	if (q->pend_cred >= 8) {
 		wmb();
-		t4_write_reg(adap, MYPF_REG(SGE_PF_KDOORBELL), DBPRIO(1) |
+		t4_write_reg(adap, MYPF_REG(SGE_PF_KDOORBELL), DBPRIO |
 			     QID(q->cntxt_id) | PIDX(q->pend_cred / 8));
 		q->pend_cred &= 7;
 	}
@@ -2082,10 +2082,10 @@ int t4_sge_alloc_rxq(struct adapter *adap, struct sge_rspq *iq, bool fwevtq,
 			goto fl_nomem;
 
 		flsz = fl->size / 8 + s->stat_len / sizeof(struct tx_desc);
-		c.iqns_to_fl0congen = htonl(FW_IQ_CMD_FL0PACKEN(1) |
+		c.iqns_to_fl0congen = htonl(FW_IQ_CMD_FL0PACKEN |
 					    FW_IQ_CMD_FL0FETCHRO(1) |
 					    FW_IQ_CMD_FL0DATARO(1) |
-					    FW_IQ_CMD_FL0PADEN(1));
+					    FW_IQ_CMD_FL0PADEN);
 		c.fl0dcaen_to_fl0cidxfthresh = htons(FW_IQ_CMD_FL0FBMIN(2) |
 				FW_IQ_CMD_FL0FBMAX(3));
 		c.fl0size = htons(flsz);

@@ -38,7 +38,6 @@
 #include "xfs_utils.h"
 #include "xfs_trace.h"
 #include "xfs_buf.h"
-#include "xfs_icache.h"
 
 
 /*
@@ -870,7 +869,7 @@ xfs_rtbuf_get(
 	ASSERT(map.br_startblock != NULLFSBLOCK);
 	error = xfs_trans_read_buf(mp, tp, mp->m_ddev_targp,
 				   XFS_FSB_TO_DADDR(mp, map.br_startblock),
-				   mp->m_bsize, 0, &bp, NULL);
+				   mp->m_bsize, 0, &bp);
 	if (error)
 		return error;
 	ASSERT(!xfs_buf_geterror(bp));
@@ -1873,14 +1872,9 @@ xfs_growfs_rt(
 	 */
 	bp = xfs_buf_read_uncached(mp->m_rtdev_targp,
 				XFS_FSB_TO_BB(mp, nrblocks - 1),
-				XFS_FSB_TO_BB(mp, 1), 0, NULL);
+				XFS_FSB_TO_BB(mp, 1), 0);
 	if (!bp)
 		return EIO;
-	if (bp->b_error) {
-		error = bp->b_error;
-		xfs_buf_relse(bp);
-		return error;
-	}
 	xfs_buf_relse(bp);
 
 	/*
@@ -2225,11 +2219,9 @@ xfs_rtmount_init(
 	}
 	bp = xfs_buf_read_uncached(mp->m_rtdev_targp,
 					d - XFS_FSB_TO_BB(mp, 1),
-					XFS_FSB_TO_BB(mp, 1), 0, NULL);
-	if (!bp || bp->b_error) {
+					XFS_FSB_TO_BB(mp, 1), 0);
+	if (!bp) {
 		xfs_warn(mp, "realtime device size check failed");
-		if (bp)
-			xfs_buf_relse(bp);
 		return EIO;
 	}
 	xfs_buf_relse(bp);

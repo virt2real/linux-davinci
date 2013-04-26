@@ -500,18 +500,18 @@ static int fintek_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id
 	/* input device for IR remote (and tx) */
 	rdev = rc_allocate_device();
 	if (!rdev)
-		goto exit_free_dev_rdev;
+		goto failure;
 
 	ret = -ENODEV;
 	/* validate pnp resources */
 	if (!pnp_port_valid(pdev, 0)) {
 		dev_err(&pdev->dev, "IR PNP Port not valid!\n");
-		goto exit_free_dev_rdev;
+		goto failure;
 	}
 
 	if (!pnp_irq_valid(pdev, 0)) {
 		dev_err(&pdev->dev, "IR PNP IRQ not valid!\n");
-		goto exit_free_dev_rdev;
+		goto failure;
 	}
 
 	fintek->cir_addr = pnp_port_start(pdev, 0);
@@ -528,7 +528,7 @@ static int fintek_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id
 
 	ret = fintek_hw_detect(fintek);
 	if (ret)
-		goto exit_free_dev_rdev;
+		goto failure;
 
 	/* Initialize CIR & CIR Wake Logical Devices */
 	fintek_config_mode_enable(fintek);
@@ -541,7 +541,7 @@ static int fintek_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id
 	/* Set up the rc device */
 	rdev->priv = fintek;
 	rdev->driver_type = RC_DRIVER_IR_RAW;
-	rdev->allowed_protos = RC_BIT_ALL;
+	rdev->allowed_protos = RC_TYPE_ALL;
 	rdev->open = fintek_open;
 	rdev->close = fintek_close;
 	rdev->input_name = FINTEK_DESCRIPTION;
@@ -557,42 +557,40 @@ static int fintek_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id
 	/* rx resolution is hardwired to 50us atm, 1, 25, 100 also possible */
 	rdev->rx_resolution = US_TO_NS(CIR_SAMPLE_PERIOD);
 
-	fintek->rdev = rdev;
-
 	ret = -EBUSY;
 	/* now claim resources */
 	if (!request_region(fintek->cir_addr,
 			    fintek->cir_port_len, FINTEK_DRIVER_NAME))
-		goto exit_free_dev_rdev;
+		goto failure;
 
 	if (request_irq(fintek->cir_irq, fintek_cir_isr, IRQF_SHARED,
 			FINTEK_DRIVER_NAME, (void *)fintek))
-		goto exit_free_cir_addr;
+		goto failure2;
 
 	ret = rc_register_device(rdev);
 	if (ret)
-		goto exit_free_irq;
+		goto failure3;
 
 	device_init_wakeup(&pdev->dev, true);
-
+	fintek->rdev = rdev;
 	fit_pr(KERN_NOTICE, "driver has been successfully loaded\n");
 	if (debug)
 		cir_dump_regs(fintek);
 
 	return 0;
 
-exit_free_irq:
+failure3:
 	free_irq(fintek->cir_irq, fintek);
-exit_free_cir_addr:
+failure2:
 	release_region(fintek->cir_addr, fintek->cir_port_len);
-exit_free_dev_rdev:
+failure:
 	rc_free_device(rdev);
 	kfree(fintek);
 
 	return ret;
 }
 
-static void fintek_remove(struct pnp_dev *pdev)
+static void __devexit fintek_remove(struct pnp_dev *pdev)
 {
 	struct fintek_dev *fintek = pnp_get_drvdata(pdev);
 	unsigned long flags;
@@ -680,18 +678,18 @@ static struct pnp_driver fintek_driver = {
 	.id_table	= fintek_ids,
 	.flags		= PNP_DRIVER_RES_DO_NOT_CHANGE,
 	.probe		= fintek_probe,
-	.remove		= fintek_remove,
+	.remove		= __devexit_p(fintek_remove),
 	.suspend	= fintek_suspend,
 	.resume		= fintek_resume,
 	.shutdown	= fintek_shutdown,
 };
 
-static int fintek_init(void)
+int fintek_init(void)
 {
 	return pnp_register_driver(&fintek_driver);
 }
 
-static void fintek_exit(void)
+void fintek_exit(void)
 {
 	pnp_unregister_driver(&fintek_driver);
 }

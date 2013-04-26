@@ -29,15 +29,8 @@
 #include <linux/of.h>
 #include <linux/clk.h>
 #include <linux/slab.h>
-#include <linux/input/matrix_keypad.h>
-#include <linux/clk/tegra.h>
-
-#define KBC_MAX_GPIO	24
-#define KBC_MAX_KPENT	8
-
-#define KBC_MAX_ROW	16
-#define KBC_MAX_COL	8
-#define KBC_MAX_KEY	(KBC_MAX_ROW * KBC_MAX_COL)
+#include <linux/input/tegra_kbc.h>
+#include <mach/clk.h>
 
 #define KBC_MAX_DEBOUNCE_CNT	0x3ffu
 
@@ -74,27 +67,10 @@
 
 #define KBC_ROW_SHIFT	3
 
-enum tegra_pin_type {
-	PIN_CFG_IGNORE,
-	PIN_CFG_COL,
-	PIN_CFG_ROW,
-};
-
-struct tegra_kbc_pin_cfg {
-	enum tegra_pin_type type;
-	unsigned char num;
-};
-
 struct tegra_kbc {
-	struct device *dev;
-	unsigned int debounce_cnt;
-	unsigned int repeat_cnt;
-	struct tegra_kbc_pin_cfg pin_cfg[KBC_MAX_GPIO];
-	const struct matrix_keymap_data *keymap_data;
-	bool wakeup;
 	void __iomem *mmio;
 	struct input_dev *idev;
-	int irq;
+	unsigned int irq;
 	spinlock_t lock;
 	unsigned int repoll_dly;
 	unsigned long cp_dly_jiffies;
@@ -102,12 +78,154 @@ struct tegra_kbc {
 	bool use_fn_map;
 	bool use_ghost_filter;
 	bool keypress_caused_wake;
+	const struct tegra_kbc_platform_data *pdata;
 	unsigned short keycode[KBC_MAX_KEY * 2];
 	unsigned short current_keys[KBC_MAX_KPENT];
 	unsigned int num_pressed_keys;
 	u32 wakeup_key;
 	struct timer_list timer;
 	struct clk *clk;
+};
+
+static const u32 tegra_kbc_default_keymap[] __devinitdata = {
+	KEY(0, 2, KEY_W),
+	KEY(0, 3, KEY_S),
+	KEY(0, 4, KEY_A),
+	KEY(0, 5, KEY_Z),
+	KEY(0, 7, KEY_FN),
+
+	KEY(1, 7, KEY_LEFTMETA),
+
+	KEY(2, 6, KEY_RIGHTALT),
+	KEY(2, 7, KEY_LEFTALT),
+
+	KEY(3, 0, KEY_5),
+	KEY(3, 1, KEY_4),
+	KEY(3, 2, KEY_R),
+	KEY(3, 3, KEY_E),
+	KEY(3, 4, KEY_F),
+	KEY(3, 5, KEY_D),
+	KEY(3, 6, KEY_X),
+
+	KEY(4, 0, KEY_7),
+	KEY(4, 1, KEY_6),
+	KEY(4, 2, KEY_T),
+	KEY(4, 3, KEY_H),
+	KEY(4, 4, KEY_G),
+	KEY(4, 5, KEY_V),
+	KEY(4, 6, KEY_C),
+	KEY(4, 7, KEY_SPACE),
+
+	KEY(5, 0, KEY_9),
+	KEY(5, 1, KEY_8),
+	KEY(5, 2, KEY_U),
+	KEY(5, 3, KEY_Y),
+	KEY(5, 4, KEY_J),
+	KEY(5, 5, KEY_N),
+	KEY(5, 6, KEY_B),
+	KEY(5, 7, KEY_BACKSLASH),
+
+	KEY(6, 0, KEY_MINUS),
+	KEY(6, 1, KEY_0),
+	KEY(6, 2, KEY_O),
+	KEY(6, 3, KEY_I),
+	KEY(6, 4, KEY_L),
+	KEY(6, 5, KEY_K),
+	KEY(6, 6, KEY_COMMA),
+	KEY(6, 7, KEY_M),
+
+	KEY(7, 1, KEY_EQUAL),
+	KEY(7, 2, KEY_RIGHTBRACE),
+	KEY(7, 3, KEY_ENTER),
+	KEY(7, 7, KEY_MENU),
+
+	KEY(8, 4, KEY_RIGHTSHIFT),
+	KEY(8, 5, KEY_LEFTSHIFT),
+
+	KEY(9, 5, KEY_RIGHTCTRL),
+	KEY(9, 7, KEY_LEFTCTRL),
+
+	KEY(11, 0, KEY_LEFTBRACE),
+	KEY(11, 1, KEY_P),
+	KEY(11, 2, KEY_APOSTROPHE),
+	KEY(11, 3, KEY_SEMICOLON),
+	KEY(11, 4, KEY_SLASH),
+	KEY(11, 5, KEY_DOT),
+
+	KEY(12, 0, KEY_F10),
+	KEY(12, 1, KEY_F9),
+	KEY(12, 2, KEY_BACKSPACE),
+	KEY(12, 3, KEY_3),
+	KEY(12, 4, KEY_2),
+	KEY(12, 5, KEY_UP),
+	KEY(12, 6, KEY_PRINT),
+	KEY(12, 7, KEY_PAUSE),
+
+	KEY(13, 0, KEY_INSERT),
+	KEY(13, 1, KEY_DELETE),
+	KEY(13, 3, KEY_PAGEUP),
+	KEY(13, 4, KEY_PAGEDOWN),
+	KEY(13, 5, KEY_RIGHT),
+	KEY(13, 6, KEY_DOWN),
+	KEY(13, 7, KEY_LEFT),
+
+	KEY(14, 0, KEY_F11),
+	KEY(14, 1, KEY_F12),
+	KEY(14, 2, KEY_F8),
+	KEY(14, 3, KEY_Q),
+	KEY(14, 4, KEY_F4),
+	KEY(14, 5, KEY_F3),
+	KEY(14, 6, KEY_1),
+	KEY(14, 7, KEY_F7),
+
+	KEY(15, 0, KEY_ESC),
+	KEY(15, 1, KEY_GRAVE),
+	KEY(15, 2, KEY_F5),
+	KEY(15, 3, KEY_TAB),
+	KEY(15, 4, KEY_F1),
+	KEY(15, 5, KEY_F2),
+	KEY(15, 6, KEY_CAPSLOCK),
+	KEY(15, 7, KEY_F6),
+
+	/* Software Handled Function Keys */
+	KEY(20, 0, KEY_KP7),
+
+	KEY(21, 0, KEY_KP9),
+	KEY(21, 1, KEY_KP8),
+	KEY(21, 2, KEY_KP4),
+	KEY(21, 4, KEY_KP1),
+
+	KEY(22, 1, KEY_KPSLASH),
+	KEY(22, 2, KEY_KP6),
+	KEY(22, 3, KEY_KP5),
+	KEY(22, 4, KEY_KP3),
+	KEY(22, 5, KEY_KP2),
+	KEY(22, 7, KEY_KP0),
+
+	KEY(27, 1, KEY_KPASTERISK),
+	KEY(27, 3, KEY_KPMINUS),
+	KEY(27, 4, KEY_KPPLUS),
+	KEY(27, 5, KEY_KPDOT),
+
+	KEY(28, 5, KEY_VOLUMEUP),
+
+	KEY(29, 3, KEY_HOME),
+	KEY(29, 4, KEY_END),
+	KEY(29, 5, KEY_BRIGHTNESSDOWN),
+	KEY(29, 6, KEY_VOLUMEDOWN),
+	KEY(29, 7, KEY_BRIGHTNESSUP),
+
+	KEY(30, 0, KEY_NUMLOCK),
+	KEY(30, 1, KEY_SCROLLLOCK),
+	KEY(30, 2, KEY_MUTE),
+
+	KEY(31, 4, KEY_HELP),
+};
+
+static const
+struct matrix_keymap_data tegra_kbc_default_keymap_data __devinitdata = {
+	.keymap		= tegra_kbc_default_keymap,
+	.keymap_size	= ARRAY_SIZE(tegra_kbc_default_keymap),
 };
 
 static void tegra_kbc_report_released_keys(struct input_dev *input,
@@ -239,6 +357,18 @@ static void tegra_kbc_set_fifo_interrupt(struct tegra_kbc *kbc, bool enable)
 	writel(val, kbc->mmio + KBC_CONTROL_0);
 }
 
+static void tegra_kbc_set_keypress_interrupt(struct tegra_kbc *kbc, bool enable)
+{
+	u32 val;
+
+	val = readl(kbc->mmio + KBC_CONTROL_0);
+	if (enable)
+		val |= KBC_CONTROL_KEYPRESS_INT_EN;
+	else
+		val &= ~KBC_CONTROL_KEYPRESS_INT_EN;
+	writel(val, kbc->mmio + KBC_CONTROL_0);
+}
+
 static void tegra_kbc_keypress_timer(unsigned long data)
 {
 	struct tegra_kbc *kbc = (struct tegra_kbc *)data;
@@ -309,11 +439,12 @@ static irqreturn_t tegra_kbc_isr(int irq, void *args)
 
 static void tegra_kbc_setup_wakekeys(struct tegra_kbc *kbc, bool filter)
 {
+	const struct tegra_kbc_platform_data *pdata = kbc->pdata;
 	int i;
 	unsigned int rst_val;
 
 	/* Either mask all keys or none. */
-	rst_val = (filter && !kbc->wakeup) ? ~0 : 0;
+	rst_val = (filter && !pdata->wakeup) ? ~0 : 0;
 
 	for (i = 0; i < KBC_MAX_ROW; i++)
 		writel(rst_val, kbc->mmio + KBC_ROW0_MASK_0 + i * 4);
@@ -321,6 +452,7 @@ static void tegra_kbc_setup_wakekeys(struct tegra_kbc *kbc, bool filter)
 
 static void tegra_kbc_config_pins(struct tegra_kbc *kbc)
 {
+	const struct tegra_kbc_platform_data *pdata = kbc->pdata;
 	int i;
 
 	for (i = 0; i < KBC_MAX_GPIO; i++) {
@@ -336,13 +468,13 @@ static void tegra_kbc_config_pins(struct tegra_kbc *kbc)
 		row_cfg &= ~r_mask;
 		col_cfg &= ~c_mask;
 
-		switch (kbc->pin_cfg[i].type) {
+		switch (pdata->pin_cfg[i].type) {
 		case PIN_CFG_ROW:
-			row_cfg |= ((kbc->pin_cfg[i].num << 1) | 1) << r_shft;
+			row_cfg |= ((pdata->pin_cfg[i].num << 1) | 1) << r_shft;
 			break;
 
 		case PIN_CFG_COL:
-			col_cfg |= ((kbc->pin_cfg[i].num << 1) | 1) << c_shft;
+			col_cfg |= ((pdata->pin_cfg[i].num << 1) | 1) << c_shft;
 			break;
 
 		case PIN_CFG_IGNORE:
@@ -356,6 +488,7 @@ static void tegra_kbc_config_pins(struct tegra_kbc *kbc)
 
 static int tegra_kbc_start(struct tegra_kbc *kbc)
 {
+	const struct tegra_kbc_platform_data *pdata = kbc->pdata;
 	unsigned int debounce_cnt;
 	u32 val = 0;
 
@@ -370,10 +503,10 @@ static int tegra_kbc_start(struct tegra_kbc *kbc)
 	tegra_kbc_config_pins(kbc);
 	tegra_kbc_setup_wakekeys(kbc, false);
 
-	writel(kbc->repeat_cnt, kbc->mmio + KBC_RPT_DLY_0);
+	writel(pdata->repeat_cnt, kbc->mmio + KBC_RPT_DLY_0);
 
 	/* Keyboard debounce count is maximum of 12 bits. */
-	debounce_cnt = min(kbc->debounce_cnt, KBC_MAX_DEBOUNCE_CNT);
+	debounce_cnt = min(pdata->debounce_cnt, KBC_MAX_DEBOUNCE_CNT);
 	val = KBC_DEBOUNCE_CNT_SHIFT(debounce_cnt);
 	val |= KBC_FIFO_TH_CNT_SHIFT(1); /* set fifo interrupt threshold to 1 */
 	val |= KBC_CONTROL_FIFO_CNT_INT_EN;  /* interrupt on FIFO threshold */
@@ -440,20 +573,21 @@ static void tegra_kbc_close(struct input_dev *dev)
 	return tegra_kbc_stop(kbc);
 }
 
-static bool tegra_kbc_check_pin_cfg(const struct tegra_kbc *kbc,
-					unsigned int *num_rows)
+static bool __devinit
+tegra_kbc_check_pin_cfg(const struct tegra_kbc_platform_data *pdata,
+			struct device *dev, unsigned int *num_rows)
 {
 	int i;
 
 	*num_rows = 0;
 
 	for (i = 0; i < KBC_MAX_GPIO; i++) {
-		const struct tegra_kbc_pin_cfg *pin_cfg = &kbc->pin_cfg[i];
+		const struct tegra_kbc_pin_cfg *pin_cfg = &pdata->pin_cfg[i];
 
 		switch (pin_cfg->type) {
 		case PIN_CFG_ROW:
 			if (pin_cfg->num >= KBC_MAX_ROW) {
-				dev_err(kbc->dev,
+				dev_err(dev,
 					"pin_cfg[%d]: invalid row number %d\n",
 					i, pin_cfg->num);
 				return false;
@@ -463,7 +597,7 @@ static bool tegra_kbc_check_pin_cfg(const struct tegra_kbc *kbc,
 
 		case PIN_CFG_COL:
 			if (pin_cfg->num >= KBC_MAX_COL) {
-				dev_err(kbc->dev,
+				dev_err(dev,
 					"pin_cfg[%d]: invalid column number %d\n",
 					i, pin_cfg->num);
 				return false;
@@ -474,7 +608,7 @@ static bool tegra_kbc_check_pin_cfg(const struct tegra_kbc *kbc,
 			break;
 
 		default:
-			dev_err(kbc->dev,
+			dev_err(dev,
 				"pin_cfg[%d]: invalid entry type %d\n",
 				pin_cfg->type, pin_cfg->num);
 			return false;
@@ -484,140 +618,154 @@ static bool tegra_kbc_check_pin_cfg(const struct tegra_kbc *kbc,
 	return true;
 }
 
-static int tegra_kbc_parse_dt(struct tegra_kbc *kbc)
+#ifdef CONFIG_OF
+static struct tegra_kbc_platform_data * __devinit tegra_kbc_dt_parse_pdata(
+	struct platform_device *pdev)
 {
-	struct device_node *np = kbc->dev->of_node;
+	struct tegra_kbc_platform_data *pdata;
+	struct device_node *np = pdev->dev.of_node;
 	u32 prop;
 	int i;
-	u32 num_rows = 0;
-	u32 num_cols = 0;
-	u32 cols_cfg[KBC_MAX_GPIO];
-	u32 rows_cfg[KBC_MAX_GPIO];
-	int proplen;
-	int ret;
+
+	if (!np)
+		return NULL;
+
+	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return NULL;
 
 	if (!of_property_read_u32(np, "nvidia,debounce-delay-ms", &prop))
-		kbc->debounce_cnt = prop;
+		pdata->debounce_cnt = prop;
 
 	if (!of_property_read_u32(np, "nvidia,repeat-delay-ms", &prop))
-		kbc->repeat_cnt = prop;
+		pdata->repeat_cnt = prop;
 
 	if (of_find_property(np, "nvidia,needs-ghost-filter", NULL))
-		kbc->use_ghost_filter = true;
+		pdata->use_ghost_filter = true;
 
 	if (of_find_property(np, "nvidia,wakeup-source", NULL))
-		kbc->wakeup = true;
+		pdata->wakeup = true;
 
-	if (!of_get_property(np, "nvidia,kbc-row-pins", &proplen)) {
-		dev_err(kbc->dev, "property nvidia,kbc-row-pins not found\n");
-		return -ENOENT;
-	}
-	num_rows = proplen / sizeof(u32);
-
-	if (!of_get_property(np, "nvidia,kbc-col-pins", &proplen)) {
-		dev_err(kbc->dev, "property nvidia,kbc-col-pins not found\n");
-		return -ENOENT;
-	}
-	num_cols = proplen / sizeof(u32);
-
-	if (!of_get_property(np, "linux,keymap", &proplen)) {
-		dev_err(kbc->dev, "property linux,keymap not found\n");
-		return -ENOENT;
+	/*
+	 * All currently known keymaps with device tree support use the same
+	 * pin_cfg, so set it up here.
+	 */
+	for (i = 0; i < KBC_MAX_ROW; i++) {
+		pdata->pin_cfg[i].num = i;
+		pdata->pin_cfg[i].type = PIN_CFG_ROW;
 	}
 
-	if (!num_rows || !num_cols || ((num_rows + num_cols) > KBC_MAX_GPIO)) {
-		dev_err(kbc->dev,
-			"keypad rows/columns not porperly specified\n");
-		return -EINVAL;
+	for (i = 0; i < KBC_MAX_COL; i++) {
+		pdata->pin_cfg[KBC_MAX_ROW + i].num = i;
+		pdata->pin_cfg[KBC_MAX_ROW + i].type = PIN_CFG_COL;
 	}
 
-	/* Set all pins as non-configured */
-	for (i = 0; i < KBC_MAX_GPIO; i++)
-		kbc->pin_cfg[i].type = PIN_CFG_IGNORE;
+	return pdata;
+}
+#else
+static inline struct tegra_kbc_platform_data *tegra_kbc_dt_parse_pdata(
+	struct platform_device *pdev)
+{
+	return NULL;
+}
+#endif
 
-	ret = of_property_read_u32_array(np, "nvidia,kbc-row-pins",
-				rows_cfg, num_rows);
-	if (ret < 0) {
-		dev_err(kbc->dev, "Rows configurations are not proper\n");
-		return -EINVAL;
+static int __devinit tegra_kbd_setup_keymap(struct tegra_kbc *kbc)
+{
+	const struct tegra_kbc_platform_data *pdata = kbc->pdata;
+	const struct matrix_keymap_data *keymap_data = pdata->keymap_data;
+	unsigned int keymap_rows = KBC_MAX_KEY;
+	int retval;
+
+	if (keymap_data && pdata->use_fn_map)
+		keymap_rows *= 2;
+
+	retval = matrix_keypad_build_keymap(keymap_data, NULL,
+					    keymap_rows, KBC_MAX_COL,
+					    kbc->keycode, kbc->idev);
+	if (retval == -ENOSYS || retval == -ENOENT) {
+		/*
+		 * If there is no OF support in kernel or keymap
+		 * property is missing, use default keymap.
+		 */
+		retval = matrix_keypad_build_keymap(
+					&tegra_kbc_default_keymap_data, NULL,
+					keymap_rows, KBC_MAX_COL,
+					kbc->keycode, kbc->idev);
 	}
 
-	ret = of_property_read_u32_array(np, "nvidia,kbc-col-pins",
-				cols_cfg, num_cols);
-	if (ret < 0) {
-		dev_err(kbc->dev, "Cols configurations are not proper\n");
-		return -EINVAL;
-	}
-
-	for (i = 0; i < num_rows; i++) {
-		kbc->pin_cfg[rows_cfg[i]].type = PIN_CFG_ROW;
-		kbc->pin_cfg[rows_cfg[i]].num = i;
-	}
-
-	for (i = 0; i < num_cols; i++) {
-		kbc->pin_cfg[cols_cfg[i]].type = PIN_CFG_COL;
-		kbc->pin_cfg[cols_cfg[i]].num = i;
-	}
-
-	return 0;
+	return retval;
 }
 
-static int tegra_kbc_probe(struct platform_device *pdev)
+static int __devinit tegra_kbc_probe(struct platform_device *pdev)
 {
+	const struct tegra_kbc_platform_data *pdata = pdev->dev.platform_data;
 	struct tegra_kbc *kbc;
+	struct input_dev *input_dev;
 	struct resource *res;
+	int irq;
 	int err;
 	int num_rows = 0;
 	unsigned int debounce_cnt;
 	unsigned int scan_time_rows;
-	unsigned int keymap_rows = KBC_MAX_KEY;
 
-	kbc = devm_kzalloc(&pdev->dev, sizeof(*kbc), GFP_KERNEL);
-	if (!kbc) {
-		dev_err(&pdev->dev, "failed to alloc memory for kbc\n");
-		return -ENOMEM;
-	}
+	if (!pdata)
+		pdata = tegra_kbc_dt_parse_pdata(pdev);
 
-	kbc->dev = &pdev->dev;
-	spin_lock_init(&kbc->lock);
-
-	err = tegra_kbc_parse_dt(kbc);
-	if (err)
-		return err;
-
-	if (!tegra_kbc_check_pin_cfg(kbc, &num_rows))
+	if (!pdata)
 		return -EINVAL;
+
+	if (!tegra_kbc_check_pin_cfg(pdata, &pdev->dev, &num_rows)) {
+		err = -EINVAL;
+		goto err_free_pdata;
+	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
 		dev_err(&pdev->dev, "failed to get I/O memory\n");
-		return -ENXIO;
+		err = -ENXIO;
+		goto err_free_pdata;
 	}
 
-	kbc->irq = platform_get_irq(pdev, 0);
-	if (kbc->irq < 0) {
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0) {
 		dev_err(&pdev->dev, "failed to get keyboard IRQ\n");
-		return -ENXIO;
+		err = -ENXIO;
+		goto err_free_pdata;
 	}
 
-	kbc->idev = devm_input_allocate_device(&pdev->dev);
-	if (!kbc->idev) {
-		dev_err(&pdev->dev, "failed to allocate input device\n");
-		return -ENOMEM;
+	kbc = kzalloc(sizeof(*kbc), GFP_KERNEL);
+	input_dev = input_allocate_device();
+	if (!kbc || !input_dev) {
+		err = -ENOMEM;
+		goto err_free_mem;
 	}
 
+	kbc->pdata = pdata;
+	kbc->idev = input_dev;
+	kbc->irq = irq;
+	spin_lock_init(&kbc->lock);
 	setup_timer(&kbc->timer, tegra_kbc_keypress_timer, (unsigned long)kbc);
 
-	kbc->mmio = devm_request_and_ioremap(&pdev->dev, res);
-	if (!kbc->mmio) {
-		dev_err(&pdev->dev, "Cannot request memregion/iomap address\n");
-		return -EBUSY;
+	res = request_mem_region(res->start, resource_size(res), pdev->name);
+	if (!res) {
+		dev_err(&pdev->dev, "failed to request I/O memory\n");
+		err = -EBUSY;
+		goto err_free_mem;
 	}
 
-	kbc->clk = devm_clk_get(&pdev->dev, NULL);
+	kbc->mmio = ioremap(res->start, resource_size(res));
+	if (!kbc->mmio) {
+		dev_err(&pdev->dev, "failed to remap I/O memory\n");
+		err = -ENXIO;
+		goto err_free_mem_region;
+	}
+
+	kbc->clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(kbc->clk)) {
 		dev_err(&pdev->dev, "failed to get keyboard clock\n");
-		return PTR_ERR(kbc->clk);
+		err = PTR_ERR(kbc->clk);
+		goto err_iounmap;
 	}
 
 	/*
@@ -626,38 +774,37 @@ static int tegra_kbc_probe(struct platform_device *pdev)
 	 * the rows. There is an additional delay before the row scanning
 	 * starts. The repoll delay is computed in milliseconds.
 	 */
-	debounce_cnt = min(kbc->debounce_cnt, KBC_MAX_DEBOUNCE_CNT);
+	debounce_cnt = min(pdata->debounce_cnt, KBC_MAX_DEBOUNCE_CNT);
 	scan_time_rows = (KBC_ROW_SCAN_TIME + debounce_cnt) * num_rows;
-	kbc->repoll_dly = KBC_ROW_SCAN_DLY + scan_time_rows + kbc->repeat_cnt;
+	kbc->repoll_dly = KBC_ROW_SCAN_DLY + scan_time_rows + pdata->repeat_cnt;
 	kbc->repoll_dly = DIV_ROUND_UP(kbc->repoll_dly, KBC_CYCLE_MS);
 
-	kbc->idev->name = pdev->name;
-	kbc->idev->id.bustype = BUS_HOST;
-	kbc->idev->dev.parent = &pdev->dev;
-	kbc->idev->open = tegra_kbc_open;
-	kbc->idev->close = tegra_kbc_close;
+	kbc->wakeup_key = pdata->wakeup_key;
+	kbc->use_fn_map = pdata->use_fn_map;
+	kbc->use_ghost_filter = pdata->use_ghost_filter;
 
-	if (kbc->keymap_data && kbc->use_fn_map)
-		keymap_rows *= 2;
+	input_dev->name = pdev->name;
+	input_dev->id.bustype = BUS_HOST;
+	input_dev->dev.parent = &pdev->dev;
+	input_dev->open = tegra_kbc_open;
+	input_dev->close = tegra_kbc_close;
 
-	err = matrix_keypad_build_keymap(kbc->keymap_data, NULL,
-					 keymap_rows, KBC_MAX_COL,
-					 kbc->keycode, kbc->idev);
+	err = tegra_kbd_setup_keymap(kbc);
 	if (err) {
 		dev_err(&pdev->dev, "failed to setup keymap\n");
-		return err;
+		goto err_put_clk;
 	}
 
-	__set_bit(EV_REP, kbc->idev->evbit);
-	input_set_capability(kbc->idev, EV_MSC, MSC_SCAN);
+	__set_bit(EV_REP, input_dev->evbit);
+	input_set_capability(input_dev, EV_MSC, MSC_SCAN);
 
-	input_set_drvdata(kbc->idev, kbc);
+	input_set_drvdata(input_dev, kbc);
 
-	err = devm_request_irq(&pdev->dev, kbc->irq, tegra_kbc_isr,
+	err = request_irq(kbc->irq, tegra_kbc_isr,
 			  IRQF_NO_SUSPEND | IRQF_TRIGGER_HIGH, pdev->name, kbc);
 	if (err) {
 		dev_err(&pdev->dev, "failed to request keyboard IRQ\n");
-		return err;
+		goto err_put_clk;
 	}
 
 	disable_irq(kbc->irq);
@@ -665,28 +812,60 @@ static int tegra_kbc_probe(struct platform_device *pdev)
 	err = input_register_device(kbc->idev);
 	if (err) {
 		dev_err(&pdev->dev, "failed to register input device\n");
-		return err;
+		goto err_free_irq;
 	}
 
 	platform_set_drvdata(pdev, kbc);
-	device_init_wakeup(&pdev->dev, kbc->wakeup);
+	device_init_wakeup(&pdev->dev, pdata->wakeup);
+
+	return 0;
+
+err_free_irq:
+	free_irq(kbc->irq, pdev);
+err_put_clk:
+	clk_put(kbc->clk);
+err_iounmap:
+	iounmap(kbc->mmio);
+err_free_mem_region:
+	release_mem_region(res->start, resource_size(res));
+err_free_mem:
+	input_free_device(input_dev);
+	kfree(kbc);
+err_free_pdata:
+	if (!pdev->dev.platform_data)
+		kfree(pdata);
+
+	return err;
+}
+
+static int __devexit tegra_kbc_remove(struct platform_device *pdev)
+{
+	struct tegra_kbc *kbc = platform_get_drvdata(pdev);
+	struct resource *res;
+
+	platform_set_drvdata(pdev, NULL);
+
+	free_irq(kbc->irq, pdev);
+	clk_put(kbc->clk);
+
+	input_unregister_device(kbc->idev);
+	iounmap(kbc->mmio);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	release_mem_region(res->start, resource_size(res));
+
+	/*
+	 * If we do not have platform data attached to the device we
+	 * allocated it ourselves and thus need to free it.
+	 */
+	if (!pdev->dev.platform_data)
+		kfree(kbc->pdata);
+
+	kfree(kbc);
 
 	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP
-static void tegra_kbc_set_keypress_interrupt(struct tegra_kbc *kbc, bool enable)
-{
-	u32 val;
-
-	val = readl(kbc->mmio + KBC_CONTROL_0);
-	if (enable)
-		val |= KBC_CONTROL_KEYPRESS_INT_EN;
-	else
-		val &= ~KBC_CONTROL_KEYPRESS_INT_EN;
-	writel(val, kbc->mmio + KBC_CONTROL_0);
-}
-
 static int tegra_kbc_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -775,6 +954,7 @@ MODULE_DEVICE_TABLE(of, tegra_kbc_of_match);
 
 static struct platform_driver tegra_kbc_driver = {
 	.probe		= tegra_kbc_probe,
+	.remove		= __devexit_p(tegra_kbc_remove),
 	.driver	= {
 		.name	= "tegra-kbc",
 		.owner  = THIS_MODULE,

@@ -25,10 +25,12 @@
 #include <linux/io.h>
 #include <linux/usb/musb.h>
 
-#include "omap_device.h"
-#include "soc.h"
+#include <plat/usb.h>
+#include <plat/omap_device.h>
+
+#include "am35xx.h"
+
 #include "mux.h"
-#include "usb.h"
 
 static struct musb_hdrc_config musb_config = {
 	.multipoint	= 1,
@@ -85,9 +87,6 @@ void __init usb_musb_init(struct omap_musb_board_data *musb_board_data)
 	musb_plat.mode = board_data->mode;
 	musb_plat.extvbus = board_data->extvbus;
 
-	if (cpu_is_omap44xx())
-		musb_plat.has_mailbox = true;
-
 	if (soc_is_am35xx()) {
 		oh_name = "am35x_otg_hs";
 		name = "musb-am35x";
@@ -105,7 +104,7 @@ void __init usb_musb_init(struct omap_musb_board_data *musb_board_data)
                 return;
 
 	pdev = omap_device_build(name, bus_id, oh, &musb_plat,
-				 sizeof(musb_plat));
+			       sizeof(musb_plat), NULL, 0, false);
 	if (IS_ERR(pdev)) {
 		pr_err("Could not build omap_device for %s %s\n",
 						name, oh_name);

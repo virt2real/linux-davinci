@@ -30,7 +30,6 @@
 #include <net/transp_v6.h>
 #include <net/ip6_route.h>
 #include <net/tcp_states.h>
-#include <net/dsfield.h>
 
 #include <linux/errqueue.h>
 #include <asm/uaccess.h>
@@ -357,11 +356,12 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 		sin->sin6_port = serr->port;
 		sin->sin6_scope_id = 0;
 		if (skb->protocol == htons(ETH_P_IPV6)) {
-			const struct ipv6hdr *ip6h = container_of((struct in6_addr *)(nh + serr->addr_offset),
-								  struct ipv6hdr, daddr);
-			sin->sin6_addr = ip6h->daddr;
+			sin->sin6_addr =
+				*(struct in6_addr *)(nh + serr->addr_offset);
 			if (np->sndflow)
-				sin->sin6_flowinfo = ip6_flowinfo(ip6h);
+				sin->sin6_flowinfo =
+					(*(__be32 *)(nh + serr->addr_offset - 24) &
+					 IPV6_FLOWINFO_MASK);
 			if (ipv6_addr_type(&sin->sin6_addr) & IPV6_ADDR_LINKLOCAL)
 				sin->sin6_scope_id = IP6CB(skb)->iif;
 		} else {
@@ -380,7 +380,7 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 		if (skb->protocol == htons(ETH_P_IPV6)) {
 			sin->sin6_addr = ipv6_hdr(skb)->saddr;
 			if (np->rxopt.all)
-				ip6_datagram_recv_ctl(sk, msg, skb);
+				datagram_recv_ctl(sk, msg, skb);
 			if (ipv6_addr_type(&sin->sin6_addr) & IPV6_ADDR_LINKLOCAL)
 				sin->sin6_scope_id = IP6CB(skb)->iif;
 		} else {
@@ -468,8 +468,7 @@ out:
 }
 
 
-int ip6_datagram_recv_ctl(struct sock *sk, struct msghdr *msg,
-			  struct sk_buff *skb)
+int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 {
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct inet6_skb_parm *opt = IP6CB(skb);
@@ -489,14 +488,13 @@ int ip6_datagram_recv_ctl(struct sock *sk, struct msghdr *msg,
 	}
 
 	if (np->rxopt.bits.rxtclass) {
-		int tclass = ipv6_get_dsfield(ipv6_hdr(skb));
+		int tclass = ipv6_tclass(ipv6_hdr(skb));
 		put_cmsg(msg, SOL_IPV6, IPV6_TCLASS, sizeof(tclass), &tclass);
 	}
 
-	if (np->rxopt.bits.rxflow) {
-		__be32 flowinfo = ip6_flowinfo((struct ipv6hdr *)nh);
-		if (flowinfo)
-			put_cmsg(msg, SOL_IPV6, IPV6_FLOWINFO, sizeof(flowinfo), &flowinfo);
+	if (np->rxopt.bits.rxflow && (*(__be32 *)nh & IPV6_FLOWINFO_MASK)) {
+		__be32 flowinfo = *(__be32 *)nh & IPV6_FLOWINFO_MASK;
+		put_cmsg(msg, SOL_IPV6, IPV6_FLOWINFO, sizeof(flowinfo), &flowinfo);
 	}
 
 	/* HbH is allowed only once */
@@ -599,12 +597,11 @@ int ip6_datagram_recv_ctl(struct sock *sk, struct msghdr *msg,
 	}
 	return 0;
 }
-EXPORT_SYMBOL_GPL(ip6_datagram_recv_ctl);
 
-int ip6_datagram_send_ctl(struct net *net, struct sock *sk,
-			  struct msghdr *msg, struct flowi6 *fl6,
-			  struct ipv6_txoptions *opt,
-			  int *hlimit, int *tclass, int *dontfrag)
+int datagram_send_ctl(struct net *net, struct sock *sk,
+		      struct msghdr *msg, struct flowi6 *fl6,
+		      struct ipv6_txoptions *opt,
+		      int *hlimit, int *tclass, int *dontfrag)
 {
 	struct in6_pktinfo *src_info;
 	struct cmsghdr *cmsg;
@@ -704,7 +701,7 @@ int ip6_datagram_send_ctl(struct net *net, struct sock *sk,
 				err = -EINVAL;
 				goto exit_f;
 			}
-			if (!ns_capable(net->user_ns, CAP_NET_RAW)) {
+			if (!capable(CAP_NET_RAW)) {
 				err = -EPERM;
 				goto exit_f;
 			}
@@ -724,7 +721,7 @@ int ip6_datagram_send_ctl(struct net *net, struct sock *sk,
 				err = -EINVAL;
 				goto exit_f;
 			}
-			if (!ns_capable(net->user_ns, CAP_NET_RAW)) {
+			if (!capable(CAP_NET_RAW)) {
 				err = -EPERM;
 				goto exit_f;
 			}
@@ -749,7 +746,7 @@ int ip6_datagram_send_ctl(struct net *net, struct sock *sk,
 				err = -EINVAL;
 				goto exit_f;
 			}
-			if (!ns_capable(net->user_ns, CAP_NET_RAW)) {
+			if (!capable(CAP_NET_RAW)) {
 				err = -EPERM;
 				goto exit_f;
 			}
@@ -772,7 +769,7 @@ int ip6_datagram_send_ctl(struct net *net, struct sock *sk,
 			rthdr = (struct ipv6_rt_hdr *)CMSG_DATA(cmsg);
 
 			switch (rthdr->type) {
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
 			case IPV6_SRCRT_TYPE_2:
 				if (rthdr->hdrlen != 2 ||
 				    rthdr->segments_left != 1) {
@@ -874,4 +871,4 @@ int ip6_datagram_send_ctl(struct net *net, struct sock *sk,
 exit_f:
 	return err;
 }
-EXPORT_SYMBOL_GPL(ip6_datagram_send_ctl);
+EXPORT_SYMBOL_GPL(datagram_send_ctl);

@@ -16,7 +16,7 @@
 #include <linux/poll.h>
 
 
-static loff_t bad_file_llseek(struct file *file, loff_t offset, int whence)
+static loff_t bad_file_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -EIO;
 }

@@ -93,9 +93,8 @@ asmlinkage long sys_ioperm(unsigned long from, unsigned long num, int turn_on)
  * on system-call entry - see also fork() and the signal handling
  * code.
  */
-SYSCALL_DEFINE1(iopl, unsigned int, level)
+long sys_iopl(unsigned int level, struct pt_regs *regs)
 {
-	struct pt_regs *regs = current_pt_regs();
 	unsigned int old = (regs->flags >> 12) & 3;
 	struct thread_struct *t = &current->thread;
 

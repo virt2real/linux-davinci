@@ -1395,7 +1395,8 @@ static const struct net_device_ops sc92031_netdev_ops = {
 #endif
 };
 
-static int sc92031_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+static int __devinit sc92031_probe(struct pci_dev *pdev,
+		const struct pci_device_id *id)
 {
 	int err;
 	void __iomem* port_base;
@@ -1458,12 +1459,12 @@ static int sc92031_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	mac0 = ioread32(port_base + MAC0);
 	mac1 = ioread32(port_base + MAC0 + 4);
-	dev->dev_addr[0] = mac0 >> 24;
-	dev->dev_addr[1] = mac0 >> 16;
-	dev->dev_addr[2] = mac0 >> 8;
-	dev->dev_addr[3] = mac0;
-	dev->dev_addr[4] = mac1 >> 8;
-	dev->dev_addr[5] = mac1;
+	dev->dev_addr[0] = dev->perm_addr[0] = mac0 >> 24;
+	dev->dev_addr[1] = dev->perm_addr[1] = mac0 >> 16;
+	dev->dev_addr[2] = dev->perm_addr[2] = mac0 >> 8;
+	dev->dev_addr[3] = dev->perm_addr[3] = mac0;
+	dev->dev_addr[4] = dev->perm_addr[4] = mac1 >> 8;
+	dev->dev_addr[5] = dev->perm_addr[5] = mac1;
 
 	err = register_netdev(dev);
 	if (err < 0)
@@ -1488,7 +1489,7 @@ out_enable_device:
 	return err;
 }
 
-static void sc92031_remove(struct pci_dev *pdev)
+static void __devexit sc92031_remove(struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
 	struct sc92031_priv *priv = netdev_priv(dev);
@@ -1573,7 +1574,7 @@ static struct pci_driver sc92031_pci_driver = {
 	.name		= SC92031_NAME,
 	.id_table	= sc92031_pci_device_id_table,
 	.probe		= sc92031_probe,
-	.remove		= sc92031_remove,
+	.remove		= __devexit_p(sc92031_remove),
 	.suspend	= sc92031_suspend,
 	.resume		= sc92031_resume,
 };

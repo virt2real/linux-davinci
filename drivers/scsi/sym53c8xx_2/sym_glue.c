@@ -1284,7 +1284,8 @@ static int sym53c8xx_proc_info(struct Scsi_Host *shost, char *buffer,
  * sym_free_resources() should be used instead of this function after calling
  * sym_attach().
  */
-static void sym_iounmap_device(struct sym_device *device)
+static void __devinit
+sym_iounmap_device(struct sym_device *device)
 {
 	if (device->s.ioaddr)
 		pci_iounmap(device->pdev, device->s.ioaddr);
@@ -1324,8 +1325,8 @@ static void sym_free_resources(struct sym_hcb *np, struct pci_dev *pdev,
  *  If all is OK, install interrupt handling and
  *  start the timer daemon.
  */
-static struct Scsi_Host *sym_attach(struct scsi_host_template *tpnt, int unit,
-				    struct sym_device *dev)
+static struct Scsi_Host * __devinit sym_attach(struct scsi_host_template *tpnt,
+		int unit, struct sym_device *dev)
 {
 	struct sym_data *sym_data;
 	struct sym_hcb *np = NULL;
@@ -1480,7 +1481,7 @@ static struct Scsi_Host *sym_attach(struct scsi_host_template *tpnt, int unit,
  *    Detect and try to read SYMBIOS and TEKRAM NVRAM.
  */
 #if SYM_CONF_NVRAM_SUPPORT
-static void sym_get_nvram(struct sym_device *devp, struct sym_nvram *nvp)
+static void __devinit sym_get_nvram(struct sym_device *devp, struct sym_nvram *nvp)
 {
 	devp->nvram = nvp;
 	nvp->type = 0;
@@ -1493,7 +1494,7 @@ static inline void sym_get_nvram(struct sym_device *devp, struct sym_nvram *nvp)
 }
 #endif	/* SYM_CONF_NVRAM_SUPPORT */
 
-static int sym_check_supported(struct sym_device *device)
+static int __devinit sym_check_supported(struct sym_device *device)
 {
 	struct sym_chip *chip;
 	struct pci_dev *pdev = device->pdev;
@@ -1530,7 +1531,7 @@ static int sym_check_supported(struct sym_device *device)
  * Ignore Symbios chips controlled by various RAID controllers.
  * These controllers set value 0x52414944 at RAM end - 16.
  */
-static int sym_check_raid(struct sym_device *device)
+static int __devinit sym_check_raid(struct sym_device *device)
 {
 	unsigned int ram_size, ram_val;
 
@@ -1551,7 +1552,7 @@ static int sym_check_raid(struct sym_device *device)
 	return -ENODEV;
 }
 
-static int sym_set_workarounds(struct sym_device *device)
+static int __devinit sym_set_workarounds(struct sym_device *device)
 {
 	struct sym_chip *chip = &device->chip;
 	struct pci_dev *pdev = device->pdev;
@@ -1601,7 +1602,8 @@ static int sym_set_workarounds(struct sym_device *device)
 /*
  * Map HBA registers and on-chip SRAM (if present).
  */
-static int sym_iomap_device(struct sym_device *device)
+static int __devinit
+sym_iomap_device(struct sym_device *device)
 {
 	struct pci_dev *pdev = device->pdev;
 	struct pci_bus_region bus_addr;
@@ -1749,7 +1751,8 @@ static struct scsi_host_template sym2_template = {
 
 static int attach_count;
 
-static int sym2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit sym2_probe(struct pci_dev *pdev,
+				const struct pci_device_id *ent)
 {
 	struct sym_device sym_dev;
 	struct sym_nvram nvram;
@@ -2074,7 +2077,7 @@ static struct spi_function_template sym2_transport_functions = {
 	.get_signalling	= sym2_get_signalling,
 };
 
-static struct pci_device_id sym2_id_table[] = {
+static struct pci_device_id sym2_id_table[] __devinitdata = {
 	{ PCI_VENDOR_ID_LSI_LOGIC, PCI_DEVICE_ID_NCR_53C810,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0UL },
 	{ PCI_VENDOR_ID_LSI_LOGIC, PCI_DEVICE_ID_NCR_53C820,

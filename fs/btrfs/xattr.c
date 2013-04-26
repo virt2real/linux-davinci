@@ -122,16 +122,6 @@ static int do_setxattr(struct btrfs_trans_handle *trans,
 		 */
 		if (!value)
 			goto out;
-	} else {
-		di = btrfs_lookup_xattr(NULL, root, path, btrfs_ino(inode),
-					name, name_len, 0);
-		if (IS_ERR(di)) {
-			ret = PTR_ERR(di);
-			goto out;
-		}
-		if (!di && !value)
-			goto out;
-		btrfs_release_path(path);
 	}
 
 again:
@@ -208,7 +198,6 @@ int __btrfs_setxattr(struct btrfs_trans_handle *trans,
 
 	inode_inc_iversion(inode);
 	inode->i_ctime = CURRENT_TIME;
-	set_bit(BTRFS_INODE_COPY_EVERYTHING, &BTRFS_I(inode)->runtime_flags);
 	ret = btrfs_update_inode(trans, root, inode);
 	BUG_ON(ret);
 out:
@@ -276,7 +265,7 @@ ssize_t btrfs_listxattr(struct dentry *dentry, char *buffer, size_t size)
 
 		di = btrfs_item_ptr(leaf, slot, struct btrfs_dir_item);
 		if (verify_dir_item(root, leaf, di))
-			goto next;
+			continue;
 
 		name_len = btrfs_dir_name_len(leaf, di);
 		total_size += name_len + 1;

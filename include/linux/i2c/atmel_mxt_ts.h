@@ -15,9 +15,6 @@
 
 #include <linux/types.h>
 
-/* For key_map array */
-#define MXT_NUM_GPIO		4
-
 /* Orient */
 #define MXT_NORMAL		0x0
 #define MXT_DIAGONAL		0x1
@@ -42,8 +39,6 @@ struct mxt_platform_data {
 	unsigned int voltage;
 	unsigned char orient;
 	unsigned long irqflags;
-	bool is_tp;
-	const unsigned int key_map[MXT_NUM_GPIO];
 };
 
 #endif /* __LINUX_ATMEL_MXT_TS_H */

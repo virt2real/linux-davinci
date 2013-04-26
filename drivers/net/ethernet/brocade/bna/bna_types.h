@@ -430,7 +430,6 @@ struct bna_ib {
 struct bna_tcb {
 	/* Fast path */
 	void			**sw_qpt;
-	void			*sw_q;
 	void			*unmap_q;
 	u32		producer_index;
 	u32		consumer_index;
@@ -438,6 +437,8 @@ struct bna_tcb {
 	u32		q_depth;
 	void __iomem   *q_dbell;
 	struct bna_ib_dbell *i_dbell;
+	int			page_idx;
+	int			page_count;
 	/* Control path */
 	struct bna_txq *txq;
 	struct bnad *bnad;
@@ -562,12 +563,13 @@ struct bna_tx_mod {
 struct bna_rcb {
 	/* Fast path */
 	void			**sw_qpt;
-	void			*sw_q;
 	void			*unmap_q;
 	u32		producer_index;
 	u32		consumer_index;
 	u32		q_depth;
 	void __iomem   *q_dbell;
+	int			page_idx;
+	int			page_count;
 	/* Control path */
 	struct bna_rxq *rxq;
 	struct bna_ccb *ccb;
@@ -624,7 +626,6 @@ struct bna_pkt_rate {
 struct bna_ccb {
 	/* Fast path */
 	void			**sw_qpt;
-	void			*sw_q;
 	u32		producer_index;
 	volatile u32	*hw_producer_index;
 	u32		q_depth;
@@ -632,6 +633,8 @@ struct bna_ccb {
 	struct bna_rcb *rcb[2];
 	void			*ctrl; /* For bnad */
 	struct bna_pkt_rate pkt_rate;
+	int			page_idx;
+	int			page_count;
 
 	/* Control path */
 	struct bna_cq *cq;

@@ -472,7 +472,6 @@ static void nvt_enable_wake(struct nvt_dev *nvt)
 	nvt_cir_wake_reg_write(nvt, 0, CIR_WAKE_IREN);
 }
 
-#if 0 /* Currently unused */
 /* rx carrier detect only works in learning mode, must be called w/nvt_lock */
 static u32 nvt_rx_carrier_detect(struct nvt_dev *nvt)
 {
@@ -505,7 +504,7 @@ static u32 nvt_rx_carrier_detect(struct nvt_dev *nvt)
 
 	return carrier;
 }
-#endif
+
 /*
  * set carrier frequency
  *
@@ -621,6 +620,7 @@ static void nvt_dump_rx_buf(struct nvt_dev *nvt)
 static void nvt_process_rx_ir_data(struct nvt_dev *nvt)
 {
 	DEFINE_IR_RAW_EVENT(rawir);
+	u32 carrier;
 	u8 sample;
 	int i;
 
@@ -628,6 +628,9 @@ static void nvt_process_rx_ir_data(struct nvt_dev *nvt)
 
 	if (debug)
 		nvt_dump_rx_buf(nvt);
+
+	if (nvt->carrier_detect_enabled)
+		carrier = nvt_rx_carrier_detect(nvt);
 
 	nvt_dbg_verbose("Processing buffer of len %d", nvt->pkts);
 
@@ -986,25 +989,25 @@ static int nvt_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
 	/* input device for IR remote (and tx) */
 	rdev = rc_allocate_device();
 	if (!rdev)
-		goto exit_free_dev_rdev;
+		goto failure;
 
 	ret = -ENODEV;
 	/* validate pnp resources */
 	if (!pnp_port_valid(pdev, 0) ||
 	    pnp_port_len(pdev, 0) < CIR_IOREG_LENGTH) {
 		dev_err(&pdev->dev, "IR PNP Port not valid!\n");
-		goto exit_free_dev_rdev;
+		goto failure;
 	}
 
 	if (!pnp_irq_valid(pdev, 0)) {
 		dev_err(&pdev->dev, "PNP IRQ not valid!\n");
-		goto exit_free_dev_rdev;
+		goto failure;
 	}
 
 	if (!pnp_port_valid(pdev, 1) ||
 	    pnp_port_len(pdev, 1) < CIR_IOREG_LENGTH) {
 		dev_err(&pdev->dev, "Wake PNP Port not valid!\n");
-		goto exit_free_dev_rdev;
+		goto failure;
 	}
 
 	nvt->cir_addr = pnp_port_start(pdev, 0);
@@ -1027,7 +1030,7 @@ static int nvt_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
 
 	ret = nvt_hw_detect(nvt);
 	if (ret)
-		goto exit_free_dev_rdev;
+		goto failure;
 
 	/* Initialize CIR & CIR Wake Logical Devices */
 	nvt_efm_enable(nvt);
@@ -1042,7 +1045,7 @@ static int nvt_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
 	/* Set up the rc device */
 	rdev->priv = nvt;
 	rdev->driver_type = RC_DRIVER_IR_RAW;
-	rdev->allowed_protos = RC_BIT_ALL;
+	rdev->allowed_protos = RC_TYPE_ALL;
 	rdev->open = nvt_open;
 	rdev->close = nvt_close;
 	rdev->tx_ir = nvt_tx_ir;
@@ -1065,32 +1068,31 @@ static int nvt_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
 	/* tx bits */
 	rdev->tx_resolution = XYZ;
 #endif
-	nvt->rdev = rdev;
-
-	ret = rc_register_device(rdev);
-	if (ret)
-		goto exit_free_dev_rdev;
 
 	ret = -EBUSY;
 	/* now claim resources */
 	if (!request_region(nvt->cir_addr,
 			    CIR_IOREG_LENGTH, NVT_DRIVER_NAME))
-		goto exit_unregister_device;
+		goto failure;
 
 	if (request_irq(nvt->cir_irq, nvt_cir_isr, IRQF_SHARED,
 			NVT_DRIVER_NAME, (void *)nvt))
-		goto exit_release_cir_addr;
+		goto failure2;
 
 	if (!request_region(nvt->cir_wake_addr,
 			    CIR_IOREG_LENGTH, NVT_DRIVER_NAME))
-		goto exit_free_irq;
+		goto failure3;
 
 	if (request_irq(nvt->cir_wake_irq, nvt_cir_wake_isr, IRQF_SHARED,
 			NVT_DRIVER_NAME, (void *)nvt))
-		goto exit_release_cir_wake_addr;
+		goto failure4;
+
+	ret = rc_register_device(rdev);
+	if (ret)
+		goto failure5;
 
 	device_init_wakeup(&pdev->dev, true);
-
+	nvt->rdev = rdev;
 	nvt_pr(KERN_NOTICE, "driver has been successfully loaded\n");
 	if (debug) {
 		cir_dump_regs(nvt);
@@ -1099,22 +1101,22 @@ static int nvt_probe(struct pnp_dev *pdev, const struct pnp_device_id *dev_id)
 
 	return 0;
 
-exit_release_cir_wake_addr:
+failure5:
+	free_irq(nvt->cir_wake_irq, nvt);
+failure4:
 	release_region(nvt->cir_wake_addr, CIR_IOREG_LENGTH);
-exit_free_irq:
+failure3:
 	free_irq(nvt->cir_irq, nvt);
-exit_release_cir_addr:
+failure2:
 	release_region(nvt->cir_addr, CIR_IOREG_LENGTH);
-exit_unregister_device:
-	rc_unregister_device(rdev);
-exit_free_dev_rdev:
+failure:
 	rc_free_device(rdev);
 	kfree(nvt);
 
 	return ret;
 }
 
-static void nvt_remove(struct pnp_dev *pdev)
+static void __devexit nvt_remove(struct pnp_dev *pdev)
 {
 	struct nvt_dev *nvt = pnp_get_drvdata(pdev);
 	unsigned long flags;
@@ -1212,18 +1214,18 @@ static struct pnp_driver nvt_driver = {
 	.id_table	= nvt_ids,
 	.flags		= PNP_DRIVER_RES_DO_NOT_CHANGE,
 	.probe		= nvt_probe,
-	.remove		= nvt_remove,
+	.remove		= __devexit_p(nvt_remove),
 	.suspend	= nvt_suspend,
 	.resume		= nvt_resume,
 	.shutdown	= nvt_shutdown,
 };
 
-static int nvt_init(void)
+int nvt_init(void)
 {
 	return pnp_register_driver(&nvt_driver);
 }
 
-static void nvt_exit(void)
+void nvt_exit(void)
 {
 	pnp_unregister_driver(&nvt_driver);
 }

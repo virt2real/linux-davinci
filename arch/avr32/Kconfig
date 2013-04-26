@@ -7,7 +7,6 @@ config AVR32
 	select HAVE_OPROFILE
 	select HAVE_KPROBES
 	select HAVE_GENERIC_HARDIRQS
-	select VIRT_TO_BUS
 	select GENERIC_IRQ_PROBE
 	select GENERIC_ATOMIC64
 	select HARDIRQS_SW_RESEND
@@ -81,6 +80,7 @@ config PLATFORM_AT32AP
 	select ARCH_REQUIRE_GPIOLIB
 	select GENERIC_ALLOCATOR
 	select HAVE_FB_ATMEL
+	select HAVE_NET_MACB
 
 #
 # CPU types
@@ -192,6 +192,9 @@ source "kernel/Kconfig.preempt"
 
 config QUICKLIST
 	def_bool y
+
+config HAVE_ARCH_BOOTMEM
+	def_bool n
 
 config ARCH_HAVE_MEMORY_PRESENT
 	def_bool n

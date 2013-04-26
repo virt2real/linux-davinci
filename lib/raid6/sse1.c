@@ -21,7 +21,7 @@
  * worthwhile as a separate implementation.
  */
 
-#ifdef CONFIG_X86_32
+#if defined(__i386__) && !defined(__arch_um__)
 
 #include <linux/raid/pq.h>
 #include "x86.h"

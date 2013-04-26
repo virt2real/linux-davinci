@@ -35,7 +35,6 @@
 #include <linux/input/sh_keysc.h>
 #include <linux/gpio_keys.h>
 #include <linux/leds.h>
-#include <linux/irqchip/arm-gic.h>
 #include <linux/platform_data/leds-renesas-tpu.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/sh_mmcif.h>
@@ -48,6 +47,7 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
+#include <asm/hardware/gic.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/traps.h>
 
@@ -474,8 +474,10 @@ static void __init kota2_init(void)
 	gpio_request(GPIO_FN_D15_NAF15, NULL);
 	gpio_request(GPIO_FN_CS5A_, NULL);
 	gpio_request(GPIO_FN_WE0__FWE, NULL);
-	gpio_request_one(GPIO_PORT144, GPIOF_IN, NULL); /* PINTA2 */
-	gpio_request_one(GPIO_PORT145, GPIOF_OUT_INIT_HIGH, NULL); /* RESET */
+	gpio_request(GPIO_PORT144, NULL); /* PINTA2 */
+	gpio_direction_input(GPIO_PORT144);
+	gpio_request(GPIO_PORT145, NULL); /* RESET */
+	gpio_direction_output(GPIO_PORT145, 1);
 
 	/* KEYSC */
 	gpio_request(GPIO_FN_KEYIN0_PU, NULL);
@@ -507,7 +509,8 @@ static void __init kota2_init(void)
 	gpio_request(GPIO_FN_MMCD0_6, NULL);
 	gpio_request(GPIO_FN_MMCD0_7, NULL);
 	gpio_request(GPIO_FN_MMCCMD0, NULL);
-	gpio_request_one(GPIO_PORT208, GPIOF_OUT_INIT_HIGH, NULL); /* Reset */
+	gpio_request(GPIO_PORT208, NULL); /* Reset */
+	gpio_direction_output(GPIO_PORT208, 1);
 
 	/* SDHI0 (microSD) */
 	gpio_request(GPIO_FN_SDHICD0_PU, NULL);
@@ -547,7 +550,8 @@ MACHINE_START(KOTA2, "kota2")
 	.init_early	= sh73a0_add_early_devices,
 	.nr_irqs	= NR_IRQS_LEGACY,
 	.init_irq	= sh73a0_init_irq,
+	.handle_irq	= gic_handle_irq,
 	.init_machine	= kota2_init,
 	.init_late	= shmobile_init_late,
-	.init_time	= sh73a0_earlytimer_init,
+	.timer		= &shmobile_timer,
 MACHINE_END

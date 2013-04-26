@@ -128,6 +128,10 @@ static void __init shark_timer_init(void)
 	setup_irq(IRQ_TIMER, &shark_timer_irq);
 }
 
+static struct sys_timer shark_timer = {
+	.init		= shark_timer_init,
+};
+
 static void shark_init_early(void)
 {
 	disable_hlt();
@@ -138,7 +142,7 @@ MACHINE_START(SHARK, "Shark")
 	.atag_offset	= 0x3000,
 	.init_early	= shark_init_early,
 	.init_irq	= shark_init_irq,
-	.init_time	= shark_timer_init,
+	.timer		= &shark_timer,
 	.dma_zone_size	= SZ_4M,
 	.restart	= shark_restart,
 MACHINE_END

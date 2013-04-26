@@ -52,7 +52,7 @@ static pfn_t kvm_pin_pages(struct kvm_memory_slot *slot, gfn_t gfn,
 	end_gfn = gfn + (size >> PAGE_SHIFT);
 	gfn    += 1;
 
-	if (is_error_noslot_pfn(pfn))
+	if (is_error_pfn(pfn))
 		return pfn;
 
 	while (gfn < end_gfn)
@@ -76,9 +76,7 @@ int kvm_iommu_map_pages(struct kvm *kvm, struct kvm_memory_slot *slot)
 	gfn     = slot->base_gfn;
 	end_gfn = gfn + slot->npages;
 
-	flags = IOMMU_READ;
-	if (!(slot->flags & KVM_MEM_READONLY))
-		flags |= IOMMU_WRITE;
+	flags = IOMMU_READ | IOMMU_WRITE;
 	if (kvm->arch.iommu_flags & KVM_IOMMU_CACHE_COHERENCY)
 		flags |= IOMMU_CACHE;
 
@@ -108,7 +106,7 @@ int kvm_iommu_map_pages(struct kvm *kvm, struct kvm_memory_slot *slot)
 		 * important because we unmap and unpin in 4kb steps later.
 		 */
 		pfn = kvm_pin_pages(slot, gfn, page_size);
-		if (is_error_noslot_pfn(pfn)) {
+		if (is_error_pfn(pfn)) {
 			gfn += 1;
 			continue;
 		}
@@ -170,7 +168,11 @@ int kvm_assign_device(struct kvm *kvm,
 
 	r = iommu_attach_device(domain, &pdev->dev);
 	if (r) {
-		dev_err(&pdev->dev, "kvm assign device failed ret %d", r);
+		printk(KERN_ERR "assign device %x:%x:%x.%x failed",
+			pci_domain_nr(pdev->bus),
+			pdev->bus->number,
+			PCI_SLOT(pdev->devfn),
+			PCI_FUNC(pdev->devfn));
 		return r;
 	}
 

@@ -378,7 +378,7 @@ static void max310x_wait_pll(struct max310x_port *s)
 	}
 }
 
-static int max310x_update_best_err(unsigned long f, long *besterr)
+static int __devinit max310x_update_best_err(unsigned long f, long *besterr)
 {
 	/* Use baudrate 115200 for calculate error */
 	long err = f % (115200 * 16);
@@ -391,7 +391,7 @@ static int max310x_update_best_err(unsigned long f, long *besterr)
 	return 1;
 }
 
-static int max310x_set_ref_clk(struct max310x_port *s)
+static int __devinit max310x_set_ref_clk(struct max310x_port *s)
 {
 	unsigned int div, clksrc, pllcfg = 0;
 	long besterr = -1;
@@ -460,6 +460,10 @@ static int max310x_set_ref_clk(struct max310x_port *s)
 static void max310x_handle_rx(struct max310x_port *s, unsigned int rxlen)
 {
 	unsigned int sts = 0, ch = 0, flag;
+	struct tty_struct *tty = tty_port_tty_get(&s->port.state->port);
+
+	if (!tty)
+		return;
 
 	if (unlikely(rxlen >= MAX310X_FIFO_SIZE)) {
 		dev_warn(s->port.dev, "Possible RX FIFO overrun %d\n", rxlen);
@@ -512,7 +516,9 @@ static void max310x_handle_rx(struct max310x_port *s, unsigned int rxlen)
 				 ch, flag);
 	}
 
-	tty_flip_buffer_push(&s->port.state->port);
+	tty_flip_buffer_push(tty);
+
+	tty_kref_put(tty);
 }
 
 static void max310x_handle_tx(struct max310x_port *s)
@@ -989,7 +995,7 @@ static struct max310x_pdata generic_plat_data = {
 	.frequency	= 26000000,
 };
 
-static int max310x_probe(struct spi_device *spi)
+static int __devinit max310x_probe(struct spi_device *spi)
 {
 	struct max310x_port *s;
 	struct device *dev = &spi->dev;
@@ -1172,7 +1178,6 @@ static int max310x_probe(struct spi_device *spi)
 		s->gpio.set		= max310x_gpio_set;
 		s->gpio.base		= pdata->gpio_base;
 		s->gpio.ngpio		= s->nr_gpio;
-		s->gpio.can_sleep	= 1;
 		if (gpiochip_add(&s->gpio)) {
 			/* Indicate that we should not call gpiochip_remove */
 			s->gpio.base = 0;
@@ -1197,7 +1202,7 @@ err_out:
 	return ret;
 }
 
-static int max310x_remove(struct spi_device *spi)
+static int __devexit max310x_remove(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
 	struct max310x_port *s = dev_get_drvdata(dev);
@@ -1234,7 +1239,6 @@ static int max310x_remove(struct spi_device *spi)
 static const struct spi_device_id max310x_id_table[] = {
 	{ "max3107",	MAX310X_TYPE_MAX3107 },
 	{ "max3108",	MAX310X_TYPE_MAX3108 },
-	{ }
 };
 MODULE_DEVICE_TABLE(spi, max310x_id_table);
 
@@ -1244,7 +1248,7 @@ static struct spi_driver max310x_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= max310x_probe,
-	.remove		= max310x_remove,
+	.remove		= __devexit_p(max310x_remove),
 	.suspend	= max310x_suspend,
 	.resume		= max310x_resume,
 	.id_table	= max310x_id_table,

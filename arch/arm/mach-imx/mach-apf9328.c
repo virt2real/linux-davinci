@@ -25,10 +25,11 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
 
-#include "common.h"
+#include <mach/common.h>
+#include <mach/hardware.h>
+#include <mach/iomux-mx1.h>
+
 #include "devices-imx1.h"
-#include "hardware.h"
-#include "iomux-mx1.h"
 
 static const int apf9328_pins[] __initconst = {
 	/* UART1 */
@@ -137,13 +138,17 @@ static void __init apf9328_timer_init(void)
 	mx1_clocks_init(32768);
 }
 
+static struct sys_timer apf9328_timer = {
+	.init	= apf9328_timer_init,
+};
+
 MACHINE_START(APF9328, "Armadeus APF9328")
 	/* Maintainer: Gwenhael Goavec-Merou, ARMadeus Systems */
 	.map_io       = mx1_map_io,
 	.init_early   = imx1_init_early,
 	.init_irq     = mx1_init_irq,
 	.handle_irq   = imx1_handle_irq,
-	.init_time	= apf9328_timer_init,
+	.timer        = &apf9328_timer,
 	.init_machine = apf9328_init,
 	.restart	= mxc_restart,
 MACHINE_END

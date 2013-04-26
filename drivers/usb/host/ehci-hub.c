@@ -56,19 +56,6 @@ static void ehci_handover_companion_ports(struct ehci_hcd *ehci)
 	if (!ehci->owned_ports)
 		return;
 
-	/* Make sure the ports are powered */
-	port = HCS_N_PORTS(ehci->hcs_params);
-	while (port--) {
-		if (test_bit(port, &ehci->owned_ports)) {
-			reg = &ehci->regs->port_status[port];
-			status = ehci_readl(ehci, reg) & ~PORT_RWC_BITS;
-			if (!(status & PORT_POWER)) {
-				status |= PORT_POWER;
-				ehci_writel(ehci, status, reg);
-			}
-		}
-	}
-
 	/* Give the connections some time to appear */
 	msleep(20);
 
@@ -328,7 +315,7 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
 	ehci->rh_state = EHCI_RH_SUSPENDED;
 
 	end_unlink_async(ehci);
-	unlink_empty_async_suspended(ehci);
+	unlink_empty_async(ehci);
 	ehci_handle_intr_unlinks(ehci);
 	end_free_itds(ehci);
 
@@ -397,24 +384,11 @@ static int ehci_bus_resume (struct usb_hcd *hcd)
 	ehci_writel(ehci, ehci->command, &ehci->regs->command);
 	ehci->rh_state = EHCI_RH_RUNNING;
 
-	/*
-	 * According to Bugzilla #8190, the port status for some controllers
-	 * will be wrong without a delay. At their wrong status, the port
-	 * is enabled, but not suspended neither resumed.
-	 */
-	i = HCS_N_PORTS(ehci->hcs_params);
-	while (i--) {
-		temp = ehci_readl(ehci, &ehci->regs->port_status[i]);
-		if ((temp & PORT_PE) &&
-				!(temp & (PORT_SUSPEND | PORT_RESUME))) {
-			ehci_dbg(ehci, "Port status(0x%x) is wrong\n", temp);
-			spin_unlock_irq(&ehci->lock);
-			msleep(8);
-			spin_lock_irq(&ehci->lock);
-			break;
-		}
-	}
-
+	/* Some controller/firmware combinations need a delay during which
+	 * they set up the port statuses.  See Bugzilla #8190. */
+	spin_unlock_irq(&ehci->lock);
+	msleep(8);
+	spin_lock_irq(&ehci->lock);
 	if (ehci->shutdown)
 		goto shutdown;
 
@@ -649,11 +623,7 @@ ehci_hub_status_data (struct usb_hcd *hcd, char *buf)
 			status = STS_PCD;
 		}
 	}
-
-	/* If a resume is in progress, make sure it can finish */
-	if (ehci->resuming_ports)
-		mod_timer(&hcd->rh_timer, jiffies + msecs_to_jiffies(25));
-
+	/* FIXME autosuspend idle root hubs */
 	spin_unlock_irqrestore (&ehci->lock, flags);
 	return status ? retval : 0;
 }
@@ -794,6 +764,11 @@ static int ehci_hub_control (
 						status_reg);
 			break;
 		case USB_PORT_FEAT_C_CONNECTION:
+			if (ehci->has_lpm) {
+				/* clear PORTSC bits on disconnect */
+				temp &= ~PORT_LPM;
+				temp &= ~PORT_DEV_ADDR;
+			}
 			ehci_writel(ehci, temp | PORT_CSC, status_reg);
 			break;
 		case USB_PORT_FEAT_C_OVER_CURRENT:
@@ -855,7 +830,6 @@ static int ehci_hub_control (
 				/* resume signaling for 20 msec */
 				ehci->reset_done[wIndex] = jiffies
 						+ msecs_to_jiffies(20);
-				usb_hcd_start_port_resume(&hcd->self, wIndex);
 				/* check the port again */
 				mod_timer(&ehci_to_hcd(ehci)->rh_timer,
 						ehci->reset_done[wIndex]);
@@ -867,7 +841,6 @@ static int ehci_hub_control (
 				clear_bit(wIndex, &ehci->suspended_ports);
 				set_bit(wIndex, &ehci->port_c_suspend);
 				ehci->reset_done[wIndex] = 0;
-				usb_hcd_end_port_resume(&hcd->self, wIndex);
 
 				/* stop resume signaling */
 				temp = ehci_readl(ehci, status_reg);
@@ -956,7 +929,6 @@ static int ehci_hub_control (
 			ehci->reset_done[wIndex] = 0;
 			if (temp & PORT_PE)
 				set_bit(wIndex, &ehci->port_c_suspend);
-			usb_hcd_end_port_resume(&hcd->self, wIndex);
 		}
 
 		if (temp & PORT_OC)
@@ -1116,7 +1088,8 @@ error_exit:
 	return retval;
 }
 
-static void ehci_relinquish_port(struct usb_hcd *hcd, int portnum)
+static void __maybe_unused ehci_relinquish_port(struct usb_hcd *hcd,
+		int portnum)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);
 
@@ -1125,7 +1098,8 @@ static void ehci_relinquish_port(struct usb_hcd *hcd, int portnum)
 	set_owner(ehci, --portnum, PORT_OWNER);
 }
 
-static int ehci_port_handed_over(struct usb_hcd *hcd, int portnum)
+static int __maybe_unused ehci_port_handed_over(struct usb_hcd *hcd,
+		int portnum)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);
 	u32 __iomem		*reg;

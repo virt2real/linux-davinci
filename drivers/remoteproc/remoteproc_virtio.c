@@ -120,10 +120,14 @@ static struct virtqueue *rp_find_vq(struct virtio_device *vdev,
 	return vq;
 }
 
-static void __rproc_virtio_del_vqs(struct virtio_device *vdev)
+static void rproc_virtio_del_vqs(struct virtio_device *vdev)
 {
 	struct virtqueue *vq, *n;
+	struct rproc *rproc = vdev_to_rproc(vdev);
 	struct rproc_vring *rvring;
+
+	/* power down the remote processor before deleting vqs */
+	rproc_shutdown(rproc);
 
 	list_for_each_entry_safe(vq, n, &vdev->vqs, list) {
 		rvring = vq->priv;
@@ -131,16 +135,6 @@ static void __rproc_virtio_del_vqs(struct virtio_device *vdev)
 		vring_del_virtqueue(vq);
 		rproc_free_vring(rvring);
 	}
-}
-
-static void rproc_virtio_del_vqs(struct virtio_device *vdev)
-{
-	struct rproc *rproc = vdev_to_rproc(vdev);
-
-	/* power down the remote processor before deleting vqs */
-	rproc_shutdown(rproc);
-
-	__rproc_virtio_del_vqs(vdev);
 }
 
 static int rproc_virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs,
@@ -169,7 +163,7 @@ static int rproc_virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 	return 0;
 
 error:
-	__rproc_virtio_del_vqs(vdev);
+	rproc_virtio_del_vqs(vdev);
 	return ret;
 }
 
@@ -222,7 +216,7 @@ static void rproc_virtio_finalize_features(struct virtio_device *vdev)
 	rvdev->gfeatures = vdev->features[0];
 }
 
-static const struct virtio_config_ops rproc_virtio_config_ops = {
+static struct virtio_config_ops rproc_virtio_config_ops = {
 	.get_features	= rproc_virtio_get_features,
 	.finalize_features = rproc_virtio_finalize_features,
 	.find_vqs	= rproc_virtio_find_vqs,

@@ -248,12 +248,13 @@ void vmw_evict_flags(struct ttm_buffer_object *bo,
 	*placement = vmw_sys_placement;
 }
 
+/**
+ * FIXME: Proper access checks on buffers.
+ */
+
 static int vmw_verify_access(struct ttm_buffer_object *bo, struct file *filp)
 {
-	struct ttm_object_file *tfile =
-		vmw_fpriv((struct drm_file *)filp->private_data)->tfile;
-
-	return vmw_user_dmabuf_verify_access(bo, tfile);
+	return 0;
 }
 
 static int vmw_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem)
@@ -309,23 +310,27 @@ static void vmw_sync_obj_unref(void **sync_obj)
 	vmw_fence_obj_unreference((struct vmw_fence_obj **) sync_obj);
 }
 
-static int vmw_sync_obj_flush(void *sync_obj)
+static int vmw_sync_obj_flush(void *sync_obj, void *sync_arg)
 {
 	vmw_fence_obj_flush((struct vmw_fence_obj *) sync_obj);
 	return 0;
 }
 
-static bool vmw_sync_obj_signaled(void *sync_obj)
+static bool vmw_sync_obj_signaled(void *sync_obj, void *sync_arg)
 {
+	unsigned long flags = (unsigned long) sync_arg;
 	return	vmw_fence_obj_signaled((struct vmw_fence_obj *) sync_obj,
-				       DRM_VMW_FENCE_FLAG_EXEC);
+				       (uint32_t) flags);
 
 }
 
-static int vmw_sync_obj_wait(void *sync_obj, bool lazy, bool interruptible)
+static int vmw_sync_obj_wait(void *sync_obj, void *sync_arg,
+			     bool lazy, bool interruptible)
 {
+	unsigned long flags = (unsigned long) sync_arg;
+
 	return vmw_fence_obj_wait((struct vmw_fence_obj *) sync_obj,
-				  DRM_VMW_FENCE_FLAG_EXEC,
+				  (uint32_t) flags,
 				  lazy, interruptible,
 				  VMW_FENCE_WAIT_TIMEOUT);
 }

@@ -16,7 +16,6 @@
 #include <linux/reboot.h>
 #include <linux/smp.h>
 #include <linux/pm.h>
-#include <linux/export.h>
 #include <asm/page.h>
 #include <asm/setup.h>
 #include <hv/hypervisor.h>
@@ -50,4 +49,3 @@ void machine_restart(char *cmd)
 
 /* No interesting distinction to be made here. */
 void (*pm_power_off)(void) = NULL;
-EXPORT_SYMBOL(pm_power_off);

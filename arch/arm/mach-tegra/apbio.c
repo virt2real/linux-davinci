@@ -15,6 +15,7 @@
 
 #include <linux/kernel.h>
 #include <linux/io.h>
+#include <mach/iomap.h>
 #include <linux/of.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
@@ -23,8 +24,9 @@
 #include <linux/sched.h>
 #include <linux/mutex.h>
 
+#include <mach/dma.h>
+
 #include "apbio.h"
-#include "iomap.h"
 
 #if defined(CONFIG_TEGRA20_APB_DMA)
 static DEFINE_MUTEX(tegra_apb_dma_lock);
@@ -38,7 +40,7 @@ static void tegra_apb_writel_direct(u32 value, unsigned long offset);
 static struct dma_chan *tegra_apb_dma_chan;
 static struct dma_slave_config dma_sconfig;
 
-static bool tegra_apb_dma_init(void)
+bool tegra_apb_dma_init(void)
 {
 	dma_cap_mask_t mask;
 
@@ -69,6 +71,7 @@ static bool tegra_apb_dma_init(void)
 
 	dma_sconfig.src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 	dma_sconfig.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	dma_sconfig.slave_id = TEGRA_DMA_REQ_SEL_CNTR;
 	dma_sconfig.src_maxburst = 1;
 	dma_sconfig.dst_maxburst = 1;
 

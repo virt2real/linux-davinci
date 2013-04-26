@@ -701,8 +701,9 @@ static struct crypto_instance *crypto_gcm_alloc_common(struct rtattr **tb,
 	int err;
 
 	algt = crypto_get_attr_type(tb);
+	err = PTR_ERR(algt);
 	if (IS_ERR(algt))
-		return ERR_CAST(algt);
+		return ERR_PTR(err);
 
 	if ((algt->type ^ CRYPTO_ALG_TYPE_AEAD) & algt->mask)
 		return ERR_PTR(-EINVAL);
@@ -710,8 +711,9 @@ static struct crypto_instance *crypto_gcm_alloc_common(struct rtattr **tb,
 	ghash_alg = crypto_find_alg(ghash_name, &crypto_ahash_type,
 				    CRYPTO_ALG_TYPE_HASH,
 				    CRYPTO_ALG_TYPE_AHASH_MASK);
+	err = PTR_ERR(ghash_alg);
 	if (IS_ERR(ghash_alg))
-		return ERR_CAST(ghash_alg);
+		return ERR_PTR(err);
 
 	err = -ENOMEM;
 	inst = kzalloc(sizeof(*inst) + sizeof(*ctx), GFP_KERNEL);
@@ -785,13 +787,15 @@ out_put_ghash:
 
 static struct crypto_instance *crypto_gcm_alloc(struct rtattr **tb)
 {
+	int err;
 	const char *cipher_name;
 	char ctr_name[CRYPTO_MAX_ALG_NAME];
 	char full_name[CRYPTO_MAX_ALG_NAME];
 
 	cipher_name = crypto_attr_alg_name(tb[1]);
+	err = PTR_ERR(cipher_name);
 	if (IS_ERR(cipher_name))
-		return ERR_CAST(cipher_name);
+		return ERR_PTR(err);
 
 	if (snprintf(ctr_name, CRYPTO_MAX_ALG_NAME, "ctr(%s)", cipher_name) >=
 	    CRYPTO_MAX_ALG_NAME)
@@ -822,17 +826,20 @@ static struct crypto_template crypto_gcm_tmpl = {
 
 static struct crypto_instance *crypto_gcm_base_alloc(struct rtattr **tb)
 {
+	int err;
 	const char *ctr_name;
 	const char *ghash_name;
 	char full_name[CRYPTO_MAX_ALG_NAME];
 
 	ctr_name = crypto_attr_alg_name(tb[1]);
+	err = PTR_ERR(ctr_name);
 	if (IS_ERR(ctr_name))
-		return ERR_CAST(ctr_name);
+		return ERR_PTR(err);
 
 	ghash_name = crypto_attr_alg_name(tb[2]);
+	err = PTR_ERR(ghash_name);
 	if (IS_ERR(ghash_name))
-		return ERR_CAST(ghash_name);
+		return ERR_PTR(err);
 
 	if (snprintf(full_name, CRYPTO_MAX_ALG_NAME, "gcm_base(%s,%s)",
 		     ctr_name, ghash_name) >= CRYPTO_MAX_ALG_NAME)
@@ -964,15 +971,17 @@ static struct crypto_instance *crypto_rfc4106_alloc(struct rtattr **tb)
 	int err;
 
 	algt = crypto_get_attr_type(tb);
+	err = PTR_ERR(algt);
 	if (IS_ERR(algt))
-		return ERR_CAST(algt);
+		return ERR_PTR(err);
 
 	if ((algt->type ^ CRYPTO_ALG_TYPE_AEAD) & algt->mask)
 		return ERR_PTR(-EINVAL);
 
 	ccm_name = crypto_attr_alg_name(tb[1]);
+	err = PTR_ERR(ccm_name);
 	if (IS_ERR(ccm_name))
-		return ERR_CAST(ccm_name);
+		return ERR_PTR(err);
 
 	inst = kzalloc(sizeof(*inst) + sizeof(*spawn), GFP_KERNEL);
 	if (!inst)
@@ -1213,15 +1222,17 @@ static struct crypto_instance *crypto_rfc4543_alloc(struct rtattr **tb)
 	int err;
 
 	algt = crypto_get_attr_type(tb);
+	err = PTR_ERR(algt);
 	if (IS_ERR(algt))
-		return ERR_CAST(algt);
+		return ERR_PTR(err);
 
 	if ((algt->type ^ CRYPTO_ALG_TYPE_AEAD) & algt->mask)
 		return ERR_PTR(-EINVAL);
 
 	ccm_name = crypto_attr_alg_name(tb[1]);
+	err = PTR_ERR(ccm_name);
 	if (IS_ERR(ccm_name))
-		return ERR_CAST(ccm_name);
+		return ERR_PTR(err);
 
 	inst = kzalloc(sizeof(*inst) + sizeof(*spawn), GFP_KERNEL);
 	if (!inst)

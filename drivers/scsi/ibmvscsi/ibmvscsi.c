@@ -2362,7 +2362,7 @@ static int ibmvscsi_resume(struct device *dev)
  * ibmvscsi_device_table: Used by vio.c to match devices in the device tree we 
  * support.
  */
-static struct vio_device_id ibmvscsi_device_table[] = {
+static struct vio_device_id ibmvscsi_device_table[] __devinitdata = {
 	{"vscsi", "IBM,v-scsi"},
 	{ "", "" }
 };

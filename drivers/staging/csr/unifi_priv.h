@@ -17,6 +17,7 @@
 #ifndef __LINUX_UNIFI_PRIV_H__
 #define __LINUX_UNIFI_PRIV_H__ 1
 
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -312,7 +313,7 @@ typedef struct CsrWifiRouterCtrlStaInfo_t {
     CSR_CLIENT_TAG nullDataHostTag;
 
     /* Activity timestamps for the station */
-    u32 lastActivity;
+    CsrTime lastActivity;
 
     /* during m/c transmission sp suspended */
     u8 uspSuspend;
@@ -652,7 +653,7 @@ typedef struct {
     bulk_data_param_t bulkdata;
     CSR_SIGNAL signal;
     u16 sn;
-    u32 recv_time;
+    CsrTime recv_time;
 } frame_desc_struct;
 
 typedef struct {
@@ -735,7 +736,7 @@ typedef struct netInterface_priv
     u8 sta_activity_check_enabled;
 
     /* Timestamp when the last inactivity check was done */
-    u32 last_inactivity_check;
+    CsrTime last_inactivity_check;
 
     /*number of multicast or borad cast packets  queued*/
     u16 noOfbroadcastPktQueued;

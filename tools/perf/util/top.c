@@ -26,8 +26,6 @@ size_t perf_top__header_snprintf(struct perf_top *top, char *bf, size_t size)
 	float samples_per_sec = top->samples / top->delay_secs;
 	float ksamples_per_sec = top->kernel_samples / top->delay_secs;
 	float esamples_percent = (100.0 * top->exact_samples) / top->samples;
-	struct perf_record_opts *opts = &top->record_opts;
-	struct perf_target *target = &opts->target;
 	size_t ret = 0;
 
 	if (!perf_guest) {
@@ -63,31 +61,31 @@ size_t perf_top__header_snprintf(struct perf_top *top, char *bf, size_t size)
 		struct perf_evsel *first = perf_evlist__first(top->evlist);
 		ret += SNPRINTF(bf + ret, size - ret, "%" PRIu64 "%s ",
 				(uint64_t)first->attr.sample_period,
-				opts->freq ? "Hz" : "");
+				top->freq ? "Hz" : "");
 	}
 
 	ret += SNPRINTF(bf + ret, size - ret, "%s", perf_evsel__name(top->sym_evsel));
 
 	ret += SNPRINTF(bf + ret, size - ret, "], ");
 
-	if (target->pid)
+	if (top->target.pid)
 		ret += SNPRINTF(bf + ret, size - ret, " (target_pid: %s",
-				target->pid);
-	else if (target->tid)
+				top->target.pid);
+	else if (top->target.tid)
 		ret += SNPRINTF(bf + ret, size - ret, " (target_tid: %s",
-				target->tid);
-	else if (target->uid_str != NULL)
+				top->target.tid);
+	else if (top->target.uid_str != NULL)
 		ret += SNPRINTF(bf + ret, size - ret, " (uid: %s",
-				target->uid_str);
+				top->target.uid_str);
 	else
 		ret += SNPRINTF(bf + ret, size - ret, " (all");
 
-	if (target->cpu_list)
+	if (top->target.cpu_list)
 		ret += SNPRINTF(bf + ret, size - ret, ", CPU%s: %s)",
 				top->evlist->cpus->nr > 1 ? "s" : "",
-				target->cpu_list);
+				top->target.cpu_list);
 	else {
-		if (target->tid)
+		if (top->target.tid)
 			ret += SNPRINTF(bf + ret, size - ret, ")");
 		else
 			ret += SNPRINTF(bf + ret, size - ret, ", %d CPU%s)",

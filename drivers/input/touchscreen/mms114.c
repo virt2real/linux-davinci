@@ -10,7 +10,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/delay.h>
-#include <linux/of.h>
 #include <linux/i2c.h>
 #include <linux/i2c/mms114.h>
 #include <linux/input/mt.h>
@@ -314,27 +313,15 @@ static int mms114_start(struct mms114_data *data)
 	struct i2c_client *client = data->client;
 	int error;
 
-	error = regulator_enable(data->core_reg);
-	if (error) {
-		dev_err(&client->dev, "Failed to enable avdd: %d\n", error);
-		return error;
-	}
-
-	error = regulator_enable(data->io_reg);
-	if (error) {
-		dev_err(&client->dev, "Failed to enable vdd: %d\n", error);
-		regulator_disable(data->core_reg);
-		return error;
-	}
-
+	if (data->core_reg)
+		regulator_enable(data->core_reg);
+	if (data->io_reg)
+		regulator_enable(data->io_reg);
 	mdelay(MMS114_POWERON_DELAY);
 
 	error = mms114_setup_regs(data);
-	if (error < 0) {
-		regulator_disable(data->io_reg);
-		regulator_disable(data->core_reg);
+	if (error < 0)
 		return error;
-	}
 
 	if (data->pdata->cfg_pin)
 		data->pdata->cfg_pin(true);
@@ -347,20 +334,16 @@ static int mms114_start(struct mms114_data *data)
 static void mms114_stop(struct mms114_data *data)
 {
 	struct i2c_client *client = data->client;
-	int error;
 
 	disable_irq(client->irq);
 
 	if (data->pdata->cfg_pin)
 		data->pdata->cfg_pin(false);
 
-	error = regulator_disable(data->io_reg);
-	if (error)
-		dev_warn(&client->dev, "Failed to disable vdd: %d\n", error);
-
-	error = regulator_disable(data->core_reg);
-	if (error)
-		dev_warn(&client->dev, "Failed to disable avdd: %d\n", error);
+	if (data->io_reg)
+		regulator_disable(data->io_reg);
+	if (data->core_reg)
+		regulator_disable(data->core_reg);
 }
 
 static int mms114_input_open(struct input_dev *dev)
@@ -377,63 +360,14 @@ static void mms114_input_close(struct input_dev *dev)
 	mms114_stop(data);
 }
 
-#ifdef CONFIG_OF
-static struct mms114_platform_data *mms114_parse_dt(struct device *dev)
-{
-	struct mms114_platform_data *pdata;
-	struct device_node *np = dev->of_node;
-
-	if (!np)
-		return NULL;
-
-	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata) {
-		dev_err(dev, "failed to allocate platform data\n");
-		return NULL;
-	}
-
-	if (of_property_read_u32(np, "x-size", &pdata->x_size)) {
-		dev_err(dev, "failed to get x-size property\n");
-		return NULL;
-	};
-
-	if (of_property_read_u32(np, "y-size", &pdata->y_size)) {
-		dev_err(dev, "failed to get y-size property\n");
-		return NULL;
-	};
-
-	of_property_read_u32(np, "contact-threshold",
-				&pdata->contact_threshold);
-	of_property_read_u32(np, "moving-threshold",
-				&pdata->moving_threshold);
-
-	if (of_find_property(np, "x-invert", NULL))
-		pdata->x_invert = true;
-	if (of_find_property(np, "y-invert", NULL))
-		pdata->y_invert = true;
-
-	return pdata;
-}
-#else
-static inline struct mms114_platform_data *mms114_parse_dt(struct device *dev)
-{
-	return NULL;
-}
-#endif
-
-static int mms114_probe(struct i2c_client *client,
+static int __devinit mms114_probe(struct i2c_client *client,
 				  const struct i2c_device_id *id)
 {
-	const struct mms114_platform_data *pdata;
 	struct mms114_data *data;
 	struct input_dev *input_dev;
 	int error;
 
-	pdata = dev_get_platdata(&client->dev);
-	if (!pdata)
-		pdata = mms114_parse_dt(&client->dev);
-
-	if (!pdata) {
+	if (!client->dev.platform_data) {
 		dev_err(&client->dev, "Need platform data\n");
 		return -EINVAL;
 	}
@@ -445,17 +379,17 @@ static int mms114_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 
-	data = devm_kzalloc(&client->dev, sizeof(struct mms114_data),
-			    GFP_KERNEL);
-	input_dev = devm_input_allocate_device(&client->dev);
+	data = kzalloc(sizeof(struct mms114_data), GFP_KERNEL);
+	input_dev = input_allocate_device();
 	if (!data || !input_dev) {
 		dev_err(&client->dev, "Failed to allocate memory\n");
-		return -ENOMEM;
+		error = -ENOMEM;
+		goto err_free_mem;
 	}
 
 	data->client = client;
 	data->input_dev = input_dev;
-	data->pdata = pdata;
+	data->pdata = client->dev.platform_data;
 
 	input_dev->name = "MELPAS MMS114 Touchscreen";
 	input_dev->id.bustype = BUS_I2C;
@@ -482,36 +416,57 @@ static int mms114_probe(struct i2c_client *client,
 	input_set_drvdata(input_dev, data);
 	i2c_set_clientdata(client, data);
 
-	data->core_reg = devm_regulator_get(&client->dev, "avdd");
+	data->core_reg = regulator_get(&client->dev, "avdd");
 	if (IS_ERR(data->core_reg)) {
 		error = PTR_ERR(data->core_reg);
 		dev_err(&client->dev,
 			"Unable to get the Core regulator (%d)\n", error);
-		return error;
+		goto err_free_mem;
 	}
 
-	data->io_reg = devm_regulator_get(&client->dev, "vdd");
+	data->io_reg = regulator_get(&client->dev, "vdd");
 	if (IS_ERR(data->io_reg)) {
 		error = PTR_ERR(data->io_reg);
 		dev_err(&client->dev,
 			"Unable to get the IO regulator (%d)\n", error);
-		return error;
+		goto err_core_reg;
 	}
 
-	error = devm_request_threaded_irq(&client->dev, client->irq, NULL,
-			mms114_interrupt, IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-			dev_name(&client->dev), data);
+	error = request_threaded_irq(client->irq, NULL, mms114_interrupt,
+			IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "mms114", data);
 	if (error) {
 		dev_err(&client->dev, "Failed to register interrupt\n");
-		return error;
+		goto err_io_reg;
 	}
 	disable_irq(client->irq);
 
 	error = input_register_device(data->input_dev);
-	if (error) {
-		dev_err(&client->dev, "Failed to register input device\n");
-		return error;
-	}
+	if (error)
+		goto err_free_irq;
+
+	return 0;
+
+err_free_irq:
+	free_irq(client->irq, data);
+err_io_reg:
+	regulator_put(data->io_reg);
+err_core_reg:
+	regulator_put(data->core_reg);
+err_free_mem:
+	input_free_device(input_dev);
+	kfree(data);
+	return error;
+}
+
+static int __devexit mms114_remove(struct i2c_client *client)
+{
+	struct mms114_data *data = i2c_get_clientdata(client);
+
+	free_irq(client->irq, data);
+	regulator_put(data->io_reg);
+	regulator_put(data->core_reg);
+	input_unregister_device(data->input_dev);
+	kfree(data);
 
 	return 0;
 }
@@ -570,21 +525,14 @@ static const struct i2c_device_id mms114_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mms114_id);
 
-#ifdef CONFIG_OF
-static struct of_device_id mms114_dt_match[] = {
-	{ .compatible = "melfas,mms114" },
-	{ }
-};
-#endif
-
 static struct i2c_driver mms114_driver = {
 	.driver = {
 		.name	= "mms114",
 		.owner	= THIS_MODULE,
 		.pm	= &mms114_pm_ops,
-		.of_match_table = of_match_ptr(mms114_dt_match),
 	},
 	.probe		= mms114_probe,
+	.remove		= __devexit_p(mms114_remove),
 	.id_table	= mms114_id,
 };
 

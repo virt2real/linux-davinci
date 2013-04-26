@@ -110,5 +110,5 @@ MACHINE_START(TROUT, "HTC Dream")
 	.init_irq	= trout_init_irq,
 	.init_machine	= trout_init,
 	.init_late	= trout_init_late,
-	.init_time	= msm7x01_timer_init,
+	.timer		= &msm7x01_timer,
 MACHINE_END

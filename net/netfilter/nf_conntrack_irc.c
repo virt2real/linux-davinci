@@ -194,8 +194,6 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 
 			exp = nf_ct_expect_alloc(ct);
 			if (exp == NULL) {
-				nf_ct_helper_log(skb, ct,
-						 "cannot alloc expectation");
 				ret = NF_DROP;
 				goto out;
 			}
@@ -212,11 +210,8 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 						 addr_beg_p - ib_ptr,
 						 addr_end_p - addr_beg_p,
 						 exp);
-			else if (nf_ct_expect_related(exp) != 0) {
-				nf_ct_helper_log(skb, ct,
-						 "cannot add expectation");
+			else if (nf_ct_expect_related(exp) != 0)
 				ret = NF_DROP;
-			}
 			nf_ct_expect_put(exp);
 			goto out;
 		}

@@ -657,11 +657,10 @@ static int clusterip_proc_release(struct inode *inode, struct file *file)
 static ssize_t clusterip_proc_write(struct file *file, const char __user *input,
 				size_t size, loff_t *ofs)
 {
-	struct clusterip_config *c = PDE(file_inode(file))->data;
+	struct clusterip_config *c = PDE(file->f_path.dentry->d_inode)->data;
 #define PROC_WRITELEN	10
 	char buffer[PROC_WRITELEN+1];
 	unsigned long nodenum;
-	int rc;
 
 	if (size > PROC_WRITELEN)
 		return -EIO;
@@ -670,15 +669,11 @@ static ssize_t clusterip_proc_write(struct file *file, const char __user *input,
 	buffer[size] = 0;
 
 	if (*buffer == '+') {
-		rc = kstrtoul(buffer+1, 10, &nodenum);
-		if (rc)
-			return rc;
+		nodenum = simple_strtoul(buffer+1, NULL, 10);
 		if (clusterip_add_node(c, nodenum))
 			return -ENOMEM;
 	} else if (*buffer == '-') {
-		rc = kstrtoul(buffer+1, 10, &nodenum);
-		if (rc)
-			return rc;
+		nodenum = simple_strtoul(buffer+1, NULL,10);
 		if (clusterip_del_node(c, nodenum))
 			return -ENOENT;
 	} else

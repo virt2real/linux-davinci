@@ -40,7 +40,6 @@
 #include <linux/list.h>
 #include <drm/drm_hashtab.h>
 #include <linux/kref.h>
-#include <linux/rcupdate.h>
 #include <ttm/ttm_memory.h>
 
 /**
@@ -121,7 +120,6 @@ struct ttm_object_device;
  */
 
 struct ttm_base_object {
-	struct rcu_head rhead;
 	struct drm_hash_item hash;
 	enum ttm_object_type object_type;
 	bool shareable;
@@ -270,6 +268,4 @@ extern struct ttm_object_device *ttm_object_device_init
 
 extern void ttm_object_device_release(struct ttm_object_device **p_tdev);
 
-#define ttm_base_object_kfree(__object, __base)\
-	kfree_rcu(__object, __base.rhead)
 #endif

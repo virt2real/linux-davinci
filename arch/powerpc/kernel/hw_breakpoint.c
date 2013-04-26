@@ -73,7 +73,7 @@ int arch_install_hw_breakpoint(struct perf_event *bp)
 	 * If so, DABR will be populated in single_step_dabr_instruction().
 	 */
 	if (current->thread.last_hit_ubp != bp)
-		set_breakpoint(info);
+		set_dabr(info->address | info->type | DABR_TRANSLATION, info->dabrx);
 
 	return 0;
 }
@@ -97,7 +97,7 @@ void arch_uninstall_hw_breakpoint(struct perf_event *bp)
 	}
 
 	*slot = NULL;
-	hw_breakpoint_disable();
+	set_dabr(0, 0);
 }
 
 /*
@@ -127,13 +127,19 @@ int arch_check_bp_in_kernelspace(struct perf_event *bp)
 
 int arch_bp_generic_fields(int type, int *gen_bp_type)
 {
-	*gen_bp_type = 0;
-	if (type & HW_BRK_TYPE_READ)
-		*gen_bp_type |= HW_BREAKPOINT_R;
-	if (type & HW_BRK_TYPE_WRITE)
-		*gen_bp_type |= HW_BREAKPOINT_W;
-	if (*gen_bp_type == 0)
+	switch (type) {
+	case DABR_DATA_READ:
+		*gen_bp_type = HW_BREAKPOINT_R;
+		break;
+	case DABR_DATA_WRITE:
+		*gen_bp_type = HW_BREAKPOINT_W;
+		break;
+	case (DABR_DATA_WRITE | DABR_DATA_READ):
+		*gen_bp_type = (HW_BREAKPOINT_W | HW_BREAKPOINT_R);
+		break;
+	default:
 		return -EINVAL;
+	}
 	return 0;
 }
 
@@ -142,28 +148,35 @@ int arch_bp_generic_fields(int type, int *gen_bp_type)
  */
 int arch_validate_hwbkpt_settings(struct perf_event *bp)
 {
-	int ret = -EINVAL, length_max;
+	int ret = -EINVAL;
 	struct arch_hw_breakpoint *info = counter_arch_bp(bp);
 
 	if (!bp)
 		return ret;
 
-	info->type = HW_BRK_TYPE_TRANSLATE;
-	if (bp->attr.bp_type & HW_BREAKPOINT_R)
-		info->type |= HW_BRK_TYPE_READ;
-	if (bp->attr.bp_type & HW_BREAKPOINT_W)
-		info->type |= HW_BRK_TYPE_WRITE;
-	if (info->type == HW_BRK_TYPE_TRANSLATE)
-		/* must set alteast read or write */
+	switch (bp->attr.bp_type) {
+	case HW_BREAKPOINT_R:
+		info->type = DABR_DATA_READ;
+		break;
+	case HW_BREAKPOINT_W:
+		info->type = DABR_DATA_WRITE;
+		break;
+	case HW_BREAKPOINT_R | HW_BREAKPOINT_W:
+		info->type = (DABR_DATA_READ | DABR_DATA_WRITE);
+		break;
+	default:
 		return ret;
-	if (!(bp->attr.exclude_user))
-		info->type |= HW_BRK_TYPE_USER;
-	if (!(bp->attr.exclude_kernel))
-		info->type |= HW_BRK_TYPE_KERNEL;
-	if (!(bp->attr.exclude_hv))
-		info->type |= HW_BRK_TYPE_HYP;
+	}
+
 	info->address = bp->attr.bp_addr;
 	info->len = bp->attr.bp_len;
+	info->dabrx = DABRX_ALL;
+	if (bp->attr.exclude_user)
+		info->dabrx &= ~DABRX_USER;
+	if (bp->attr.exclude_kernel)
+		info->dabrx &= ~DABRX_KERNEL;
+	if (bp->attr.exclude_hv)
+		info->dabrx &= ~DABRX_HYP;
 
 	/*
 	 * Since breakpoint length can be a maximum of HW_BREAKPOINT_LEN(8)
@@ -171,16 +184,8 @@ int arch_validate_hwbkpt_settings(struct perf_event *bp)
 	 * HW_BREAKPOINT_ALIGN by rounding off to the lower address, the
 	 * 'symbolsize' should satisfy the check below.
 	 */
-	length_max = 8; /* DABR */
-	if (cpu_has_feature(CPU_FTR_DAWR)) {
-		length_max = 512 ; /* 64 doublewords */
-		/* DAWR region can't cross 512 boundary */
-		if ((bp->attr.bp_addr >> 10) != 
-		    ((bp->attr.bp_addr + bp->attr.bp_len) >> 10))
-			return -EINVAL;
-	}
 	if (info->len >
-	    (length_max - (info->address & HW_BREAKPOINT_ALIGN)))
+	    (HW_BREAKPOINT_LEN - (info->address & HW_BREAKPOINT_ALIGN)))
 		return -EINVAL;
 	return 0;
 }
@@ -199,7 +204,7 @@ void thread_change_pc(struct task_struct *tsk, struct pt_regs *regs)
 
 	info = counter_arch_bp(tsk->thread.last_hit_ubp);
 	regs->msr &= ~MSR_SE;
-	set_breakpoint(info);
+	set_dabr(info->address | info->type | DABR_TRANSLATION, info->dabrx);
 	tsk->thread.last_hit_ubp = NULL;
 }
 
@@ -217,7 +222,7 @@ int __kprobes hw_breakpoint_handler(struct die_args *args)
 	unsigned long dar = regs->dar;
 
 	/* Disable breakpoints during exception handling */
-	hw_breakpoint_disable();
+	set_dabr(0, 0);
 
 	/*
 	 * The counter may be concurrently released but that can only
@@ -250,9 +255,8 @@ int __kprobes hw_breakpoint_handler(struct die_args *args)
 	 * we still need to single-step the instruction, but we don't
 	 * generate an event.
 	 */
-	if (!((bp->attr.bp_addr <= dar) &&
-	      (dar - bp->attr.bp_addr < bp->attr.bp_len)))
-		info->type |= HW_BRK_TYPE_EXTRANEOUS_IRQ;
+	info->extraneous_interrupt = !((bp->attr.bp_addr <= dar) &&
+			(dar - bp->attr.bp_addr < bp->attr.bp_len));
 
 	/* Do not emulate user-space instructions, instead single-step them */
 	if (user_mode(regs)) {
@@ -281,10 +285,10 @@ int __kprobes hw_breakpoint_handler(struct die_args *args)
 	 * As a policy, the callback is invoked in a 'trigger-after-execute'
 	 * fashion
 	 */
-	if (!(info->type & HW_BRK_TYPE_EXTRANEOUS_IRQ))
+	if (!info->extraneous_interrupt)
 		perf_bp_event(bp, regs);
 
-	set_breakpoint(info);
+	set_dabr(info->address | info->type | DABR_TRANSLATION, info->dabrx);
 out:
 	rcu_read_unlock();
 	return rc;
@@ -313,10 +317,10 @@ int __kprobes single_step_dabr_instruction(struct die_args *args)
 	 * We shall invoke the user-defined callback function in the single
 	 * stepping handler to confirm to 'trigger-after-execute' semantics
 	 */
-	if (!(info->type & HW_BRK_TYPE_EXTRANEOUS_IRQ))
+	if (!info->extraneous_interrupt)
 		perf_bp_event(bp, regs);
 
-	set_breakpoint(info);
+	set_dabr(info->address | info->type | DABR_TRANSLATION, info->dabrx);
 	current->thread.last_hit_ubp = NULL;
 
 	/*

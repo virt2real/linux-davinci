@@ -54,8 +54,6 @@ Interrupt support for these boards is also not currently supported.
 Configuration Options: not applicable, uses PCI auto config
 */
 
-#include <linux/pci.h>
-
 #include "../comedidev.h"
 
 #include "8255.h"
@@ -66,6 +64,9 @@ Configuration Options: not applicable, uses PCI auto config
 #define PCI_DEVICE_ID_ADLINK_PCI7224	0x7224
 #define PCI_DEVICE_ID_ADLINK_PCI7248	0x7248
 #define PCI_DEVICE_ID_ADLINK_PCI7296	0x7296
+
+/* ComputerBoards is now known as Measurement Computing */
+#define PCI_VENDOR_ID_CB		0x1307
 
 #define PCI_DEVICE_ID_CB_PCIDIO48H	0x000b
 #define PCI_DEVICE_ID_CB_PCIDIO24H	0x0014
@@ -215,10 +216,9 @@ static const void *pci_8255_find_boardinfo(struct comedi_device *dev,
 	return NULL;
 }
 
-static int pci_8255_auto_attach(struct comedi_device *dev,
-					  unsigned long context_unused)
+static int pci_8255_attach_pci(struct comedi_device *dev,
+			       struct pci_dev *pcidev)
 {
-	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
 	const struct pci_8255_boardinfo *board;
 	struct pci_8255_private *devpriv;
 	struct comedi_subdevice *s;
@@ -227,16 +227,18 @@ static int pci_8255_auto_attach(struct comedi_device *dev,
 	int ret;
 	int i;
 
+	comedi_set_hw_dev(dev, &pcidev->dev);
+
 	board = pci_8255_find_boardinfo(dev, pcidev);
 	if (!board)
 		return -ENODEV;
 	dev->board_ptr = board;
 	dev->board_name = board->name;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(*devpriv));
+	if (ret < 0)
+		return ret;
+	devpriv = dev->private;
 
 	ret = comedi_pci_enable(pcidev, dev->board_name);
 	if (ret)
@@ -287,8 +289,6 @@ static void pci_8255_detach(struct comedi_device *dev)
 	struct comedi_subdevice *s;
 	int i;
 
-	if (!board || !devpriv)
-		return;
 	if (dev->subdevices) {
 		for (i = 0; i < board->n_8255; i++) {
 			s = &dev->subdevices[i];
@@ -306,14 +306,19 @@ static void pci_8255_detach(struct comedi_device *dev)
 static struct comedi_driver pci_8255_driver = {
 	.driver_name	= "8255_pci",
 	.module		= THIS_MODULE,
-	.auto_attach	= pci_8255_auto_attach,
+	.attach_pci	= pci_8255_attach_pci,
 	.detach		= pci_8255_detach,
 };
 
-static int pci_8255_pci_probe(struct pci_dev *dev,
+static int __devinit pci_8255_pci_probe(struct pci_dev *dev,
 					const struct pci_device_id *ent)
 {
 	return comedi_pci_auto_config(dev, &pci_8255_driver);
+}
+
+static void __devexit pci_8255_pci_remove(struct pci_dev *dev)
+{
+	comedi_pci_auto_unconfig(dev);
 }
 
 static DEFINE_PCI_DEVICE_TABLE(pci_8255_pci_table) = {
@@ -339,7 +344,7 @@ static struct pci_driver pci_8255_pci_driver = {
 	.name		= "8255_pci",
 	.id_table	= pci_8255_pci_table,
 	.probe		= pci_8255_pci_probe,
-	.remove		= comedi_pci_auto_unconfig,
+	.remove		= __devexit_p(pci_8255_pci_remove),
 };
 module_comedi_pci_driver(pci_8255_driver, pci_8255_pci_driver);
 

@@ -261,7 +261,6 @@ struct goku_udc {
 	/* statistics... */
 	unsigned long			irqs;
 };
-#define to_goku_udc(g)		(container_of((g), struct goku_udc, gadget))
 
 /*-------------------------------------------------------------------------*/
 

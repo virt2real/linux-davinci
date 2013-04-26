@@ -73,10 +73,7 @@
 #define PTRACE_O_TRACEEXIT	(1 << PTRACE_EVENT_EXIT)
 #define PTRACE_O_TRACESECCOMP	(1 << PTRACE_EVENT_SECCOMP)
 
-/* eventless options */
-#define PTRACE_O_EXITKILL	(1 << 20)
-
-#define PTRACE_O_MASK		(0x000000ff | PTRACE_O_EXITKILL)
+#define PTRACE_O_MASK		0x000000ff
 
 #include <asm/ptrace.h>
 

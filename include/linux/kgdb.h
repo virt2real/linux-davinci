@@ -13,6 +13,7 @@
 #ifndef _KGDB_H_
 #define _KGDB_H_
 
+#include <linux/serial_8250.h>
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <linux/atomic.h>

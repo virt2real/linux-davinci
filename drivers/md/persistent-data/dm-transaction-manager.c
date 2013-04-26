@@ -25,8 +25,8 @@ struct shadow_info {
 /*
  * It would be nice if we scaled with the size of transaction.
  */
-#define DM_HASH_SIZE 256
-#define DM_HASH_MASK (DM_HASH_SIZE - 1)
+#define HASH_SIZE 256
+#define HASH_MASK (HASH_SIZE - 1)
 
 struct dm_transaction_manager {
 	int is_clone;
@@ -36,7 +36,7 @@ struct dm_transaction_manager {
 	struct dm_space_map *sm;
 
 	spinlock_t lock;
-	struct hlist_head buckets[DM_HASH_SIZE];
+	struct hlist_head buckets[HASH_SIZE];
 };
 
 /*----------------------------------------------------------------*/
@@ -44,11 +44,12 @@ struct dm_transaction_manager {
 static int is_shadow(struct dm_transaction_manager *tm, dm_block_t b)
 {
 	int r = 0;
-	unsigned bucket = dm_hash_block(b, DM_HASH_MASK);
+	unsigned bucket = dm_hash_block(b, HASH_MASK);
 	struct shadow_info *si;
+	struct hlist_node *n;
 
 	spin_lock(&tm->lock);
-	hlist_for_each_entry(si, tm->buckets + bucket, hlist)
+	hlist_for_each_entry(si, n, tm->buckets + bucket, hlist)
 		if (si->where == b) {
 			r = 1;
 			break;
@@ -70,7 +71,7 @@ static void insert_shadow(struct dm_transaction_manager *tm, dm_block_t b)
 	si = kmalloc(sizeof(*si), GFP_NOIO);
 	if (si) {
 		si->where = b;
-		bucket = dm_hash_block(b, DM_HASH_MASK);
+		bucket = dm_hash_block(b, HASH_MASK);
 		spin_lock(&tm->lock);
 		hlist_add_head(&si->hlist, tm->buckets + bucket);
 		spin_unlock(&tm->lock);
@@ -80,14 +81,14 @@ static void insert_shadow(struct dm_transaction_manager *tm, dm_block_t b)
 static void wipe_shadow_table(struct dm_transaction_manager *tm)
 {
 	struct shadow_info *si;
-	struct hlist_node *tmp;
+	struct hlist_node *n, *tmp;
 	struct hlist_head *bucket;
 	int i;
 
 	spin_lock(&tm->lock);
-	for (i = 0; i < DM_HASH_SIZE; i++) {
+	for (i = 0; i < HASH_SIZE; i++) {
 		bucket = tm->buckets + i;
-		hlist_for_each_entry_safe(si, tmp, bucket, hlist)
+		hlist_for_each_entry_safe(si, n, tmp, bucket, hlist)
 			kfree(si);
 
 		INIT_HLIST_HEAD(bucket);
@@ -114,7 +115,7 @@ static struct dm_transaction_manager *dm_tm_create(struct dm_block_manager *bm,
 	tm->sm = sm;
 
 	spin_lock_init(&tm->lock);
-	for (i = 0; i < DM_HASH_SIZE; i++)
+	for (i = 0; i < HASH_SIZE; i++)
 		INIT_HLIST_HEAD(tm->buckets + i);
 
 	return tm;

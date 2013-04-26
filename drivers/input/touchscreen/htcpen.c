@@ -102,7 +102,7 @@ static void htcpen_close(struct input_dev *dev)
 	synchronize_irq(HTCPEN_IRQ);
 }
 
-static int htcpen_isa_probe(struct device *dev, unsigned int id)
+static int __devinit htcpen_isa_probe(struct device *dev, unsigned int id)
 {
 	struct input_dev *htcpen_dev;
 	int err = -EBUSY;
@@ -174,7 +174,7 @@ static int htcpen_isa_probe(struct device *dev, unsigned int id)
 	return err;
 }
 
-static int htcpen_isa_remove(struct device *dev, unsigned int id)
+static int __devexit htcpen_isa_remove(struct device *dev, unsigned int id)
 {
 	struct input_dev *htcpen_dev = dev_get_drvdata(dev);
 
@@ -210,7 +210,7 @@ static int htcpen_isa_resume(struct device *dev, unsigned int n)
 
 static struct isa_driver htcpen_isa_driver = {
 	.probe		= htcpen_isa_probe,
-	.remove		= htcpen_isa_remove,
+	.remove		= __devexit_p(htcpen_isa_remove),
 #ifdef CONFIG_PM
 	.suspend	= htcpen_isa_suspend,
 	.resume		= htcpen_isa_resume,

@@ -179,6 +179,11 @@ static int ap320_wvga_set_brightness(int brightness)
 	return 0;
 }
 
+static int ap320_wvga_get_brightness(void)
+{
+	return gpio_get_value(GPIO_PTS3);
+}
+
 static void ap320_wvga_power_on(void)
 {
 	msleep(100);
@@ -227,6 +232,7 @@ static struct sh_mobile_lcdc_info lcdc_info = {
 			.name = "sh_mobile_lcdc_bl",
 			.max_brightness = 1,
 			.set_brightness = ap320_wvga_set_brightness,
+			.get_brightness = ap320_wvga_get_brightness,
 		},
 	}
 };

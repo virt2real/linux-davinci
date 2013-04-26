@@ -27,7 +27,6 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
-#include <linux/syscore_ops.h>
 
 #include <asm/mach-types.h>
 
@@ -96,7 +95,7 @@ static inline unsigned long timer_ticks_to_usec(unsigned long ticks)
  * IRQs are disabled before entering here from do_gettimeofday()
  */
 
-static u32 s3c2410_gettimeoffset(void)
+static unsigned long s3c2410_gettimeoffset (void)
 {
 	unsigned long tdone;
 	unsigned long tval;
@@ -121,7 +120,7 @@ static u32 s3c2410_gettimeoffset(void)
 			tdone += timer_startval;
 	}
 
-	return timer_ticks_to_usec(tdone) * 1000;
+	return timer_ticks_to_usec(tdone);
 }
 
 
@@ -272,16 +271,15 @@ static void __init s3c2410_timer_resources(void)
 	clk_enable(tin);
 }
 
-static struct syscore_ops s3c24xx_syscore_ops = {
-	.resume		= s3c2410_timer_setup,
-};
-
-void __init s3c24xx_timer_init(void)
+static void __init s3c2410_timer_init(void)
 {
-	arch_gettimeoffset = s3c2410_gettimeoffset;
-
 	s3c2410_timer_resources();
 	s3c2410_timer_setup();
 	setup_irq(IRQ_TIMER4, &s3c2410_timer_irq);
-	register_syscore_ops(&s3c24xx_syscore_ops);
 }
+
+struct sys_timer s3c24xx_timer = {
+	.init		= s3c2410_timer_init,
+	.offset		= s3c2410_gettimeoffset,
+	.resume		= s3c2410_timer_setup
+};

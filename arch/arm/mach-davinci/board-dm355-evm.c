@@ -280,6 +280,7 @@ static struct davinci_mmc_config dm355evm_mmc_config = {
 	.wires		= 4,
 	.max_freq       = 50000000,
 	.caps           = MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED,
+	.version	= MMC_CTLR_VERSION_1,
 };
 
 /* Don't connect anything to J10 unless you're only using USB host
@@ -354,7 +355,7 @@ MACHINE_START(DAVINCI_DM355_EVM, "DaVinci DM355 EVM")
 	.atag_offset  = 0x100,
 	.map_io	      = dm355_evm_map_io,
 	.init_irq     = davinci_irq_init,
-	.init_time	= davinci_timer_init,
+	.timer	      = &davinci_timer,
 	.init_machine = dm355_evm_init,
 	.init_late	= davinci_init_late,
 	.dma_zone_size	= SZ_128M,

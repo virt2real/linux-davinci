@@ -35,8 +35,7 @@ endchoice
 if M68KCLASSIC
 
 config M68000
-	bool "MC68000"
-	depends on !MMU
+	bool
 	select CPU_HAS_NO_BITFIELDS
 	select CPU_HAS_NO_MULDIV64
 	select CPU_HAS_NO_UNALIGNED
@@ -275,8 +274,9 @@ endif # COLDFIRE
 comment "Processor Specific Options"
 
 config M68KFPU_EMU
-	bool "Math emulation support"
+	bool "Math emulation support (EXPERIMENTAL)"
 	depends on MMU
+	depends on EXPERIMENTAL
 	help
 	  At some point in the future, this will cause floating-point math
 	  instructions to be emulated by the kernel on machines that lack a

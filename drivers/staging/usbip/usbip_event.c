@@ -105,12 +105,10 @@ EXPORT_SYMBOL_GPL(usbip_stop_eh);
 
 void usbip_event_add(struct usbip_device *ud, unsigned long event)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&ud->lock, flags);
+	spin_lock(&ud->lock);
 	ud->event |= event;
 	wake_up(&ud->eh_waitq);
-	spin_unlock_irqrestore(&ud->lock, flags);
+	spin_unlock(&ud->lock);
 }
 EXPORT_SYMBOL_GPL(usbip_event_add);
 

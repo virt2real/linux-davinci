@@ -32,6 +32,10 @@
 #include "iuu_phoenix.h"
 #include <linux/random.h>
 
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v0.12"
 #define DRIVER_DESC "Infinity USB Unlimited Phoenix driver"
 
 static const struct usb_device_id id_table[] = {
@@ -581,6 +585,7 @@ static void read_buf_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	unsigned char *data = urb->transfer_buffer;
+	struct tty_struct *tty;
 	int status = urb->status;
 
 	if (status) {
@@ -591,12 +596,14 @@ static void read_buf_callback(struct urb *urb)
 	}
 
 	dev_dbg(&port->dev, "%s - %i chars to write\n", __func__, urb->actual_length);
+	tty = tty_port_tty_get(&port->port);
 	if (data == NULL)
 		dev_dbg(&port->dev, "%s - data is NULL !!!\n", __func__);
-	if (urb->actual_length && data) {
-		tty_insert_flip_string(&port->port, data, urb->actual_length);
-		tty_flip_buffer_push(&port->port);
+	if (tty && urb->actual_length && data) {
+		tty_insert_flip_string(tty, data, urb->actual_length);
+		tty_flip_buffer_push(tty);
 	}
+	tty_kref_put(tty);
 	iuu_led_activity_on(urb);
 }
 
@@ -1157,7 +1164,7 @@ static ssize_t store_vcc_mode(struct device *dev,
 	struct iuu_private *priv = usb_get_serial_port_data(port);
 	unsigned long v;
 
-	if (kstrtoul(buf, 10, &v)) {
+	if (strict_strtoul(buf, 10, &v)) {
 		dev_err(dev, "%s - vcc_mode: %s is not a unsigned long\n",
 				__func__, buf);
 		goto fail_store_vcc_mode;
@@ -1224,6 +1231,8 @@ MODULE_AUTHOR("Alain Degreffe eczema@ecze.com");
 
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL");
+
+MODULE_VERSION(DRIVER_VERSION);
 
 module_param(xmas, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(xmas, "Xmas colors enabled or not");

@@ -595,11 +595,8 @@ int bcma_sprom_get(struct bcma_bus *bus)
 		bcma_chipco_bcm4331_ext_pa_lines_ctl(&bus->drv_cc, true);
 
 	err = bcma_sprom_valid(sprom);
-	if (err) {
-		bcma_warn(bus, "invalid sprom read from the PCIe card, try to use fallback sprom\n");
-		err = bcma_fill_sprom_with_fallback(bus, &bus->sprom);
+	if (err)
 		goto out;
-	}
 
 	bcma_sprom_extract_r8(bus, sprom);
 

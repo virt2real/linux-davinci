@@ -319,7 +319,9 @@ static void dlm_free_ctxt_mem(struct dlm_ctxt *dlm)
 	if (dlm->master_hash)
 		dlm_free_pagevec((void **)dlm->master_hash, DLM_HASH_PAGES);
 
-	kfree(dlm->name);
+	if (dlm->name)
+		kfree(dlm->name);
+
 	kfree(dlm);
 }
 

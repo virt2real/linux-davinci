@@ -147,13 +147,18 @@ struct sigstack {
 #define SIG_UNBLOCK        0x02	/* for unblocking signals */
 #define SIG_SETMASK        0x04	/* for setting the signal mask */
 
+/*
+ * sigaltstack controls
+ */
+#define SS_ONSTACK	1
+#define SS_DISABLE	2
+
 #define MINSIGSTKSZ	4096
 #define SIGSTKSZ	16384
 
 
 #include <asm-generic/signal-defs.h>
 
-#ifndef __KERNEL__
 struct __new_sigaction {
 	__sighandler_t		sa_handler;
 	unsigned long		sa_flags;
@@ -167,7 +172,6 @@ struct __old_sigaction {
 	unsigned long		sa_flags;
 	void			(*sa_restorer)(void);  /* not used by Linux/SPARC yet */
 };
-#endif
 
 typedef struct sigaltstack {
 	void			__user *ss_sp;

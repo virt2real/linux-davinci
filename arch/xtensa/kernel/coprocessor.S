@@ -43,12 +43,9 @@
 /* IO protection is currently unsupported. */
 
 ENTRY(fast_io_protect)
-
 	wsr	a0, excsave1
 	movi	a0, unrecoverable_exception
 	callx0	a0
-
-ENDPROC(fast_io_protect)
 
 #if XTENSA_HAVE_COPROCESSORS
 
@@ -142,7 +139,6 @@ ENDPROC(fast_io_protect)
  */
 
 ENTRY(coprocessor_save)
-
 	entry	a1, 32
 	s32i	a0, a1, 0
 	movi	a0, .Lsave_cp_regs_jump_table
@@ -154,10 +150,7 @@ ENTRY(coprocessor_save)
 1:	l32i	a0, a1, 0
 	retw
 
-ENDPROC(coprocessor_save)
-
 ENTRY(coprocessor_load)
-
 	entry	a1, 32
 	s32i	a0, a1, 0
 	movi	a0, .Lload_cp_regs_jump_table
@@ -169,10 +162,8 @@ ENTRY(coprocessor_load)
 1:	l32i	a0, a1, 0
 	retw
 
-ENDPROC(coprocessor_load)
-
 /*
- * coprocessor_flush(struct task_info*, index)
+ * coprocessor_flush(struct task_info*, index) 
  *                             a2        a3
  * coprocessor_restore(struct task_info*, index)
  *                              a2         a3
@@ -187,7 +178,6 @@ ENDPROC(coprocessor_load)
 
 
 ENTRY(coprocessor_flush)
-
 	entry	a1, 32
 	s32i	a0, a1, 0
 	movi	a0, .Lsave_cp_regs_jump_table
@@ -200,8 +190,6 @@ ENTRY(coprocessor_flush)
 	callx0	a0
 1:	l32i	a0, a1, 0
 	retw
-
-ENDPROC(coprocessor_flush)
 
 ENTRY(coprocessor_restore)
 	entry	a1, 32
@@ -216,8 +204,6 @@ ENTRY(coprocessor_restore)
 	callx0	a0
 1:	l32i	a0, a1, 0
 	retw
-
-ENDPROC(coprocessor_restore)
 
 /*
  * Entry condition:
@@ -234,12 +220,10 @@ ENDPROC(coprocessor_restore)
  */
 
 ENTRY(fast_coprocessor_double)
-
 	wsr	a0, excsave1
 	movi	a0, unrecoverable_exception
 	callx0	a0
 
-ENDPROC(fast_coprocessor_double)
 
 ENTRY(fast_coprocessor)
 
@@ -343,14 +327,9 @@ ENTRY(fast_coprocessor)
 
 	rfe
 
-ENDPROC(fast_coprocessor)
-
 	.data
-
 ENTRY(coprocessor_owner)
-
 	.fill XCHAL_CP_MAX, 4, 0
 
-END(coprocessor_owner)
-
 #endif /* XTENSA_HAVE_COPROCESSORS */
+

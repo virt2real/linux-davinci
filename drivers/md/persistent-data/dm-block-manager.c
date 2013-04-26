@@ -25,7 +25,7 @@
  * may be held at once.  This is just an implementation detail.
  *
  * ii) Recursive locking attempts are detected and return EINVAL.  A stack
- * trace is also emitted for the previous lock acquisition.
+ * trace is also emitted for the previous lock aquisition.
  *
  * iii) Priority is given to write locks.
  */
@@ -109,7 +109,7 @@ static int __check_holder(struct block_lock *lock)
 			DMERR("previously held here:");
 			print_stack_trace(lock->traces + i, 4);
 
-			DMERR("subsequent acquisition attempted here:");
+			DMERR("subsequent aquisition attempted here:");
 			t.nr_entries = 0;
 			t.max_entries = MAX_STACK;
 			t.entries = entries;
@@ -428,17 +428,15 @@ static int dm_bm_validate_buffer(struct dm_block_manager *bm,
 		if (!v)
 			return 0;
 		r = v->check(v, (struct dm_block *) buf, dm_bufio_get_block_size(bm->bufio));
-		if (unlikely(r)) {
-			DMERR_LIMIT("%s validator check failed for block %llu", v->name,
-				    (unsigned long long) dm_bufio_get_block_number(buf));
+		if (unlikely(r))
 			return r;
-		}
 		aux->validator = v;
 	} else {
 		if (unlikely(aux->validator != v)) {
-			DMERR_LIMIT("validator mismatch (old=%s vs new=%s) for block %llu",
-				    aux->validator->name, v ? v->name : "NULL",
-				    (unsigned long long) dm_bufio_get_block_number(buf));
+			DMERR("validator mismatch (old=%s vs new=%s) for block %llu",
+				aux->validator->name, v ? v->name : "NULL",
+				(unsigned long long)
+					dm_bufio_get_block_number(buf));
 			return -EINVAL;
 		}
 	}
@@ -613,7 +611,6 @@ int dm_bm_flush_and_unlock(struct dm_block_manager *bm,
 
 	return dm_bufio_write_dirty_buffers(bm->bufio);
 }
-EXPORT_SYMBOL_GPL(dm_bm_flush_and_unlock);
 
 void dm_bm_set_read_only(struct dm_block_manager *bm)
 {

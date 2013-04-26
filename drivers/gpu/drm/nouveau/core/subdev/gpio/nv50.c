@@ -22,22 +22,22 @@
  * Authors: Ben Skeggs
  */
 
-#include "priv.h"
+#include <subdev/gpio.h>
 
 struct nv50_gpio_priv {
 	struct nouveau_gpio base;
 };
 
 static void
-nv50_gpio_reset(struct nouveau_gpio *gpio, u8 match)
+nv50_gpio_reset(struct nouveau_gpio *gpio)
 {
 	struct nouveau_bios *bios = nouveau_bios(gpio);
 	struct nv50_gpio_priv *priv = (void *)gpio;
-	u8 ver, len;
 	u16 entry;
+	u8 ver;
 	int ent = -1;
 
-	while ((entry = dcb_gpio_entry(bios, 0, ++ent, &ver, &len))) {
+	while ((entry = dcb_gpio_entry(bios, 0, ++ent, &ver))) {
 		static const u32 regs[] = { 0xe100, 0xe28c };
 		u32 data = nv_ro32(bios, entry);
 		u8  line =   (data & 0x0000001f);
@@ -48,8 +48,7 @@ nv50_gpio_reset(struct nouveau_gpio *gpio, u8 match)
 		u32 val = (unk1 << 16) | unk0;
 		u32 reg = regs[line >> 4]; line &= 0x0f;
 
-		if ( func  == DCB_GPIO_UNUSED ||
-		    (match != DCB_GPIO_UNUSED && match != func))
+		if (func == 0xff)
 			continue;
 
 		gpio->set(gpio, 0, func, line, defs);
@@ -95,12 +94,21 @@ nv50_gpio_sense(struct nouveau_gpio *gpio, int line)
 }
 
 void
+nv50_gpio_irq_enable(struct nouveau_gpio *gpio, int line, bool on)
+{
+	u32 reg  = line < 16 ? 0xe050 : 0xe070;
+	u32 mask = 0x00010001 << (line & 0xf);
+
+	nv_wr32(gpio, reg + 4, mask);
+	nv_mask(gpio, reg + 0, mask, on ? mask : 0);
+}
+
+void
 nv50_gpio_intr(struct nouveau_subdev *subdev)
 {
 	struct nv50_gpio_priv *priv = (void *)subdev;
 	u32 intr0, intr1 = 0;
 	u32 hi, lo;
-	int i;
 
 	intr0 = nv_rd32(priv, 0xe054) & nv_rd32(priv, 0xe050);
 	if (nv_device(priv)->chipset >= 0x90)
@@ -108,33 +116,11 @@ nv50_gpio_intr(struct nouveau_subdev *subdev)
 
 	hi = (intr0 & 0x0000ffff) | (intr1 << 16);
 	lo = (intr0 >> 16) | (intr1 & 0xffff0000);
-
-	for (i = 0; (hi | lo) && i < 32; i++) {
-		if ((hi | lo) & (1 << i))
-			nouveau_event_trigger(priv->base.events, i);
-	}
+	priv->base.isr_run(&priv->base, 0, hi | lo);
 
 	nv_wr32(priv, 0xe054, intr0);
 	if (nv_device(priv)->chipset >= 0x90)
 		nv_wr32(priv, 0xe074, intr1);
-}
-
-void
-nv50_gpio_intr_enable(struct nouveau_event *event, int line)
-{
-	const u32 addr = line < 16 ? 0xe050 : 0xe070;
-	const u32 mask = 0x00010001 << (line & 0xf);
-	nv_wr32(event->priv, addr + 0x04, mask);
-	nv_mask(event->priv, addr + 0x00, mask, mask);
-}
-
-void
-nv50_gpio_intr_disable(struct nouveau_event *event, int line)
-{
-	const u32 addr = line < 16 ? 0xe050 : 0xe070;
-	const u32 mask = 0x00010001 << (line & 0xf);
-	nv_wr32(event->priv, addr + 0x04, mask);
-	nv_mask(event->priv, addr + 0x00, mask, 0x00000000);
 }
 
 static int
@@ -145,9 +131,7 @@ nv50_gpio_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 	struct nv50_gpio_priv *priv;
 	int ret;
 
-	ret = nouveau_gpio_create(parent, engine, oclass,
-				  nv_device(parent)->chipset >= 0x90 ? 32 : 16,
-				  &priv);
+	ret = nouveau_gpio_create(parent, engine, oclass, &priv);
 	*pobject = nv_object(priv);
 	if (ret)
 		return ret;
@@ -155,9 +139,7 @@ nv50_gpio_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 	priv->base.reset = nv50_gpio_reset;
 	priv->base.drive = nv50_gpio_drive;
 	priv->base.sense = nv50_gpio_sense;
-	priv->base.events->priv = priv;
-	priv->base.events->enable = nv50_gpio_intr_enable;
-	priv->base.events->disable = nv50_gpio_intr_disable;
+	priv->base.irq_enable = nv50_gpio_irq_enable;
 	nv_subdev(priv)->intr = nv50_gpio_intr;
 	return 0;
 }

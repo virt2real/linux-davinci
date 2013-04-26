@@ -14,12 +14,6 @@
 	compatible = "ti,omap2430", "ti,omap2";
 
 	ocp {
-		counter32k: counter@49020000 {
-			compatible = "ti,omap-counter32k";
-			reg = <0x49020000 0x20>;
-			ti,hwmods = "counter_32k";
-		};
-
 		omap2430_pmx: pinmux@49002030 {
 			compatible = "ti,omap2430-padconf", "pinctrl-single";
 			reg = <0x49002030 0x0154>;
@@ -38,6 +32,7 @@
 				     <60>, /* RX interrupt */
 				     <61>; /* RX overflow interrupt */
 			interrupt-names = "common", "tx", "rx", "rx_overflow";
+			interrupt-parent = <&intc>;
 			ti,buffer-size = <128>;
 			ti,hwmods = "mcbsp1";
 		};
@@ -50,6 +45,7 @@
 				     <62>, /* TX interrupt */
 				     <63>; /* RX interrupt */
 			interrupt-names = "common", "tx", "rx";
+			interrupt-parent = <&intc>;
 			ti,buffer-size = <128>;
 			ti,hwmods = "mcbsp2";
 		};
@@ -62,6 +58,7 @@
 				     <89>, /* TX interrupt */
 				     <90>; /* RX interrupt */
 			interrupt-names = "common", "tx", "rx";
+			interrupt-parent = <&intc>;
 			ti,buffer-size = <128>;
 			ti,hwmods = "mcbsp3";
 		};
@@ -74,6 +71,7 @@
 				     <54>, /* TX interrupt */
 				     <55>; /* RX interrupt */
 			interrupt-names = "common", "tx", "rx";
+			interrupt-parent = <&intc>;
 			ti,buffer-size = <128>;
 			ti,hwmods = "mcbsp4";
 		};
@@ -86,16 +84,9 @@
 				     <81>, /* TX interrupt */
 				     <82>; /* RX interrupt */
 			interrupt-names = "common", "tx", "rx";
+			interrupt-parent = <&intc>;
 			ti,buffer-size = <128>;
 			ti,hwmods = "mcbsp5";
-		};
-
-		timer1: timer@49018000 {
-			compatible = "ti,omap2-timer";
-			reg = <0x49018000 0x400>;
-			interrupts = <37>;
-			ti,hwmods = "timer1";
-			ti,timer-alwon;
 		};
 	};
 };

@@ -27,6 +27,15 @@
 
 #define DEBUG_SIG 0
 
+asmlinkage int
+sys_sigaltstack(const stack_t __user *uss, stack_t __user *uoss,
+		unsigned long r2, unsigned long r3, unsigned long r4,
+		unsigned long r5, unsigned long r6, struct pt_regs *regs)
+{
+	return do_sigaltstack(uss, uoss, regs->spu);
+}
+
+
 /*
  * Do a signal return; undo the signal stack.
  */
@@ -104,7 +113,7 @@ sys_rt_sigreturn(unsigned long r0, unsigned long r1,
 	if (restore_sigcontext(regs, &frame->uc.uc_mcontext, &result))
 		goto badframe;
 
-	if (restore_altstack(&frame->uc.uc_stack))
+	if (do_sigaltstack(&frame->uc.uc_stack, NULL, regs->spu) == -EFAULT)
 		goto badframe;
 
 	return result;
@@ -204,7 +213,10 @@ static int setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	/* Create the ucontext.  */
 	err |= __put_user(0, &frame->uc.uc_flags);
 	err |= __put_user(0, &frame->uc.uc_link);
-	err |= __save_altstack(&frame->uc.uc_stack, regs->spu);
+	err |= __put_user(current->sas_ss_sp, &frame->uc.uc_stack.ss_sp);
+	err |= __put_user(sas_ss_flags(regs->spu),
+			  &frame->uc.uc_stack.ss_flags);
+	err |= __put_user(current->sas_ss_size, &frame->uc.uc_stack.ss_size);
 	err |= setup_sigcontext(&frame->uc.uc_mcontext, regs, set->sig[0]);
 	err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
 	if (err)

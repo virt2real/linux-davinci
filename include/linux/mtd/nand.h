@@ -187,13 +187,6 @@ typedef enum {
  * This happens with the Renesas AG-AND chips, possibly others.
  */
 #define BBT_AUTO_REFRESH	0x00000080
-/*
- * Chip requires ready check on read (for auto-incremented sequential read).
- * True only for small page devices; large page devices do not support
- * autoincrement.
- */
-#define NAND_NEED_READRDY	0x00000100
-
 /* Chip does not allow subpage writes */
 #define NAND_NO_SUBPAGE_WRITE	0x00000200
 
@@ -226,13 +219,6 @@ typedef enum {
 #define NAND_OWN_BUFFERS	0x00020000
 /* Chip may not exist, so silence any errors in scan */
 #define NAND_SCAN_SILENT_NODEV	0x00040000
-/*
- * Autodetect nand buswidth with readid/onfi.
- * This suppose the driver will configure the hardware in 8 bits mode
- * when calling nand_scan_ident, and update its configuration
- * before calling nand_scan_tail.
- */
-#define NAND_BUSWIDTH_AUTO      0x00080000
 
 /* Options set by nand scan */
 /* Nand scan has allocated controller struct */
@@ -485,8 +471,8 @@ struct nand_buffers {
  *			non 0 if ONFI supported.
  * @onfi_params:	[INTERN] holds the ONFI page parameter when ONFI is
  *			supported, 0 otherwise.
- * @onfi_set_features:	[REPLACEABLE] set the features for ONFI nand
- * @onfi_get_features:	[REPLACEABLE] get the features for ONFI nand
+ * @onfi_set_features	[REPLACEABLE] set the features for ONFI nand
+ * @onfi_get_features	[REPLACEABLE] get the features for ONFI nand
  * @ecclayout:		[REPLACEABLE] the default ECC placement scheme
  * @bbt:		[INTERN] bad block table pointer
  * @bbt_td:		[REPLACEABLE] bad block table descriptor for flash

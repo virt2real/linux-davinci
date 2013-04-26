@@ -31,7 +31,7 @@ const struct regmap_config pm80x_regmap_config = {
 };
 EXPORT_SYMBOL_GPL(pm80x_regmap_config);
 
-int pm80x_init(struct i2c_client *client,
+int __devinit pm80x_init(struct i2c_client *client,
 				 const struct i2c_device_id *id)
 {
 	struct pm80x_chip *chip;
@@ -48,12 +48,14 @@ int pm80x_init(struct i2c_client *client,
 		ret = PTR_ERR(map);
 		dev_err(&client->dev, "Failed to allocate register map: %d\n",
 			ret);
-		return ret;
+		goto err_regmap_init;
 	}
 
 	chip->id = id->driver_data;
-	if (chip->id < CHIP_PM800 || chip->id > CHIP_PM805)
-		return -EINVAL;
+	if (chip->id < CHIP_PM800 || chip->id > CHIP_PM805) {
+		ret = -EINVAL;
+		goto err_chip_id;
+	}
 
 	chip->client = client;
 	chip->regmap = map;
@@ -80,11 +82,19 @@ int pm80x_init(struct i2c_client *client,
 	}
 
 	return 0;
+
+err_chip_id:
+	regmap_exit(map);
+err_regmap_init:
+	devm_kfree(&client->dev, chip);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(pm80x_init);
 
-int pm80x_deinit(void)
+int pm80x_deinit(struct i2c_client *client)
 {
+	struct pm80x_chip *chip = i2c_get_clientdata(client);
+
 	/*
 	 * workaround: clear the dependency between pm800 and pm805.
 	 * would remove it after HW chip fixes the issue.
@@ -93,6 +103,10 @@ int pm80x_deinit(void)
 		g_pm80x_chip->companion = NULL;
 	else
 		g_pm80x_chip = NULL;
+
+	regmap_exit(chip->regmap);
+	devm_kfree(&client->dev, chip);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pm80x_deinit);

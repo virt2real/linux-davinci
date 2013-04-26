@@ -5,6 +5,8 @@
 
 /* misc architecture specific prototypes */
 
+void early_idt_handler(void);
+
 void system_call(void);
 void syscall_init(void);
 

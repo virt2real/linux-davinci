@@ -67,7 +67,7 @@ static bool rpfilter_lookup_reverse6(const struct sk_buff *skb,
 	if (rt->rt6i_idev->dev == dev || (flags & XT_RPFILTER_LOOSE))
 		ret = true;
  out:
-	ip6_rt_put(rt);
+	dst_release(&rt->dst);
 	return ret;
 }
 

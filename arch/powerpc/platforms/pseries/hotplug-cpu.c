@@ -23,12 +23,12 @@
 #include <linux/delay.h>
 #include <linux/sched.h>	/* for idle_task_exit */
 #include <linux/cpu.h>
-#include <linux/of.h>
 #include <asm/prom.h>
 #include <asm/rtas.h>
 #include <asm/firmware.h>
 #include <asm/machdep.h>
 #include <asm/vdso_datapage.h>
+#include <asm/pSeries_reconfig.h>
 #include <asm/xics.h>
 #include "plpar_wrappers.h"
 #include "offline_states.h"
@@ -127,15 +127,8 @@ static void pseries_mach_cpu_die(void)
 			get_lppaca()->donate_dedicated_cpu = 1;
 
 		while (get_preferred_offline_state(cpu) == CPU_STATE_INACTIVE) {
-			while (!prep_irq_for_idle()) {
-				local_irq_enable();
-				local_irq_disable();
-			}
-
 			extended_cede_processor(cede_latency_hint);
 		}
-
-		local_irq_disable();
 
 		if (!get_lppaca()->shared_proc)
 			get_lppaca()->donate_dedicated_cpu = 0;
@@ -144,7 +137,6 @@ static void pseries_mach_cpu_die(void)
 		if (get_preferred_offline_state(cpu) == CPU_STATE_ONLINE) {
 			unregister_slb_shadow(hwcpu);
 
-			hard_irq_disable();
 			/*
 			 * Call to start_secondary_resume() will not return.
 			 * Kernel stack will be reset and start_secondary()
@@ -341,10 +333,10 @@ static int pseries_smp_notifier(struct notifier_block *nb,
 	int err = 0;
 
 	switch (action) {
-	case OF_RECONFIG_ATTACH_NODE:
+	case PSERIES_RECONFIG_ADD:
 		err = pseries_add_processor(node);
 		break;
-	case OF_RECONFIG_DETACH_NODE:
+	case PSERIES_RECONFIG_REMOVE:
 		pseries_remove_processor(node);
 		break;
 	}
@@ -407,7 +399,7 @@ static int __init pseries_cpu_hotplug_init(void)
 
 	/* Processors can be added/removed only on LPAR */
 	if (firmware_has_feature(FW_FEATURE_LPAR)) {
-		of_reconfig_notifier_register(&pseries_smp_nb);
+		pSeries_reconfig_notifier_register(&pseries_smp_nb);
 		cpu_maps_update_begin();
 		if (cede_offline_enabled && parse_cede_parameters() == 0) {
 			default_offline_state = CPU_STATE_INACTIVE;

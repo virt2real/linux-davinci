@@ -126,7 +126,8 @@ struct dentry *nfs_get_root(struct super_block *sb, struct nfs_fh *mntfh,
 	}
 	spin_unlock(&ret->d_lock);
 out:
-	kfree(name);
+	if (name)
+		kfree(name);
 	nfs_free_fattr(fsinfo.fattr);
 	return ret;
 }

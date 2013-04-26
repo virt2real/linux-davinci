@@ -25,35 +25,33 @@
 #include <linux/sysfs.h>
 #include <linux/module.h>
 #include <linux/delay.h>
-#include <linux/clk-provider.h>
+#include <linux/clk.h>
 #include <linux/irq.h>
 #include <linux/time.h>
 #include <linux/gpio.h>
 #include <linux/platform_data/gpio-omap.h>
-
-#include <asm/fncpy.h>
 
 #include <asm/mach/time.h>
 #include <asm/mach/irq.h>
 #include <asm/mach-types.h>
 #include <asm/system_misc.h>
 
-#include <linux/omap-dma.h>
+#include <plat/clock.h>
+#include <plat/sram.h>
+#include <plat/dma.h>
 
-#include "soc.h"
 #include "common.h"
-#include "clock.h"
-#include "prm2xxx.h"
+#include "prm2xxx_3xxx.h"
 #include "prm-regbits-24xx.h"
-#include "cm2xxx.h"
+#include "cm2xxx_3xxx.h"
 #include "cm-regbits-24xx.h"
 #include "sdrc.h"
-#include "sram.h"
 #include "pm.h"
 #include "control.h"
 #include "powerdomain.h"
 #include "clockdomain.h"
 
+static void (*omap2_sram_idle)(void);
 static void (*omap2_sram_suspend)(u32 dllctrl, void __iomem *sdrc_dlla_ctrl,
 				  void __iomem *sdrc_power);
 
@@ -89,7 +87,11 @@ static int omap2_enter_full_retention(void)
 	omap2_prm_write_mod_reg(0xffffffff, CORE_MOD, OMAP24XX_PM_WKST2);
 	omap2_prm_write_mod_reg(0xffffffff, WKUP_MOD, PM_WKST);
 
-	pwrdm_set_next_pwrst(core_pwrdm, PWRDM_POWER_RET);
+	/*
+	 * Set MPU powerdomain's next power state to RETENTION;
+	 * preserve logic state during retention
+	 */
+	pwrdm_set_logic_retst(mpu_pwrdm, PWRDM_POWER_RET);
 	pwrdm_set_next_pwrst(mpu_pwrdm, PWRDM_POWER_RET);
 
 	/* Workaround to kill USB */
@@ -132,10 +134,15 @@ no_sleep:
 	/* Mask future PRCM-to-MPU interrupts */
 	omap2_prm_write_mod_reg(0x0, OCP_MOD, OMAP2_PRCM_IRQSTATUS_MPU_OFFSET);
 
-	pwrdm_set_next_pwrst(mpu_pwrdm, PWRDM_POWER_ON);
-	pwrdm_set_next_pwrst(core_pwrdm, PWRDM_POWER_ON);
-
 	return 0;
+}
+
+static int omap2_i2c_active(void)
+{
+	u32 l;
+
+	l = omap2_cm_read_mod_reg(CORE_MOD, CM_FCLKEN1);
+	return l & (OMAP2420_EN_I2C2_MASK | OMAP2420_EN_I2C1_MASK);
 }
 
 static int sti_console_enabled;
@@ -162,7 +169,10 @@ static int omap2_allow_mpu_retention(void)
 
 static void omap2_enter_mpu_retention(void)
 {
-	const int zero = 0;
+	/* Putting MPU into the WFI state while a transfer is active
+	 * seems to cause the I2C block to timeout. Why? Good question. */
+	if (omap2_i2c_active())
+		return;
 
 	/* The peripherals seem not to be able to wake up the MPU when
 	 * it is in retention mode. */
@@ -173,24 +183,24 @@ static void omap2_enter_mpu_retention(void)
 		omap2_prm_write_mod_reg(0xffffffff, WKUP_MOD, PM_WKST);
 
 		/* Try to enter MPU retention */
-		pwrdm_set_next_pwrst(mpu_pwrdm, PWRDM_POWER_RET);
-
+		omap2_prm_write_mod_reg((0x01 << OMAP_POWERSTATE_SHIFT) |
+				  OMAP_LOGICRETSTATE_MASK,
+				  MPU_MOD, OMAP2_PM_PWSTCTRL);
 	} else {
 		/* Block MPU retention */
-		pwrdm_set_next_pwrst(mpu_pwrdm, PWRDM_POWER_ON);
+
+		omap2_prm_write_mod_reg(OMAP_LOGICRETSTATE_MASK, MPU_MOD,
+						 OMAP2_PM_PWSTCTRL);
 	}
 
-	/* WFI */
-	asm("mcr p15, 0, %0, c7, c0, 4" : : "r" (zero) : "memory", "cc");
-
-	pwrdm_set_next_pwrst(mpu_pwrdm, PWRDM_POWER_ON);
+	omap2_sram_idle();
 }
 
 static int omap2_can_sleep(void)
 {
 	if (omap2_fclks_active())
 		return 0;
-	if (__clk_is_enabled(osc_ck))
+	if (osc_ck->usecount > 1)
 		return 0;
 	if (omap_dma_running())
 		return 0;
@@ -238,17 +248,25 @@ static void __init prcm_setup_regs(void)
 	for (i = 0; i < num_mem_banks; i++)
 		pwrdm_set_mem_retst(core_pwrdm, i, PWRDM_POWER_RET);
 
-	pwrdm_set_logic_retst(core_pwrdm, PWRDM_POWER_RET);
+	/* Set CORE powerdomain's next power state to RETENTION */
+	pwrdm_set_next_pwrst(core_pwrdm, PWRDM_POWER_RET);
 
+	/*
+	 * Set MPU powerdomain's next power state to RETENTION;
+	 * preserve logic state during retention
+	 */
 	pwrdm_set_logic_retst(mpu_pwrdm, PWRDM_POWER_RET);
+	pwrdm_set_next_pwrst(mpu_pwrdm, PWRDM_POWER_RET);
 
 	/* Force-power down DSP, GFX powerdomains */
 
 	pwrdm = clkdm_get_pwrdm(dsp_clkdm);
 	pwrdm_set_next_pwrst(pwrdm, PWRDM_POWER_OFF);
+	clkdm_sleep(dsp_clkdm);
 
 	pwrdm = clkdm_get_pwrdm(gfx_clkdm);
 	pwrdm_set_next_pwrst(pwrdm, PWRDM_POWER_OFF);
+	clkdm_sleep(gfx_clkdm);
 
 	/* Enable hardware-supervised idle for all clkdms */
 	clkdm_for_each(omap_pm_clkdms_setup, NULL);
@@ -335,9 +353,11 @@ int __init omap2_pm_init(void)
 	/*
 	 * We copy the assembler sleep/wakeup routines to SRAM.
 	 * These routines need to be in SRAM as that's the only
-	 * memory the MPU can see when it wakes up after the entire
-	 * chip enters idle.
+	 * memory the MPU can see when it wakes up.
 	 */
+	omap2_sram_idle = omap_sram_push(omap24xx_idle_loop_suspend,
+					 omap24xx_idle_loop_suspend_sz);
+
 	omap2_sram_suspend = omap_sram_push(omap24xx_cpu_suspend,
 					    omap24xx_cpu_suspend_sz);
 

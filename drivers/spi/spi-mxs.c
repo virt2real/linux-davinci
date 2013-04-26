@@ -241,7 +241,6 @@ static int mxs_spi_txrx_dma(struct mxs_spi *spi, int cs,
 	INIT_COMPLETION(spi->c);
 
 	ctrl0 = readl(ssp->base + HW_SSP_CTRL0);
-	ctrl0 &= ~BM_SSP_CTRL0_XFER_COUNT;
 	ctrl0 |= BM_SSP_CTRL0_DATA_XFER | mxs_spi_cs_to_reg(cs);
 
 	if (*first)
@@ -257,10 +256,8 @@ static int mxs_spi_txrx_dma(struct mxs_spi *spi, int cs,
 		if ((sg_count + 1 == sgs) && *last)
 			ctrl0 |= BM_SSP_CTRL0_IGNORE_CRC;
 
-		if (ssp->devid == IMX23_SSP) {
-			ctrl0 &= ~BM_SSP_CTRL0_XFER_COUNT;
+		if (ssp->devid == IMX23_SSP)
 			ctrl0 |= min;
-		}
 
 		dma_xfer[sg_count].pio[0] = ctrl0;
 		dma_xfer[sg_count].pio[3] = min;
@@ -326,7 +323,6 @@ static int mxs_spi_txrx_dma(struct mxs_spi *spi, int cs,
 	if (!ret) {
 		dev_err(ssp->dev, "DMA transfer timeout\n");
 		ret = -ETIMEDOUT;
-		dmaengine_terminate_all(ssp->dmach);
 		goto err_vmalloc;
 	}
 
@@ -484,7 +480,7 @@ static int mxs_spi_transfer_one(struct spi_master *master,
 		first = last = 0;
 	}
 
-	m->status = status;
+	m->status = 0;
 	spi_finalize_current_message(master);
 
 	return status;
@@ -512,7 +508,7 @@ static const struct of_device_id mxs_spi_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, mxs_spi_dt_ids);
 
-static int mxs_spi_probe(struct platform_device *pdev)
+static int __devinit mxs_spi_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *of_id =
 			of_match_device(mxs_spi_dt_ids, &pdev->dev);
@@ -541,9 +537,9 @@ static int mxs_spi_probe(struct platform_device *pdev)
 	if (!iores || irq_err < 0 || irq_dma < 0)
 		return -EINVAL;
 
-	base = devm_ioremap_resource(&pdev->dev, iores);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	base = devm_request_and_ioremap(&pdev->dev, iores);
+	if (!base)
+		return -EADDRNOTAVAIL;
 
 	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
 	if (IS_ERR(pinctrl))
@@ -639,7 +635,7 @@ out_master_free:
 	return ret;
 }
 
-static int mxs_spi_remove(struct platform_device *pdev)
+static int __devexit mxs_spi_remove(struct platform_device *pdev)
 {
 	struct spi_master *master;
 	struct mxs_spi *spi;
@@ -662,7 +658,7 @@ static int mxs_spi_remove(struct platform_device *pdev)
 
 static struct platform_driver mxs_spi_driver = {
 	.probe	= mxs_spi_probe,
-	.remove	= mxs_spi_remove,
+	.remove	= __devexit_p(mxs_spi_remove),
 	.driver	= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,

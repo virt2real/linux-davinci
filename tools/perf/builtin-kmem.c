@@ -17,7 +17,6 @@
 #include "util/debug.h"
 
 #include <linux/rbtree.h>
-#include <linux/string.h>
 
 struct alloc_stat;
 typedef int (*sort_fn_t)(struct alloc_stat *, struct alloc_stat *);
@@ -341,7 +340,7 @@ static void __print_result(struct rb_root *root, struct perf_session *session,
 			   int n_lines, int is_caller)
 {
 	struct rb_node *next;
-	struct machine *machine = &session->machines.host;
+	struct machine *machine;
 
 	printf("%.102s\n", graph_dotted_line);
 	printf(" %-34s |",  is_caller ? "Callsite": "Alloc Ptr");
@@ -350,6 +349,11 @@ static void __print_result(struct rb_root *root, struct perf_session *session,
 
 	next = rb_first(root);
 
+	machine = perf_session__find_host_machine(session);
+	if (!machine) {
+		pr_err("__print_result: couldn't find kernel information\n");
+		return;
+	}
 	while (next && n_lines--) {
 		struct alloc_stat *data = rb_entry(next, struct alloc_stat,
 						   node);
@@ -473,7 +477,7 @@ static void sort_result(void)
 	__sort_result(&root_caller_stat, &root_caller_sorted, &caller_sort);
 }
 
-static int __cmd_kmem(void)
+static int __cmd_kmem(const char *input_name)
 {
 	int err = -EINVAL;
 	struct perf_session *session;
@@ -610,7 +614,8 @@ static struct sort_dimension *avail_sorts[] = {
 	&pingpong_sort_dimension,
 };
 
-#define NUM_AVAIL_SORTS	((int)ARRAY_SIZE(avail_sorts))
+#define NUM_AVAIL_SORTS	\
+	(int)(sizeof(avail_sorts) / sizeof(struct sort_dimension *))
 
 static int sort_dimension__add(const char *tok, struct list_head *list)
 {
@@ -619,11 +624,12 @@ static int sort_dimension__add(const char *tok, struct list_head *list)
 
 	for (i = 0; i < NUM_AVAIL_SORTS; i++) {
 		if (!strcmp(avail_sorts[i]->name, tok)) {
-			sort = memdup(avail_sorts[i], sizeof(*avail_sorts[i]));
+			sort = malloc(sizeof(*sort));
 			if (!sort) {
-				pr_err("%s: memdup failed\n", __func__);
+				pr_err("%s: malloc failed\n", __func__);
 				return -1;
 			}
+			memcpy(sort, avail_sorts[i], sizeof(*sort));
 			list_add_tail(&sort->list, list);
 			return 0;
 		}
@@ -737,6 +743,7 @@ static int __cmd_record(int argc, const char **argv)
 int cmd_kmem(int argc, const char **argv, const char *prefix __maybe_unused)
 {
 	const char * const default_sort_order = "frag,hit,bytes";
+	const char *input_name = NULL;
 	const struct option kmem_options[] = {
 	OPT_STRING('i', "input", &input_name, "file", "input file name"),
 	OPT_CALLBACK_NOOPT(0, "caller", NULL, NULL,
@@ -772,7 +779,7 @@ int cmd_kmem(int argc, const char **argv, const char *prefix __maybe_unused)
 		if (list_empty(&alloc_sort))
 			setup_sorting(&alloc_sort, default_sort_order);
 
-		return __cmd_kmem();
+		return __cmd_kmem(input_name);
 	} else
 		usage_with_options(kmem_usage, kmem_options);
 

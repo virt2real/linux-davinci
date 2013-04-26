@@ -167,10 +167,10 @@ struct atao_private {
 	unsigned int ao_readback[10];
 };
 
+#define devpriv ((struct atao_private *)dev->private)
+
 static void atao_reset(struct comedi_device *dev)
 {
-	struct atao_private *devpriv = dev->private;
-
 	/* This is the reset sequence described in the manual */
 
 	devpriv->cfg1 = 0;
@@ -202,7 +202,6 @@ static void atao_reset(struct comedi_device *dev)
 static int atao_ao_winsn(struct comedi_device *dev, struct comedi_subdevice *s,
 			 struct comedi_insn *insn, unsigned int *data)
 {
-	struct atao_private *devpriv = dev->private;
 	int i;
 	int chan = CR_CHAN(insn->chanspec);
 	short bits;
@@ -227,7 +226,6 @@ static int atao_ao_winsn(struct comedi_device *dev, struct comedi_subdevice *s,
 static int atao_ao_rinsn(struct comedi_device *dev, struct comedi_subdevice *s,
 			 struct comedi_insn *insn, unsigned int *data)
 {
-	struct atao_private *devpriv = dev->private;
 	int i;
 	int chan = CR_CHAN(insn->chanspec);
 
@@ -256,7 +254,6 @@ static int atao_dio_insn_config(struct comedi_device *dev,
 				struct comedi_subdevice *s,
 				struct comedi_insn *insn, unsigned int *data)
 {
-	struct atao_private *devpriv = dev->private;
 	int chan = CR_CHAN(insn->chanspec);
 	unsigned int mask, bit;
 
@@ -312,7 +309,6 @@ static int atao_calib_insn_write(struct comedi_device *dev,
 				 struct comedi_subdevice *s,
 				 struct comedi_insn *insn, unsigned int *data)
 {
-	struct atao_private *devpriv = dev->private;
 	unsigned int bitstring, bit;
 	unsigned int chan = CR_CHAN(insn->chanspec);
 
@@ -335,7 +331,6 @@ static int atao_calib_insn_write(struct comedi_device *dev,
 static int atao_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 {
 	const struct atao_board *board = comedi_board(dev);
-	struct atao_private *devpriv;
 	struct comedi_subdevice *s;
 	unsigned long iobase;
 	int ao_unipolar;
@@ -356,10 +351,8 @@ static int atao_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 
 	dev->board_name = board->name;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
+	if (alloc_private(dev, sizeof(struct atao_private)) < 0)
 		return -ENOMEM;
-	dev->private = devpriv;
 
 	ret = comedi_alloc_subdevices(dev, 4);
 	if (ret)

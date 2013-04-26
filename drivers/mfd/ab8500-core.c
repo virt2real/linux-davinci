@@ -19,7 +19,6 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/abx500.h>
 #include <linux/mfd/abx500/ab8500.h>
-#include <linux/mfd/abx500/ab8500-bm.h>
 #include <linux/mfd/dbx500-prcmu.h>
 #include <linux/regulator/ab8500.h>
 #include <linux/of.h>
@@ -320,7 +319,6 @@ static struct abx500_ops ab8500_ops = {
 	.mask_and_set_register = ab8500_mask_and_set_register,
 	.event_registers_startup_state_get = NULL,
 	.startup_irq_enabled = NULL,
-	.dump_all_banks = ab8500_dump_all_banks,
 };
 
 static void ab8500_irq_lock(struct irq_data *data)
@@ -369,48 +367,16 @@ static void ab8500_irq_mask(struct irq_data *data)
 	int mask = 1 << (offset % 8);
 
 	ab8500->mask[index] |= mask;
-
-	/* The AB8500 GPIOs have two interrupts each (rising & falling). */
-	if (offset >= AB8500_INT_GPIO6R && offset <= AB8500_INT_GPIO41R)
-		ab8500->mask[index + 2] |= mask;
-	if (offset >= AB9540_INT_GPIO50R && offset <= AB9540_INT_GPIO54R)
-		ab8500->mask[index + 1] |= mask;
-	if (offset == AB8540_INT_GPIO43R || offset == AB8540_INT_GPIO44R)
-		/* Here the falling IRQ is one bit lower */
-		ab8500->mask[index] |= (mask << 1);
 }
 
 static void ab8500_irq_unmask(struct irq_data *data)
 {
 	struct ab8500 *ab8500 = irq_data_get_irq_chip_data(data);
-	unsigned int type = irqd_get_trigger_type(data);
 	int offset = data->hwirq;
 	int index = offset / 8;
 	int mask = 1 << (offset % 8);
 
-	if (type & IRQ_TYPE_EDGE_RISING)
-		ab8500->mask[index] &= ~mask;
-
-	/* The AB8500 GPIOs have two interrupts each (rising & falling). */
-	if (type & IRQ_TYPE_EDGE_FALLING) {
-		if (offset >= AB8500_INT_GPIO6R && offset <= AB8500_INT_GPIO41R)
-			ab8500->mask[index + 2] &= ~mask;
-		else if (offset >= AB9540_INT_GPIO50R && offset <= AB9540_INT_GPIO54R)
-			ab8500->mask[index + 1] &= ~mask;
-		else if (offset == AB8540_INT_GPIO43R || offset == AB8540_INT_GPIO44R)
-			/* Here the falling IRQ is one bit lower */
-			ab8500->mask[index] &= ~(mask << 1);
-		else
-			ab8500->mask[index] &= ~mask;
-	} else {
-		/* Satisfies the case where type is not set. */
-		ab8500->mask[index] &= ~mask;
-	}
-}
-
-static int ab8500_irq_set_type(struct irq_data *data, unsigned int type)
-{
-	return 0;
+	ab8500->mask[index] &= ~mask;
 }
 
 static struct irq_chip ab8500_irq_chip = {
@@ -420,7 +386,6 @@ static struct irq_chip ab8500_irq_chip = {
 	.irq_mask		= ab8500_irq_mask,
 	.irq_disable		= ab8500_irq_mask,
 	.irq_unmask		= ab8500_irq_unmask,
-	.irq_set_type		= ab8500_irq_set_type,
 };
 
 static int ab8500_handle_hierarchical_line(struct ab8500 *ab8500,
@@ -444,19 +409,6 @@ static int ab8500_handle_hierarchical_line(struct ab8500 *ab8500,
 
 		line = (i << 3) + int_bit;
 		latch_val &= ~(1 << int_bit);
-
-		/*
-		 * This handles the falling edge hwirqs from the GPIO
-		 * lines. Route them back to the line registered for the
-		 * rising IRQ, as this is merely a flag for the same IRQ
-		 * in linux terms.
-		 */
-		if (line >= AB8500_INT_GPIO6F && line <= AB8500_INT_GPIO41F)
-			line -= 16;
-		if (line >= AB9540_INT_GPIO50F && line <= AB9540_INT_GPIO54F)
-			line -= 8;
-		if (line == AB8540_INT_GPIO43F || line == AB8540_INT_GPIO44F)
-			line += 1;
 
 		handle_nested_irq(ab8500->irq_base + line);
 	} while (latch_val);
@@ -568,7 +520,6 @@ static irqreturn_t ab8500_irq(int irq, void *dev)
 			int virq = ab8500_irq_get_virq(ab8500, line);
 
 			handle_nested_irq(virq);
-			ab8500_debug_register_interrupt(line);
 			value &= ~(1 << bit);
 
 		} while (value);
@@ -614,10 +565,15 @@ static int ab8500_irq_init(struct ab8500 *ab8500, struct device_node *np)
 	else
 		num_irqs = AB8500_NR_IRQS;
 
-	/* If ->irq_base is zero this will give a linear mapping */
-	ab8500->domain = irq_domain_add_simple(NULL,
-			num_irqs, ab8500->irq_base,
-			&ab8500_irq_ops, ab8500);
+	if (ab8500->irq_base) {
+		ab8500->domain = irq_domain_add_legacy(
+			NULL, num_irqs, ab8500->irq_base,
+			0, &ab8500_irq_ops, ab8500);
+	}
+	else {
+		ab8500->domain = irq_domain_add_linear(
+			np, num_irqs, &ab8500_irq_ops, ab8500);
+	}
 
 	if (!ab8500->domain) {
 		dev_err(ab8500->dev, "Failed to create irqdomain\n");
@@ -635,7 +591,39 @@ int ab8500_suspend(struct ab8500 *ab8500)
 		return 0;
 }
 
-static struct resource ab8500_gpadc_resources[] = {
+/* AB8500 GPIO Resources */
+static struct resource __devinitdata ab8500_gpio_resources[] = {
+	{
+		.name	= "GPIO_INT6",
+		.start	= AB8500_INT_GPIO6R,
+		.end	= AB8500_INT_GPIO41F,
+		.flags	= IORESOURCE_IRQ,
+	}
+};
+
+/* AB9540 GPIO Resources */
+static struct resource __devinitdata ab9540_gpio_resources[] = {
+	{
+		.name	= "GPIO_INT6",
+		.start	= AB8500_INT_GPIO6R,
+		.end	= AB8500_INT_GPIO41F,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.name	= "GPIO_INT14",
+		.start	= AB9540_INT_GPIO50R,
+		.end	= AB9540_INT_GPIO54R,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.name	= "GPIO_INT15",
+		.start	= AB9540_INT_GPIO50F,
+		.end	= AB9540_INT_GPIO54F,
+		.flags	= IORESOURCE_IRQ,
+	}
+};
+
+static struct resource __devinitdata ab8500_gpadc_resources[] = {
 	{
 		.name	= "HW_CONV_END",
 		.start	= AB8500_INT_GP_HW_ADC_CONV_END,
@@ -650,7 +638,7 @@ static struct resource ab8500_gpadc_resources[] = {
 	},
 };
 
-static struct resource ab8500_rtc_resources[] = {
+static struct resource __devinitdata ab8500_rtc_resources[] = {
 	{
 		.name	= "60S",
 		.start	= AB8500_INT_RTC_60S,
@@ -665,7 +653,7 @@ static struct resource ab8500_rtc_resources[] = {
 	},
 };
 
-static struct resource ab8500_poweronkey_db_resources[] = {
+static struct resource __devinitdata ab8500_poweronkey_db_resources[] = {
 	{
 		.name	= "ONKEY_DBF",
 		.start	= AB8500_INT_PON_KEY1DB_F,
@@ -680,7 +668,7 @@ static struct resource ab8500_poweronkey_db_resources[] = {
 	},
 };
 
-static struct resource ab8500_av_acc_detect_resources[] = {
+static struct resource __devinitdata ab8500_av_acc_detect_resources[] = {
 	{
 	       .name = "ACC_DETECT_1DB_F",
 	       .start = AB8500_INT_ACC_DETECT_1DB_F,
@@ -719,7 +707,7 @@ static struct resource ab8500_av_acc_detect_resources[] = {
 	},
 };
 
-static struct resource ab8500_charger_resources[] = {
+static struct resource __devinitdata ab8500_charger_resources[] = {
 	{
 		.name = "MAIN_CH_UNPLUG_DET",
 		.start = AB8500_INT_MAIN_CH_UNPLUG_DET,
@@ -798,15 +786,9 @@ static struct resource ab8500_charger_resources[] = {
 		.end = AB8500_INT_CH_WD_EXP,
 		.flags = IORESOURCE_IRQ,
 	},
-	{
-		.name = "VBUS_CH_DROP_END",
-		.start = AB8500_INT_VBUS_CH_DROP_END,
-		.end = AB8500_INT_VBUS_CH_DROP_END,
-		.flags = IORESOURCE_IRQ,
-	},
 };
 
-static struct resource ab8500_btemp_resources[] = {
+static struct resource __devinitdata ab8500_btemp_resources[] = {
 	{
 		.name = "BAT_CTRL_INDB",
 		.start = AB8500_INT_BAT_CTRL_INDB,
@@ -839,7 +821,7 @@ static struct resource ab8500_btemp_resources[] = {
 	},
 };
 
-static struct resource ab8500_fg_resources[] = {
+static struct resource __devinitdata ab8500_fg_resources[] = {
 	{
 		.name = "NCONV_ACCU",
 		.start = AB8500_INT_CCN_CONV_ACC,
@@ -878,10 +860,10 @@ static struct resource ab8500_fg_resources[] = {
 	},
 };
 
-static struct resource ab8500_chargalg_resources[] = {};
+static struct resource __devinitdata ab8500_chargalg_resources[] = {};
 
 #ifdef CONFIG_DEBUG_FS
-static struct resource ab8500_debug_resources[] = {
+static struct resource __devinitdata ab8500_debug_resources[] = {
 	{
 		.name	= "IRQ_FIRST",
 		.start	= AB8500_INT_MAIN_EXT_CH_NOT_OK,
@@ -897,7 +879,7 @@ static struct resource ab8500_debug_resources[] = {
 };
 #endif
 
-static struct resource ab8500_usb_resources[] = {
+static struct resource __devinitdata ab8500_usb_resources[] = {
 	{
 		.name = "ID_WAKEUP_R",
 		.start = AB8500_INT_ID_WAKEUP_R,
@@ -942,7 +924,7 @@ static struct resource ab8500_usb_resources[] = {
 	},
 };
 
-static struct resource ab8505_iddet_resources[] = {
+static struct resource __devinitdata ab8505_iddet_resources[] = {
 	{
 		.name  = "KeyDeglitch",
 		.start = AB8505_INT_KEYDEGLITCH,
@@ -975,16 +957,16 @@ static struct resource ab8505_iddet_resources[] = {
 	},
 };
 
-static struct resource ab8500_temp_resources[] = {
+static struct resource __devinitdata ab8500_temp_resources[] = {
 	{
-		.name  = "ABX500_TEMP_WARM",
+		.name  = "AB8500_TEMP_WARM",
 		.start = AB8500_INT_TEMP_WARM,
 		.end   = AB8500_INT_TEMP_WARM,
 		.flags = IORESOURCE_IRQ,
 	},
 };
 
-static struct mfd_cell abx500_common_devs[] = {
+static struct mfd_cell __devinitdata abx500_common_devs[] = {
 #ifdef CONFIG_DEBUG_FS
 	{
 		.name = "ab8500-debug",
@@ -1000,10 +982,6 @@ static struct mfd_cell abx500_common_devs[] = {
 	{
 		.name = "ab8500-regulator",
 		.of_compatible = "stericsson,ab8500-regulator",
-	},
-	{
-		.name = "abx500-clk",
-		.of_compatible = "stericsson,abx500-clk",
 	},
 	{
 		.name = "ab8500-gpadc",
@@ -1053,52 +1031,42 @@ static struct mfd_cell abx500_common_devs[] = {
 		.of_compatible = "stericsson,ab8500-denc",
 	},
 	{
-		.name = "abx500-temp",
-		.of_compatible = "stericsson,abx500-temp",
+		.name = "ab8500-temp",
+		.of_compatible = "stericsson,ab8500-temp",
 		.num_resources = ARRAY_SIZE(ab8500_temp_resources),
 		.resources = ab8500_temp_resources,
 	},
 };
 
-static struct mfd_cell ab8500_bm_devs[] = {
+static struct mfd_cell __devinitdata ab8500_bm_devs[] = {
 	{
 		.name = "ab8500-charger",
-		.of_compatible = "stericsson,ab8500-charger",
 		.num_resources = ARRAY_SIZE(ab8500_charger_resources),
 		.resources = ab8500_charger_resources,
-		.platform_data = &ab8500_bm_data,
-		.pdata_size = sizeof(ab8500_bm_data),
 	},
 	{
 		.name = "ab8500-btemp",
-		.of_compatible = "stericsson,ab8500-btemp",
 		.num_resources = ARRAY_SIZE(ab8500_btemp_resources),
 		.resources = ab8500_btemp_resources,
-		.platform_data = &ab8500_bm_data,
-		.pdata_size = sizeof(ab8500_bm_data),
 	},
 	{
 		.name = "ab8500-fg",
-		.of_compatible = "stericsson,ab8500-fg",
 		.num_resources = ARRAY_SIZE(ab8500_fg_resources),
 		.resources = ab8500_fg_resources,
-		.platform_data = &ab8500_bm_data,
-		.pdata_size = sizeof(ab8500_bm_data),
 	},
 	{
 		.name = "ab8500-chargalg",
-		.of_compatible = "stericsson,ab8500-chargalg",
 		.num_resources = ARRAY_SIZE(ab8500_chargalg_resources),
 		.resources = ab8500_chargalg_resources,
-		.platform_data = &ab8500_bm_data,
-		.pdata_size = sizeof(ab8500_bm_data),
 	},
 };
 
-static struct mfd_cell ab8500_devs[] = {
+static struct mfd_cell __devinitdata ab8500_devs[] = {
 	{
-		.name = "pinctrl-ab8500",
+		.name = "ab8500-gpio",
 		.of_compatible = "stericsson,ab8500-gpio",
+		.num_resources = ARRAY_SIZE(ab8500_gpio_resources),
+		.resources = ab8500_gpio_resources,
 	},
 	{
 		.name = "ab8500-usb",
@@ -1112,10 +1080,11 @@ static struct mfd_cell ab8500_devs[] = {
 	},
 };
 
-static struct mfd_cell ab9540_devs[] = {
+static struct mfd_cell __devinitdata ab9540_devs[] = {
 	{
-		.name = "pinctrl-ab9540",
-		.of_compatible = "stericsson,ab9540-gpio",
+		.name = "ab8500-gpio",
+		.num_resources = ARRAY_SIZE(ab9540_gpio_resources),
+		.resources = ab9540_gpio_resources,
 	},
 	{
 		.name = "ab9540-usb",
@@ -1128,7 +1097,7 @@ static struct mfd_cell ab9540_devs[] = {
 };
 
 /* Device list common to ab9540 and ab8505 */
-static struct mfd_cell ab9540_ab8505_devs[] = {
+static struct mfd_cell __devinitdata ab9540_ab8505_devs[] = {
 	{
 		.name = "ab-iddet",
 		.num_resources = ARRAY_SIZE(ab8505_iddet_resources),
@@ -1279,7 +1248,7 @@ static struct attribute_group ab9540_attr_group = {
 	.attrs	= ab9540_sysfs_entries,
 };
 
-static int ab8500_probe(struct platform_device *pdev)
+static int __devinit ab8500_probe(struct platform_device *pdev)
 {
 	static char *switch_off_status[] = {
 		"Swoff bit programming",
@@ -1300,7 +1269,7 @@ static int ab8500_probe(struct platform_device *pdev)
 	int i;
 	u8 value;
 
-	ab8500 = devm_kzalloc(&pdev->dev, sizeof *ab8500, GFP_KERNEL);
+	ab8500 = kzalloc(sizeof *ab8500, GFP_KERNEL);
 	if (!ab8500)
 		return -ENOMEM;
 
@@ -1310,8 +1279,10 @@ static int ab8500_probe(struct platform_device *pdev)
 	ab8500->dev = &pdev->dev;
 
 	resource = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-	if (!resource)
-		return -ENODEV;
+	if (!resource) {
+		ret = -ENODEV;
+		goto out_free_ab8500;
+	}
 
 	ab8500->irq = resource->start;
 
@@ -1334,7 +1305,7 @@ static int ab8500_probe(struct platform_device *pdev)
 		ret = get_register_interruptible(ab8500, AB8500_MISC,
 			AB8500_IC_NAME_REG, &value);
 		if (ret < 0)
-			return ret;
+			goto out_free_ab8500;
 
 		ab8500->version = value;
 	}
@@ -1342,7 +1313,7 @@ static int ab8500_probe(struct platform_device *pdev)
 	ret = get_register_interruptible(ab8500, AB8500_MISC,
 		AB8500_REV_REG, &value);
 	if (ret < 0)
-		return ret;
+		goto out_free_ab8500;
 
 	ab8500->chip_id = value;
 
@@ -1359,13 +1330,14 @@ static int ab8500_probe(struct platform_device *pdev)
 		ab8500->mask_size = AB8500_NUM_IRQ_REGS;
 		ab8500->irq_reg_offset = ab8500_irq_regoffset;
 	}
-	ab8500->mask = devm_kzalloc(&pdev->dev, ab8500->mask_size, GFP_KERNEL);
+	ab8500->mask = kzalloc(ab8500->mask_size, GFP_KERNEL);
 	if (!ab8500->mask)
 		return -ENOMEM;
-	ab8500->oldmask = devm_kzalloc(&pdev->dev, ab8500->mask_size, GFP_KERNEL);
-	if (!ab8500->oldmask)
-		return -ENOMEM;
-
+	ab8500->oldmask = kzalloc(ab8500->mask_size, GFP_KERNEL);
+	if (!ab8500->oldmask) {
+		ret = -ENOMEM;
+		goto out_freemask;
+	}
 	/*
 	 * ab8500 has switched off due to (SWITCH_OFF_STATUS):
 	 * 0x01 Swoff bit programming
@@ -1419,37 +1391,37 @@ static int ab8500_probe(struct platform_device *pdev)
 
 	ret = abx500_register_ops(ab8500->dev, &ab8500_ops);
 	if (ret)
-		return ret;
+		goto out_freeoldmask;
 
 	for (i = 0; i < ab8500->mask_size; i++)
 		ab8500->mask[i] = ab8500->oldmask[i] = 0xff;
 
 	ret = ab8500_irq_init(ab8500, np);
 	if (ret)
-		return ret;
+		goto out_freeoldmask;
 
 	/*  Activate this feature only in ab9540 */
 	/*  till tests are done on ab8500 1p2 or later*/
 	if (is_ab9540(ab8500)) {
-		ret = devm_request_threaded_irq(&pdev->dev, ab8500->irq, NULL,
-						ab8500_hierarchical_irq,
-						IRQF_ONESHOT | IRQF_NO_SUSPEND,
-						"ab8500", ab8500);
+		ret = request_threaded_irq(ab8500->irq, NULL,
+					ab8500_hierarchical_irq,
+					IRQF_ONESHOT | IRQF_NO_SUSPEND,
+					"ab8500", ab8500);
 	}
 	else {
-		ret = devm_request_threaded_irq(&pdev->dev, ab8500->irq, NULL,
-						ab8500_irq,
-						IRQF_ONESHOT | IRQF_NO_SUSPEND,
-						"ab8500", ab8500);
+		ret = request_threaded_irq(ab8500->irq, NULL,
+					ab8500_irq,
+					IRQF_ONESHOT | IRQF_NO_SUSPEND,
+					"ab8500", ab8500);
 		if (ret)
-			return ret;
+			goto out_freeoldmask;
 	}
 
 	ret = mfd_add_devices(ab8500->dev, 0, abx500_common_devs,
 			ARRAY_SIZE(abx500_common_devs), NULL,
 			ab8500->irq_base, ab8500->domain);
 	if (ret)
-		return ret;
+		goto out_freeirq;
 
 	if (is_ab9540(ab8500))
 		ret = mfd_add_devices(ab8500->dev, 0, ab9540_devs,
@@ -1460,14 +1432,14 @@ static int ab8500_probe(struct platform_device *pdev)
 				ARRAY_SIZE(ab8500_devs), NULL,
 				ab8500->irq_base, ab8500->domain);
 	if (ret)
-		return ret;
+		goto out_freeirq;
 
 	if (is_ab9540(ab8500) || is_ab8505(ab8500))
 		ret = mfd_add_devices(ab8500->dev, 0, ab9540_ab8505_devs,
 				ARRAY_SIZE(ab9540_ab8505_devs), NULL,
 				ab8500->irq_base, ab8500->domain);
 	if (ret)
-		return ret;
+		goto out_freeirq;
 
 	if (!no_bm) {
 		/* Add battery management devices */
@@ -1488,9 +1460,20 @@ static int ab8500_probe(struct platform_device *pdev)
 		dev_err(ab8500->dev, "error creating sysfs entries\n");
 
 	return ret;
+
+out_freeirq:
+	free_irq(ab8500->irq, ab8500);
+out_freeoldmask:
+	kfree(ab8500->oldmask);
+out_freemask:
+	kfree(ab8500->mask);
+out_free_ab8500:
+	kfree(ab8500);
+
+	return ret;
 }
 
-static int ab8500_remove(struct platform_device *pdev)
+static int __devexit ab8500_remove(struct platform_device *pdev)
 {
 	struct ab8500 *ab8500 = platform_get_drvdata(pdev);
 
@@ -1500,6 +1483,11 @@ static int ab8500_remove(struct platform_device *pdev)
 		sysfs_remove_group(&ab8500->dev->kobj, &ab8500_attr_group);
 
 	mfd_remove_devices(ab8500->dev);
+	free_irq(ab8500->irq, ab8500);
+
+	kfree(ab8500->oldmask);
+	kfree(ab8500->mask);
+	kfree(ab8500);
 
 	return 0;
 }
@@ -1518,7 +1506,7 @@ static struct platform_driver ab8500_core_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe	= ab8500_probe,
-	.remove	= ab8500_remove,
+	.remove	= __devexit_p(ab8500_remove),
 	.id_table = ab8500_id,
 };
 

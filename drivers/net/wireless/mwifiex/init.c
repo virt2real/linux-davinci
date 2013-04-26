@@ -39,8 +39,11 @@ static int mwifiex_add_bss_prio_tbl(struct mwifiex_private *priv)
 	unsigned long flags;
 
 	bss_prio = kzalloc(sizeof(struct mwifiex_bss_prio_node), GFP_KERNEL);
-	if (!bss_prio)
+	if (!bss_prio) {
+		dev_err(adapter->dev, "%s: failed to alloc bss_prio\n",
+			__func__);
 		return -ENOMEM;
+	}
 
 	bss_prio->priv = priv;
 	INIT_LIST_HEAD(&bss_prio->list);
@@ -81,18 +84,17 @@ static void scan_delay_timer_fn(unsigned long data)
 		spin_unlock_irqrestore(&adapter->mwifiex_cmd_lock, flags);
 
 		if (priv->user_scan_cfg) {
-			if (priv->scan_request) {
-				dev_dbg(priv->adapter->dev,
-					"info: aborting scan\n");
-				cfg80211_scan_done(priv->scan_request, 1);
-				priv->scan_request = NULL;
-			} else {
-				dev_dbg(priv->adapter->dev,
-					"info: scan already aborted\n");
-			}
-
+			dev_dbg(priv->adapter->dev,
+				"info: %s: scan aborted\n", __func__);
+			cfg80211_scan_done(priv->scan_request, 1);
+			priv->scan_request = NULL;
 			kfree(priv->user_scan_cfg);
 			priv->user_scan_cfg = NULL;
+		}
+
+		if (priv->scan_pending_on_block) {
+			priv->scan_pending_on_block = false;
+			up(&priv->async_sem);
 		}
 		goto done;
 	}
@@ -314,6 +316,7 @@ static void mwifiex_init_adapter(struct mwifiex_adapter *adapter)
 
 	adapter->pm_wakeup_fw_try = false;
 
+	adapter->max_tx_buf_size = MWIFIEX_TX_DATA_BUF_SIZE_2K;
 	adapter->tx_buf_size = MWIFIEX_TX_DATA_BUF_SIZE_2K;
 	adapter->curr_tx_buf_size = MWIFIEX_TX_DATA_BUF_SIZE_2K;
 
@@ -384,17 +387,9 @@ void mwifiex_wake_up_net_dev_queue(struct net_device *netdev,
 					struct mwifiex_adapter *adapter)
 {
 	unsigned long dev_queue_flags;
-	unsigned int i;
 
 	spin_lock_irqsave(&adapter->queue_lock, dev_queue_flags);
-
-	for (i = 0; i < netdev->num_tx_queues; i++) {
-		struct netdev_queue *txq = netdev_get_tx_queue(netdev, i);
-
-		if (netif_tx_queue_stopped(txq))
-			netif_tx_wake_queue(txq);
-	}
-
+	netif_tx_wake_all_queues(netdev);
 	spin_unlock_irqrestore(&adapter->queue_lock, dev_queue_flags);
 }
 
@@ -405,17 +400,9 @@ void mwifiex_stop_net_dev_queue(struct net_device *netdev,
 					struct mwifiex_adapter *adapter)
 {
 	unsigned long dev_queue_flags;
-	unsigned int i;
 
 	spin_lock_irqsave(&adapter->queue_lock, dev_queue_flags);
-
-	for (i = 0; i < netdev->num_tx_queues; i++) {
-		struct netdev_queue *txq = netdev_get_tx_queue(netdev, i);
-
-		if (!netif_tx_queue_stopped(txq))
-			netif_tx_stop_queue(txq);
-	}
-
+	netif_tx_stop_all_queues(netdev);
 	spin_unlock_irqrestore(&adapter->queue_lock, dev_queue_flags);
 }
 
@@ -587,12 +574,6 @@ int mwifiex_init_fw(struct mwifiex_adapter *adapter)
 				return -1;
 		}
 	}
-
-	if (adapter->if_ops.init_fw_port) {
-		if (adapter->if_ops.init_fw_port(adapter))
-			return -1;
-	}
-
 	for (i = 0; i < adapter->priv_num; i++) {
 		if (adapter->priv[i]) {
 			ret = mwifiex_sta_init_cmd(adapter->priv[i], first_sta);
@@ -707,14 +688,6 @@ mwifiex_shutdown_drv(struct mwifiex_adapter *adapter)
 	if (adapter->mwifiex_processing) {
 		dev_warn(adapter->dev, "main process is still running\n");
 		return ret;
-	}
-
-	/* cancel current command */
-	if (adapter->curr_cmd) {
-		dev_warn(adapter->dev, "curr_cmd is still in processing\n");
-		del_timer(&adapter->cmd_timer);
-		mwifiex_insert_cmd_to_free_q(adapter, adapter->curr_cmd);
-		adapter->curr_cmd = NULL;
 	}
 
 	/* shut down mwifiex */

@@ -55,7 +55,8 @@ struct mtd_info;
 #define MODULE_AUTHOR(x)	/* x */
 #define MODULE_DESCRIPTION(x)	/* x */
 
-#define pr_err printf
+#define printk printf
+#define KERN_ERR		""
 #endif
 
 /*
@@ -506,7 +507,7 @@ int __nand_correct_data(unsigned char *buf,
 	if ((bitsperbyte[b0] + bitsperbyte[b1] + bitsperbyte[b2]) == 1)
 		return 1;	/* error in ECC data; no action needed */
 
-	pr_err("%s: uncorrectable ECC error", __func__);
+	printk(KERN_ERR "uncorrectable error : ");
 	return -1;
 }
 EXPORT_SYMBOL(__nand_correct_data);

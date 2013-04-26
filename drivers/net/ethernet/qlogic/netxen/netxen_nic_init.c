@@ -144,7 +144,7 @@ void netxen_release_tx_buffers(struct netxen_adapter *adapter)
 					 buffrag->length, PCI_DMA_TODEVICE);
 			buffrag->dma = 0ULL;
 		}
-		for (j = 1; j < cmd_buf->frag_count; j++) {
+		for (j = 0; j < cmd_buf->frag_count; j++) {
 			buffrag++;
 			if (buffrag->dma) {
 				pci_unmap_page(adapter->pdev, buffrag->dma,
@@ -197,33 +197,41 @@ int netxen_alloc_sw_resources(struct netxen_adapter *adapter)
 	struct nx_host_sds_ring *sds_ring;
 	struct nx_host_tx_ring *tx_ring;
 	struct netxen_rx_buffer *rx_buf;
-	int ring, i;
+	int ring, i, size;
 
 	struct netxen_cmd_buffer *cmd_buf_arr;
 	struct net_device *netdev = adapter->netdev;
+	struct pci_dev *pdev = adapter->pdev;
 
-	tx_ring = kzalloc(sizeof(struct nx_host_tx_ring), GFP_KERNEL);
-	if (tx_ring == NULL)
+	size = sizeof(struct nx_host_tx_ring);
+	tx_ring = kzalloc(size, GFP_KERNEL);
+	if (tx_ring == NULL) {
+		dev_err(&pdev->dev, "%s: failed to allocate tx ring struct\n",
+		       netdev->name);
 		return -ENOMEM;
-
+	}
 	adapter->tx_ring = tx_ring;
 
 	tx_ring->num_desc = adapter->num_txd;
 	tx_ring->txq = netdev_get_tx_queue(netdev, 0);
 
 	cmd_buf_arr = vzalloc(TX_BUFF_RINGSIZE(tx_ring));
-	if (cmd_buf_arr == NULL)
+	if (cmd_buf_arr == NULL) {
+		dev_err(&pdev->dev, "%s: failed to allocate cmd buffer ring\n",
+		       netdev->name);
 		goto err_out;
-
+	}
 	tx_ring->cmd_buf_arr = cmd_buf_arr;
 
 	recv_ctx = &adapter->recv_ctx;
 
-	rds_ring = kcalloc(adapter->max_rds_rings,
-			   sizeof(struct nx_host_rds_ring), GFP_KERNEL);
-	if (rds_ring == NULL)
+	size = adapter->max_rds_rings * sizeof (struct nx_host_rds_ring);
+	rds_ring = kzalloc(size, GFP_KERNEL);
+	if (rds_ring == NULL) {
+		dev_err(&pdev->dev, "%s: failed to allocate rds ring struct\n",
+		       netdev->name);
 		goto err_out;
-
+	}
 	recv_ctx->rds_rings = rds_ring;
 
 	for (ring = 0; ring < adapter->max_rds_rings; ring++) {

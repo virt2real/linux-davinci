@@ -100,23 +100,15 @@
 				};
 				partition@10000 {
 					label = "u-boot";
-					reg = <0x10000 0x50000>;
+					reg = <0x10000 0x40000>;
 				};
-				partition@60000 {
-					label = "environment";
-					reg = <0x60000 0x10000>;
-				};
-				partition@70000 {
-					label = "dtb";
-					reg = <0x70000 0x10000>;
-				};
-				partition@80000 {
+				partition@50000 {
 					label = "linux";
-					reg = <0x80000 0x310000>;
+					reg = <0x50000 0x2c0000>;
 				};
-				partition@390000 {
+				partition@310000 {
 					label = "rootfs";
-					reg = <0x390000 0x0>;
+					reg = <0x310000 0x4f0000>;
 				};
 			};
 		};
@@ -243,8 +235,6 @@
 
 			serial@d0000000 {
 			       status = "okay";
-				pinctrl-names = "default";
-				pinctrl-0 = <>;
 			};
 
 			wdt@fc880000 {

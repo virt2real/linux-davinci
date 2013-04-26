@@ -16,7 +16,7 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/errno.h>
-#include <linux/export.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/memblock.h>
@@ -289,7 +289,6 @@ void machine_power_off(void)
  * Dummy power off function.
  */
 void (*pm_power_off)(void) = machine_power_off;
-EXPORT_SYMBOL_GPL(pm_power_off);
 
 static int __init early_parse_mem(char *p)
 {
@@ -571,8 +570,6 @@ static void __init setup_memory_end(void)
 
 	/* Split remaining virtual space between 1:1 mapping & vmemmap array */
 	tmp = VMALLOC_START / (PAGE_SIZE + sizeof(struct page));
-	/* vmemmap contains a multiple of PAGES_PER_SECTION struct pages */
-	tmp = SECTION_ALIGN_UP(tmp);
 	tmp = VMALLOC_START - tmp * sizeof(struct page);
 	tmp &= ~((vmax >> 11) - 1);	/* align to page table level */
 	tmp = min(tmp, 1UL << MAX_PHYSMEM_BITS);
@@ -780,6 +777,40 @@ static void __init reserve_crashkernel(void)
 #endif
 }
 
+static void __init init_storage_keys(unsigned long start, unsigned long end)
+{
+	unsigned long boundary, function, size;
+
+	while (start < end) {
+		if (MACHINE_HAS_EDAT2) {
+			/* set storage keys for a 2GB frame */
+			function = 0x22000 | PAGE_DEFAULT_KEY;
+			size = 1UL << 31;
+			boundary = (start + size) & ~(size - 1);
+			if (boundary <= end) {
+				do {
+					start = pfmf(function, start);
+				} while (start < boundary);
+				continue;
+			}
+		}
+		if (MACHINE_HAS_EDAT1) {
+			/* set storage keys for a 1MB frame */
+			function = 0x21000 | PAGE_DEFAULT_KEY;
+			size = 1UL << 20;
+			boundary = (start + size) & ~(size - 1);
+			if (boundary <= end) {
+				do {
+					start = pfmf(function, start);
+				} while (start < boundary);
+				continue;
+			}
+		}
+		page_set_storage_key(start, PAGE_DEFAULT_KEY, 0);
+		start += PAGE_SIZE;
+	}
+}
+
 static void __init setup_memory(void)
 {
         unsigned long bootmap_size;
@@ -858,7 +889,7 @@ static void __init setup_memory(void)
 		memblock_add_node(PFN_PHYS(start_chunk),
 				  PFN_PHYS(end_chunk - start_chunk), 0);
 		pfn = max(start_chunk, start_pfn);
-		storage_key_init_range(PFN_PHYS(pfn), PFN_PHYS(end_chunk));
+		init_storage_keys(PFN_PHYS(pfn), PFN_PHYS(end_chunk));
 	}
 
 	psw_set_key(PAGE_DEFAULT_KEY);
@@ -1008,9 +1039,6 @@ static void __init setup_hwcaps(void)
 	case 0x2817:
 	case 0x2818:
 		strcpy(elf_platform, "z196");
-		break;
-	case 0x2827:
-		strcpy(elf_platform, "zEC12");
 		break;
 	}
 }

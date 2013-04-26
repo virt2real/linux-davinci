@@ -2,9 +2,20 @@
 # arch/microblaze/boot/Makefile
 #
 
+obj-y += linked_dtb.o
+
 targets := linux.bin linux.bin.gz simpleImage.%
 
 OBJCOPYFLAGS := -R .note -R .comment -R .note.gnu.build-id -O binary
+
+# Ensure system.dtb exists
+$(obj)/linked_dtb.o: $(obj)/system.dtb
+
+# Generate system.dtb from $(DTB).dtb
+ifneq ($(DTB),system)
+$(obj)/system.dtb: $(obj)/$(DTB).dtb
+	$(call if_changed,cp)
+endif
 
 $(obj)/linux.bin: vmlinux FORCE
 	$(call if_changed,objcopy)
@@ -34,4 +45,10 @@ $(obj)/simpleImage.%: vmlinux FORCE
 	@echo 'Kernel: $@ is ready' ' (#'`cat .version`')'
 
 
-clean-files += simpleImage.*.unstrip linux.bin.ub
+# Rule to build device tree blobs
+DTC_FLAGS := -p 1024
+
+$(obj)/%.dtb: $(src)/dts/%.dts FORCE
+	$(call if_changed_dep,dtc)
+
+clean-files += *.dtb simpleImage.*.unstrip linux.bin.ub

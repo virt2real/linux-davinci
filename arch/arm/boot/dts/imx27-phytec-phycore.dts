@@ -21,7 +21,8 @@
 	};
 
 	soc {
-		aipi@10000000 { /* aipi1 */
+		aipi@10000000 { /* aipi */
+
 			serial@1000a000 {
 				fsl,uart-has-rtscts;
 				status = "okay";
@@ -34,6 +35,10 @@
 
 			serial@1000c000 {
 				fsl,uart-has-rtscts;
+				status = "okay";
+			};
+
+			ethernet@1002b000 {
 				status = "okay";
 			};
 
@@ -53,12 +58,6 @@
 					compatible = "national,lm75";
 					reg = <0x4a>;
 				};
-			};
-		};
-
-		aipi@10020000 { /* aipi2 */
-			ethernet@1002b000 {
-				status = "okay";
 			};
 		};
 	};

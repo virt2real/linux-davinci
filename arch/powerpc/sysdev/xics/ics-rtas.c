@@ -213,7 +213,7 @@ static int ics_rtas_host_match(struct ics *ics, struct device_node *node)
 	return !of_device_is_compatible(node, "chrp,iic");
 }
 
-__init int ics_rtas_init(void)
+int ics_rtas_init(void)
 {
 	ibm_get_xive = rtas_token("ibm,get-xive");
 	ibm_set_xive = rtas_token("ibm,set-xive");

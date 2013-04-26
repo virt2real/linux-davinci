@@ -193,7 +193,7 @@ static void shm_destroy(struct ipc_namespace *ns, struct shmid_kernel *shp)
 	if (!is_file_hugepages(shp->shm_file))
 		shmem_lock(shp->shm_file, 0, shp->mlock_user);
 	else if (shp->mlock_user)
-		user_shm_unlock(file_inode(shp->shm_file)->i_size,
+		user_shm_unlock(shp->shm_file->f_path.dentry->d_inode->i_size,
 						shp->mlock_user);
 	fput (shp->shm_file);
 	security_shm_free(shp);
@@ -495,8 +495,7 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 		if (shmflg & SHM_NORESERVE)
 			acctflag = VM_NORESERVE;
 		file = hugetlb_file_setup(name, 0, size, acctflag,
-				  &shp->mlock_user, HUGETLB_SHMFS_INODE,
-				(shmflg >> SHM_HUGE_SHIFT) & SHM_HUGE_MASK);
+					&shp->mlock_user, HUGETLB_SHMFS_INODE);
 	} else {
 		/*
 		 * Do not allow no accounting for OVERCOMMIT_NEVER, even
@@ -529,7 +528,7 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	 * shmid gets reported as "inode#" in /proc/pid/maps.
 	 * proc-ps tools use this. Changing this will break them.
 	 */
-	file_inode(file)->i_ino = shp->shm_perm.id;
+	file->f_dentry->d_inode->i_ino = shp->shm_perm.id;
 
 	ns->shm_tot += numpages;
 	error = shp->shm_perm.id;
@@ -678,7 +677,7 @@ static void shm_add_rss_swap(struct shmid_kernel *shp,
 {
 	struct inode *inode;
 
-	inode = file_inode(shp->shm_file);
+	inode = shp->shm_file->f_path.dentry->d_inode;
 
 	if (is_file_hugepages(shp->shm_file)) {
 		struct address_space *mapping = inode->i_mapping;
@@ -967,11 +966,11 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg, ulong *raddr,
 	unsigned long flags;
 	unsigned long prot;
 	int acc_mode;
+	unsigned long user_addr;
 	struct ipc_namespace *ns;
 	struct shm_file_data *sfd;
 	struct path path;
 	fmode_t f_mode;
-	unsigned long populate = 0;
 
 	err = -EINVAL;
 	if (shmid < 0)
@@ -1042,8 +1041,7 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg, ulong *raddr,
 			  is_file_hugepages(shp->shm_file) ?
 				&shm_file_operations_huge :
 				&shm_file_operations);
-	err = PTR_ERR(file);
-	if (IS_ERR(file))
+	if (!file)
 		goto out_free;
 
 	file->private_data = sfd;
@@ -1071,15 +1069,13 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg, ulong *raddr,
 			goto invalid;
 	}
 		
-	addr = do_mmap_pgoff(file, addr, size, prot, flags, 0, &populate);
-	*raddr = addr;
+	user_addr = do_mmap_pgoff(file, addr, size, prot, flags, 0);
+	*raddr = user_addr;
 	err = 0;
-	if (IS_ERR_VALUE(addr))
-		err = (long)addr;
+	if (IS_ERR_VALUE(user_addr))
+		err = (long)user_addr;
 invalid:
 	up_write(&current->mm->mmap_sem);
-	if (populate)
-		mm_populate(addr, populate);
 
 out_fput:
 	fput(file);
@@ -1176,7 +1172,7 @@ SYSCALL_DEFINE1(shmdt, char __user *, shmaddr)
 			(vma->vm_start - addr)/PAGE_SIZE == vma->vm_pgoff) {
 
 
-			size = file_inode(vma->vm_file)->i_size;
+			size = vma->vm_file->f_path.dentry->d_inode->i_size;
 			do_munmap(mm, vma->vm_start, vma->vm_end - vma->vm_start);
 			/*
 			 * We discovered the size of the shm segment, so

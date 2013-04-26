@@ -23,25 +23,22 @@
  *
  */
 
-#include <linux/linkage.h>
-#include "glue_helper-asm-avx.S"
-
 .file "cast6-avx-x86_64-asm_64.S"
 
-.extern cast_s1
-.extern cast_s2
-.extern cast_s3
-.extern cast_s4
+.extern cast6_s1
+.extern cast6_s2
+.extern cast6_s3
+.extern cast6_s4
 
 /* structure of crypto context */
 #define km	0
 #define kr	(12*4*4)
 
 /* s-boxes */
-#define s1	cast_s1
-#define s2	cast_s2
-#define s3	cast_s3
-#define s4	cast_s4
+#define s1	cast6_s1
+#define s2	cast6_s2
+#define s3	cast6_s3
+#define s4	cast6_s4
 
 /**********************************************************************
   8-way AVX cast6
@@ -208,7 +205,11 @@
 	vpunpcklqdq		x3, t2, x2; \
 	vpunpckhqdq		x3, t2, x3;
 
-#define inpack_blocks(x0, x1, x2, x3, t0, t1, t2, rmask) \
+#define inpack_blocks(in, x0, x1, x2, x3, t0, t1, t2, rmask) \
+	vmovdqu (0*4*4)(in),	x0; \
+	vmovdqu (1*4*4)(in),	x1; \
+	vmovdqu (2*4*4)(in),	x2; \
+	vmovdqu (3*4*4)(in),	x3; \
 	vpshufb rmask, x0,	x0; \
 	vpshufb rmask, x1,	x1; \
 	vpshufb rmask, x2,	x2; \
@@ -216,21 +217,39 @@
 	\
 	transpose_4x4(x0, x1, x2, x3, t0, t1, t2)
 
-#define outunpack_blocks(x0, x1, x2, x3, t0, t1, t2, rmask) \
+#define outunpack_blocks(out, x0, x1, x2, x3, t0, t1, t2, rmask) \
 	transpose_4x4(x0, x1, x2, x3, t0, t1, t2) \
 	\
 	vpshufb rmask,		x0, x0;       \
 	vpshufb rmask,		x1, x1;       \
 	vpshufb rmask,		x2, x2;       \
-	vpshufb rmask,		x3, x3;
+	vpshufb rmask,		x3, x3;       \
+	vmovdqu x0,		(0*4*4)(out); \
+	vmovdqu	x1,		(1*4*4)(out); \
+	vmovdqu	x2,		(2*4*4)(out); \
+	vmovdqu	x3,		(3*4*4)(out);
+
+#define outunpack_xor_blocks(out, x0, x1, x2, x3, t0, t1, t2, rmask) \
+	transpose_4x4(x0, x1, x2, x3, t0, t1, t2) \
+	\
+	vpshufb rmask,		x0, x0;       \
+	vpshufb rmask,		x1, x1;       \
+	vpshufb rmask,		x2, x2;       \
+	vpshufb rmask,		x3, x3;       \
+	vpxor (0*4*4)(out),	x0, x0;       \
+	vmovdqu	x0,		(0*4*4)(out); \
+	vpxor (1*4*4)(out),	x1, x1;       \
+	vmovdqu	x1,		(1*4*4)(out); \
+	vpxor (2*4*4)(out),	x2, x2;       \
+	vmovdqu x2,		(2*4*4)(out); \
+	vpxor (3*4*4)(out),	x3, x3;       \
+	vmovdqu x3,		(3*4*4)(out);
 
 .data
 
 .align 16
 .Lbswap_mask:
 	.byte 3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12
-.Lbswap128_mask:
-	.byte 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
 .Lrkr_enc_Q_Q_QBAR_QBAR:
 	.byte 0, 1, 2, 3, 4, 5, 6, 7, 11, 10, 9, 8, 15, 14, 13, 12
 .Lrkr_enc_QBAR_QBAR_QBAR_QBAR:
@@ -250,24 +269,31 @@
 
 .text
 
-.align 8
-__cast6_enc_blk8:
+.align 16
+.global __cast6_enc_blk_8way
+.type   __cast6_enc_blk_8way,@function;
+
+__cast6_enc_blk_8way:
 	/* input:
 	 *	%rdi: ctx, CTX
-	 *	RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2: blocks
-	 * output:
-	 *	RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2: encrypted blocks
+	 *	%rsi: dst
+	 *	%rdx: src
+	 *	%rcx: bool, if true: xor output
 	 */
 
 	pushq %rbp;
 	pushq %rbx;
+	pushq %rcx;
 
 	vmovdqa .Lbswap_mask, RKM;
 	vmovd .Lfirst_mask, R1ST;
 	vmovd .L32_mask, R32;
 
-	inpack_blocks(RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
-	inpack_blocks(RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
+	leaq (4*4*4)(%rdx), %rax;
+	inpack_blocks(%rdx, RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
+	inpack_blocks(%rax, RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
+
+	movq %rsi, %r11;
 
 	preload_rkr(0, dummy, none);
 	Q(0);
@@ -285,24 +311,36 @@ __cast6_enc_blk8:
 	QBAR(10);
 	QBAR(11);
 
+	popq %rcx;
 	popq %rbx;
 	popq %rbp;
 
 	vmovdqa .Lbswap_mask, RKM;
+	leaq (4*4*4)(%r11), %rax;
 
-	outunpack_blocks(RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
-	outunpack_blocks(RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
+	testb %cl, %cl;
+	jnz __enc_xor8;
+
+	outunpack_blocks(%r11, RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
+	outunpack_blocks(%rax, RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
 
 	ret;
-ENDPROC(__cast6_enc_blk8)
 
-.align 8
-__cast6_dec_blk8:
+__enc_xor8:
+	outunpack_xor_blocks(%r11, RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
+	outunpack_xor_blocks(%rax, RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
+
+	ret;
+
+.align 16
+.global cast6_dec_blk_8way
+.type   cast6_dec_blk_8way,@function;
+
+cast6_dec_blk_8way:
 	/* input:
 	 *	%rdi: ctx, CTX
-	 *	RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2: encrypted blocks
-	 * output:
-	 *	RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2: decrypted blocks
+	 *	%rsi: dst
+	 *	%rdx: src
 	 */
 
 	pushq %rbp;
@@ -312,8 +350,11 @@ __cast6_dec_blk8:
 	vmovd .Lfirst_mask, R1ST;
 	vmovd .L32_mask, R32;
 
-	inpack_blocks(RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
-	inpack_blocks(RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
+	leaq (4*4*4)(%rdx), %rax;
+	inpack_blocks(%rdx, RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
+	inpack_blocks(%rax, RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
+
+	movq %rsi, %r11;
 
 	preload_rkr(2, shuffle, .Lrkr_dec_Q_Q_Q_Q);
 	Q(11);
@@ -335,92 +376,8 @@ __cast6_dec_blk8:
 	popq %rbp;
 
 	vmovdqa .Lbswap_mask, RKM;
-	outunpack_blocks(RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
-	outunpack_blocks(RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
+	leaq (4*4*4)(%r11), %rax;
+	outunpack_blocks(%r11, RA1, RB1, RC1, RD1, RTMP, RX, RKRF, RKM);
+	outunpack_blocks(%rax, RA2, RB2, RC2, RD2, RTMP, RX, RKRF, RKM);
 
 	ret;
-ENDPROC(__cast6_dec_blk8)
-
-ENTRY(cast6_ecb_enc_8way)
-	/* input:
-	 *	%rdi: ctx, CTX
-	 *	%rsi: dst
-	 *	%rdx: src
-	 */
-
-	movq %rsi, %r11;
-
-	load_8way(%rdx, RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2);
-
-	call __cast6_enc_blk8;
-
-	store_8way(%r11, RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2);
-
-	ret;
-ENDPROC(cast6_ecb_enc_8way)
-
-ENTRY(cast6_ecb_dec_8way)
-	/* input:
-	 *	%rdi: ctx, CTX
-	 *	%rsi: dst
-	 *	%rdx: src
-	 */
-
-	movq %rsi, %r11;
-
-	load_8way(%rdx, RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2);
-
-	call __cast6_dec_blk8;
-
-	store_8way(%r11, RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2);
-
-	ret;
-ENDPROC(cast6_ecb_dec_8way)
-
-ENTRY(cast6_cbc_dec_8way)
-	/* input:
-	 *	%rdi: ctx, CTX
-	 *	%rsi: dst
-	 *	%rdx: src
-	 */
-
-	pushq %r12;
-
-	movq %rsi, %r11;
-	movq %rdx, %r12;
-
-	load_8way(%rdx, RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2);
-
-	call __cast6_dec_blk8;
-
-	store_cbc_8way(%r12, %r11, RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2);
-
-	popq %r12;
-
-	ret;
-ENDPROC(cast6_cbc_dec_8way)
-
-ENTRY(cast6_ctr_8way)
-	/* input:
-	 *	%rdi: ctx, CTX
-	 *	%rsi: dst
-	 *	%rdx: src
-	 *	%rcx: iv (little endian, 128bit)
-	 */
-
-	pushq %r12;
-
-	movq %rsi, %r11;
-	movq %rdx, %r12;
-
-	load_ctr_8way(%rcx, .Lbswap128_mask, RA1, RB1, RC1, RD1, RA2, RB2, RC2,
-		      RD2, RX, RKR, RKM);
-
-	call __cast6_enc_blk8;
-
-	store_ctr_8way(%r12, %r11, RA1, RB1, RC1, RD1, RA2, RB2, RC2, RD2);
-
-	popq %r12;
-
-	ret;
-ENDPROC(cast6_ctr_8way)

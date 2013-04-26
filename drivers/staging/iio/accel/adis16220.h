@@ -1,9 +1,10 @@
 #ifndef SPI_ADIS16220_H_
 #define SPI_ADIS16220_H_
 
-#include <linux/iio/imu/adis.h>
-
 #define ADIS16220_STARTUP_DELAY	220 /* ms */
+
+#define ADIS16220_READ_REG(a)    a
+#define ADIS16220_WRITE_REG(a) ((a) | 0x80)
 
 /* Flash memory write count */
 #define ADIS16220_FLASH_CNT     0x00
@@ -101,15 +102,15 @@
 #define ADIS16220_DIAG_STAT_FLASH_CHK	(1<<6)
 #define ADIS16220_DIAG_STAT_SELF_TEST	(1<<5)
 /* Capture period violation/interruption */
-#define ADIS16220_DIAG_STAT_VIOLATION_BIT	4
+#define ADIS16220_DIAG_STAT_VIOLATION	(1<<4)
 /* SPI communications failure */
-#define ADIS16220_DIAG_STAT_SPI_FAIL_BIT	3
+#define ADIS16220_DIAG_STAT_SPI_FAIL	(1<<3)
 /* Flash update failure */
-#define ADIS16220_DIAG_STAT_FLASH_UPT_BIT	2
+#define ADIS16220_DIAG_STAT_FLASH_UPT	(1<<2)
 /* Power supply above 3.625 V */
-#define ADIS16220_DIAG_STAT_POWER_HIGH_BIT	1
+#define ADIS16220_DIAG_STAT_POWER_HIGH	(1<<1)
 /* Power supply below 3.15 V */
-#define ADIS16220_DIAG_STAT_POWER_LOW_BIT	0
+#define ADIS16220_DIAG_STAT_POWER_LOW	(1<<0)
 
 /* GLOB_CMD */
 #define ADIS16220_GLOB_CMD_SW_RESET	(1<<7)
@@ -124,14 +125,13 @@
 
 /**
  * struct adis16220_state - device instance specific data
- * @adis:		adis device
+ * @us:			actual spi_device
  * @tx:			transmit buffer
  * @rx:			receive buffer
  * @buf_lock:		mutex to protect tx and rx
  **/
 struct adis16220_state {
-	struct adis adis;
-
+	struct spi_device	*us;
 	struct mutex		buf_lock;
 	u8			tx[ADIS16220_MAX_TX] ____cacheline_aligned;
 	u8			rx[ADIS16220_MAX_RX];

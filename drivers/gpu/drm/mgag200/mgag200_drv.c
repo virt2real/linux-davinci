@@ -60,7 +60,8 @@ static void mgag200_kick_out_firmware_fb(struct pci_dev *pdev)
 }
 
 
-static int mga_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit
+mga_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	mgag200_kick_out_firmware_fb(pdev);
 

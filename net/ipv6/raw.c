@@ -50,7 +50,7 @@
 #include <net/udp.h>
 #include <net/inet_common.h>
 #include <net/tcp_states.h>
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
 #include <net/mip6.h>
 #endif
 #include <linux/mroute6.h>
@@ -71,9 +71,10 @@ static struct sock *__raw_v6_lookup(struct net *net, struct sock *sk,
 		unsigned short num, const struct in6_addr *loc_addr,
 		const struct in6_addr *rmt_addr, int dif)
 {
+	struct hlist_node *node;
 	bool is_multicast = ipv6_addr_is_multicast(loc_addr);
 
-	sk_for_each_from(sk)
+	sk_for_each_from(sk, node)
 		if (inet_sk(sk)->inet_num == num) {
 			struct ipv6_pinfo *np = inet6_sk(sk);
 
@@ -122,7 +123,7 @@ static int icmpv6_filter(const struct sock *sk, const struct sk_buff *skb)
 	return 1;
 }
 
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
 typedef int mh_filter_t(struct sock *sock, struct sk_buff *skb);
 
 static mh_filter_t __rcu *mh_filter __read_mostly;
@@ -183,7 +184,7 @@ static bool ipv6_raw_deliver(struct sk_buff *skb, int nexthdr)
 			filtered = icmpv6_filter(sk, skb);
 			break;
 
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
 		case IPPROTO_MH:
 		{
 			/* XXX: To validate MH only once for each packet,
@@ -506,7 +507,7 @@ static int rawv6_recvmsg(struct kiocb *iocb, struct sock *sk,
 	sock_recv_ts_and_drops(msg, sk, skb);
 
 	if (np->rxopt.all)
-		ip6_datagram_recv_ctl(sk, msg, skb);
+		datagram_recv_ctl(sk, msg, skb);
 
 	err = copied;
 	if (flags & MSG_TRUNC)
@@ -821,8 +822,8 @@ static int rawv6_sendmsg(struct kiocb *iocb, struct sock *sk,
 		memset(opt, 0, sizeof(struct ipv6_txoptions));
 		opt->tot_len = sizeof(struct ipv6_txoptions);
 
-		err = ip6_datagram_send_ctl(sock_net(sk), sk, msg, &fl6, opt,
-					    &hlimit, &tclass, &dontfrag);
+		err = datagram_send_ctl(sock_net(sk), sk, msg, &fl6, opt,
+					&hlimit, &tclass, &dontfrag);
 		if (err < 0) {
 			fl6_sock_release(flowlabel);
 			return err;
@@ -1291,7 +1292,7 @@ static const struct file_operations raw6_seq_fops = {
 
 static int __net_init raw6_init_net(struct net *net)
 {
-	if (!proc_create("raw6", S_IRUGO, net->proc_net, &raw6_seq_fops))
+	if (!proc_net_fops_create(net, "raw6", S_IRUGO, &raw6_seq_fops))
 		return -ENOMEM;
 
 	return 0;
@@ -1299,7 +1300,7 @@ static int __net_init raw6_init_net(struct net *net)
 
 static void __net_exit raw6_exit_net(struct net *net)
 {
-	remove_proc_entry("raw6", net->proc_net);
+	proc_net_remove(net, "raw6");
 }
 
 static struct pernet_operations raw6_net_ops = {

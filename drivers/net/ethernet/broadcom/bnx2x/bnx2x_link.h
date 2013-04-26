@@ -1,4 +1,4 @@
-/* Copyright 2008-2013 Broadcom Corporation
+/* Copyright 2008-2012 Broadcom Corporation
  *
  * Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -139,6 +139,8 @@ struct bnx2x_phy {
 	u8 addr;
 	u8 def_md_devad;
 	u16 flags;
+	/* Require HW lock */
+#define FLAGS_HW_LOCK_REQUIRED		(1<<0)
 	/* No Over-Current detection */
 #define FLAGS_NOC			(1<<1)
 	/* Fan failure detection required */
@@ -154,7 +156,6 @@ struct bnx2x_phy {
 #define FLAGS_MDC_MDIO_WA_B0		(1<<10)
 #define FLAGS_TX_ERROR_CHECK		(1<<12)
 #define FLAGS_EEE			(1<<13)
-#define FLAGS_MDC_MDIO_WA_G		(1<<15)
 
 	/* preemphasis values for the rx side */
 	u16 rx_preemphasis[4];
@@ -266,9 +267,6 @@ struct link_params {
 #define FEATURE_CONFIG_AUTOGREEEN_ENABLED			(1<<9)
 #define FEATURE_CONFIG_BC_SUPPORTS_SFP_TX_DISABLED		(1<<10)
 #define FEATURE_CONFIG_DISABLE_REMOTE_FAULT_DET		(1<<11)
-#define FEATURE_CONFIG_MT_SUPPORT			(1<<13)
-#define FEATURE_CONFIG_BOOT_FROM_SAN			(1<<14)
-
 	/* Will be populated during common init */
 	struct bnx2x_phy phy[MAX_PHYS];
 
@@ -307,9 +305,7 @@ struct link_params {
 	struct bnx2x *bp;
 	u16 req_fc_auto_adv; /* Should be set to TX / BOTH when
 				req_flow_ctrl is set to AUTO */
-	u16 link_flags;
-#define LINK_FLAGS_INT_DISABLED		(1<<0)
-#define PHY_INITIALIZED		(1<<1)
+	u16 rsrv1;
 	u32 lfa_base;
 };
 
@@ -343,8 +339,7 @@ struct link_vars {
 	u32 link_status;
 	u32 eee_status;
 	u8 fault_detected;
-	u8 check_kr2_recovery_cnt;
-#define CHECK_KR2_RECOVERY_CNT	5
+	u8 rsrv1;
 	u16 periodic_flags;
 #define PERIODIC_FLAGS_LINK_EVENT	0x0001
 
@@ -352,8 +347,6 @@ struct link_vars {
 	u8 rx_tx_asic_rst;
 	u8 turn_to_run_wc_rt;
 	u16 rsrv2;
-	/* The same definitions as the shmem2 parameter */
-	u32 link_attr_sync;
 };
 
 /***********************************************************/
@@ -425,6 +418,10 @@ int bnx2x_read_sfp_module_eeprom(struct bnx2x_phy *phy,
 
 void bnx2x_hw_reset_phy(struct link_params *params);
 
+/* Checks if HW lock is required for this phy/board type */
+u8 bnx2x_hw_lock_required(struct bnx2x *bp, u32 shmem_base,
+			  u32 shmem2_base);
+
 /* Check swap bit and adjust PHY order */
 u32 bnx2x_phy_selection(struct link_params *params);
 
@@ -435,8 +432,7 @@ int bnx2x_phy_probe(struct link_params *params);
 u8 bnx2x_fan_failure_det_req(struct bnx2x *bp, u32 shmem_base,
 			     u32 shmem2_base, u8 port);
 
-/* Open / close the gate between the NIG and the BRB */
-void bnx2x_set_rx_filter(struct link_params *params, u8 en);
+
 
 /* DCBX structs */
 
@@ -463,6 +459,9 @@ struct bnx2x_nig_brb_pfc_port_params {
 	u32 rx_cos_priority_mask[DCBX_MAX_NUM_COS];
 	u32 llfc_high_priority_classes;
 	u32 llfc_low_priority_classes;
+	/* BRB */
+	u32 cos0_pauseable;
+	u32 cos1_pauseable;
 };
 
 

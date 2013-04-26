@@ -295,8 +295,7 @@ static inline u16 *decompose_unichar(wchar_t uc, int *size)
 	return hfsplus_decompose_table + (off / 4);
 }
 
-int hfsplus_asc2uni(struct super_block *sb,
-		    struct hfsplus_unistr *ustr, int max_unistr_len,
+int hfsplus_asc2uni(struct super_block *sb, struct hfsplus_unistr *ustr,
 		    const char *astr, int len)
 {
 	int size, dsize, decompose;
@@ -304,7 +303,7 @@ int hfsplus_asc2uni(struct super_block *sb,
 	wchar_t c;
 
 	decompose = !test_bit(HFSPLUS_SB_NODECOMPOSE, &HFSPLUS_SB(sb)->flags);
-	while (outlen < max_unistr_len && len > 0) {
+	while (outlen < HFSPLUS_MAX_STRLEN && len > 0) {
 		size = asc2unichar(sb, astr, len, &c);
 
 		if (decompose)
@@ -312,7 +311,7 @@ int hfsplus_asc2uni(struct super_block *sb,
 		else
 			dstr = NULL;
 		if (dstr) {
-			if (outlen + dsize > max_unistr_len)
+			if (outlen + dsize > HFSPLUS_MAX_STRLEN)
 				break;
 			do {
 				ustr->unicode[outlen++] = cpu_to_be16(*dstr++);

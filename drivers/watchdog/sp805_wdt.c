@@ -130,10 +130,16 @@ static int wdt_config(struct watchdog_device *wdd, bool ping)
 	int ret;
 
 	if (!ping) {
+		ret = clk_prepare(wdt->clk);
+		if (ret) {
+			dev_err(&wdt->adev->dev, "clock prepare fail");
+			return ret;
+		}
 
-		ret = clk_prepare_enable(wdt->clk);
+		ret = clk_enable(wdt->clk);
 		if (ret) {
 			dev_err(&wdt->adev->dev, "clock enable fail");
+			clk_unprepare(wdt->clk);
 			return ret;
 		}
 	}
@@ -184,7 +190,8 @@ static int wdt_disable(struct watchdog_device *wdd)
 	readl_relaxed(wdt->base + WDTLOCK);
 	spin_unlock(&wdt->lock);
 
-	clk_disable_unprepare(wdt->clk);
+	clk_disable(wdt->clk);
+	clk_unprepare(wdt->clk);
 
 	return 0;
 }
@@ -203,7 +210,7 @@ static const struct watchdog_ops wdt_ops = {
 	.get_timeleft	= wdt_timeleft,
 };
 
-static int
+static int __devinit
 sp805_wdt_probe(struct amba_device *adev, const struct amba_id *id)
 {
 	struct sp805_wdt *wdt;
@@ -265,7 +272,7 @@ err:
 	return ret;
 }
 
-static int sp805_wdt_remove(struct amba_device *adev)
+static int __devexit sp805_wdt_remove(struct amba_device *adev)
 {
 	struct sp805_wdt *wdt = amba_get_drvdata(adev);
 
@@ -277,7 +284,8 @@ static int sp805_wdt_remove(struct amba_device *adev)
 	return 0;
 }
 
-static int __maybe_unused sp805_wdt_suspend(struct device *dev)
+#ifdef CONFIG_PM
+static int sp805_wdt_suspend(struct device *dev)
 {
 	struct sp805_wdt *wdt = dev_get_drvdata(dev);
 
@@ -287,7 +295,7 @@ static int __maybe_unused sp805_wdt_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused sp805_wdt_resume(struct device *dev)
+static int sp805_wdt_resume(struct device *dev)
 {
 	struct sp805_wdt *wdt = dev_get_drvdata(dev);
 
@@ -296,6 +304,7 @@ static int __maybe_unused sp805_wdt_resume(struct device *dev)
 
 	return 0;
 }
+#endif /* CONFIG_PM */
 
 static SIMPLE_DEV_PM_OPS(sp805_wdt_dev_pm_ops, sp805_wdt_suspend,
 		sp805_wdt_resume);
@@ -317,7 +326,7 @@ static struct amba_driver sp805_wdt_driver = {
 	},
 	.id_table	= sp805_wdt_ids,
 	.probe		= sp805_wdt_probe,
-	.remove = sp805_wdt_remove,
+	.remove = __devexit_p(sp805_wdt_remove),
 };
 
 module_amba_driver(sp805_wdt_driver);

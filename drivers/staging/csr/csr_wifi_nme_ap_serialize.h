@@ -17,6 +17,10 @@
 
 #include "csr_wifi_nme_ap_prim.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef CSR_WIFI_NME_ENABLE
 #error CSR_WIFI_NME_ENABLE MUST be defined inorder to use csr_wifi_nme_ap_serialize.h
 #endif
@@ -91,4 +95,9 @@ extern void* CsrWifiNmeApStationIndDes(u8 *buffer, size_t len);
 extern size_t CsrWifiNmeApStationIndSizeof(void *msg);
 #define CsrWifiNmeApStationIndSerFree CsrWifiNmeApPfree
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif /* CSR_WIFI_NME_AP_SERIALIZE_H__ */
+

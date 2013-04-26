@@ -92,11 +92,6 @@ extern int isolate_lru_page(struct page *page);
 extern void putback_lru_page(struct page *page);
 
 /*
- * in mm/rmap.c:
- */
-extern pmd_t *mm_find_pmd(struct mm_struct *mm, unsigned long address);
-
-/*
  * in mm/page_alloc.c
  */
 extern void __free_pages_bootmem(struct page *page, unsigned int order);
@@ -135,6 +130,7 @@ struct compact_control {
 	int migratetype;		/* MOVABLE, RECLAIMABLE etc */
 	struct zone *zone;
 	bool contended;			/* True if a lock was contended */
+	struct page **page;		/* Page captured of requested size */
 };
 
 unsigned long
@@ -162,8 +158,8 @@ void __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
 		struct vm_area_struct *prev, struct rb_node *rb_parent);
 
 #ifdef CONFIG_MMU
-extern long __mlock_vma_pages_range(struct vm_area_struct *vma,
-		unsigned long start, unsigned long end, int *nonblocking);
+extern long mlock_vma_pages_range(struct vm_area_struct *vma,
+			unsigned long start, unsigned long end);
 extern void munlock_vma_pages_range(struct vm_area_struct *vma,
 			unsigned long start, unsigned long end);
 static inline void munlock_vma_pages_all(struct vm_area_struct *vma)
@@ -195,7 +191,7 @@ static inline int mlocked_vma_newpage(struct vm_area_struct *vma,
  * must be called with vma's mmap_sem held for read or write, and page locked.
  */
 extern void mlock_vma_page(struct page *page);
-extern unsigned int munlock_vma_page(struct page *page);
+extern void munlock_vma_page(struct page *page);
 
 /*
  * Clear the page's PageMlocked().  This can be useful in a situation where
@@ -216,17 +212,14 @@ static inline void mlock_migrate_page(struct page *newpage, struct page *page)
 {
 	if (TestClearPageMlocked(page)) {
 		unsigned long flags;
-		int nr_pages = hpage_nr_pages(page);
 
 		local_irq_save(flags);
-		__mod_zone_page_state(page_zone(page), NR_MLOCK, -nr_pages);
+		__dec_zone_page_state(page, NR_MLOCK);
 		SetPageMlocked(newpage);
-		__mod_zone_page_state(page_zone(newpage), NR_MLOCK, nr_pages);
+		__inc_zone_page_state(newpage, NR_MLOCK);
 		local_irq_restore(flags);
 	}
 }
-
-extern pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma);
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 extern unsigned long vma_address(struct page *page,

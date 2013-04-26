@@ -142,7 +142,7 @@ extern __be32 nfs4_callback_recallany(struct cb_recallanyargs *args,
 
 struct cb_recallslotargs {
 	struct sockaddr	*crsa_addr;
-	uint32_t	crsa_target_highest_slotid;
+	uint32_t	crsa_target_max_slots;
 };
 extern __be32 nfs4_callback_recallslot(struct cb_recallslotargs *args,
 					 void *dummy,
@@ -166,6 +166,8 @@ struct cb_layoutrecallargs {
 extern __be32 nfs4_callback_layoutrecall(
 	struct cb_layoutrecallargs *args,
 	void *dummy, struct cb_process_state *cps);
+
+extern void nfs4_check_drain_bc_complete(struct nfs4_session *ses);
 
 struct cb_devicenotifyitem {
 	uint32_t		cbd_notify_type;

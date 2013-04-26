@@ -55,15 +55,15 @@
 
 struct spear_kbd {
 	struct input_dev *input;
+	struct resource *res;
 	void __iomem *io_base;
 	struct clk *clk;
 	unsigned int irq;
 	unsigned int mode;
-	unsigned int suspended_rate;
 	unsigned short last_key;
 	unsigned short keycodes[NUM_ROWS * NUM_COLS];
 	bool rep;
-	bool irq_wake_enabled;
+	unsigned int suspended_rate;
 	u32 mode_ctl_reg;
 };
 
@@ -146,7 +146,7 @@ static void spear_kbd_close(struct input_dev *dev)
 }
 
 #ifdef CONFIG_OF
-static int spear_kbd_parse_dt(struct platform_device *pdev,
+static int __devinit spear_kbd_parse_dt(struct platform_device *pdev,
                                         struct spear_kbd *kbd)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -181,7 +181,7 @@ static inline int spear_kbd_parse_dt(struct platform_device *pdev,
 }
 #endif
 
-static int spear_kbd_probe(struct platform_device *pdev)
+static int __devinit spear_kbd_probe(struct platform_device *pdev)
 {
 	struct kbd_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	const struct matrix_keymap_data *keymap = pdata ? pdata->keymap : NULL;
@@ -203,16 +203,12 @@ static int spear_kbd_probe(struct platform_device *pdev)
 		return irq;
 	}
 
-	kbd = devm_kzalloc(&pdev->dev, sizeof(*kbd), GFP_KERNEL);
-	if (!kbd) {
-		dev_err(&pdev->dev, "not enough memory for driver data\n");
-		return -ENOMEM;
-	}
-
-	input_dev = devm_input_allocate_device(&pdev->dev);
-	if (!input_dev) {
-		dev_err(&pdev->dev, "unable to allocate input device\n");
-		return -ENOMEM;
+	kbd = kzalloc(sizeof(*kbd), GFP_KERNEL);
+	input_dev = input_allocate_device();
+	if (!kbd || !input_dev) {
+		dev_err(&pdev->dev, "out of memory\n");
+		error = -ENOMEM;
+		goto err_free_mem;
 	}
 
 	kbd->input = input_dev;
@@ -221,23 +217,37 @@ static int spear_kbd_probe(struct platform_device *pdev)
 	if (!pdata) {
 		error = spear_kbd_parse_dt(pdev, kbd);
 		if (error)
-			return error;
+			goto err_free_mem;
 	} else {
 		kbd->mode = pdata->mode;
 		kbd->rep = pdata->rep;
 		kbd->suspended_rate = pdata->suspended_rate;
 	}
 
-	kbd->io_base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(kbd->io_base))
-		return PTR_ERR(kbd->io_base);
+	kbd->res = request_mem_region(res->start, resource_size(res),
+				      pdev->name);
+	if (!kbd->res) {
+		dev_err(&pdev->dev, "keyboard region already claimed\n");
+		error = -EBUSY;
+		goto err_free_mem;
+	}
 
-	kbd->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(kbd->clk))
-		return PTR_ERR(kbd->clk);
+	kbd->io_base = ioremap(res->start, resource_size(res));
+	if (!kbd->io_base) {
+		dev_err(&pdev->dev, "ioremap failed for kbd_region\n");
+		error = -ENOMEM;
+		goto err_release_mem_region;
+	}
+
+	kbd->clk = clk_get(&pdev->dev, NULL);
+	if (IS_ERR(kbd->clk)) {
+		error = PTR_ERR(kbd->clk);
+		goto err_iounmap;
+	}
 
 	input_dev->name = "Spear Keyboard";
 	input_dev->phys = "keyboard/input0";
+	input_dev->dev.parent = &pdev->dev;
 	input_dev->id.bustype = BUS_HOST;
 	input_dev->id.vendor = 0x0001;
 	input_dev->id.product = 0x0001;
@@ -249,7 +259,7 @@ static int spear_kbd_probe(struct platform_device *pdev)
 					   kbd->keycodes, input_dev);
 	if (error) {
 		dev_err(&pdev->dev, "Failed to build keymap\n");
-		return error;
+		goto err_put_clk;
 	}
 
 	if (kbd->rep)
@@ -258,36 +268,48 @@ static int spear_kbd_probe(struct platform_device *pdev)
 
 	input_set_drvdata(input_dev, kbd);
 
-	error = devm_request_irq(&pdev->dev, irq, spear_kbd_interrupt, 0,
-			"keyboard", kbd);
+	error = request_irq(irq, spear_kbd_interrupt, 0, "keyboard", kbd);
 	if (error) {
-		dev_err(&pdev->dev, "request_irq failed\n");
-		return error;
+		dev_err(&pdev->dev, "request_irq fail\n");
+		goto err_put_clk;
 	}
-
-	error = clk_prepare(kbd->clk);
-	if (error)
-		return error;
 
 	error = input_register_device(input_dev);
 	if (error) {
 		dev_err(&pdev->dev, "Unable to register keyboard device\n");
-		clk_unprepare(kbd->clk);
-		return error;
+		goto err_free_irq;
 	}
 
 	device_init_wakeup(&pdev->dev, 1);
 	platform_set_drvdata(pdev, kbd);
 
 	return 0;
+
+err_free_irq:
+	free_irq(kbd->irq, kbd);
+err_put_clk:
+	clk_put(kbd->clk);
+err_iounmap:
+	iounmap(kbd->io_base);
+err_release_mem_region:
+	release_mem_region(res->start, resource_size(res));
+err_free_mem:
+	input_free_device(input_dev);
+	kfree(kbd);
+
+	return error;
 }
 
-static int spear_kbd_remove(struct platform_device *pdev)
+static int __devexit spear_kbd_remove(struct platform_device *pdev)
 {
 	struct spear_kbd *kbd = platform_get_drvdata(pdev);
 
+	free_irq(kbd->irq, kbd);
 	input_unregister_device(kbd->input);
-	clk_unprepare(kbd->clk);
+	clk_put(kbd->clk);
+	iounmap(kbd->io_base);
+	release_mem_region(kbd->res->start, resource_size(kbd->res));
+	kfree(kbd);
 
 	device_init_wakeup(&pdev->dev, 0);
 	platform_set_drvdata(pdev, NULL);
@@ -311,8 +333,7 @@ static int spear_kbd_suspend(struct device *dev)
 	mode_ctl_reg = readl_relaxed(kbd->io_base + MODE_CTL_REG);
 
 	if (device_may_wakeup(&pdev->dev)) {
-		if (!enable_irq_wake(kbd->irq))
-			kbd->irq_wake_enabled = true;
+		enable_irq_wake(kbd->irq);
 
 		/*
 		 * reprogram the keyboard operating frequency as on some
@@ -358,10 +379,7 @@ static int spear_kbd_resume(struct device *dev)
 	mutex_lock(&input_dev->mutex);
 
 	if (device_may_wakeup(&pdev->dev)) {
-		if (kbd->irq_wake_enabled) {
-			kbd->irq_wake_enabled = false;
-			disable_irq_wake(kbd->irq);
-		}
+		disable_irq_wake(kbd->irq);
 	} else {
 		if (input_dev->users)
 			clk_enable(kbd->clk);
@@ -389,7 +407,7 @@ MODULE_DEVICE_TABLE(of, spear_kbd_id_table);
 
 static struct platform_driver spear_kbd_driver = {
 	.probe		= spear_kbd_probe,
-	.remove		= spear_kbd_remove,
+	.remove		= __devexit_p(spear_kbd_remove),
 	.driver		= {
 		.name	= "keyboard",
 		.owner	= THIS_MODULE,

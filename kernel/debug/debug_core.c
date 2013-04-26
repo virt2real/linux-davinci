@@ -29,7 +29,6 @@
  */
 #include <linux/pid_namespace.h>
 #include <linux/clocksource.h>
-#include <linux/serial_core.h>
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
 #include <linux/console.h>

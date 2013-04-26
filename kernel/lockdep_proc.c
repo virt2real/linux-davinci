@@ -39,7 +39,7 @@ static void l_stop(struct seq_file *m, void *v)
 
 static void print_name(struct seq_file *m, struct lock_class *class)
 {
-	char str[KSYM_NAME_LEN];
+	char str[128];
 	const char *name = class->name;
 
 	if (!name) {

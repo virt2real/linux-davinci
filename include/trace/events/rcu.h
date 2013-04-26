@@ -44,10 +44,8 @@ TRACE_EVENT(rcu_utilization,
  * of a new grace period or the end of an old grace period ("cpustart"
  * and "cpuend", respectively), a CPU passing through a quiescent
  * state ("cpuqs"), a CPU coming online or going offline ("cpuonl"
- * and "cpuofl", respectively), a CPU being kicked for being too
- * long in dyntick-idle mode ("kick"), a CPU accelerating its new
- * callbacks to RCU_NEXT_READY_TAIL ("AccReadyCB"), and a CPU
- * accelerating its new callbacks to RCU_WAIT_TAIL ("AccWaitCB").
+ * and "cpuofl", respectively), and a CPU being kicked for being too
+ * long in dyntick-idle mode ("kick").
  */
 TRACE_EVENT(rcu_grace_period,
 
@@ -395,7 +393,7 @@ TRACE_EVENT(rcu_kfree_callback,
  */
 TRACE_EVENT(rcu_batch_start,
 
-	TP_PROTO(char *rcuname, long qlen_lazy, long qlen, long blimit),
+	TP_PROTO(char *rcuname, long qlen_lazy, long qlen, int blimit),
 
 	TP_ARGS(rcuname, qlen_lazy, qlen, blimit),
 
@@ -403,7 +401,7 @@ TRACE_EVENT(rcu_batch_start,
 		__field(char *, rcuname)
 		__field(long, qlen_lazy)
 		__field(long, qlen)
-		__field(long, blimit)
+		__field(int, blimit)
 	),
 
 	TP_fast_assign(
@@ -413,7 +411,7 @@ TRACE_EVENT(rcu_batch_start,
 		__entry->blimit = blimit;
 	),
 
-	TP_printk("%s CBs=%ld/%ld bl=%ld",
+	TP_printk("%s CBs=%ld/%ld bl=%d",
 		  __entry->rcuname, __entry->qlen_lazy, __entry->qlen,
 		  __entry->blimit)
 );
@@ -525,30 +523,22 @@ TRACE_EVENT(rcu_batch_end,
  */
 TRACE_EVENT(rcu_torture_read,
 
-	TP_PROTO(char *rcutorturename, struct rcu_head *rhp,
-		 unsigned long secs, unsigned long c_old, unsigned long c),
+	TP_PROTO(char *rcutorturename, struct rcu_head *rhp),
 
-	TP_ARGS(rcutorturename, rhp, secs, c_old, c),
+	TP_ARGS(rcutorturename, rhp),
 
 	TP_STRUCT__entry(
 		__field(char *, rcutorturename)
 		__field(struct rcu_head *, rhp)
-		__field(unsigned long, secs)
-		__field(unsigned long, c_old)
-		__field(unsigned long, c)
 	),
 
 	TP_fast_assign(
 		__entry->rcutorturename = rcutorturename;
 		__entry->rhp = rhp;
-		__entry->secs = secs;
-		__entry->c_old = c_old;
-		__entry->c = c;
 	),
 
-	TP_printk("%s torture read %p %luus c: %lu %lu",
-		  __entry->rcutorturename, __entry->rhp,
-		  __entry->secs, __entry->c_old, __entry->c)
+	TP_printk("%s torture read %p",
+		  __entry->rcutorturename, __entry->rhp)
 );
 
 /*
@@ -559,7 +549,6 @@ TRACE_EVENT(rcu_torture_read,
  *	"EarlyExit": rcu_barrier_callback() piggybacked, thus early exit.
  *	"Inc1": rcu_barrier_callback() piggyback check counter incremented.
  *	"Offline": rcu_barrier_callback() found offline CPU
- *	"OnlineNoCB": rcu_barrier_callback() found online no-CBs CPU.
  *	"OnlineQ": rcu_barrier_callback() found online CPU with callbacks.
  *	"OnlineNQ": rcu_barrier_callback() found online CPU, no callbacks.
  *	"IRQ": An rcu_barrier_callback() callback posted on remote CPU.
@@ -618,8 +607,7 @@ TRACE_EVENT(rcu_barrier,
 #define trace_rcu_invoke_kfree_callback(rcuname, rhp, offset) do { } while (0)
 #define trace_rcu_batch_end(rcuname, callbacks_invoked, cb, nr, iit, risk) \
 	do { } while (0)
-#define trace_rcu_torture_read(rcutorturename, rhp, secs, c_old, c) \
-	do { } while (0)
+#define trace_rcu_torture_read(rcutorturename, rhp) do { } while (0)
 #define trace_rcu_barrier(name, s, cpu, cnt, done) do { } while (0)
 
 #endif /* #else #ifdef CONFIG_RCU_TRACE */

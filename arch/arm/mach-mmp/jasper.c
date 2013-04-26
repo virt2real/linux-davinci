@@ -174,7 +174,7 @@ MACHINE_START(MARVELL_JASPER, "Jasper Development Platform")
 	.map_io		= mmp_map_io,
 	.nr_irqs	= JASPER_NR_IRQS,
 	.init_irq       = mmp2_init_irq,
-	.init_time	= mmp2_timer_init,
+	.timer          = &mmp2_timer,
 	.init_machine   = jasper_init,
 	.restart	= mmp_restart,
 MACHINE_END

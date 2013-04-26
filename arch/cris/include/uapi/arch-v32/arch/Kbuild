@@ -1,3 +1,1 @@
 # UAPI Header export list
-header-y += cryptocop.h
-header-y += user.h

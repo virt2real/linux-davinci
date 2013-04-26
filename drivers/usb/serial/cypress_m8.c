@@ -50,6 +50,10 @@ static bool stats;
 static int interval;
 static bool unstable_bauds;
 
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.10"
 #define DRIVER_AUTHOR "Lonnie Mendez <dignome@gmail.com>, Neil Whelchel <koyama@firstlight.net>"
 #define DRIVER_DESC "Cypress USB to Serial Driver"
 
@@ -111,6 +115,7 @@ struct cypress_private {
 	int baud_rate;			   /* stores current baud rate in
 					      integer form */
 	int isthrottled;		   /* if throttled, discard reads */
+	wait_queue_head_t delta_msr_wait;  /* used for TIOCMIWAIT */
 	char prev_status, diff_status;	   /* used for TIOCMIWAIT */
 	/* we pass a pointer to this as the argument sent to
 	   cypress_set_termios old_termios */
@@ -448,6 +453,7 @@ static int cypress_generic_port_probe(struct usb_serial_port *port)
 		kfree(priv);
 		return -ENOMEM;
 	}
+	init_waitqueue_head(&priv->delta_msr_wait);
 
 	usb_reset_configuration(serial->dev);
 
@@ -866,16 +872,12 @@ static int cypress_ioctl(struct tty_struct *tty,
 	switch (cmd) {
 	/* This code comes from drivers/char/serial.c and ftdi_sio.c */
 	case TIOCMIWAIT:
-		for (;;) {
-			interruptible_sleep_on(&port->delta_msr_wait);
+		while (priv != NULL) {
+			interruptible_sleep_on(&priv->delta_msr_wait);
 			/* see if a signal did it */
 			if (signal_pending(current))
 				return -ERESTARTSYS;
-
-			if (port->serial->disconnected)
-				return -EIO;
-
-			{
+			else {
 				char diff = priv->diff_status;
 				if (diff == 0)
 					return -EIO; /* no change => error */
@@ -1189,7 +1191,7 @@ static void cypress_read_int_callback(struct urb *urb)
 	if (priv->current_status != priv->prev_status) {
 		priv->diff_status |= priv->current_status ^
 			priv->prev_status;
-		wake_up_interruptible(&port->delta_msr_wait);
+		wake_up_interruptible(&priv->delta_msr_wait);
 		priv->prev_status = priv->current_status;
 	}
 	spin_unlock_irqrestore(&priv->lock, flags);
@@ -1216,10 +1218,10 @@ static void cypress_read_int_callback(struct urb *urb)
 		spin_unlock_irqrestore(&priv->lock, flags);
 
 	/* process read if there is data other than line status */
-	if (bytes > i) {
-		tty_insert_flip_string_fixed_flag(&port->port, data + i,
+	if (tty && bytes > i) {
+		tty_insert_flip_string_fixed_flag(tty, data + i,
 				tty_flag, bytes - i);
-		tty_flip_buffer_push(&port->port);
+		tty_flip_buffer_push(tty);
 	}
 
 	spin_lock_irqsave(&priv->lock, flags);
@@ -1301,6 +1303,7 @@ module_usb_serial_driver(serial_drivers, id_table_combined);
 
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
+MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL");
 
 module_param(stats, bool, S_IRUGO | S_IWUSR);

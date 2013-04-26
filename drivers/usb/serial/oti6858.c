@@ -57,6 +57,7 @@
 #define OTI6858_DESCRIPTION \
 	"Ours Technology Inc. OTi-6858 USB to serial adapter driver"
 #define OTI6858_AUTHOR "Tomasz Michal Lukaszewski <FIXME@FIXME>"
+#define OTI6858_VERSION "0.2"
 
 static const struct usb_device_id id_table[] = {
 	{ USB_DEVICE(OTI6858_VENDOR_ID, OTI6858_PRODUCT_ID) },
@@ -188,6 +189,7 @@ struct oti6858_private {
 	u8 setup_done;
 	struct delayed_work delayed_setup_work;
 
+	wait_queue_head_t intr_wait;
 	struct usb_serial_port *port;   /* USB port with which associated */
 };
 
@@ -338,6 +340,7 @@ static int oti6858_port_probe(struct usb_serial_port *port)
 		return -ENOMEM;
 
 	spin_lock_init(&priv->lock);
+	init_waitqueue_head(&priv->intr_wait);
 	priv->port = port;
 	INIT_DELAYED_WORK(&priv->delayed_setup_work, setup_line);
 	INIT_DELAYED_WORK(&priv->delayed_write_work, send_data);
@@ -662,14 +665,10 @@ static int wait_modem_info(struct usb_serial_port *port, unsigned int arg)
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	while (1) {
-		wait_event_interruptible(port->delta_msr_wait,
-					port->serial->disconnected ||
+		wait_event_interruptible(priv->intr_wait,
 					priv->status.pin_state != prev);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
-
-		if (port->serial->disconnected)
-			return -EIO;
 
 		spin_lock_irqsave(&priv->lock, flags);
 		status = priv->status.pin_state & PIN_MASK;
@@ -765,7 +764,7 @@ static void oti6858_read_int_callback(struct urb *urb)
 
 		if (!priv->transient) {
 			if (xs->pin_state != priv->status.pin_state)
-				wake_up_interruptible(&port->delta_msr_wait);
+				wake_up_interruptible(&priv->intr_wait);
 			memcpy(&priv->status, xs, OTI6858_CTRL_PKT_SIZE);
 		}
 
@@ -822,6 +821,7 @@ static void oti6858_read_bulk_callback(struct urb *urb)
 {
 	struct usb_serial_port *port =  urb->context;
 	struct oti6858_private *priv = usb_get_serial_port_data(port);
+	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 	unsigned long flags;
 	int status = urb->status;
@@ -836,10 +836,12 @@ static void oti6858_read_bulk_callback(struct urb *urb)
 		return;
 	}
 
-	if (urb->actual_length > 0) {
-		tty_insert_flip_string(&port->port, data, urb->actual_length);
-		tty_flip_buffer_push(&port->port);
+	tty = tty_port_tty_get(&port->port);
+	if (tty != NULL && urb->actual_length > 0) {
+		tty_insert_flip_string(tty, data, urb->actual_length);
+		tty_flip_buffer_push(tty);
 	}
+	tty_kref_put(tty);
 
 	/* schedule the interrupt urb */
 	result = usb_submit_urb(port->interrupt_in_urb, GFP_ATOMIC);
@@ -897,4 +899,5 @@ module_usb_serial_driver(serial_drivers, id_table);
 
 MODULE_DESCRIPTION(OTI6858_DESCRIPTION);
 MODULE_AUTHOR(OTI6858_AUTHOR);
+MODULE_VERSION(OTI6858_VERSION);
 MODULE_LICENSE("GPL");

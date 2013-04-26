@@ -137,14 +137,6 @@ static int mlx4_ib_query_device(struct ib_device *ibdev,
 		props->device_cap_flags |= IB_DEVICE_MEM_MGT_EXTENSIONS;
 	if (dev->dev->caps.flags & MLX4_DEV_CAP_FLAG_XRC)
 		props->device_cap_flags |= IB_DEVICE_XRC;
-	if (dev->dev->caps.flags & MLX4_DEV_CAP_FLAG_MEM_WINDOW)
-		props->device_cap_flags |= IB_DEVICE_MEM_WINDOW;
-	if (dev->dev->caps.bmme_flags & MLX4_BMME_FLAG_TYPE_2_WIN) {
-		if (dev->dev->caps.bmme_flags & MLX4_BMME_FLAG_WIN_TYPE_2B)
-			props->device_cap_flags |= IB_DEVICE_MEM_WINDOW_TYPE_2B;
-		else
-			props->device_cap_flags |= IB_DEVICE_MEM_WINDOW_TYPE_2A;
-	}
 
 	props->vendor_id	   = be32_to_cpup((__be32 *) (out_mad->data + 36)) &
 		0xffffff;
@@ -571,24 +563,15 @@ static struct ib_ucontext *mlx4_ib_alloc_ucontext(struct ib_device *ibdev,
 {
 	struct mlx4_ib_dev *dev = to_mdev(ibdev);
 	struct mlx4_ib_ucontext *context;
-	struct mlx4_ib_alloc_ucontext_resp_v3 resp_v3;
 	struct mlx4_ib_alloc_ucontext_resp resp;
 	int err;
 
 	if (!dev->ib_active)
 		return ERR_PTR(-EAGAIN);
 
-	if (ibdev->uverbs_abi_ver == MLX4_IB_UVERBS_NO_DEV_CAPS_ABI_VERSION) {
-		resp_v3.qp_tab_size      = dev->dev->caps.num_qps;
-		resp_v3.bf_reg_size      = dev->dev->caps.bf_reg_size;
-		resp_v3.bf_regs_per_page = dev->dev->caps.bf_regs_per_page;
-	} else {
-		resp.dev_caps	      = dev->dev->caps.userspace_caps;
-		resp.qp_tab_size      = dev->dev->caps.num_qps;
-		resp.bf_reg_size      = dev->dev->caps.bf_reg_size;
-		resp.bf_regs_per_page = dev->dev->caps.bf_regs_per_page;
-		resp.cqe_size	      = dev->dev->caps.cqe_size;
-	}
+	resp.qp_tab_size      = dev->dev->caps.num_qps;
+	resp.bf_reg_size      = dev->dev->caps.bf_reg_size;
+	resp.bf_regs_per_page = dev->dev->caps.bf_regs_per_page;
 
 	context = kmalloc(sizeof *context, GFP_KERNEL);
 	if (!context)
@@ -603,11 +586,7 @@ static struct ib_ucontext *mlx4_ib_alloc_ucontext(struct ib_device *ibdev,
 	INIT_LIST_HEAD(&context->db_page_list);
 	mutex_init(&context->db_page_mutex);
 
-	if (ibdev->uverbs_abi_ver == MLX4_IB_UVERBS_NO_DEV_CAPS_ABI_VERSION)
-		err = ib_copy_to_udata(udata, &resp_v3, sizeof(resp_v3));
-	else
-		err = ib_copy_to_udata(udata, &resp, sizeof(resp));
-
+	err = ib_copy_to_udata(udata, &resp, sizeof resp);
 	if (err) {
 		mlx4_uar_free(to_mdev(ibdev)->dev, &context->uar);
 		kfree(context);
@@ -1363,11 +1342,7 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	ibdev->ib_dev.num_comp_vectors	= dev->caps.num_comp_vectors;
 	ibdev->ib_dev.dma_device	= &dev->pdev->dev;
 
-	if (dev->caps.userspace_caps)
-		ibdev->ib_dev.uverbs_abi_ver = MLX4_IB_UVERBS_ABI_VERSION;
-	else
-		ibdev->ib_dev.uverbs_abi_ver = MLX4_IB_UVERBS_NO_DEV_CAPS_ABI_VERSION;
-
+	ibdev->ib_dev.uverbs_abi_ver	= MLX4_IB_UVERBS_ABI_VERSION;
 	ibdev->ib_dev.uverbs_cmd_mask	=
 		(1ull << IB_USER_VERBS_CMD_GET_CONTEXT)		|
 		(1ull << IB_USER_VERBS_CMD_QUERY_DEVICE)	|
@@ -1440,17 +1415,6 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 		ibdev->ib_dev.map_phys_fmr	= mlx4_ib_map_phys_fmr;
 		ibdev->ib_dev.unmap_fmr		= mlx4_ib_unmap_fmr;
 		ibdev->ib_dev.dealloc_fmr	= mlx4_ib_fmr_dealloc;
-	}
-
-	if (dev->caps.flags & MLX4_DEV_CAP_FLAG_MEM_WINDOW ||
-	    dev->caps.bmme_flags & MLX4_BMME_FLAG_TYPE_2_WIN) {
-		ibdev->ib_dev.alloc_mw = mlx4_ib_alloc_mw;
-		ibdev->ib_dev.bind_mw = mlx4_ib_bind_mw;
-		ibdev->ib_dev.dealloc_mw = mlx4_ib_dealloc_mw;
-
-		ibdev->ib_dev.uverbs_cmd_mask |=
-			(1ull << IB_USER_VERBS_CMD_ALLOC_MW) |
-			(1ull << IB_USER_VERBS_CMD_DEALLOC_MW);
 	}
 
 	if (dev->caps.flags & MLX4_DEV_CAP_FLAG_XRC) {
@@ -1620,7 +1584,8 @@ static void do_slave_init(struct mlx4_ib_dev *ibdev, int slave, int do_init)
 		spin_unlock_irqrestore(&ibdev->sriov.going_down_lock, flags);
 	}
 out:
-	kfree(dm);
+	if (dm)
+		kfree(dm);
 	return;
 }
 

@@ -287,6 +287,7 @@ static void ir_process_read_urb(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	unsigned char *data = urb->transfer_buffer;
+	struct tty_struct *tty;
 
 	if (!urb->actual_length)
 		return;
@@ -301,8 +302,12 @@ static void ir_process_read_urb(struct urb *urb)
 	if (urb->actual_length == 1)
 		return;
 
-	tty_insert_flip_string(&port->port, data + 1, urb->actual_length - 1);
-	tty_flip_buffer_push(&port->port);
+	tty = tty_port_tty_get(&port->port);
+	if (!tty)
+		return;
+	tty_insert_flip_string(tty, data + 1, urb->actual_length - 1);
+	tty_flip_buffer_push(tty);
+	tty_kref_put(tty);
 }
 
 static void ir_set_termios_callback(struct urb *urb)

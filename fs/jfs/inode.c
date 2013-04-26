@@ -300,16 +300,6 @@ static int jfs_readpages(struct file *file, struct address_space *mapping,
 	return mpage_readpages(mapping, pages, nr_pages, jfs_get_block);
 }
 
-static void jfs_write_failed(struct address_space *mapping, loff_t to)
-{
-	struct inode *inode = mapping->host;
-
-	if (to > inode->i_size) {
-		truncate_pagecache(inode, to, inode->i_size);
-		jfs_truncate(inode);
-	}
-}
-
 static int jfs_write_begin(struct file *file, struct address_space *mapping,
 				loff_t pos, unsigned len, unsigned flags,
 				struct page **pagep, void **fsdata)
@@ -318,8 +308,11 @@ static int jfs_write_begin(struct file *file, struct address_space *mapping,
 
 	ret = nobh_write_begin(mapping, pos, len, flags, pagep, fsdata,
 				jfs_get_block);
-	if (unlikely(ret))
-		jfs_write_failed(mapping, pos + len);
+	if (unlikely(ret)) {
+		loff_t isize = mapping->host->i_size;
+		if (pos + len > isize)
+			vmtruncate(mapping->host, isize);
+	}
 
 	return ret;
 }
@@ -333,7 +326,6 @@ static ssize_t jfs_direct_IO(int rw, struct kiocb *iocb,
 	const struct iovec *iov, loff_t offset, unsigned long nr_segs)
 {
 	struct file *file = iocb->ki_filp;
-	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = file->f_mapping->host;
 	ssize_t ret;
 
@@ -349,7 +341,7 @@ static ssize_t jfs_direct_IO(int rw, struct kiocb *iocb,
 		loff_t end = offset + iov_length(iov, nr_segs);
 
 		if (end > isize)
-			jfs_write_failed(mapping, end);
+			vmtruncate(inode, isize);
 	}
 
 	return ret;

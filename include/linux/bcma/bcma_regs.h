@@ -85,9 +85,6 @@
 							 * (2 ZettaBytes), high 32 bits
 							 */
 
-#define BCMA_SOC_FLASH1			0x1fc00000	/* MIPS Flash Region 1 */
-#define BCMA_SOC_FLASH1_SZ		0x00400000	/* MIPS Size of Flash Region 1 */
-#define BCMA_SOC_FLASH2			0x1c000000	/* Flash Region 2 (region 1 shadowed here) */
-#define BCMA_SOC_FLASH2_SZ		0x02000000	/* Size of Flash Region 2 */
+#define BCMA_SFLASH			0x1c000000
 
 #endif /* LINUX_BCMA_REGS_H_ */

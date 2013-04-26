@@ -167,7 +167,7 @@ static void lcd_clear(struct fb_info *info)
 	lcd_write_control(info, LCD_RESET);
 }
 
-static struct fb_fix_screeninfo cobalt_lcdfb_fix = {
+static struct fb_fix_screeninfo cobalt_lcdfb_fix __devinitdata = {
 	.id		= "cobalt-lcd",
 	.type		= FB_TYPE_TEXT,
 	.type_aux	= FB_AUX_TEXT_MDA,
@@ -331,7 +331,7 @@ static struct fb_ops cobalt_lcd_fbops = {
 	.fb_cursor	= cobalt_lcdfb_cursor,
 };
 
-static int cobalt_lcdfb_probe(struct platform_device *dev)
+static int __devinit cobalt_lcdfb_probe(struct platform_device *dev)
 {
 	struct fb_info *info;
 	struct resource *res;
@@ -374,7 +374,7 @@ static int cobalt_lcdfb_probe(struct platform_device *dev)
 	return 0;
 }
 
-static int cobalt_lcdfb_remove(struct platform_device *dev)
+static int __devexit cobalt_lcdfb_remove(struct platform_device *dev)
 {
 	struct fb_info *info;
 
@@ -389,7 +389,7 @@ static int cobalt_lcdfb_remove(struct platform_device *dev)
 
 static struct platform_driver cobalt_lcdfb_driver = {
 	.probe	= cobalt_lcdfb_probe,
-	.remove	= cobalt_lcdfb_remove,
+	.remove	= __devexit_p(cobalt_lcdfb_remove),
 	.driver	= {
 		.name	= "cobalt-lcd",
 		.owner	= THIS_MODULE,

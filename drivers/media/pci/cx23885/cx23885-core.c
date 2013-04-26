@@ -303,7 +303,7 @@ static struct sram_channel cx23887_sram_channels[] = {
 	},
 };
 
-static void cx23885_irq_add(struct cx23885_dev *dev, u32 mask)
+void cx23885_irq_add(struct cx23885_dev *dev, u32 mask)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&dev->pci_irqmask_lock, flags);
@@ -439,7 +439,7 @@ void cx23885_wakeup(struct cx23885_tsport *port,
 		if ((s16) (count - buf->count) < 0)
 			break;
 
-		v4l2_get_timestamp(&buf->vb.ts);
+		do_gettimeofday(&buf->vb.ts);
 		dprintk(2, "[%p/%d] wakeup reg=%d buf=%d\n", buf, buf->vb.i,
 			count, buf->count);
 		buf->vb.state = VIDEOBUF_DONE;
@@ -1516,7 +1516,8 @@ int cx23885_restart_queue(struct cx23885_tsport *port,
 			buf = list_entry(q->queued.next, struct cx23885_buffer,
 					 vb.queue);
 			if (NULL == prev) {
-				list_move_tail(&buf->vb.queue, &q->active);
+				list_del(&buf->vb.queue);
+				list_add_tail(&buf->vb.queue, &q->active);
 				cx23885_start_dma(port, q, buf);
 				buf->vb.state = VIDEOBUF_ACTIVE;
 				buf->count    = q->count++;
@@ -1527,7 +1528,8 @@ int cx23885_restart_queue(struct cx23885_tsport *port,
 			} else if (prev->vb.width  == buf->vb.width  &&
 				   prev->vb.height == buf->vb.height &&
 				   prev->fmt       == buf->fmt) {
-				list_move_tail(&buf->vb.queue, &q->active);
+				list_del(&buf->vb.queue);
+				list_add_tail(&buf->vb.queue, &q->active);
 				buf->vb.state = VIDEOBUF_ACTIVE;
 				buf->count    = q->count++;
 				prev->risc.jmp[1] = cpu_to_le32(buf->risc.dma);
@@ -2086,8 +2088,8 @@ void cx23885_gpio_enable(struct cx23885_dev *dev, u32 mask, int asoutput)
 	/* TODO: 23-19 */
 }
 
-static int cx23885_initdev(struct pci_dev *pci_dev,
-			   const struct pci_device_id *pci_id)
+static int __devinit cx23885_initdev(struct pci_dev *pci_dev,
+				     const struct pci_device_id *pci_id)
 {
 	struct cx23885_dev *dev;
 	int err;
@@ -2167,7 +2169,7 @@ fail_free:
 	return err;
 }
 
-static void cx23885_finidev(struct pci_dev *pci_dev)
+static void __devexit cx23885_finidev(struct pci_dev *pci_dev)
 {
 	struct v4l2_device *v4l2_dev = pci_get_drvdata(pci_dev);
 	struct cx23885_dev *dev = to_cx23885(v4l2_dev);
@@ -2210,7 +2212,7 @@ static struct pci_driver cx23885_pci_driver = {
 	.name     = "cx23885",
 	.id_table = cx23885_pci_tbl,
 	.probe    = cx23885_initdev,
-	.remove   = cx23885_finidev,
+	.remove   = __devexit_p(cx23885_finidev),
 	/* TODO */
 	.suspend  = NULL,
 	.resume   = NULL,

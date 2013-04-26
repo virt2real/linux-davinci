@@ -134,28 +134,10 @@ static int pcie_port_runtime_resume(struct device *dev)
 	return 0;
 }
 
-static int pci_dev_pme_poll(struct pci_dev *pdev, void *data)
-{
-	bool *pme_poll = data;
-
-	if (pdev->pme_poll)
-		*pme_poll = true;
-	return 0;
-}
-
 static int pcie_port_runtime_idle(struct device *dev)
 {
-	struct pci_dev *pdev = to_pci_dev(dev);
-	bool pme_poll = false;
-
-	/*
-	 * If any subordinate device needs pme poll, we should keep
-	 * the port in D0, because we need port in D0 to poll it.
-	 */
-	pci_walk_bus(pdev->subordinate, pci_dev_pme_poll, &pme_poll);
 	/* Delay for a short while to prevent too frequent suspend/resume */
-	if (!pme_poll)
-		pm_schedule_suspend(dev, 10);
+	pm_schedule_suspend(dev, 10);
 	return -EBUSY;
 }
 #else
@@ -185,6 +167,14 @@ static const struct dev_pm_ops pcie_portdrv_pm_ops = {
 #endif /* !PM */
 
 /*
+ * PCIe port runtime suspend is broken for some chipsets, so use a
+ * black list to disable runtime PM for these chipsets.
+ */
+static const struct pci_device_id port_runtime_pm_black_list[] = {
+	{ /* end: all zeroes */ }
+};
+
+/*
  * pcie_portdrv_probe - Probe PCI-Express port devices
  * @dev: PCI-Express port device being probed
  *
@@ -192,7 +182,7 @@ static const struct dev_pm_ops pcie_portdrv_pm_ops = {
  * this port device.
  *
  */
-static int pcie_portdrv_probe(struct pci_dev *dev,
+static int __devinit pcie_portdrv_probe(struct pci_dev *dev,
 					const struct pci_device_id *id)
 {
 	int status;
@@ -217,11 +207,16 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 	 * it by default.
 	 */
 	dev->d3cold_allowed = false;
+	if (!pci_match_id(port_runtime_pm_black_list, dev))
+		pm_runtime_put_noidle(&dev->dev);
+
 	return 0;
 }
 
 static void pcie_portdrv_remove(struct pci_dev *dev)
 {
+	if (!pci_match_id(port_runtime_pm_black_list, dev))
+		pm_runtime_get_noresume(&dev->dev);
 	pcie_port_device_remove(dev);
 	pci_disable_device(dev);
 }

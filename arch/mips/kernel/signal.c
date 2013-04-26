@@ -247,11 +247,34 @@ void __user *get_sigframe(struct k_sigaction *ka, struct pt_regs *regs,
  */
 
 #ifdef CONFIG_TRAD_SIGNALS
-SYSCALL_DEFINE1(sigsuspend, sigset_t __user *, uset)
+asmlinkage int sys_sigsuspend(nabi_no_regargs struct pt_regs regs)
 {
-	return sys_rt_sigsuspend(uset, sizeof(sigset_t));
+	sigset_t newset;
+	sigset_t __user *uset;
+
+	uset = (sigset_t __user *) regs.regs[4];
+	if (copy_from_user(&newset, uset, sizeof(sigset_t)))
+		return -EFAULT;
+	return sigsuspend(&newset);
 }
 #endif
+
+asmlinkage int sys_rt_sigsuspend(nabi_no_regargs struct pt_regs regs)
+{
+	sigset_t newset;
+	sigset_t __user *unewset;
+	size_t sigsetsize;
+
+	/* XXX Don't preclude handling different sized sigset_t's.  */
+	sigsetsize = regs.regs[5];
+	if (sigsetsize != sizeof(sigset_t))
+		return -EINVAL;
+
+	unewset = (sigset_t __user *) regs.regs[4];
+	if (copy_from_user(&newset, unewset, sizeof(newset)))
+		return -EFAULT;
+	return sigsuspend(&newset);
+}
 
 #ifdef CONFIG_TRAD_SIGNALS
 SYSCALL_DEFINE3(sigaction, int, sig, const struct sigaction __user *, act,
@@ -293,6 +316,15 @@ SYSCALL_DEFINE3(sigaction, int, sig, const struct sigaction __user *, act,
 	return ret;
 }
 #endif
+
+asmlinkage int sys_sigaltstack(nabi_no_regargs struct pt_regs regs)
+{
+	const stack_t __user *uss = (const stack_t __user *) regs.regs[4];
+	stack_t __user *uoss = (stack_t __user *) regs.regs[5];
+	unsigned long usp = regs.regs[29];
+
+	return do_sigaltstack(uss, uoss, usp);
+}
 
 #ifdef CONFIG_TRAD_SIGNALS
 asmlinkage void sys_sigreturn(nabi_no_regargs struct pt_regs regs)
@@ -350,8 +382,9 @@ asmlinkage void sys_rt_sigreturn(nabi_no_regargs struct pt_regs regs)
 	else if (sig)
 		force_sig(sig, current);
 
-	if (restore_altstack(&frame->rs_uc.uc_stack))
-		goto badframe;
+	/* It is more difficult to avoid calling this function than to
+	   call it and ignore errors.  */
+	do_sigaltstack(&frame->rs_uc.uc_stack, NULL, regs.regs[29]);
 
 	/*
 	 * Don't let your children do this ...
@@ -412,7 +445,7 @@ give_sigsegv:
 #endif
 
 static int setup_rt_frame(void *sig_return, struct k_sigaction *ka,
-			  struct pt_regs *regs, int signr, sigset_t *set,
+			  struct pt_regs *regs,	int signr, sigset_t *set,
 			  siginfo_t *info)
 {
 	struct rt_sigframe __user *frame;
@@ -425,10 +458,15 @@ static int setup_rt_frame(void *sig_return, struct k_sigaction *ka,
 	/* Create siginfo.  */
 	err |= copy_siginfo_to_user(&frame->rs_info, info);
 
-	/* Create the ucontext.	 */
+	/* Create the ucontext.  */
 	err |= __put_user(0, &frame->rs_uc.uc_flags);
 	err |= __put_user(NULL, &frame->rs_uc.uc_link);
-	err |= __save_altstack(&frame->rs_uc.uc_stack, regs->regs[29]);
+	err |= __put_user((void __user *)current->sas_ss_sp,
+	                  &frame->rs_uc.uc_stack.ss_sp);
+	err |= __put_user(sas_ss_flags(regs->regs[29]),
+	                  &frame->rs_uc.uc_stack.ss_flags);
+	err |= __put_user(current->sas_ss_size,
+	                  &frame->rs_uc.uc_stack.ss_size);
 	err |= setup_sigcontext(regs, &frame->rs_uc.uc_mcontext);
 	err |= __copy_to_user(&frame->rs_uc.uc_sigmask, set, sizeof(*set));
 
@@ -468,7 +506,7 @@ struct mips_abi mips_abi = {
 	.setup_frame	= setup_frame,
 	.signal_return_offset = offsetof(struct mips_vdso, signal_trampoline),
 #endif
-	.setup_rt_frame = setup_rt_frame,
+	.setup_rt_frame	= setup_rt_frame,
 	.rt_signal_return_offset =
 		offsetof(struct mips_vdso, rt_signal_trampoline),
 	.restart	= __NR_restart_syscall
@@ -500,7 +538,7 @@ static void handle_signal(unsigned long sig, siginfo_t *info,
 			regs->cp0_epc -= 4;
 		}
 
-		regs->regs[0] = 0;		/* Don't deal with this again.	*/
+		regs->regs[0] = 0;		/* Don't deal with this again.  */
 	}
 
 	if (sig_uses_siginfo(ka))
@@ -524,28 +562,25 @@ static void do_signal(struct pt_regs *regs)
 
 	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
 	if (signr > 0) {
-		/* Whee!  Actually deliver the signal.	*/
+		/* Whee!  Actually deliver the signal.  */
 		handle_signal(signr, &info, &ka, regs);
 		return;
 	}
 
 	if (regs->regs[0]) {
-		switch (regs->regs[2]) {
-		case ERESTARTNOHAND:
-		case ERESTARTSYS:
-		case ERESTARTNOINTR:
+		if (regs->regs[2] == ERESTARTNOHAND ||
+		    regs->regs[2] == ERESTARTSYS ||
+		    regs->regs[2] == ERESTARTNOINTR) {
 			regs->regs[2] = regs->regs[0];
 			regs->regs[7] = regs->regs[26];
 			regs->cp0_epc -= 4;
-			break;
-
-		case ERESTART_RESTARTBLOCK:
+		}
+		if (regs->regs[2] == ERESTART_RESTARTBLOCK) {
 			regs->regs[2] = current->thread.abi->restart;
 			regs->regs[7] = regs->regs[26];
 			regs->cp0_epc -= 4;
-			break;
 		}
-		regs->regs[0] = 0;	/* Don't deal with this again.	*/
+		regs->regs[0] = 0;	/* Don't deal with this again.  */
 	}
 
 	/*

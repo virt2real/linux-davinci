@@ -196,14 +196,13 @@ int tifm_add_adapter(struct tifm_adapter *fm)
 {
 	int rc;
 
-	idr_preload(GFP_KERNEL);
+	if (!idr_pre_get(&tifm_adapter_idr, GFP_KERNEL))
+		return -ENOMEM;
+
 	spin_lock(&tifm_adapter_lock);
-	rc = idr_alloc(&tifm_adapter_idr, fm, 0, 0, GFP_NOWAIT);
-	if (rc >= 0)
-		fm->id = rc;
+	rc = idr_get_new(&tifm_adapter_idr, fm, &fm->id);
 	spin_unlock(&tifm_adapter_lock);
-	idr_preload_end();
-	if (rc < 0)
+	if (rc)
 		return rc;
 
 	dev_set_name(&fm->dev, "tifm%u", fm->id);

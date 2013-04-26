@@ -26,7 +26,6 @@ enum sec_device_type {
 /**
  * struct sec_pmic_dev - s5m87xx master device for sub-drivers
  * @dev: master device of the chip (can be used to access platform data)
- * @pdata: pointer to private data used to pass platform data to child
  * @i2c: i2c client private data for regulator
  * @rtc: i2c client private data for rtc
  * @iolock: mutex for serializing io access
@@ -40,7 +39,6 @@ enum sec_device_type {
  */
 struct sec_pmic_dev {
 	struct device *dev;
-	struct sec_platform_data *pdata;
 	struct regmap *regmap;
 	struct i2c_client *i2c;
 	struct i2c_client *rtc;
@@ -84,11 +82,11 @@ struct sec_platform_data {
 
 	int				buck_gpios[3];
 	int				buck_ds[3];
-	unsigned int			buck2_voltage[8];
+	int				buck2_voltage[8];
 	bool				buck2_gpiodvs;
-	unsigned int			buck3_voltage[8];
+	int				buck3_voltage[8];
 	bool				buck3_gpiodvs;
-	unsigned int			buck4_voltage[8];
+	int				buck4_voltage[8];
 	bool				buck4_gpiodvs;
 
 	int				buck_set1;
@@ -129,7 +127,6 @@ struct sec_platform_data {
 struct sec_regulator_data {
 	int				id;
 	struct regulator_init_data	*initdata;
-	struct device_node *reg_node;
 };
 
 /*
@@ -139,7 +136,7 @@ struct sec_regulator_data {
  */
 struct sec_opmode_data {
 	int id;
-	unsigned int mode;
+	int mode;
 };
 
 /*

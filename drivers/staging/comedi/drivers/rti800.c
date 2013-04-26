@@ -161,6 +161,8 @@ struct rti800_private {
 	int muxgain_bits;
 };
 
+#define devpriv ((struct rti800_private *)dev->private)
+
 #define RTI800_TIMEOUT 100
 
 static irqreturn_t rti800_interrupt(int irq, void *dev)
@@ -175,7 +177,6 @@ static int rti800_ai_insn_read(struct comedi_device *dev,
 			       struct comedi_subdevice *s,
 			       struct comedi_insn *insn, unsigned int *data)
 {
-	struct rti800_private *devpriv = dev->private;
 	int i, t;
 	int status;
 	int chan = CR_CHAN(insn->chanspec);
@@ -228,7 +229,6 @@ static int rti800_ao_insn_read(struct comedi_device *dev,
 			       struct comedi_subdevice *s,
 			       struct comedi_insn *insn, unsigned int *data)
 {
-	struct rti800_private *devpriv = dev->private;
 	int i;
 	int chan = CR_CHAN(insn->chanspec);
 
@@ -242,7 +242,6 @@ static int rti800_ao_insn_write(struct comedi_device *dev,
 				struct comedi_subdevice *s,
 				struct comedi_insn *insn, unsigned int *data)
 {
-	struct rti800_private *devpriv = dev->private;
 	int chan = CR_CHAN(insn->chanspec);
 	int d;
 	int i;
@@ -304,7 +303,6 @@ static int rti800_do_insn_bits(struct comedi_device *dev,
 static int rti800_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 {
 	const struct rti800_board *board = comedi_board(dev);
-	struct rti800_private *devpriv;
 	unsigned int irq;
 	unsigned long iobase;
 	int ret;
@@ -349,10 +347,9 @@ static int rti800_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 	if (ret)
 		return ret;
 
-	devpriv = kzalloc(sizeof(*devpriv), GFP_KERNEL);
-	if (!devpriv)
-		return -ENOMEM;
-	dev->private = devpriv;
+	ret = alloc_private(dev, sizeof(struct rti800_private));
+	if (ret < 0)
+		return ret;
 
 	devpriv->adc_mux = it->options[2];
 	devpriv->adc_range = it->options[3];

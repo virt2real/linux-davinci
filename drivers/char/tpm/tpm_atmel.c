@@ -116,11 +116,6 @@ static u8 tpm_atml_status(struct tpm_chip *chip)
 	return ioread8(chip->vendor.iobase + 1);
 }
 
-static bool tpm_atml_req_canceled(struct tpm_chip *chip, u8 status)
-{
-	return (status == ATML_STATUS_READY);
-}
-
 static const struct file_operations atmel_ops = {
 	.owner = THIS_MODULE,
 	.llseek = no_llseek,
@@ -152,7 +147,7 @@ static const struct tpm_vendor_specific tpm_atmel = {
 	.status = tpm_atml_status,
 	.req_complete_mask = ATML_STATUS_BUSY | ATML_STATUS_DATA_AVAIL,
 	.req_complete_val = ATML_STATUS_DATA_AVAIL,
-	.req_canceled = tpm_atml_req_canceled,
+	.req_canceled = ATML_STATUS_READY,
 	.attr_group = &atmel_attr_grp,
 	.miscdev = { .fops = &atmel_ops, },
 };

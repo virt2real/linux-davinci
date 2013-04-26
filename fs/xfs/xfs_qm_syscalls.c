@@ -40,7 +40,6 @@
 #include "xfs_utils.h"
 #include "xfs_qm.h"
 #include "xfs_trace.h"
-#include "xfs_icache.h"
 
 STATIC int	xfs_qm_log_quotaoff(xfs_mount_t *, xfs_qoff_logitem_t **, uint);
 STATIC int	xfs_qm_log_quotaoff_end(xfs_mount_t *, xfs_qoff_logitem_t *,
@@ -408,10 +407,10 @@ xfs_qm_scall_getqstat(
 {
 	struct xfs_quotainfo	*q = mp->m_quotainfo;
 	struct xfs_inode	*uip, *gip;
-	bool                    tempuqip, tempgqip;
+	boolean_t		tempuqip, tempgqip;
 
 	uip = gip = NULL;
-	tempuqip = tempgqip = false;
+	tempuqip = tempgqip = B_FALSE;
 	memset(out, 0, sizeof(fs_quota_stat_t));
 
 	out->qs_version = FS_QSTAT_VERSION;
@@ -434,12 +433,12 @@ xfs_qm_scall_getqstat(
 	if (!uip && mp->m_sb.sb_uquotino != NULLFSINO) {
 		if (xfs_iget(mp, NULL, mp->m_sb.sb_uquotino,
 					0, 0, &uip) == 0)
-			tempuqip = true;
+			tempuqip = B_TRUE;
 	}
 	if (!gip && mp->m_sb.sb_gquotino != NULLFSINO) {
 		if (xfs_iget(mp, NULL, mp->m_sb.sb_gquotino,
 					0, 0, &gip) == 0)
-			tempgqip = true;
+			tempgqip = B_TRUE;
 	}
 	if (uip) {
 		out->qs_uquota.qfs_nblks = uip->i_d.di_nblocks;
@@ -490,9 +489,8 @@ xfs_qm_scall_setqlim(
 		return 0;
 
 	tp = xfs_trans_alloc(mp, XFS_TRANS_QM_SETQLIM);
-	error = xfs_trans_reserve(tp, 0, XFS_QM_SETQLIM_LOG_RES(mp),
-				  0, 0, XFS_DEFAULT_LOG_COUNT);
-	if (error) {
+	if ((error = xfs_trans_reserve(tp, 0, sizeof(xfs_disk_dquot_t) + 128,
+				      0, 0, XFS_DEFAULT_LOG_COUNT))) {
 		xfs_trans_cancel(tp, 0);
 		return (error);
 	}
@@ -639,9 +637,8 @@ xfs_qm_log_quotaoff_end(
 
 	tp = xfs_trans_alloc(mp, XFS_TRANS_QM_QUOTAOFF_END);
 
-	error = xfs_trans_reserve(tp, 0, XFS_QM_QUOTAOFF_END_LOG_RES(mp),
-				  0, 0, XFS_DEFAULT_LOG_COUNT);
-	if (error) {
+	if ((error = xfs_trans_reserve(tp, 0, sizeof(xfs_qoff_logitem_t) * 2,
+				      0, 0, XFS_DEFAULT_LOG_COUNT))) {
 		xfs_trans_cancel(tp, 0);
 		return (error);
 	}
@@ -673,10 +670,14 @@ xfs_qm_log_quotaoff(
 	uint			oldsbqflag=0;
 
 	tp = xfs_trans_alloc(mp, XFS_TRANS_QM_QUOTAOFF);
-	error = xfs_trans_reserve(tp, 0, XFS_QM_QUOTAOFF_LOG_RES(mp),
-				  0, 0, XFS_DEFAULT_LOG_COUNT);
-	if (error)
+	if ((error = xfs_trans_reserve(tp, 0,
+				      sizeof(xfs_qoff_logitem_t) * 2 +
+				      mp->m_sb.sb_sectsize + 128,
+				      0,
+				      0,
+				      XFS_DEFAULT_LOG_COUNT))) {
 		goto error0;
+	}
 
 	qoffi = xfs_trans_get_qoff_item(tp, NULL, flags & XFS_ALL_QUOTA_ACCT);
 	xfs_trans_log_quotaoff_item(tp, qoffi);
@@ -782,11 +783,11 @@ xfs_qm_scall_getquota(
 	     (XFS_IS_OQUOTA_ENFORCED(mp) &&
 			(dst->d_flags & (FS_PROJ_QUOTA | FS_GROUP_QUOTA)))) &&
 	    dst->d_id != 0) {
-		if ((dst->d_bcount > dst->d_blk_softlimit) &&
+		if (((int) dst->d_bcount > (int) dst->d_blk_softlimit) &&
 		    (dst->d_blk_softlimit > 0)) {
 			ASSERT(dst->d_btimer != 0);
 		}
-		if ((dst->d_icount > dst->d_ino_softlimit) &&
+		if (((int) dst->d_icount > (int) dst->d_ino_softlimit) &&
 		    (dst->d_ino_softlimit > 0)) {
 			ASSERT(dst->d_itimer != 0);
 		}
@@ -844,8 +845,7 @@ STATIC int
 xfs_dqrele_inode(
 	struct xfs_inode	*ip,
 	struct xfs_perag	*pag,
-	int			flags,
-	void			*args)
+	int			flags)
 {
 	/* skip quota inodes */
 	if (ip == ip->i_mount->m_quotainfo->qi_uquotaip ||
@@ -881,5 +881,5 @@ xfs_qm_dqrele_all_inodes(
 	uint		 flags)
 {
 	ASSERT(mp->m_quotainfo);
-	xfs_inode_ag_iterator(mp, xfs_dqrele_inode, flags, NULL);
+	xfs_inode_ag_iterator(mp, xfs_dqrele_inode, flags);
 }

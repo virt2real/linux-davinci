@@ -22,6 +22,8 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 
+#include <plat/clock.h>
+
 #include "clock.h"
 #include "clock2xxx.h"
 #include "prm2xxx_3xxx.h"
@@ -40,8 +42,9 @@ u32 omap2xxx_get_sysclkdiv(void)
 	return div;
 }
 
-unsigned long omap2xxx_sys_clk_recalc(struct clk_hw *clk,
-				      unsigned long parent_rate)
+unsigned long omap2xxx_sys_clk_recalc(struct clk *clk)
 {
-	return parent_rate / omap2xxx_get_sysclkdiv();
+	return clk->parent->rate / omap2xxx_get_sysclkdiv();
 }
+
+

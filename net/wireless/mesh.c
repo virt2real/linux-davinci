@@ -3,7 +3,6 @@
 #include <net/cfg80211.h>
 #include "nl80211.h"
 #include "core.h"
-#include "rdev-ops.h"
 
 /* Default values, timeouts in ms */
 #define MESH_TTL 		31
@@ -44,10 +43,6 @@
 
 #define MESH_SYNC_NEIGHBOR_OFFSET_MAX 50
 
-#define MESH_DEFAULT_BEACON_INTERVAL	1000	/* in 1024 us units (=TUs) */
-#define MESH_DEFAULT_DTIM_PERIOD	2
-#define MESH_DEFAULT_AWAKE_WINDOW	10	/* in 1024 us units (=TUs) */
-
 const struct mesh_config default_mesh_config = {
 	.dot11MeshRetryTimeout = MESH_RET_T,
 	.dot11MeshConfirmTimeout = MESH_CONF_T,
@@ -73,20 +68,18 @@ const struct mesh_config default_mesh_config = {
 	.dot11MeshHWMPactivePathToRootTimeout = MESH_PATH_TO_ROOT_TIMEOUT,
 	.dot11MeshHWMProotInterval = MESH_ROOT_INTERVAL,
 	.dot11MeshHWMPconfirmationInterval = MESH_ROOT_CONFIRMATION_INTERVAL,
-	.power_mode = NL80211_MESH_POWER_ACTIVE,
-	.dot11MeshAwakeWindowDuration = MESH_DEFAULT_AWAKE_WINDOW,
 };
 
 const struct mesh_setup default_mesh_setup = {
 	/* cfg80211_join_mesh() will pick a channel if needed */
+	.channel = NULL,
+	.channel_type = NL80211_CHAN_NO_HT,
 	.sync_method = IEEE80211_SYNC_METHOD_NEIGHBOR_OFFSET,
 	.path_sel_proto = IEEE80211_PATH_PROTOCOL_HWMP,
 	.path_metric = IEEE80211_PATH_METRIC_AIRTIME,
 	.ie = NULL,
 	.ie_len = 0,
 	.is_secure = false,
-	.beacon_interval = MESH_DEFAULT_BEACON_INTERVAL,
-	.dtim_period = MESH_DEFAULT_DTIM_PERIOD,
 };
 
 int __cfg80211_join_mesh(struct cfg80211_registered_device *rdev,
@@ -117,12 +110,13 @@ int __cfg80211_join_mesh(struct cfg80211_registered_device *rdev,
 	if (!rdev->ops->join_mesh)
 		return -EOPNOTSUPP;
 
-	if (!setup->chandef.chan) {
+	if (!setup->channel) {
 		/* if no channel explicitly given, use preset channel */
-		setup->chandef = wdev->preset_chandef;
+		setup->channel = wdev->preset_chan;
+		setup->channel_type = wdev->preset_chantype;
 	}
 
-	if (!setup->chandef.chan) {
+	if (!setup->channel) {
 		/* if we don't have that either, use the first usable channel */
 		enum ieee80211_band band;
 
@@ -142,35 +136,35 @@ int __cfg80211_join_mesh(struct cfg80211_registered_device *rdev,
 						   IEEE80211_CHAN_DISABLED |
 						   IEEE80211_CHAN_RADAR))
 					continue;
-				setup->chandef.chan = chan;
+				setup->channel = chan;
 				break;
 			}
 
-			if (setup->chandef.chan)
+			if (setup->channel)
 				break;
 		}
 
 		/* no usable channel ... */
-		if (!setup->chandef.chan)
+		if (!setup->channel)
 			return -EINVAL;
 
-		setup->chandef.width = NL80211_CHAN_WIDTH_20_NOHT;
-		setup->chandef.center_freq1 = setup->chandef.chan->center_freq;
+		setup->channel_type = NL80211_CHAN_NO_HT;
 	}
 
-	if (!cfg80211_reg_can_beacon(&rdev->wiphy, &setup->chandef))
+	if (!cfg80211_can_beacon_sec_chan(&rdev->wiphy, setup->channel,
+					  setup->channel_type))
 		return -EINVAL;
 
-	err = cfg80211_can_use_chan(rdev, wdev, setup->chandef.chan,
+	err = cfg80211_can_use_chan(rdev, wdev, setup->channel,
 				    CHAN_MODE_SHARED);
 	if (err)
 		return err;
 
-	err = rdev_join_mesh(rdev, dev, conf, setup);
+	err = rdev->ops->join_mesh(&rdev->wiphy, dev, conf, setup);
 	if (!err) {
 		memcpy(wdev->ssid, setup->mesh_id, setup->mesh_id_len);
 		wdev->mesh_id_len = setup->mesh_id_len;
-		wdev->channel = setup->chandef.chan;
+		wdev->channel = setup->channel;
 	}
 
 	return err;
@@ -193,11 +187,19 @@ int cfg80211_join_mesh(struct cfg80211_registered_device *rdev,
 	return err;
 }
 
-int cfg80211_set_mesh_channel(struct cfg80211_registered_device *rdev,
-			      struct wireless_dev *wdev,
-			      struct cfg80211_chan_def *chandef)
+int cfg80211_set_mesh_freq(struct cfg80211_registered_device *rdev,
+			   struct wireless_dev *wdev, int freq,
+			   enum nl80211_channel_type channel_type)
 {
+	struct ieee80211_channel *channel;
 	int err;
+
+	channel = rdev_freq_to_chan(rdev, freq, channel_type);
+	if (!channel || !cfg80211_can_beacon_sec_chan(&rdev->wiphy,
+						      channel,
+						      channel_type)) {
+		return -EINVAL;
+	}
 
 	/*
 	 * Workaround for libertas (only!), it puts the interface
@@ -207,21 +209,22 @@ int cfg80211_set_mesh_channel(struct cfg80211_registered_device *rdev,
 	 * compatible with 802.11 mesh.
 	 */
 	if (rdev->ops->libertas_set_mesh_channel) {
-		if (chandef->width != NL80211_CHAN_WIDTH_20_NOHT)
+		if (channel_type != NL80211_CHAN_NO_HT)
 			return -EINVAL;
 
 		if (!netif_running(wdev->netdev))
 			return -ENETDOWN;
 
-		err = cfg80211_can_use_chan(rdev, wdev, chandef->chan,
+		err = cfg80211_can_use_chan(rdev, wdev, channel,
 					    CHAN_MODE_SHARED);
 		if (err)
 			return err;
 
-		err = rdev_libertas_set_mesh_channel(rdev, wdev->netdev,
-						     chandef->chan);
+		err = rdev->ops->libertas_set_mesh_channel(&rdev->wiphy,
+							   wdev->netdev,
+							   channel);
 		if (!err)
-			wdev->channel = chandef->chan;
+			wdev->channel = channel;
 
 		return err;
 	}
@@ -229,7 +232,8 @@ int cfg80211_set_mesh_channel(struct cfg80211_registered_device *rdev,
 	if (wdev->mesh_id_len)
 		return -EBUSY;
 
-	wdev->preset_chandef = *chandef;
+	wdev->preset_chan = channel;
+	wdev->preset_chantype = channel_type;
 	return 0;
 }
 
@@ -238,7 +242,6 @@ void cfg80211_notify_new_peer_candidate(struct net_device *dev,
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 
-	trace_cfg80211_notify_new_peer_candidate(dev, macaddr);
 	if (WARN_ON(wdev->iftype != NL80211_IFTYPE_MESH_POINT))
 		return;
 
@@ -264,7 +267,7 @@ static int __cfg80211_leave_mesh(struct cfg80211_registered_device *rdev,
 	if (!wdev->mesh_id_len)
 		return -ENOTCONN;
 
-	err = rdev_leave_mesh(rdev, dev);
+	err = rdev->ops->leave_mesh(&rdev->wiphy, dev);
 	if (!err) {
 		wdev->mesh_id_len = 0;
 		wdev->channel = NULL;

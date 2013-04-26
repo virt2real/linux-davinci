@@ -1127,7 +1127,7 @@ static int snd_emu10k1_playback_open(struct snd_pcm_substream *substream)
 	struct snd_emu10k1_pcm *epcm;
 	struct snd_emu10k1_pcm_mixer *mix;
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	int i, err, sample_rate;
+	int i, err;
 
 	epcm = kzalloc(sizeof(*epcm), GFP_KERNEL);
 	if (epcm == NULL)
@@ -1146,11 +1146,7 @@ static int snd_emu10k1_playback_open(struct snd_pcm_substream *substream)
 		kfree(epcm);
 		return err;
 	}
-	if (emu->card_capabilities->emu_model && emu->emu1010.internal_clock == 0)
-		sample_rate = 44100;
-	else
-		sample_rate = 48000;
-	err = snd_pcm_hw_rule_noresample(runtime, sample_rate);
+	err = snd_pcm_hw_rule_noresample(runtime, 48000);
 	if (err < 0) {
 		kfree(epcm);
 		return err;
@@ -1395,7 +1391,7 @@ static struct snd_pcm_ops snd_emu10k1_efx_playback_ops = {
 	.page =			snd_pcm_sgbuf_ops_page,
 };
 
-int snd_emu10k1_pcm(struct snd_emu10k1 *emu, int device, struct snd_pcm **rpcm)
+int __devinit snd_emu10k1_pcm(struct snd_emu10k1 * emu, int device, struct snd_pcm ** rpcm)
 {
 	struct snd_pcm *pcm;
 	struct snd_pcm_substream *substream;
@@ -1430,8 +1426,7 @@ int snd_emu10k1_pcm(struct snd_emu10k1 *emu, int device, struct snd_pcm **rpcm)
 	return 0;
 }
 
-int snd_emu10k1_pcm_multi(struct snd_emu10k1 *emu, int device,
-			  struct snd_pcm **rpcm)
+int __devinit snd_emu10k1_pcm_multi(struct snd_emu10k1 * emu, int device, struct snd_pcm ** rpcm)
 {
 	struct snd_pcm *pcm;
 	struct snd_pcm_substream *substream;
@@ -1474,8 +1469,7 @@ static struct snd_pcm_ops snd_emu10k1_capture_mic_ops = {
 	.pointer =		snd_emu10k1_capture_pointer,
 };
 
-int snd_emu10k1_pcm_mic(struct snd_emu10k1 *emu, int device,
-			struct snd_pcm **rpcm)
+int __devinit snd_emu10k1_pcm_mic(struct snd_emu10k1 * emu, int device, struct snd_pcm ** rpcm)
 {
 	struct snd_pcm *pcm;
 	int err;
@@ -1816,8 +1810,7 @@ static struct snd_pcm_ops snd_emu10k1_fx8010_playback_ops = {
 	.ack =			snd_emu10k1_fx8010_playback_transfer,
 };
 
-int snd_emu10k1_pcm_efx(struct snd_emu10k1 *emu, int device,
-			struct snd_pcm **rpcm)
+int __devinit snd_emu10k1_pcm_efx(struct snd_emu10k1 * emu, int device, struct snd_pcm ** rpcm)
 {
 	struct snd_pcm *pcm;
 	struct snd_kcontrol *kctl;

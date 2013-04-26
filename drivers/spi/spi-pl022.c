@@ -371,7 +371,6 @@ struct pl022 {
 	/* Two optional pin states - default & sleep */
 	struct pinctrl			*pinctrl;
 	struct pinctrl_state		*pins_default;
-	struct pinctrl_state		*pins_idle;
 	struct pinctrl_state		*pins_sleep;
 	struct spi_master		*master;
 	struct pl022_ssp_controller	*master_info;
@@ -1089,7 +1088,7 @@ err_alloc_rx_sg:
 	return -ENOMEM;
 }
 
-static int pl022_dma_probe(struct pl022 *pl022)
+static int __devinit pl022_dma_probe(struct pl022 *pl022)
 {
 	dma_cap_mask_t mask;
 
@@ -2058,7 +2057,8 @@ pl022_platform_data_dt_get(struct device *dev)
 	return pd;
 }
 
-static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
+static int __devinit
+pl022_probe(struct amba_device *adev, const struct amba_id *id)
 {
 	struct device *dev = &adev->dev;
 	struct pl022_ssp_controller *platform_info = adev->dev.platform_data;
@@ -2115,11 +2115,6 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 			dev_err(dev, "could not set default pins\n");
 	} else
 		dev_err(dev, "could not get default pinstate\n");
-
-	pl022->pins_idle = pinctrl_lookup_state(pl022->pinctrl,
-					      PINCTRL_STATE_IDLE);
-	if (IS_ERR(pl022->pins_idle))
-		dev_dbg(dev, "could not get idle pinstate\n");
 
 	pl022->pins_sleep = pinctrl_lookup_state(pl022->pinctrl,
 					       PINCTRL_STATE_SLEEP);
@@ -2191,6 +2186,8 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 	printk(KERN_INFO "pl022: mapped registers from 0x%08x to %p\n",
 	       adev->res.start, pl022->virtbase);
 
+	pm_runtime_resume(dev);
+
 	pl022->clk = devm_clk_get(&adev->dev, NULL);
 	if (IS_ERR(pl022->clk)) {
 		status = PTR_ERR(pl022->clk);
@@ -2251,9 +2248,10 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 		pm_runtime_set_autosuspend_delay(dev,
 			platform_info->autosuspend_delay);
 		pm_runtime_use_autosuspend(dev);
+		pm_runtime_put_autosuspend(dev);
+	} else {
+		pm_runtime_put(dev);
 	}
-	pm_runtime_put(dev);
-
 	return 0;
 
  err_spi_register:
@@ -2274,7 +2272,7 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 	return status;
 }
 
-static int
+static int __devexit
 pl022_remove(struct amba_device *adev)
 {
 	struct pl022 *pl022 = amba_get_drvdata(adev);
@@ -2294,6 +2292,7 @@ pl022_remove(struct amba_device *adev)
 
 	clk_disable(pl022->clk);
 	clk_unprepare(pl022->clk);
+	pm_runtime_disable(&adev->dev);
 	amba_release_regions(adev);
 	tasklet_disable(&pl022->pump_transfers);
 	spi_unregister_master(pl022->master);
@@ -2307,45 +2306,33 @@ pl022_remove(struct amba_device *adev)
  * the runtime counterparts to handle external resources like
  * clocks, pins and regulators when going to sleep.
  */
-static void pl022_suspend_resources(struct pl022 *pl022, bool runtime)
+static void pl022_suspend_resources(struct pl022 *pl022)
 {
 	int ret;
-	struct pinctrl_state *pins_state;
 
 	clk_disable(pl022->clk);
 
-	pins_state = runtime ? pl022->pins_idle : pl022->pins_sleep;
 	/* Optionally let pins go into sleep states */
-	if (!IS_ERR(pins_state)) {
-		ret = pinctrl_select_state(pl022->pinctrl, pins_state);
+	if (!IS_ERR(pl022->pins_sleep)) {
+		ret = pinctrl_select_state(pl022->pinctrl,
+					   pl022->pins_sleep);
 		if (ret)
-			dev_err(&pl022->adev->dev, "could not set %s pins\n",
-				runtime ? "idle" : "sleep");
+			dev_err(&pl022->adev->dev,
+				"could not set pins to sleep state\n");
 	}
 }
 
-static void pl022_resume_resources(struct pl022 *pl022, bool runtime)
+static void pl022_resume_resources(struct pl022 *pl022)
 {
 	int ret;
 
 	/* Optionaly enable pins to be muxed in and configured */
-	/* First go to the default state */
 	if (!IS_ERR(pl022->pins_default)) {
-		ret = pinctrl_select_state(pl022->pinctrl, pl022->pins_default);
+		ret = pinctrl_select_state(pl022->pinctrl,
+					   pl022->pins_default);
 		if (ret)
 			dev_err(&pl022->adev->dev,
 				"could not set default pins\n");
-	}
-
-	if (!runtime) {
-		/* Then let's idle the pins until the next transfer happens */
-		if (!IS_ERR(pl022->pins_idle)) {
-			ret = pinctrl_select_state(pl022->pinctrl,
-					pl022->pins_idle);
-		if (ret)
-			dev_err(&pl022->adev->dev,
-				"could not set idle pins\n");
-		}
 	}
 
 	clk_enable(pl022->clk);
@@ -2363,9 +2350,7 @@ static int pl022_suspend(struct device *dev)
 		dev_warn(dev, "cannot suspend master\n");
 		return ret;
 	}
-
-	pm_runtime_get_sync(dev);
-	pl022_suspend_resources(pl022, false);
+	pl022_suspend_resources(pl022);
 
 	dev_dbg(dev, "suspended\n");
 	return 0;
@@ -2376,8 +2361,7 @@ static int pl022_resume(struct device *dev)
 	struct pl022 *pl022 = dev_get_drvdata(dev);
 	int ret;
 
-	pl022_resume_resources(pl022, false);
-	pm_runtime_put(dev);
+	pl022_resume_resources(pl022);
 
 	/* Start the queue running */
 	ret = spi_master_resume(pl022->master);
@@ -2395,7 +2379,7 @@ static int pl022_runtime_suspend(struct device *dev)
 {
 	struct pl022 *pl022 = dev_get_drvdata(dev);
 
-	pl022_suspend_resources(pl022, true);
+	pl022_suspend_resources(pl022);
 	return 0;
 }
 
@@ -2403,7 +2387,7 @@ static int pl022_runtime_resume(struct device *dev)
 {
 	struct pl022 *pl022 = dev_get_drvdata(dev);
 
-	pl022_resume_resources(pl022, true);
+	pl022_resume_resources(pl022);
 	return 0;
 }
 #endif
@@ -2483,7 +2467,7 @@ static struct amba_driver pl022_driver = {
 	},
 	.id_table	= pl022_ids,
 	.probe		= pl022_probe,
-	.remove		= pl022_remove,
+	.remove		= __devexit_p(pl022_remove),
 };
 
 static int __init pl022_init(void)

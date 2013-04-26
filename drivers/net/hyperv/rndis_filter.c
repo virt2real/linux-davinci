@@ -363,6 +363,11 @@ static void rndis_filter_receive_data(struct rndis_device *dev,
 
 	rndis_pkt = &msg->msg.pkt;
 
+	/*
+	 * FIXME: Handle multiple rndis pkt msgs that maybe enclosed in this
+	 * netvsc packet (ie TotalDataBufferLength != MessageLength)
+	 */
+
 	/* Remove the rndis header and pass it back up the stack */
 	data_offset = RNDIS_HEADER_SIZE + rndis_pkt->data_offset;
 
@@ -605,11 +610,8 @@ int rndis_filter_set_device_mac(struct hv_device *hdev, char *mac)
 		return -EBUSY;
 	} else {
 		set_complete = &request->response_msg.msg.set_complete;
-		if (set_complete->status != RNDIS_STATUS_SUCCESS) {
-			netdev_err(ndev, "Fail to set MAC on host side:0x%x\n",
-				   set_complete->status);
+		if (set_complete->status != RNDIS_STATUS_SUCCESS)
 			ret = -EINVAL;
-		}
 	}
 
 cleanup:

@@ -23,25 +23,11 @@
 
 /****************************************************************************/
 
-#ifdef CONFIG_MTD_ROM
-#define MAP_NAME "rom"
-#else
-#define MAP_NAME "ram"
-#endif
-
-/*
- * Blackfin uses uclinux_ram_map during startup, so it must not be static.
- * Provide a dummy declaration to make sparse happy.
- */
-extern struct map_info uclinux_ram_map;
-
 struct map_info uclinux_ram_map = {
-	.name = MAP_NAME,
+	.name = "RAM",
+	.phys = (unsigned long)__bss_stop,
 	.size = 0,
 };
-
-static unsigned long physaddr = -1;
-module_param(physaddr, ulong, S_IRUGO);
 
 static struct mtd_info *uclinux_ram_mtdinfo;
 
@@ -74,17 +60,11 @@ static int __init uclinux_mtd_init(void)
 	struct map_info *mapp;
 
 	mapp = &uclinux_ram_map;
-
-	if (physaddr == -1)
-		mapp->phys = (resource_size_t)__bss_stop;
-	else
-		mapp->phys = physaddr;
-
 	if (!mapp->size)
 		mapp->size = PAGE_ALIGN(ntohl(*((unsigned long *)(mapp->phys + 8))));
 	mapp->bankwidth = 4;
 
-	printk("uclinux[mtd]: probe address=0x%x size=0x%x\n",
+	printk("uclinux[mtd]: RAM probe address=0x%x size=0x%x\n",
 	       	(int) mapp->phys, (int) mapp->size);
 
 	/*
@@ -102,7 +82,7 @@ static int __init uclinux_mtd_init(void)
 
 	simple_map_init(mapp);
 
-	mtd = do_map_probe("map_" MAP_NAME, mapp);
+	mtd = do_map_probe("map_ram", mapp);
 	if (!mtd) {
 		printk("uclinux[mtd]: failed to find a mapping?\n");
 		return(-ENXIO);
@@ -138,6 +118,6 @@ module_exit(uclinux_mtd_cleanup);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Greg Ungerer <gerg@snapgear.com>");
-MODULE_DESCRIPTION("Generic MTD for uClinux");
+MODULE_DESCRIPTION("Generic RAM based MTD for uClinux");
 
 /****************************************************************************/

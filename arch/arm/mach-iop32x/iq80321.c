@@ -43,6 +43,10 @@ static void __init iq80321_timer_init(void)
 	iop_init_time(200000000);
 }
 
+static struct sys_timer iq80321_timer = {
+	.init		= iq80321_timer_init,
+};
+
 
 /*
  * IQ80321 I/O.
@@ -184,7 +188,7 @@ MACHINE_START(IQ80321, "Intel IQ80321")
 	.atag_offset	= 0x100,
 	.map_io		= iq80321_map_io,
 	.init_irq	= iop32x_init_irq,
-	.init_time	= iq80321_timer_init,
+	.timer		= &iq80321_timer,
 	.init_machine	= iq80321_init_machine,
 	.restart	= iop3xx_restart,
 MACHINE_END

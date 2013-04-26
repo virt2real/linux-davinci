@@ -34,9 +34,11 @@ asmlinkage unsigned long sys_getpagesize(void)
 	return PAGE_SIZE; /* Possibly older binaries want 8192 on sun4's? */
 }
 
+#define COLOUR_ALIGN(addr)      (((addr)+SHMLBA-1)&~(SHMLBA-1))
+
 unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsigned long len, unsigned long pgoff, unsigned long flags)
 {
-	struct vm_unmapped_area_info info;
+	struct vm_area_struct * vmm;
 
 	if (flags & MAP_FIXED) {
 		/* We do not accept a shared mapping if it would violate
@@ -54,14 +56,21 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsi
 	if (!addr)
 		addr = TASK_UNMAPPED_BASE;
 
-	info.flags = 0;
-	info.length = len;
-	info.low_limit = addr;
-	info.high_limit = TASK_SIZE;
-	info.align_mask = (flags & MAP_SHARED) ?
-		(PAGE_MASK & (SHMLBA - 1)) : 0;
-	info.align_offset = pgoff << PAGE_SHIFT;
-	return vm_unmapped_area(&info);
+	if (flags & MAP_SHARED)
+		addr = COLOUR_ALIGN(addr);
+	else
+		addr = PAGE_ALIGN(addr);
+
+	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {
+		/* At this point:  (!vmm || addr < vmm->vm_end). */
+		if (TASK_SIZE - PAGE_SIZE - len < addr)
+			return -ENOMEM;
+		if (!vmm || addr + len <= vmm->vm_start)
+			return addr;
+		addr = vmm->vm_end;
+		if (flags & MAP_SHARED)
+			addr = COLOUR_ALIGN(addr);
+	}
 }
 
 /*
@@ -160,19 +169,49 @@ sparc_breakpoint (struct pt_regs *regs)
 #endif
 }
 
-SYSCALL_DEFINE3(sparc_sigaction, int, sig,
-		struct old_sigaction __user *,act,
-		struct old_sigaction __user *,oact)
+asmlinkage int
+sparc_sigaction (int sig, const struct old_sigaction __user *act,
+		 struct old_sigaction __user *oact)
 {
+	struct k_sigaction new_ka, old_ka;
+	int ret;
+
 	WARN_ON_ONCE(sig >= 0);
-	return sys_sigaction(-sig, act, oact);
+	sig = -sig;
+
+	if (act) {
+		unsigned long mask;
+
+		if (!access_ok(VERIFY_READ, act, sizeof(*act)) ||
+		    __get_user(new_ka.sa.sa_handler, &act->sa_handler) ||
+		    __get_user(new_ka.sa.sa_restorer, &act->sa_restorer) ||
+		    __get_user(new_ka.sa.sa_flags, &act->sa_flags) ||
+		    __get_user(mask, &act->sa_mask))
+			return -EFAULT;
+		siginitset(&new_ka.sa.sa_mask, mask);
+		new_ka.ka_restorer = NULL;
+	}
+
+	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
+
+	if (!ret && oact) {
+		if (!access_ok(VERIFY_WRITE, oact, sizeof(*oact)) ||
+		    __put_user(old_ka.sa.sa_handler, &oact->sa_handler) ||
+		    __put_user(old_ka.sa.sa_restorer, &oact->sa_restorer) ||
+		    __put_user(old_ka.sa.sa_flags, &oact->sa_flags) ||
+		    __put_user(old_ka.sa.sa_mask.sig[0], &oact->sa_mask))
+			return -EFAULT;
+	}
+
+	return ret;
 }
 
-SYSCALL_DEFINE5(rt_sigaction, int, sig,
-		 const struct sigaction __user *, act,
-		 struct sigaction __user *, oact,
-		 void __user *, restorer,
-		 size_t, sigsetsize)
+asmlinkage long
+sys_rt_sigaction(int sig,
+		 const struct sigaction __user *act,
+		 struct sigaction __user *oact,
+		 void __user *restorer,
+		 size_t sigsetsize)
 {
 	struct k_sigaction new_ka, old_ka;
 	int ret;
@@ -218,4 +257,28 @@ asmlinkage int sys_getdomainname(char __user *name, int len)
 out:
 	up_read(&uts_sem);
 	return err;
+}
+
+/*
+ * Do a system call from kernel instead of calling sys_execve so we
+ * end up with proper pt_regs.
+ */
+int kernel_execve(const char *filename,
+		  const char *const argv[],
+		  const char *const envp[])
+{
+	long __res;
+	register long __g1 __asm__ ("g1") = __NR_execve;
+	register long __o0 __asm__ ("o0") = (long)(filename);
+	register long __o1 __asm__ ("o1") = (long)(argv);
+	register long __o2 __asm__ ("o2") = (long)(envp);
+	asm volatile ("t 0x10\n\t"
+		      "bcc 1f\n\t"
+		      "mov %%o0, %0\n\t"
+		      "sub %%g0, %%o0, %0\n\t"
+		      "1:\n\t"
+		      : "=r" (__res), "=&r" (__o0)
+		      : "1" (__o0), "r" (__o1), "r" (__o2), "r" (__g1)
+		      : "cc");
+	return __res;
 }

@@ -1272,7 +1272,7 @@ out:
 
 static void ap_interrupt_handler(void *unused1, void *unused2)
 {
-	inc_irq_stat(IRQIO_APB);
+	kstat_cpu(smp_processor_id()).irqs[IOINT_APB]++;
 	tasklet_schedule(&ap_tasklet);
 }
 

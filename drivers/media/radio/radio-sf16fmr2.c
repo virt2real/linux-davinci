@@ -197,13 +197,13 @@ static int fmr2_tea_ext_init(struct snd_tea575x *tea)
 	return 0;
 }
 
-static struct pnp_device_id fmr2_pnp_ids[] = {
+static struct pnp_device_id fmr2_pnp_ids[] __devinitdata = {
 	{ .id = "MFRad13" }, /* tuner subdevice of SF16-FMD2 */
 	{ .id = "" }
 };
 MODULE_DEVICE_TABLE(pnp, fmr2_pnp_ids);
 
-static int fmr2_probe(struct fmr2 *fmr2, struct device *pdev, int io)
+static int __devinit fmr2_probe(struct fmr2 *fmr2, struct device *pdev, int io)
 {
 	int err, i;
 	char *card_name = fmr2->is_fmd2 ? "SF16-FMD2" : "SF16-FMR2";
@@ -249,7 +249,7 @@ static int fmr2_probe(struct fmr2 *fmr2, struct device *pdev, int io)
 	return 0;
 }
 
-static int fmr2_isa_match(struct device *pdev, unsigned int ndev)
+static int __devinit fmr2_isa_match(struct device *pdev, unsigned int ndev)
 {
 	struct fmr2 *fmr2 = kzalloc(sizeof(*fmr2), GFP_KERNEL);
 	if (!fmr2)
@@ -265,7 +265,8 @@ static int fmr2_isa_match(struct device *pdev, unsigned int ndev)
 	return 1;
 }
 
-static int fmr2_pnp_probe(struct pnp_dev *pdev, const struct pnp_device_id *id)
+static int __devinit fmr2_pnp_probe(struct pnp_dev *pdev,
+				const struct pnp_device_id *id)
 {
 	int ret;
 	struct fmr2 *fmr2 = kzalloc(sizeof(*fmr2), GFP_KERNEL);
@@ -284,7 +285,7 @@ static int fmr2_pnp_probe(struct pnp_dev *pdev, const struct pnp_device_id *id)
 	return 0;
 }
 
-static void fmr2_remove(struct fmr2 *fmr2)
+static void __devexit fmr2_remove(struct fmr2 *fmr2)
 {
 	snd_tea575x_exit(&fmr2->tea);
 	release_region(fmr2->io, 2);
@@ -292,7 +293,7 @@ static void fmr2_remove(struct fmr2 *fmr2)
 	kfree(fmr2);
 }
 
-static int fmr2_isa_remove(struct device *pdev, unsigned int ndev)
+static int __devexit fmr2_isa_remove(struct device *pdev, unsigned int ndev)
 {
 	fmr2_remove(dev_get_drvdata(pdev));
 	dev_set_drvdata(pdev, NULL);
@@ -300,7 +301,7 @@ static int fmr2_isa_remove(struct device *pdev, unsigned int ndev)
 	return 0;
 }
 
-static void fmr2_pnp_remove(struct pnp_dev *pdev)
+static void __devexit fmr2_pnp_remove(struct pnp_dev *pdev)
 {
 	fmr2_remove(pnp_get_drvdata(pdev));
 	pnp_set_drvdata(pdev, NULL);
@@ -308,7 +309,7 @@ static void fmr2_pnp_remove(struct pnp_dev *pdev)
 
 struct isa_driver fmr2_isa_driver = {
 	.match		= fmr2_isa_match,
-	.remove		= fmr2_isa_remove,
+	.remove		= __devexit_p(fmr2_isa_remove),
 	.driver		= {
 		.name	= "radio-sf16fmr2",
 	},
@@ -318,7 +319,7 @@ struct pnp_driver fmr2_pnp_driver = {
 	.name		= "radio-sf16fmr2",
 	.id_table	= fmr2_pnp_ids,
 	.probe		= fmr2_pnp_probe,
-	.remove		= fmr2_pnp_remove,
+	.remove		= __devexit_p(fmr2_pnp_remove),
 };
 
 static int __init fmr2_init(void)

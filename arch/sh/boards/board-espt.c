@@ -1,5 +1,5 @@
 /*
- * Data Technology Inc. ESPT-GIGA board support
+ * Data Technology Inc. ESPT-GIGA board suport
  *
  * Copyright (C) 2008, 2009 Renesas Solutions Corp.
  * Copyright (C) 2008, 2009 Nobuhiro Iwamatsu <iwamatsu.nobuhiro@renesas.com>

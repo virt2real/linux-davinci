@@ -56,10 +56,6 @@ static char config[MAX_PARAM_LENGTH];
 module_param_string(netconsole, config, MAX_PARAM_LENGTH, 0);
 MODULE_PARM_DESC(netconsole, " netconsole=[src-port]@[src-ip]/[dev],[tgt-port]@<tgt-ip>/[tgt-macaddr]");
 
-static bool oops_only = false;
-module_param(oops_only, bool, 0600);
-MODULE_PARM_DESC(oops_only, "Only log oops messages");
-
 #ifndef	MODULE
 static int __init option_setup(char *opt)
 {
@@ -269,18 +265,12 @@ static ssize_t show_remote_port(struct netconsole_target *nt, char *buf)
 
 static ssize_t show_local_ip(struct netconsole_target *nt, char *buf)
 {
-	if (nt->np.ipv6)
-		return snprintf(buf, PAGE_SIZE, "%pI6c\n", &nt->np.local_ip.in6);
-	else
-		return snprintf(buf, PAGE_SIZE, "%pI4\n", &nt->np.local_ip);
+	return snprintf(buf, PAGE_SIZE, "%pI4\n", &nt->np.local_ip);
 }
 
 static ssize_t show_remote_ip(struct netconsole_target *nt, char *buf)
 {
-	if (nt->np.ipv6)
-		return snprintf(buf, PAGE_SIZE, "%pI6c\n", &nt->np.remote_ip.in6);
-	else
-		return snprintf(buf, PAGE_SIZE, "%pI4\n", &nt->np.remote_ip);
+	return snprintf(buf, PAGE_SIZE, "%pI4\n", &nt->np.remote_ip);
 }
 
 static ssize_t show_local_mac(struct netconsole_target *nt, char *buf)
@@ -416,22 +406,7 @@ static ssize_t store_local_ip(struct netconsole_target *nt,
 		return -EINVAL;
 	}
 
-	if (strnchr(buf, count, ':')) {
-		const char *end;
-		if (in6_pton(buf, count, nt->np.local_ip.in6.s6_addr, -1, &end) > 0) {
-			if (*end && *end != '\n') {
-				printk(KERN_ERR "netconsole: invalid IPv6 address at: <%c>\n", *end);
-				return -EINVAL;
-			}
-			nt->np.ipv6 = true;
-		} else
-			return -EINVAL;
-	} else {
-		if (!nt->np.ipv6) {
-			nt->np.local_ip.ip = in_aton(buf);
-		} else
-			return -EINVAL;
-	}
+	nt->np.local_ip = in_aton(buf);
 
 	return strnlen(buf, count);
 }
@@ -447,22 +422,7 @@ static ssize_t store_remote_ip(struct netconsole_target *nt,
 		return -EINVAL;
 	}
 
-	if (strnchr(buf, count, ':')) {
-		const char *end;
-		if (in6_pton(buf, count, nt->np.remote_ip.in6.s6_addr, -1, &end) > 0) {
-			if (*end && *end != '\n') {
-				printk(KERN_ERR "netconsole: invalid IPv6 address at: <%c>\n", *end);
-				return -EINVAL;
-			}
-			nt->np.ipv6 = true;
-		} else
-			return -EINVAL;
-	} else {
-		if (!nt->np.ipv6) {
-			nt->np.remote_ip.ip = in_aton(buf);
-		} else
-			return -EINVAL;
-	}
+	nt->np.remote_ip = in_aton(buf);
 
 	return strnlen(buf, count);
 }
@@ -666,7 +626,6 @@ static int netconsole_netdev_event(struct notifier_block *this,
 		goto done;
 
 	spin_lock_irqsave(&target_list_lock, flags);
-restart:
 	list_for_each_entry(nt, &target_list, list) {
 		netconsole_target_get(nt);
 		if (nt->np.dev == dev) {
@@ -679,17 +638,15 @@ restart:
 			case NETDEV_UNREGISTER:
 				/*
 				 * rtnl_lock already held
-				 * we might sleep in __netpoll_cleanup()
 				 */
-				spin_unlock_irqrestore(&target_list_lock, flags);
-				__netpoll_cleanup(&nt->np);
-				spin_lock_irqsave(&target_list_lock, flags);
-				dev_put(nt->np.dev);
-				nt->np.dev = NULL;
+				if (nt->np.dev) {
+					__netpoll_cleanup(&nt->np);
+					dev_put(nt->np.dev);
+					nt->np.dev = NULL;
+				}
 				nt->enabled = 0;
 				stopped = true;
-				netconsole_target_put(nt);
-				goto restart;
+				break;
 			}
 		}
 		netconsole_target_put(nt);
@@ -726,8 +683,6 @@ static void write_msg(struct console *con, const char *msg, unsigned int len)
 	struct netconsole_target *nt;
 	const char *tmp;
 
-	if (oops_only && !oops_in_progress)
-		return;
 	/* Avoid taking lock and disabling interrupts unnecessarily */
 	if (list_empty(&target_list))
 		return;

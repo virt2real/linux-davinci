@@ -69,7 +69,8 @@ static struct map_info scb2_map = {
 };
 static int region_fail;
 
-static int scb2_fixup_mtd(struct mtd_info *mtd)
+static int __devinit
+scb2_fixup_mtd(struct mtd_info *mtd)
 {
 	int i;
 	int done = 0;
@@ -132,8 +133,8 @@ static int scb2_fixup_mtd(struct mtd_info *mtd)
 /* CSB5's 'Function Control Register' has bits for decoding @ >= 0xffc00000 */
 #define CSB5_FCR	0x41
 #define CSB5_FCR_DECODE_ALL 0x0e
-static int scb2_flash_probe(struct pci_dev *dev,
-			    const struct pci_device_id *ent)
+static int __devinit
+scb2_flash_probe(struct pci_dev *dev, const struct pci_device_id *ent)
 {
 	u8 reg;
 
@@ -196,7 +197,8 @@ static int scb2_flash_probe(struct pci_dev *dev,
 	return 0;
 }
 
-static void scb2_flash_remove(struct pci_dev *dev)
+static void __devexit
+scb2_flash_remove(struct pci_dev *dev)
 {
 	if (!scb2_mtd)
 		return;
@@ -229,7 +231,7 @@ static struct pci_driver scb2_flash_driver = {
 	.name =     "Intel SCB2 BIOS Flash",
 	.id_table = scb2_flash_pci_ids,
 	.probe =    scb2_flash_probe,
-	.remove =   scb2_flash_remove,
+	.remove =   __devexit_p(scb2_flash_remove),
 };
 
 module_pci_driver(scb2_flash_driver);

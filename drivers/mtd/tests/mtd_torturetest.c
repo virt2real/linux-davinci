@@ -23,8 +23,6 @@
  * damage caused by this program.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -33,6 +31,7 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 
+#define PRINT_PREF KERN_INFO "mtd_torturetest: "
 #define RETRIES 3
 
 static int eb = 8;
@@ -108,12 +107,12 @@ static inline int erase_eraseblock(int ebnum)
 
 	err = mtd_erase(mtd, &ei);
 	if (err) {
-		pr_err("error %d while erasing EB %d\n", err, ebnum);
+		printk(PRINT_PREF "error %d while erasing EB %d\n", err, ebnum);
 		return err;
 	}
 
 	if (ei.state == MTD_ERASE_FAILED) {
-		pr_err("some erase error occurred at EB %d\n",
+		printk(PRINT_PREF "some erase error occurred at EB %d\n",
 		       ebnum);
 		return -EIO;
 	}
@@ -140,40 +139,40 @@ static inline int check_eraseblock(int ebnum, unsigned char *buf)
 retry:
 	err = mtd_read(mtd, addr, len, &read, check_buf);
 	if (mtd_is_bitflip(err))
-		pr_err("single bit flip occurred at EB %d "
+		printk(PRINT_PREF "single bit flip occurred at EB %d "
 		       "MTD reported that it was fixed.\n", ebnum);
 	else if (err) {
-		pr_err("error %d while reading EB %d, "
+		printk(PRINT_PREF "error %d while reading EB %d, "
 		       "read %zd\n", err, ebnum, read);
 		return err;
 	}
 
 	if (read != len) {
-		pr_err("failed to read %zd bytes from EB %d, "
+		printk(PRINT_PREF "failed to read %zd bytes from EB %d, "
 		       "read only %zd, but no error reported\n",
 		       len, ebnum, read);
 		return -EIO;
 	}
 
 	if (memcmp(buf, check_buf, len)) {
-		pr_err("read wrong data from EB %d\n", ebnum);
+		printk(PRINT_PREF "read wrong data from EB %d\n", ebnum);
 		report_corrupt(check_buf, buf);
 
 		if (retries++ < RETRIES) {
 			/* Try read again */
 			yield();
-			pr_info("re-try reading data from EB %d\n",
+			printk(PRINT_PREF "re-try reading data from EB %d\n",
 			       ebnum);
 			goto retry;
 		} else {
-			pr_info("retried %d times, still errors, "
+			printk(PRINT_PREF "retried %d times, still errors, "
 			       "give-up\n", RETRIES);
 			return -EINVAL;
 		}
 	}
 
 	if (retries != 0)
-		pr_info("only attempt number %d was OK (!!!)\n",
+		printk(PRINT_PREF "only attempt number %d was OK (!!!)\n",
 		       retries);
 
 	return 0;
@@ -192,12 +191,12 @@ static inline int write_pattern(int ebnum, void *buf)
 	}
 	err = mtd_write(mtd, addr, len, &written, buf);
 	if (err) {
-		pr_err("error %d while writing EB %d, written %zd"
+		printk(PRINT_PREF "error %d while writing EB %d, written %zd"
 		      " bytes\n", err, ebnum, written);
 		return err;
 	}
 	if (written != len) {
-		pr_info("written only %zd bytes of %zd, but no error"
+		printk(PRINT_PREF "written only %zd bytes of %zd, but no error"
 		       " reported\n", written, len);
 		return -EIO;
 	}
@@ -208,66 +207,70 @@ static inline int write_pattern(int ebnum, void *buf)
 static int __init tort_init(void)
 {
 	int err = 0, i, infinite = !cycles_count;
-	int *bad_ebs;
+	int bad_ebs[ebcnt];
 
 	printk(KERN_INFO "\n");
 	printk(KERN_INFO "=================================================\n");
-	pr_info("Warning: this program is trying to wear out your "
+	printk(PRINT_PREF "Warning: this program is trying to wear out your "
 	       "flash, stop it if this is not wanted.\n");
 
 	if (dev < 0) {
-		pr_info("Please specify a valid mtd-device via module parameter\n");
-		pr_crit("CAREFUL: This test wipes all data on the specified MTD device!\n");
+		printk(PRINT_PREF "Please specify a valid mtd-device via module paramter\n");
+		printk(KERN_CRIT "CAREFUL: This test wipes all data on the specified MTD device!\n");
 		return -EINVAL;
 	}
 
-	pr_info("MTD device: %d\n", dev);
-	pr_info("torture %d eraseblocks (%d-%d) of mtd%d\n",
+	printk(PRINT_PREF "MTD device: %d\n", dev);
+	printk(PRINT_PREF "torture %d eraseblocks (%d-%d) of mtd%d\n",
 	       ebcnt, eb, eb + ebcnt - 1, dev);
 	if (pgcnt)
-		pr_info("torturing just %d pages per eraseblock\n",
+		printk(PRINT_PREF "torturing just %d pages per eraseblock\n",
 			pgcnt);
-	pr_info("write verify %s\n", check ? "enabled" : "disabled");
+	printk(PRINT_PREF "write verify %s\n", check ? "enabled" : "disabled");
 
 	mtd = get_mtd_device(NULL, dev);
 	if (IS_ERR(mtd)) {
 		err = PTR_ERR(mtd);
-		pr_err("error: cannot get MTD device\n");
+		printk(PRINT_PREF "error: cannot get MTD device\n");
 		return err;
 	}
 
 	if (mtd->writesize == 1) {
-		pr_info("not NAND flash, assume page size is 512 "
+		printk(PRINT_PREF "not NAND flash, assume page size is 512 "
 		       "bytes.\n");
 		pgsize = 512;
 	} else
 		pgsize = mtd->writesize;
 
 	if (pgcnt && (pgcnt > mtd->erasesize / pgsize || pgcnt < 0)) {
-		pr_err("error: invalid pgcnt value %d\n", pgcnt);
+		printk(PRINT_PREF "error: invalid pgcnt value %d\n", pgcnt);
 		goto out_mtd;
 	}
 
 	err = -ENOMEM;
 	patt_5A5 = kmalloc(mtd->erasesize, GFP_KERNEL);
-	if (!patt_5A5)
+	if (!patt_5A5) {
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		goto out_mtd;
+	}
 
 	patt_A5A = kmalloc(mtd->erasesize, GFP_KERNEL);
-	if (!patt_A5A)
+	if (!patt_A5A) {
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		goto out_patt_5A5;
+	}
 
 	patt_FF = kmalloc(mtd->erasesize, GFP_KERNEL);
-	if (!patt_FF)
+	if (!patt_FF) {
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		goto out_patt_A5A;
+	}
 
 	check_buf = kmalloc(mtd->erasesize, GFP_KERNEL);
-	if (!check_buf)
+	if (!check_buf) {
+		printk(PRINT_PREF "error: cannot allocate memory\n");
 		goto out_patt_FF;
-
-	bad_ebs = kcalloc(ebcnt, sizeof(*bad_ebs), GFP_KERNEL);
-	if (!bad_ebs)
-		goto out_check_buf;
+	}
 
 	err = 0;
 
@@ -286,18 +289,19 @@ static int __init tort_init(void)
 	/*
 	 * Check if there is a bad eraseblock among those we are going to test.
 	 */
+	memset(&bad_ebs[0], 0, sizeof(int) * ebcnt);
 	if (mtd_can_have_bb(mtd)) {
 		for (i = eb; i < eb + ebcnt; i++) {
 			err = mtd_block_isbad(mtd, (loff_t)i * mtd->erasesize);
 
 			if (err < 0) {
-				pr_info("block_isbad() returned %d "
+				printk(PRINT_PREF "block_isbad() returned %d "
 				       "for EB %d\n", err, i);
 				goto out;
 			}
 
 			if (err) {
-				pr_err("EB %d is bad. Skip it.\n", i);
+				printk("EB %d is bad. Skip it.\n", i);
 				bad_ebs[i - eb] = 1;
 			}
 		}
@@ -325,7 +329,7 @@ static int __init tort_init(void)
 					continue;
 				err = check_eraseblock(i, patt_FF);
 				if (err) {
-					pr_info("verify failed"
+					printk(PRINT_PREF "verify failed"
 					       " for 0xFF... pattern\n");
 					goto out;
 				}
@@ -358,7 +362,7 @@ static int __init tort_init(void)
 					patt = patt_A5A;
 				err = check_eraseblock(i, patt);
 				if (err) {
-					pr_info("verify failed for %s"
+					printk(PRINT_PREF "verify failed for %s"
 					       " pattern\n",
 					       ((eb + erase_cycles) & 1) ?
 					       "0x55AA55..." : "0xAA55AA...");
@@ -376,7 +380,7 @@ static int __init tort_init(void)
 			stop_timing();
 			ms = (finish.tv_sec - start.tv_sec) * 1000 +
 			     (finish.tv_usec - start.tv_usec) / 1000;
-			pr_info("%08u erase cycles done, took %lu "
+			printk(PRINT_PREF "%08u erase cycles done, took %lu "
 			       "milliseconds (%lu seconds)\n",
 			       erase_cycles, ms, ms / 1000);
 			start_timing();
@@ -387,10 +391,8 @@ static int __init tort_init(void)
 	}
 out:
 
-	pr_info("finished after %u erase cycles\n",
+	printk(PRINT_PREF "finished after %u erase cycles\n",
 	       erase_cycles);
-	kfree(bad_ebs);
-out_check_buf:
 	kfree(check_buf);
 out_patt_FF:
 	kfree(patt_FF);
@@ -401,7 +403,7 @@ out_patt_5A5:
 out_mtd:
 	put_mtd_device(mtd);
 	if (err)
-		pr_info("error %d occurred during torturing\n", err);
+		printk(PRINT_PREF "error %d occurred during torturing\n", err);
 	printk(KERN_INFO "=================================================\n");
 	return err;
 }
@@ -439,9 +441,9 @@ static void report_corrupt(unsigned char *read, unsigned char *written)
 			       &bits) >= 0)
 			pages++;
 
-	pr_info("verify fails on %d pages, %d bytes/%d bits\n",
+	printk(PRINT_PREF "verify fails on %d pages, %d bytes/%d bits\n",
 	       pages, bytes, bits);
-	pr_info("The following is a list of all differences between"
+	printk(PRINT_PREF "The following is a list of all differences between"
 	       " what was read from flash and what was expected\n");
 
 	for (i = 0; i < check_len; i += pgsize) {
@@ -455,7 +457,7 @@ static void report_corrupt(unsigned char *read, unsigned char *written)
 		printk("-------------------------------------------------------"
 		       "----------------------------------\n");
 
-		pr_info("Page %zd has %d bytes/%d bits failing verify,"
+		printk(PRINT_PREF "Page %zd has %d bytes/%d bits failing verify,"
 		       " starting at offset 0x%x\n",
 		       (mtd->erasesize - check_len + i) / pgsize,
 		       bytes, bits, first);

@@ -164,11 +164,23 @@ static void __init davinci_ntosd2_map_io(void)
 
 static struct davinci_mmc_config davinci_ntosd2_mmc_config = {
 	.wires		= 4,
+	.version	= MMC_CTLR_VERSION_1
 };
 
-#define HAS_ATA		IS_ENABLED(CONFIG_BLK_DEV_PALMCHIP_BK3710)
 
-#define HAS_NAND	IS_ENABLED(CONFIG_MTD_NAND_DAVINCI)
+#if defined(CONFIG_BLK_DEV_PALMCHIP_BK3710) || \
+	defined(CONFIG_BLK_DEV_PALMCHIP_BK3710_MODULE)
+#define HAS_ATA 1
+#else
+#define HAS_ATA 0
+#endif
+
+#if defined(CONFIG_MTD_NAND_DAVINCI) || \
+	defined(CONFIG_MTD_NAND_DAVINCI_MODULE)
+#define HAS_NAND 1
+#else
+#define HAS_NAND 0
+#endif
 
 static __init void davinci_ntosd2_init(void)
 {
@@ -225,7 +237,7 @@ MACHINE_START(NEUROS_OSD2, "Neuros OSD2")
 	.atag_offset	= 0x100,
 	.map_io		 = davinci_ntosd2_map_io,
 	.init_irq	= davinci_irq_init,
-	.init_time	= davinci_timer_init,
+	.timer		= &davinci_timer,
 	.init_machine = davinci_ntosd2_init,
 	.init_late	= davinci_init_late,
 	.dma_zone_size	= SZ_128M,

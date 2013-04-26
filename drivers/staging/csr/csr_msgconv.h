@@ -15,6 +15,10 @@
 #include "csr_prim_defs.h"
 #include "csr_sched.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef size_t (CsrMsgSizeofFunc)(void *msg);
 typedef u8 *(CsrMsgSerializeFunc)(u8 *buffer, size_t *length, void *msg);
 typedef void (CsrMsgFreeFunc)(void *msg);
@@ -74,5 +78,10 @@ void CsrUint16Des(u16 *value, u8 *buffer, size_t *offset);
 void CsrUint32Des(u32 *value, u8 *buffer, size_t *offset);
 void CsrMemCpyDes(void *value, u8 *buffer, size_t *offset, size_t length);
 void CsrCharStringDes(char **value, u8 *buffer, size_t *offset);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

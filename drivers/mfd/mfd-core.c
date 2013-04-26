@@ -21,10 +21,6 @@
 #include <linux/irqdomain.h>
 #include <linux/of.h>
 
-static struct device_type mfd_dev_type = {
-	.name	= "mfd_device",
-};
-
 int mfd_cell_enable(struct platform_device *pdev)
 {
 	const struct mfd_cell *cell = mfd_get_cell(pdev);
@@ -95,7 +91,6 @@ static int mfd_add_device(struct device *parent, int id,
 		goto fail_device;
 
 	pdev->dev.parent = parent;
-	pdev->dev.type = &mfd_dev_type;
 
 	if (parent->of_node && cell->of_compatible) {
 		for_each_child_of_node(parent->of_node, np) {
@@ -209,15 +204,9 @@ EXPORT_SYMBOL(mfd_add_devices);
 
 static int mfd_remove_devices_fn(struct device *dev, void *c)
 {
-	struct platform_device *pdev;
-	const struct mfd_cell *cell;
+	struct platform_device *pdev = to_platform_device(dev);
+	const struct mfd_cell *cell = mfd_get_cell(pdev);
 	atomic_t **usage_count = c;
-
-	if (dev->type != &mfd_dev_type)
-		return 0;
-
-	pdev = to_platform_device(dev);
-	cell = mfd_get_cell(pdev);
 
 	/* find the base address of usage_count pointers (for freeing) */
 	if (!*usage_count || (cell->usage_count < *usage_count))

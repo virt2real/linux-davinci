@@ -27,7 +27,6 @@
 #include <linux/err.h>
 #include <linux/pm_runtime.h>
 #include <linux/delay.h>
-#include <linux/usb/omap_control_usb.h>
 
 /**
  * omap_usb2_set_comparator - links the comparator present in the sytem with
@@ -52,6 +51,29 @@ int omap_usb2_set_comparator(struct phy_companion *comparator)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(omap_usb2_set_comparator);
+
+/**
+ * omap_usb_phy_power - power on/off the phy using control module reg
+ * @phy: struct omap_usb *
+ * @on: 0 or 1, based on powering on or off the PHY
+ *
+ * XXX: Remove this function once control module driver gets merged
+ */
+static void omap_usb_phy_power(struct omap_usb *phy, int on)
+{
+	u32 val;
+
+	if (on) {
+		val = readl(phy->control_dev);
+		if (val & PHY_PD) {
+			writel(~PHY_PD, phy->control_dev);
+			/* XXX: add proper documentation for this delay */
+			mdelay(200);
+		}
+	} else {
+		writel(PHY_PD, phy->control_dev);
+	}
+}
 
 static int omap_usb_set_vbus(struct usb_otg *otg, bool enabled)
 {
@@ -102,7 +124,7 @@ static int omap_usb2_suspend(struct usb_phy *x, int suspend)
 	struct omap_usb *phy = phy_to_omapusb(x);
 
 	if (suspend && !phy->is_suspended) {
-		omap_control_usb_phy_power(phy->control_dev, 0);
+		omap_usb_phy_power(phy, 0);
 		pm_runtime_put_sync(phy->dev);
 		phy->is_suspended = 1;
 	} else if (!suspend && phy->is_suspended) {
@@ -112,17 +134,18 @@ static int omap_usb2_suspend(struct usb_phy *x, int suspend)
 									ret);
 			return ret;
 		}
-		omap_control_usb_phy_power(phy->control_dev, 1);
+		omap_usb_phy_power(phy, 1);
 		phy->is_suspended = 0;
 	}
 
 	return 0;
 }
 
-static int omap_usb2_probe(struct platform_device *pdev)
+static int __devinit omap_usb2_probe(struct platform_device *pdev)
 {
 	struct omap_usb			*phy;
 	struct usb_otg			*otg;
+	struct resource			*res;
 
 	phy = devm_kzalloc(&pdev->dev, sizeof(*phy), GFP_KERNEL);
 	if (!phy) {
@@ -142,16 +165,17 @@ static int omap_usb2_probe(struct platform_device *pdev)
 	phy->phy.label		= "omap-usb2";
 	phy->phy.set_suspend	= omap_usb2_suspend;
 	phy->phy.otg		= otg;
-	phy->phy.type		= USB_PHY_TYPE_USB2;
 
-	phy->control_dev = omap_get_control_dev();
-	if (IS_ERR(phy->control_dev)) {
-		dev_dbg(&pdev->dev, "Failed to get control device\n");
-		return -ENODEV;
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+
+	phy->control_dev = devm_request_and_ioremap(&pdev->dev, res);
+	if (phy->control_dev == NULL) {
+		dev_err(&pdev->dev, "Failed to obtain io memory\n");
+		return -ENXIO;
 	}
 
 	phy->is_suspended	= 1;
-	omap_control_usb_phy_power(phy->control_dev, 0);
+	omap_usb_phy_power(phy, 0);
 
 	otg->set_host		= omap_usb_set_host;
 	otg->set_peripheral	= omap_usb_set_peripheral;
@@ -166,13 +190,7 @@ static int omap_usb2_probe(struct platform_device *pdev)
 	}
 	clk_prepare(phy->wkupclk);
 
-	phy->optclk = devm_clk_get(phy->dev, "usb_otg_ss_refclk960m");
-	if (IS_ERR(phy->optclk))
-		dev_vdbg(&pdev->dev, "unable to get refclk960m\n");
-	else
-		clk_prepare(phy->optclk);
-
-	usb_add_phy_dev(&phy->phy);
+	usb_add_phy(&phy->phy, USB_PHY_TYPE_USB2);
 
 	platform_set_drvdata(pdev, phy);
 
@@ -181,13 +199,11 @@ static int omap_usb2_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int omap_usb2_remove(struct platform_device *pdev)
+static int __devexit omap_usb2_remove(struct platform_device *pdev)
 {
 	struct omap_usb	*phy = platform_get_drvdata(pdev);
 
 	clk_unprepare(phy->wkupclk);
-	if (!IS_ERR(phy->optclk))
-		clk_unprepare(phy->optclk);
 	usb_remove_phy(&phy->phy);
 
 	return 0;
@@ -201,8 +217,6 @@ static int omap_usb2_runtime_suspend(struct device *dev)
 	struct omap_usb	*phy = platform_get_drvdata(pdev);
 
 	clk_disable(phy->wkupclk);
-	if (!IS_ERR(phy->optclk))
-		clk_disable(phy->optclk);
 
 	return 0;
 }
@@ -214,25 +228,9 @@ static int omap_usb2_runtime_resume(struct device *dev)
 	struct omap_usb	*phy = platform_get_drvdata(pdev);
 
 	ret = clk_enable(phy->wkupclk);
-	if (ret < 0) {
+	if (ret < 0)
 		dev_err(phy->dev, "Failed to enable wkupclk %d\n", ret);
-		goto err0;
-	}
 
-	if (!IS_ERR(phy->optclk)) {
-		ret = clk_enable(phy->optclk);
-		if (ret < 0) {
-			dev_err(phy->dev, "Failed to enable optclk %d\n", ret);
-			goto err1;
-		}
-	}
-
-	return 0;
-
-err1:
-	clk_disable(phy->wkupclk);
-
-err0:
 	return ret;
 }
 
@@ -256,7 +254,7 @@ MODULE_DEVICE_TABLE(of, omap_usb2_id_table);
 
 static struct platform_driver omap_usb2_driver = {
 	.probe		= omap_usb2_probe,
-	.remove		= omap_usb2_remove,
+	.remove		= __devexit_p(omap_usb2_remove),
 	.driver		= {
 		.name	= "omap-usb2",
 		.owner	= THIS_MODULE,

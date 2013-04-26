@@ -322,6 +322,7 @@ static struct ubi_ainf_volume *add_volume(struct ubi_attach_info *ai,
 int ubi_compare_lebs(struct ubi_device *ubi, const struct ubi_ainf_peb *aeb,
 			int pnum, const struct ubi_vid_hdr *vid_hdr)
 {
+	void *buf;
 	int len, err, second_is_newer, bitflips = 0, corrupted = 0;
 	uint32_t data_crc, crc;
 	struct ubi_vid_hdr *vh = NULL;
@@ -392,14 +393,18 @@ int ubi_compare_lebs(struct ubi_device *ubi, const struct ubi_ainf_peb *aeb,
 	/* Read the data of the copy and check the CRC */
 
 	len = be32_to_cpu(vid_hdr->data_size);
+	buf = vmalloc(len);
+	if (!buf) {
+		err = -ENOMEM;
+		goto out_free_vidh;
+	}
 
-	mutex_lock(&ubi->buf_mutex);
-	err = ubi_io_read_data(ubi, ubi->peb_buf, pnum, 0, len);
+	err = ubi_io_read_data(ubi, buf, pnum, 0, len);
 	if (err && err != UBI_IO_BITFLIPS && !mtd_is_eccerr(err))
-		goto out_unlock;
+		goto out_free_buf;
 
 	data_crc = be32_to_cpu(vid_hdr->data_crc);
-	crc = crc32(UBI_CRC32_INIT, ubi->peb_buf, len);
+	crc = crc32(UBI_CRC32_INIT, buf, len);
 	if (crc != data_crc) {
 		dbg_bld("PEB %d CRC error: calculated %#08x, must be %#08x",
 			pnum, crc, data_crc);
@@ -410,8 +415,8 @@ int ubi_compare_lebs(struct ubi_device *ubi, const struct ubi_ainf_peb *aeb,
 		dbg_bld("PEB %d CRC is OK", pnum);
 		bitflips = !!err;
 	}
-	mutex_unlock(&ubi->buf_mutex);
 
+	vfree(buf);
 	ubi_free_vid_hdr(ubi, vh);
 
 	if (second_is_newer)
@@ -421,8 +426,8 @@ int ubi_compare_lebs(struct ubi_device *ubi, const struct ubi_ainf_peb *aeb,
 
 	return second_is_newer | (bitflips << 1) | (corrupted << 2);
 
-out_unlock:
-	mutex_unlock(&ubi->buf_mutex);
+out_free_buf:
+	vfree(buf);
 out_free_vidh:
 	ubi_free_vid_hdr(ubi, vh);
 	return err;
@@ -1448,7 +1453,7 @@ int ubi_attach(struct ubi_device *ubi, int force_scan)
 		goto out_wl;
 
 #ifdef CONFIG_MTD_UBI_FASTMAP
-	if (ubi->fm && ubi_dbg_chk_gen(ubi)) {
+	if (ubi->fm && ubi->dbg->chk_gen) {
 		struct ubi_attach_info *scan_ai;
 
 		scan_ai = alloc_ai("ubi_ckh_aeb_slab_cache");
@@ -1498,7 +1503,7 @@ static int self_check_ai(struct ubi_device *ubi, struct ubi_attach_info *ai)
 	struct ubi_ainf_peb *aeb, *last_aeb;
 	uint8_t *buf;
 
-	if (!ubi_dbg_chk_gen(ubi))
+	if (!ubi->dbg->chk_gen)
 		return 0;
 
 	/*

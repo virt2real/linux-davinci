@@ -4480,11 +4480,18 @@ static void handle_scan_event(struct ipw_priv *priv)
 {
 	/* Only userspace-requested scan completion events go out immediately */
 	if (!priv->user_requested_scan) {
-		schedule_delayed_work(&priv->scan_event,
-				      round_jiffies_relative(msecs_to_jiffies(4000)));
+		if (!delayed_work_pending(&priv->scan_event))
+			schedule_delayed_work(&priv->scan_event,
+					      round_jiffies_relative(msecs_to_jiffies(4000)));
 	} else {
+		union iwreq_data wrqu;
+
 		priv->user_requested_scan = 0;
-		mod_delayed_work(system_wq, &priv->scan_event, 0);
+		cancel_delayed_work(&priv->scan_event);
+
+		wrqu.data.length = 0;
+		wrqu.data.flags = 0;
+		wireless_send_event(priv->net_dev, SIOCGIWSCAN, &wrqu, NULL);
 	}
 }
 
@@ -6805,6 +6812,7 @@ static int ipw_wx_get_auth(struct net_device *dev,
 	struct libipw_device *ieee = priv->ieee;
 	struct lib80211_crypt_data *crypt;
 	struct iw_param *param = &wrqu->param;
+	int ret = 0;
 
 	switch (param->flags & IW_AUTH_INDEX) {
 	case IW_AUTH_WPA_VERSION:
@@ -6814,7 +6822,8 @@ static int ipw_wx_get_auth(struct net_device *dev,
 		/*
 		 * wpa_supplicant will control these internally
 		 */
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		break;
 
 	case IW_AUTH_TKIP_COUNTERMEASURES:
 		crypt = priv->ieee->crypt_info.crypt[priv->ieee->crypt_info.tx_keyidx];
@@ -10463,7 +10472,7 @@ static void ipw_handle_promiscuous_tx(struct ipw_priv *priv,
 		} else
 			len = src->len;
 
-		dst = alloc_skb(len + sizeof(*rt_hdr) + sizeof(u16)*2, GFP_ATOMIC);
+		dst = alloc_skb(len + sizeof(*rt_hdr), GFP_ATOMIC);
 		if (!dst)
 			continue;
 
@@ -10765,7 +10774,7 @@ static void ipw_bg_link_down(struct work_struct *work)
 	mutex_unlock(&priv->mutex);
 }
 
-static int ipw_setup_deferred_work(struct ipw_priv *priv)
+static int __devinit ipw_setup_deferred_work(struct ipw_priv *priv)
 {
 	int ret = 0;
 
@@ -11260,31 +11269,10 @@ static const struct libipw_geo ipw_geos[] = {
 	 }
 };
 
-static void ipw_set_geo(struct ipw_priv *priv)
-{
-	int j;
-
-	for (j = 0; j < ARRAY_SIZE(ipw_geos); j++) {
-		if (!memcmp(&priv->eeprom[EEPROM_COUNTRY_CODE],
-			    ipw_geos[j].name, 3))
-			break;
-	}
-
-	if (j == ARRAY_SIZE(ipw_geos)) {
-		IPW_WARNING("SKU [%c%c%c] not recognized.\n",
-			    priv->eeprom[EEPROM_COUNTRY_CODE + 0],
-			    priv->eeprom[EEPROM_COUNTRY_CODE + 1],
-			    priv->eeprom[EEPROM_COUNTRY_CODE + 2]);
-		j = 0;
-	}
-
-	libipw_set_geo(priv->ieee, &ipw_geos[j]);
-}
-
 #define MAX_HW_RESTARTS 5
 static int ipw_up(struct ipw_priv *priv)
 {
-	int rc, i;
+	int rc, i, j;
 
 	/* Age scan list entries found before suspend */
 	if (priv->suspend_time) {
@@ -11320,8 +11308,24 @@ static int ipw_up(struct ipw_priv *priv)
 		if (!(priv->config & CFG_CUSTOM_MAC))
 			eeprom_parse_mac(priv, priv->mac_addr);
 		memcpy(priv->net_dev->dev_addr, priv->mac_addr, ETH_ALEN);
+		memcpy(priv->net_dev->perm_addr, priv->mac_addr, ETH_ALEN);
 
-		ipw_set_geo(priv);
+		for (j = 0; j < ARRAY_SIZE(ipw_geos); j++) {
+			if (!memcmp(&priv->eeprom[EEPROM_COUNTRY_CODE],
+				    ipw_geos[j].name, 3))
+				break;
+		}
+		if (j == ARRAY_SIZE(ipw_geos)) {
+			IPW_WARNING("SKU [%c%c%c] not recognized.\n",
+				    priv->eeprom[EEPROM_COUNTRY_CODE + 0],
+				    priv->eeprom[EEPROM_COUNTRY_CODE + 1],
+				    priv->eeprom[EEPROM_COUNTRY_CODE + 2]);
+			j = 0;
+		}
+		if (libipw_set_geo(priv->ieee, &ipw_geos[j])) {
+			IPW_WARNING("Could not set geography.");
+			return 0;
+		}
 
 		if (priv->status & STATUS_RF_KILL_SW) {
 			IPW_WARNING("Radio disabled by module parameter.\n");
@@ -11718,7 +11722,7 @@ static const struct net_device_ops ipw_netdev_ops = {
 	.ndo_validate_addr	= eth_validate_addr,
 };
 
-static int ipw_pci_probe(struct pci_dev *pdev,
+static int __devinit ipw_pci_probe(struct pci_dev *pdev,
 				   const struct pci_device_id *ent)
 {
 	int err = 0;
@@ -11891,7 +11895,7 @@ static int ipw_pci_probe(struct pci_dev *pdev,
 	return err;
 }
 
-static void ipw_pci_remove(struct pci_dev *pdev)
+static void __devexit ipw_pci_remove(struct pci_dev *pdev)
 {
 	struct ipw_priv *priv = pci_get_drvdata(pdev);
 	struct list_head *p, *q;
@@ -12053,7 +12057,7 @@ static struct pci_driver ipw_driver = {
 	.name = DRV_NAME,
 	.id_table = card_ids,
 	.probe = ipw_pci_probe,
-	.remove = ipw_pci_remove,
+	.remove = __devexit_p(ipw_pci_remove),
 #ifdef CONFIG_PM
 	.suspend = ipw_pci_suspend,
 	.resume = ipw_pci_resume,

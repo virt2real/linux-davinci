@@ -12,7 +12,7 @@
  * the Free Software Foundation.
 */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+/* #define WK0701_DEBUG */
 
 #define RESERVE 20000
 #define SYNC_PULSE 1306000
@@ -67,7 +67,6 @@ static inline void walkera0701_parse_frame(struct walkera_dev *w)
 {
 	int i;
 	int val1, val2, val3, val4, val5, val6, val7, val8;
-	int magic, magic_bit;
 	int crc1, crc2;
 
 	for (crc1 = crc2 = i = 0; i < 10; i++) {
@@ -103,12 +102,17 @@ static inline void walkera0701_parse_frame(struct walkera_dev *w)
 	val8 = (w->buf[18] & 1) << 8 | (w->buf[19] << 4) | w->buf[20];
 	val8 *= (w->buf[18] & 2) - 1;	/*sign */
 
-	magic = (w->buf[21] << 4) | w->buf[22];
-	magic_bit = (w->buf[24] & 8) >> 3;
-	pr_debug("%4d %4d %4d %4d  %4d %4d %4d %4d (magic %2x %d)\n",
-		 val1, val2, val3, val4, val5, val6, val7, val8,
-		 magic, magic_bit);
-
+#ifdef WK0701_DEBUG
+	{
+		int magic, magic_bit;
+		magic = (w->buf[21] << 4) | w->buf[22];
+		magic_bit = (w->buf[24] & 8) >> 3;
+		printk(KERN_DEBUG
+		       "walkera0701: %4d %4d %4d %4d  %4d %4d %4d %4d (magic %2x %d)\n",
+		       val1, val2, val3, val4, val5, val6, val7, val8, magic,
+		       magic_bit);
+	}
+#endif
 	input_report_abs(w->input_dev, ABS_X, val2);
 	input_report_abs(w->input_dev, ABS_Y, val1);
 	input_report_abs(w->input_dev, ABS_Z, val6);
@@ -183,9 +187,6 @@ static int walkera0701_open(struct input_dev *dev)
 {
 	struct walkera_dev *w = input_get_drvdata(dev);
 
-	if (parport_claim(w->pardevice))
-		return -EBUSY;
-
 	parport_enable_irq(w->parport);
 	return 0;
 }
@@ -195,52 +196,37 @@ static void walkera0701_close(struct input_dev *dev)
 	struct walkera_dev *w = input_get_drvdata(dev);
 
 	parport_disable_irq(w->parport);
-	hrtimer_cancel(&w->timer);
-
-	parport_release(w->pardevice);
 }
 
 static int walkera0701_connect(struct walkera_dev *w, int parport)
 {
-	int error;
+	int err = -ENODEV;
 
 	w->parport = parport_find_number(parport);
-	if (!w->parport) {
-		pr_err("parport %d does not exist\n", parport);
+	if (w->parport == NULL)
 		return -ENODEV;
-	}
 
 	if (w->parport->irq == -1) {
-		pr_err("parport %d does not have interrupt assigned\n",
-			parport);
-		error = -EINVAL;
-		goto err_put_parport;
+		printk(KERN_ERR "walkera0701: parport without interrupt\n");
+		goto init_err;
 	}
 
+	err = -EBUSY;
 	w->pardevice = parport_register_device(w->parport, "walkera0701",
 				    NULL, NULL, walkera0701_irq_handler,
 				    PARPORT_DEV_EXCL, w);
-	if (!w->pardevice) {
-		pr_err("failed to register parport device\n");
-		error = -EIO;
-		goto err_put_parport;
-	}
+	if (!w->pardevice)
+		goto init_err;
 
-	if (parport_negotiate(w->pardevice->port, IEEE1284_MODE_COMPAT)) {
-		pr_err("failed to negotiate parport mode\n");
-		error = -EIO;
-		goto err_unregister_device;
-	}
+	if (parport_negotiate(w->pardevice->port, IEEE1284_MODE_COMPAT))
+		goto init_err1;
 
-	hrtimer_init(&w->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	w->timer.function = timer_handler;
+	if (parport_claim(w->pardevice))
+		goto init_err1;
 
 	w->input_dev = input_allocate_device();
-	if (!w->input_dev) {
-		pr_err("failed to allocate input device\n");
-		error = -ENOMEM;
-		goto err_unregister_device;
-	}
+	if (!w->input_dev)
+		goto init_err2;
 
 	input_set_drvdata(w->input_dev, w);
 	w->input_dev->name = "Walkera WK-0701 TX";
@@ -251,7 +237,6 @@ static int walkera0701_connect(struct walkera_dev *w, int parport)
 	w->input_dev->id.vendor = 0x0001;
 	w->input_dev->id.product = 0x0001;
 	w->input_dev->id.version = 0x0100;
-	w->input_dev->dev.parent = w->parport->dev;
 	w->input_dev->open = walkera0701_open;
 	w->input_dev->close = walkera0701_close;
 
@@ -265,26 +250,30 @@ static int walkera0701_connect(struct walkera_dev *w, int parport)
 	input_set_abs_params(w->input_dev, ABS_RUDDER, -512, 512, 0, 0);
 	input_set_abs_params(w->input_dev, ABS_MISC, -512, 512, 0, 0);
 
-	error = input_register_device(w->input_dev);
-	if (error) {
-		pr_err("failed to register input device\n");
-		goto err_free_input_dev;
-	}
+	err = input_register_device(w->input_dev);
+	if (err)
+		goto init_err3;
 
+	hrtimer_init(&w->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	w->timer.function = timer_handler;
 	return 0;
 
-err_free_input_dev:
+ init_err3:
 	input_free_device(w->input_dev);
-err_unregister_device:
+ init_err2:
+	parport_release(w->pardevice);
+ init_err1:
 	parport_unregister_device(w->pardevice);
-err_put_parport:
+ init_err:
 	parport_put_port(w->parport);
-	return error;
+	return err;
 }
 
 static void walkera0701_disconnect(struct walkera_dev *w)
 {
+	hrtimer_cancel(&w->timer);
 	input_unregister_device(w->input_dev);
+	parport_release(w->pardevice);
 	parport_unregister_device(w->pardevice);
 	parport_put_port(w->parport);
 }

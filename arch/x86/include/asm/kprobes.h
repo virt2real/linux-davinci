@@ -77,7 +77,6 @@ struct arch_specific_insn {
 	 * a post_handler or break_handler).
 	 */
 	int boostable;
-	bool if_modifier;
 };
 
 struct arch_optimized_insn {

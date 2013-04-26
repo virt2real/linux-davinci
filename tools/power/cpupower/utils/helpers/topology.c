@@ -20,8 +20,9 @@
 #include <helpers/sysfs.h>
 
 /* returns -1 on failure, 0 on success */
-static int sysfs_topology_read_file(unsigned int cpu, const char *fname, int *result)
+int sysfs_topology_read_file(unsigned int cpu, const char *fname)
 {
+	unsigned long value;
 	char linebuf[MAX_LINE_LEN];
 	char *endp;
 	char path[SYSFS_PATH_MAX];
@@ -30,11 +31,19 @@ static int sysfs_topology_read_file(unsigned int cpu, const char *fname, int *re
 			 cpu, fname);
 	if (sysfs_read_file(path, linebuf, MAX_LINE_LEN) == 0)
 		return -1;
-	*result = strtol(linebuf, &endp, 0);
+	value = strtoul(linebuf, &endp, 0);
 	if (endp == linebuf || errno == ERANGE)
 		return -1;
-	return 0;
+	return value;
 }
+
+struct cpuid_core_info {
+	unsigned int pkg;
+	unsigned int thread;
+	unsigned int cpu;
+	/* flags */
+	unsigned int is_online:1;
+};
 
 static int __compare(const void *t1, const void *t2)
 {
@@ -44,9 +53,9 @@ static int __compare(const void *t1, const void *t2)
 		return -1;
 	else if (top1->pkg > top2->pkg)
 		return 1;
-	else if (top1->core < top2->core)
+	else if (top1->thread < top2->thread)
 		return -1;
-	else if (top1->core > top2->core)
+	else if (top1->thread > top2->thread)
 		return 1;
 	else if (top1->cpu < top2->cpu)
 		return -1;
@@ -64,41 +73,27 @@ static int __compare(const void *t1, const void *t2)
  */
 int get_cpu_topology(struct cpupower_topology *cpu_top)
 {
-	int cpu, last_pkg, cpus = sysconf(_SC_NPROCESSORS_CONF);
+	int cpu, cpus = sysconf(_SC_NPROCESSORS_CONF);
 
-	cpu_top->core_info = malloc(sizeof(struct cpuid_core_info) * cpus);
+	cpu_top->core_info = malloc(sizeof(struct cpupower_topology) * cpus);
 	if (cpu_top->core_info == NULL)
 		return -ENOMEM;
 	cpu_top->pkgs = cpu_top->cores = 0;
 	for (cpu = 0; cpu < cpus; cpu++) {
 		cpu_top->core_info[cpu].cpu = cpu;
 		cpu_top->core_info[cpu].is_online = sysfs_is_cpu_online(cpu);
-		if(sysfs_topology_read_file(
-			cpu,
-			"physical_package_id",
-			&(cpu_top->core_info[cpu].pkg)) < 0)
-			return -1;
-		if(sysfs_topology_read_file(
-			cpu,
-			"core_id",
-			&(cpu_top->core_info[cpu].core)) < 0)
-			return -1;
+		cpu_top->core_info[cpu].pkg =
+			sysfs_topology_read_file(cpu, "physical_package_id");
+		if ((int)cpu_top->core_info[cpu].pkg != -1 &&
+		    cpu_top->core_info[cpu].pkg > cpu_top->pkgs)
+			cpu_top->pkgs = cpu_top->core_info[cpu].pkg;
+		cpu_top->core_info[cpu].core =
+			sysfs_topology_read_file(cpu, "core_id");
 	}
+	cpu_top->pkgs++;
 
 	qsort(cpu_top->core_info, cpus, sizeof(struct cpuid_core_info),
 	      __compare);
-
-	/* Count the number of distinct pkgs values. This works
-	   because the primary sort of the core_info struct was just
-	   done by pkg value. */
-	last_pkg = cpu_top->core_info[0].pkg;
-	for(cpu = 1; cpu < cpus; cpu++) {
-		if(cpu_top->core_info[cpu].pkg != last_pkg) {
-			last_pkg = cpu_top->core_info[cpu].pkg;
-			cpu_top->pkgs++;
-		}
-	}
-	cpu_top->pkgs++;
 
 	/* Intel's cores count is not consecutively numbered, there may
 	 * be a core_id of 3, but none of 2. Assume there always is 0

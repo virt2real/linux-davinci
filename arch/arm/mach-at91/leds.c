@@ -15,7 +15,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 
-#include "board.h"
+#include <mach/board.h>
 
 
 /* ------------------------------------------------------------------------- */

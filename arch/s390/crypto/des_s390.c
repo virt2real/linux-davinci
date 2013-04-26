@@ -94,8 +94,7 @@ static int ecb_desall_crypt(struct blkcipher_desc *desc, long func,
 		u8 *in = walk->src.virt.addr;
 
 		ret = crypt_s390_km(func, key, out, in, n);
-		if (ret < 0 || ret != n)
-			return -EIO;
+		BUG_ON((ret < 0) || (ret != n));
 
 		nbytes &= DES_BLOCK_SIZE - 1;
 		ret = blkcipher_walk_done(desc, walk, nbytes);
@@ -121,8 +120,7 @@ static int cbc_desall_crypt(struct blkcipher_desc *desc, long func,
 		u8 *in = walk->src.virt.addr;
 
 		ret = crypt_s390_kmc(func, iv, out, in, n);
-		if (ret < 0 || ret != n)
-			return -EIO;
+		BUG_ON((ret < 0) || (ret != n));
 
 		nbytes &= DES_BLOCK_SIZE - 1;
 		ret = blkcipher_walk_done(desc, walk, nbytes);
@@ -388,8 +386,7 @@ static int ctr_desall_crypt(struct blkcipher_desc *desc, long func,
 				crypto_inc(ctrblk + i, DES_BLOCK_SIZE);
 			}
 			ret = crypt_s390_kmctr(func, ctx->key, out, in, n, ctrblk);
-			if (ret < 0 || ret != n)
-				return -EIO;
+			BUG_ON((ret < 0) || (ret != n));
 			if (n > DES_BLOCK_SIZE)
 				memcpy(ctrblk, ctrblk + n - DES_BLOCK_SIZE,
 				       DES_BLOCK_SIZE);
@@ -407,8 +404,7 @@ static int ctr_desall_crypt(struct blkcipher_desc *desc, long func,
 		in = walk->src.virt.addr;
 		ret = crypt_s390_kmctr(func, ctx->key, buf, in,
 				       DES_BLOCK_SIZE, ctrblk);
-		if (ret < 0 || ret != DES_BLOCK_SIZE)
-			return -EIO;
+		BUG_ON(ret < 0 || ret != DES_BLOCK_SIZE);
 		memcpy(out, buf, nbytes);
 		crypto_inc(ctrblk, DES_BLOCK_SIZE);
 		ret = blkcipher_walk_done(desc, walk, 0);

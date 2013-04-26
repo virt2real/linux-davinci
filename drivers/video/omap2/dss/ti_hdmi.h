@@ -102,8 +102,6 @@ struct ti_hdmi_ip_ops {
 
 	int (*audio_config)(struct hdmi_ip_data *ip_data,
 		struct omap_dss_audio *audio);
-
-	int (*audio_get_dma_port)(u32 *offset, u32 *size);
 #endif
 
 };
@@ -185,6 +183,5 @@ int ti_hdmi_4xxx_audio_start(struct hdmi_ip_data *ip_data);
 void ti_hdmi_4xxx_audio_stop(struct hdmi_ip_data *ip_data);
 int ti_hdmi_4xxx_audio_config(struct hdmi_ip_data *ip_data,
 		struct omap_dss_audio *audio);
-int ti_hdmi_4xxx_audio_get_dma_port(u32 *offset, u32 *size);
 #endif
 #endif

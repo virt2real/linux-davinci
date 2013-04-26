@@ -25,8 +25,6 @@
  * Authors:
  *    Gareth Hughes <gareth@valinux.com>
  *    Kevin E. Martin <martin@valinux.com>
- *
- * ------------------------ This file is DEPRECATED! -------------------------
  */
 
 #include <drm/drmP.h>

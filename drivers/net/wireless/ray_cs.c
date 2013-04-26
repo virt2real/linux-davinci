@@ -1107,15 +1107,12 @@ static int ray_get_essid(struct net_device *dev, struct iw_request_info *info,
 			 union iwreq_data *wrqu, char *extra)
 {
 	ray_dev_t *local = netdev_priv(dev);
-	UCHAR tmp[IW_ESSID_MAX_SIZE + 1];
 
 	/* Get the essid that was set */
 	memcpy(extra, local->sparm.b5.a_current_ess_id, IW_ESSID_MAX_SIZE);
-	memcpy(tmp, local->sparm.b5.a_current_ess_id, IW_ESSID_MAX_SIZE);
-	tmp[IW_ESSID_MAX_SIZE] = '\0';
 
 	/* Push it out ! */
-	wrqu->essid.length = strlen(tmp);
+	wrqu->essid.length = strlen(extra);
 	wrqu->essid.flags = 1;	/* active */
 
 	return 0;
@@ -1845,8 +1842,6 @@ static irqreturn_t ray_interrupt(int irq, void *dev_id)
 	UCHAR tmp;
 	UCHAR cmd;
 	UCHAR status;
-	UCHAR memtmp[ESSID_SIZE + 1];
-
 
 	if (dev == NULL)	/* Note that we want interrupts with dev->start == 0 */
 		return IRQ_NONE;
@@ -1906,21 +1901,17 @@ static irqreturn_t ray_interrupt(int irq, void *dev_id)
 			break;
 		case CCS_START_NETWORK:
 		case CCS_JOIN_NETWORK:
-			memcpy(memtmp, local->sparm.b4.a_current_ess_id,
-								ESSID_SIZE);
-			memtmp[ESSID_SIZE] = '\0';
-
 			if (status == CCS_COMMAND_COMPLETE) {
 				if (readb
 				    (&pccs->var.start_network.net_initiated) ==
 				    1) {
 					dev_dbg(&link->dev,
 					      "ray_cs interrupt network \"%s\" started\n",
-					      memtmp);
+					      local->sparm.b4.a_current_ess_id);
 				} else {
 					dev_dbg(&link->dev,
 					      "ray_cs interrupt network \"%s\" joined\n",
-					      memtmp);
+					      local->sparm.b4.a_current_ess_id);
 				}
 				memcpy_fromio(&local->bss_id,
 					      pccs->var.start_network.bssid,
@@ -1948,12 +1939,12 @@ static irqreturn_t ray_interrupt(int irq, void *dev_id)
 				if (status == CCS_START_NETWORK) {
 					dev_dbg(&link->dev,
 					      "ray_cs interrupt network \"%s\" start failed\n",
-					      memtmp);
+					      local->sparm.b4.a_current_ess_id);
 					local->timer.function = start_net;
 				} else {
 					dev_dbg(&link->dev,
 					      "ray_cs interrupt network \"%s\" join failed\n",
-					      memtmp);
+					      local->sparm.b4.a_current_ess_id);
 					local->timer.function = join_net;
 				}
 				add_timer(&local->timer);
@@ -2778,7 +2769,7 @@ static ssize_t int_proc_write(struct file *file, const char __user *buffer,
 		nr = nr * 10 + c;
 		p++;
 	} while (--len);
-	*(int *)PDE(file_inode(file))->data = nr;
+	*(int *)PDE(file->f_path.dentry->d_inode)->data = nr;
 	return count;
 }
 

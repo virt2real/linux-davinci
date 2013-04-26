@@ -929,10 +929,11 @@ int iscsit_execute_cmd(struct iscsi_cmd *cmd, int ooo)
 	case ISCSI_OP_SCSI_CMD:
 		/*
 		 * Go ahead and send the CHECK_CONDITION status for
-		 * any SCSI CDB exceptions that may have occurred.
+		 * any SCSI CDB exceptions that may have occurred, also
+		 * handle the SCF_SCSI_RESERVATION_CONFLICT case here as well.
 		 */
-		if (cmd->sense_reason) {
-			if (cmd->sense_reason == TCM_RESERVATION_CONFLICT) {
+		if (se_cmd->se_cmd_flags & SCF_SCSI_CDB_EXCEPTION) {
+			if (se_cmd->scsi_sense_reason == TCM_RESERVATION_CONFLICT) {
 				cmd->i_state = ISTATE_SEND_STATUS;
 				spin_unlock_bh(&cmd->istate_lock);
 				iscsit_add_cmd_to_response_queue(cmd, cmd->conn,
@@ -955,7 +956,7 @@ int iscsit_execute_cmd(struct iscsi_cmd *cmd, int ooo)
 			 * exception
 			 */
 			return transport_send_check_condition_and_sense(se_cmd,
-					cmd->sense_reason, 0);
+					se_cmd->scsi_sense_reason, 0);
 		}
 		/*
 		 * Special case for delayed CmdSN with Immediate
@@ -1012,7 +1013,7 @@ int iscsit_execute_cmd(struct iscsi_cmd *cmd, int ooo)
 		iscsit_add_cmd_to_response_queue(cmd, cmd->conn, cmd->i_state);
 		break;
 	case ISCSI_OP_SCSI_TMFUNC:
-		if (cmd->se_cmd.se_tmr_req->response) {
+		if (se_cmd->se_cmd_flags & SCF_SCSI_CDB_EXCEPTION) {
 			spin_unlock_bh(&cmd->istate_lock);
 			iscsit_add_cmd_to_response_queue(cmd, cmd->conn,
 					cmd->i_state);

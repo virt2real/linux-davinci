@@ -418,7 +418,6 @@ static int audio_get_intf_req(struct usb_function *f,
 
 	req->context = audio;
 	req->complete = f_audio_complete;
-	len = min_t(size_t, sizeof(value), len);
 	memcpy(req->buf, &value, len);
 
 	return len;
@@ -631,7 +630,7 @@ f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	struct usb_composite_dev *cdev = c->cdev;
 	struct f_audio		*audio = func_to_audio(f);
 	int			status;
-	struct usb_ep		*ep = NULL;
+	struct usb_ep		*ep;
 
 	f_audio_build_desc(audio);
 
@@ -660,14 +659,22 @@ f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	status = -ENOMEM;
 
 	/* copy descriptors, and track endpoint copies */
-	status = usb_assign_descriptors(f, f_audio_desc, f_audio_desc, NULL);
-	if (status)
-		goto fail;
+	f->descriptors = usb_copy_descriptors(f_audio_desc);
+
+	/*
+	 * support all relevant hardware speeds... we expect that when
+	 * hardware is dual speed, all bulk-capable endpoints work at
+	 * both speeds
+	 */
+	if (gadget_is_dualspeed(c->cdev->gadget)) {
+		c->highspeed = true;
+		f->hs_descriptors = usb_copy_descriptors(f_audio_desc);
+	}
+
 	return 0;
 
 fail:
-	if (ep)
-		ep->driver_data = NULL;
+
 	return status;
 }
 
@@ -676,7 +683,8 @@ f_audio_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_audio		*audio = func_to_audio(f);
 
-	usb_free_all_descriptors(f);
+	usb_free_descriptors(f->descriptors);
+	usb_free_descriptors(f->hs_descriptors);
 	kfree(audio);
 }
 

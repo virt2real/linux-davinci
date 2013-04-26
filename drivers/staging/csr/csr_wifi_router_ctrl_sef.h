@@ -12,6 +12,10 @@
 
 #include "csr_wifi_router_ctrl_prim.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
     typedef void (*CsrWifiRouterCtrlStateHandlerType)(void* drvpriv, CsrWifiFsmEvent* msg);
 
     extern const CsrWifiRouterCtrlStateHandlerType CsrWifiRouterCtrlDownstreamStateHandlers[CSR_WIFI_ROUTER_CTRL_PRIM_DOWNSTREAM_COUNT];
@@ -47,5 +51,8 @@
     extern void CsrWifiRouterCtrlWapiUnicastTxPktReqHandler(void* drvpriv, CsrWifiFsmEvent* msg);
     extern void CsrWifiRouterCtrlWapiUnicastFilterReqHandler(void* drvpriv, CsrWifiFsmEvent* msg);
     extern void CsrWifiRouterCtrlWapiFilterReqHandler(void* drvpriv, CsrWifiFsmEvent* msg);
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CSR_WIFI_ROUTER_SEF_CSR_WIFI_ROUTER_CTRL_H__ */

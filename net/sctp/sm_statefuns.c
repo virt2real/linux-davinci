@@ -1055,7 +1055,6 @@ sctp_disposition_t sctp_sf_beat_8_3(struct net *net,
 				    void *arg,
 				    sctp_cmd_seq_t *commands)
 {
-	sctp_paramhdr_t *param_hdr;
 	struct sctp_chunk *chunk = arg;
 	struct sctp_chunk *reply;
 	size_t paylen = 0;
@@ -1073,17 +1072,12 @@ sctp_disposition_t sctp_sf_beat_8_3(struct net *net,
 	 * Information field copied from the received HEARTBEAT chunk.
 	 */
 	chunk->subh.hb_hdr = (sctp_heartbeathdr_t *) chunk->skb->data;
-	param_hdr = (sctp_paramhdr_t *) chunk->subh.hb_hdr;
 	paylen = ntohs(chunk->chunk_hdr->length) - sizeof(sctp_chunkhdr_t);
-
-	if (ntohs(param_hdr->length) > paylen)
-		return sctp_sf_violation_paramlen(net, ep, asoc, type, arg,
-						  param_hdr, commands);
-
 	if (!pskb_pull(chunk->skb, paylen))
 		goto nomem;
 
-	reply = sctp_make_heartbeat_ack(asoc, chunk, param_hdr, paylen);
+	reply = sctp_make_heartbeat_ack(asoc, chunk,
+					chunk->subh.hb_hdr, paylen);
 	if (!reply)
 		goto nomem;
 
@@ -1779,10 +1773,8 @@ static sctp_disposition_t sctp_sf_do_dupcook_a(struct net *net,
 
 	/* Update the content of current association. */
 	sctp_add_cmd_sf(commands, SCTP_CMD_UPDATE_ASSOC, SCTP_ASOC(new_asoc));
-	sctp_add_cmd_sf(commands, SCTP_CMD_EVENT_ULP, SCTP_ULPEVENT(ev));
-	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_STATE,
-			SCTP_STATE(SCTP_STATE_ESTABLISHED));
 	sctp_add_cmd_sf(commands, SCTP_CMD_REPLY, SCTP_CHUNK(repl));
+	sctp_add_cmd_sf(commands, SCTP_CMD_EVENT_ULP, SCTP_ULPEVENT(ev));
 	return SCTP_DISPOSITION_CONSUME;
 
 nomem_ev:
@@ -2082,7 +2074,7 @@ sctp_disposition_t sctp_sf_do_5_2_4_dupcook(struct net *net,
 	}
 
 	/* Delete the tempory new association. */
-	sctp_add_cmd_sf(commands, SCTP_CMD_SET_ASOC, SCTP_ASOC(new_asoc));
+	sctp_add_cmd_sf(commands, SCTP_CMD_NEW_ASOC, SCTP_ASOC(new_asoc));
 	sctp_add_cmd_sf(commands, SCTP_CMD_DELETE_TCB, SCTP_NULL());
 
 	/* Restore association pointer to provide SCTP command interpeter
@@ -4002,7 +3994,7 @@ static sctp_ierror_t sctp_sf_authenticate(struct net *net,
 	chunk->subh.auth_hdr = auth_hdr;
 	skb_pull(chunk->skb, sizeof(struct sctp_authhdr));
 
-	/* Make sure that we support the HMAC algorithm from the auth
+	/* Make sure that we suport the HMAC algorithm from the auth
 	 * chunk.
 	 */
 	if (!sctp_auth_asoc_verify_hmac_id(asoc, auth_hdr->hmac_id))
@@ -6135,8 +6127,6 @@ static int sctp_eat_data(const struct sctp_association *asoc,
 		/* The TSN is too high--silently discard the chunk and
 		 * count on it getting retransmitted later.
 		 */
-		if (chunk->asoc)
-			chunk->asoc->stats.outofseqtsns++;
 		return SCTP_IERROR_HIGH_TSN;
 	} else if (tmp > 0) {
 		/* This is a duplicate.  Record it.  */
@@ -6236,14 +6226,10 @@ static int sctp_eat_data(const struct sctp_association *asoc,
 	/* Note: Some chunks may get overcounted (if we drop) or overcounted
 	 * if we renege and the chunk arrives again.
 	 */
-	if (chunk->chunk_hdr->flags & SCTP_DATA_UNORDERED) {
+	if (chunk->chunk_hdr->flags & SCTP_DATA_UNORDERED)
 		SCTP_INC_STATS(net, SCTP_MIB_INUNORDERCHUNKS);
-		if (chunk->asoc)
-			chunk->asoc->stats.iuodchunks++;
-	} else {
+	else {
 		SCTP_INC_STATS(net, SCTP_MIB_INORDERCHUNKS);
-		if (chunk->asoc)
-			chunk->asoc->stats.iodchunks++;
 		ordered = 1;
 	}
 

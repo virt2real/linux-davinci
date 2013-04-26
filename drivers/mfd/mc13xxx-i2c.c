@@ -24,10 +24,7 @@
 static const struct i2c_device_id mc13xxx_i2c_device_id[] = {
 	{
 		.name = "mc13892",
-		.driver_data = (kernel_ulong_t)&mc13xxx_variant_mc13892,
-	}, {
-		.name = "mc34708",
-		.driver_data = (kernel_ulong_t)&mc13xxx_variant_mc34708,
+		.driver_data = MC13XXX_ID_MC13892,
 	}, {
 		/* sentinel */
 	}
@@ -37,10 +34,7 @@ MODULE_DEVICE_TABLE(i2c, mc13xxx_i2c_device_id);
 static const struct of_device_id mc13xxx_dt_ids[] = {
 	{
 		.compatible = "fsl,mc13892",
-		.data = &mc13xxx_variant_mc13892,
-	}, {
-		.compatible = "fsl,mc34708",
-		.data = &mc13xxx_variant_mc34708,
+		.data = (void *) &mc13xxx_i2c_device_id[0],
 	}, {
 		/* sentinel */
 	}
@@ -82,20 +76,16 @@ static int mc13xxx_i2c_probe(struct i2c_client *client,
 		return ret;
 	}
 
-	if (client->dev.of_node) {
-		const struct of_device_id *of_id =
-			of_match_device(mc13xxx_dt_ids, &client->dev);
-		mc13xxx->variant = of_id->data;
-	} else {
-		mc13xxx->variant = (void *)id->driver_data;
-	}
-
 	ret = mc13xxx_common_init(mc13xxx, pdata, client->irq);
+
+	if (ret == 0 && (id->driver_data != mc13xxx->ictype))
+		dev_warn(mc13xxx->dev,
+				"device id doesn't match auto detection!\n");
 
 	return ret;
 }
 
-static int mc13xxx_i2c_remove(struct i2c_client *client)
+static int __devexit mc13xxx_i2c_remove(struct i2c_client *client)
 {
 	struct mc13xxx *mc13xxx = dev_get_drvdata(&client->dev);
 
@@ -112,7 +102,7 @@ static struct i2c_driver mc13xxx_i2c_driver = {
 		.of_match_table = mc13xxx_dt_ids,
 	},
 	.probe = mc13xxx_i2c_probe,
-	.remove = mc13xxx_i2c_remove,
+	.remove = __devexit_p(mc13xxx_i2c_remove),
 };
 
 static int __init mc13xxx_i2c_init(void)

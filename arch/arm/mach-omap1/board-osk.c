@@ -48,7 +48,7 @@
 
 #include <mach/flash.h>
 #include <mach/mux.h>
-#include <mach/tc.h>
+#include <plat/tc.h>
 
 #include <mach/hardware.h>
 #include <mach/usb.h>
@@ -606,9 +606,10 @@ MACHINE_START(OMAP_OSK, "TI-OSK")
 	.atag_offset	= 0x100,
 	.map_io		= omap16xx_map_io,
 	.init_early	= omap1_init_early,
+	.reserve	= omap_reserve,
 	.init_irq	= omap1_init_irq,
 	.init_machine	= osk_init,
 	.init_late	= omap1_init_late,
-	.init_time	= omap1_timer_init,
+	.timer		= &omap1_timer,
 	.restart	= omap1_restart,
 MACHINE_END

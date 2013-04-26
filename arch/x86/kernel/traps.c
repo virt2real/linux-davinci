@@ -55,7 +55,7 @@
 #include <asm/i387.h>
 #include <asm/fpu-internal.h>
 #include <asm/mce.h>
-#include <asm/context_tracking.h>
+#include <asm/rcu.h>
 
 #include <asm/mach_traps.h>
 
@@ -68,6 +68,9 @@
 #include <asm/setup.h>
 
 asmlinkage int system_call(void);
+
+/* Do we ignore FPU interrupts ? */
+char ignore_fpu_irq;
 
 /*
  * The IDT has to be page-aligned to simplify the Pentium
@@ -561,6 +564,9 @@ void math_error(struct pt_regs *regs, int error_code, int trapnr)
 
 dotraplinkage void do_coprocessor_error(struct pt_regs *regs, long error_code)
 {
+#ifdef CONFIG_X86_32
+	ignore_fpu_irq = 1;
+#endif
 	exception_enter(regs);
 	math_error(regs, error_code, X86_TRAP_MF);
 	exception_exit(regs);
@@ -688,17 +694,8 @@ void __init early_trap_init(void)
 	set_intr_gate_ist(X86_TRAP_DB, &debug, DEBUG_STACK);
 	/* int3 can be called from all */
 	set_system_intr_gate_ist(X86_TRAP_BP, &int3, DEBUG_STACK);
-#ifdef CONFIG_X86_32
 	set_intr_gate(X86_TRAP_PF, &page_fault);
-#endif
 	load_idt(&idt_descr);
-}
-
-void __init early_trap_pf_init(void)
-{
-#ifdef CONFIG_X86_64
-	set_intr_gate(X86_TRAP_PF, &page_fault);
-#endif
 }
 
 void __init trap_init(void)

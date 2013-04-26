@@ -39,8 +39,6 @@ static int dma_buf_release(struct inode *inode, struct file *file)
 
 	dmabuf = file->private_data;
 
-	BUG_ON(dmabuf->vmapping_counter);
-
 	dmabuf->ops->release(dmabuf);
 	kfree(dmabuf);
 	return 0;
@@ -136,14 +134,15 @@ EXPORT_SYMBOL_GPL(dma_buf_export);
  */
 int dma_buf_fd(struct dma_buf *dmabuf, int flags)
 {
-	int fd;
+	int error, fd;
 
 	if (!dmabuf || !dmabuf->file)
 		return -EINVAL;
 
-	fd = get_unused_fd_flags(flags);
-	if (fd < 0)
-		return fd;
+	error = get_unused_fd_flags(flags);
+	if (error < 0)
+		return error;
+	fd = error;
 
 	fd_install(fd, dmabuf->file);
 
@@ -299,8 +298,6 @@ void dma_buf_unmap_attachment(struct dma_buf_attachment *attach,
 				struct sg_table *sg_table,
 				enum dma_data_direction direction)
 {
-	might_sleep();
-
 	if (WARN_ON(!attach || !attach->dmabuf || !sg_table))
 		return;
 
@@ -447,9 +444,6 @@ EXPORT_SYMBOL_GPL(dma_buf_kunmap);
 int dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
 		 unsigned long pgoff)
 {
-	struct file *oldfile;
-	int ret;
-
 	if (WARN_ON(!dmabuf || !vma))
 		return -EINVAL;
 
@@ -463,22 +457,14 @@ int dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
 		return -EINVAL;
 
 	/* readjust the vma */
-	get_file(dmabuf->file);
-	oldfile = vma->vm_file;
-	vma->vm_file = dmabuf->file;
+	if (vma->vm_file)
+		fput(vma->vm_file);
+
+	vma->vm_file = get_file(dmabuf->file);
+
 	vma->vm_pgoff = pgoff;
 
-	ret = dmabuf->ops->mmap(dmabuf, vma);
-	if (ret) {
-		/* restore old parameters on failure */
-		vma->vm_file = oldfile;
-		fput(dmabuf->file);
-	} else {
-		if (oldfile)
-			fput(oldfile);
-	}
-	return ret;
-
+	return dmabuf->ops->mmap(dmabuf, vma);
 }
 EXPORT_SYMBOL_GPL(dma_buf_mmap);
 
@@ -494,34 +480,12 @@ EXPORT_SYMBOL_GPL(dma_buf_mmap);
  */
 void *dma_buf_vmap(struct dma_buf *dmabuf)
 {
-	void *ptr;
-
 	if (WARN_ON(!dmabuf))
 		return NULL;
 
-	if (!dmabuf->ops->vmap)
-		return NULL;
-
-	mutex_lock(&dmabuf->lock);
-	if (dmabuf->vmapping_counter) {
-		dmabuf->vmapping_counter++;
-		BUG_ON(!dmabuf->vmap_ptr);
-		ptr = dmabuf->vmap_ptr;
-		goto out_unlock;
-	}
-
-	BUG_ON(dmabuf->vmap_ptr);
-
-	ptr = dmabuf->ops->vmap(dmabuf);
-	if (IS_ERR_OR_NULL(ptr))
-		goto out_unlock;
-
-	dmabuf->vmap_ptr = ptr;
-	dmabuf->vmapping_counter = 1;
-
-out_unlock:
-	mutex_unlock(&dmabuf->lock);
-	return ptr;
+	if (dmabuf->ops->vmap)
+		return dmabuf->ops->vmap(dmabuf);
+	return NULL;
 }
 EXPORT_SYMBOL_GPL(dma_buf_vmap);
 
@@ -535,16 +499,7 @@ void dma_buf_vunmap(struct dma_buf *dmabuf, void *vaddr)
 	if (WARN_ON(!dmabuf))
 		return;
 
-	BUG_ON(!dmabuf->vmap_ptr);
-	BUG_ON(dmabuf->vmapping_counter == 0);
-	BUG_ON(dmabuf->vmap_ptr != vaddr);
-
-	mutex_lock(&dmabuf->lock);
-	if (--dmabuf->vmapping_counter == 0) {
-		if (dmabuf->ops->vunmap)
-			dmabuf->ops->vunmap(dmabuf, vaddr);
-		dmabuf->vmap_ptr = NULL;
-	}
-	mutex_unlock(&dmabuf->lock);
+	if (dmabuf->ops->vunmap)
+		dmabuf->ops->vunmap(dmabuf, vaddr);
 }
 EXPORT_SYMBOL_GPL(dma_buf_vunmap);

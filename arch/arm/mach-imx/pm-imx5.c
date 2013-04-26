@@ -16,11 +16,10 @@
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
 #include <asm/tlbflush.h>
-
-#include "common.h"
-#include "cpuidle.h"
+#include <mach/common.h>
+#include <mach/cpuidle.h>
+#include <mach/hardware.h>
 #include "crm-regs-imx5.h"
-#include "hardware.h"
 
 /*
  * The WAIT_UNCLOCKED_POWER_OFF state only requires <= 500ns to exit.
@@ -34,7 +33,7 @@
 
 /*
  * set cpu low power mode before WFI instruction. This function is called
- * mx5 because it can be used for mx51, and mx53.
+ * mx5 because it can be used for mx50, mx51, and mx53.
  */
 static void mx5_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 {
@@ -85,7 +84,10 @@ static void mx5_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 	__raw_writel(plat_lpc, MXC_CORTEXA8_PLAT_LPC);
 	__raw_writel(ccm_clpcr, MXC_CCM_CLPCR);
 	__raw_writel(arm_srpgcr, MXC_SRPG_ARM_SRPGCR);
-	__raw_writel(arm_srpgcr, MXC_SRPG_NEON_SRPGCR);
+
+	/* Enable NEON SRPG for all but MX50TO1.0. */
+	if (mx50_revision() != IMX_CHIP_REVISION_1_0)
+		__raw_writel(arm_srpgcr, MXC_SRPG_NEON_SRPGCR);
 
 	if (stop_mode) {
 		empgc0 |= MXC_SRPGCR_PCR;

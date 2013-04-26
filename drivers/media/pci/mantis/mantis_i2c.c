@@ -217,7 +217,7 @@ static struct i2c_algorithm mantis_algo = {
 	.functionality		= mantis_i2c_func,
 };
 
-int mantis_i2c_init(struct mantis_pci *mantis)
+int __devinit mantis_i2c_init(struct mantis_pci *mantis)
 {
 	u32 intstat, intmask;
 	struct i2c_adapter *i2c_adapter = &mantis->adapter;

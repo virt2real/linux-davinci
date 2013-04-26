@@ -120,6 +120,8 @@ search_module_dbetables(unsigned long addr)
 #define MODULE_PROC_FAMILY "R10000 "
 #elif defined CONFIG_CPU_RM7000
 #define MODULE_PROC_FAMILY "RM7000 "
+#elif defined CONFIG_CPU_RM9000
+#define MODULE_PROC_FAMILY "RM9000 "
 #elif defined CONFIG_CPU_SB1
 #define MODULE_PROC_FAMILY "SB1 "
 #elif defined CONFIG_CPU_LOONGSON1

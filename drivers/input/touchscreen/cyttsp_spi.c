@@ -147,7 +147,7 @@ static const struct cyttsp_bus_ops cyttsp_spi_bus_ops = {
 	.read		= cyttsp_spi_read_block_data,
 };
 
-static int cyttsp_spi_probe(struct spi_device *spi)
+static int __devinit cyttsp_spi_probe(struct spi_device *spi)
 {
 	struct cyttsp *ts;
 	int error;
@@ -172,7 +172,7 @@ static int cyttsp_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int cyttsp_spi_remove(struct spi_device *spi)
+static int __devexit cyttsp_spi_remove(struct spi_device *spi)
 {
 	struct cyttsp *ts = spi_get_drvdata(spi);
 
@@ -188,11 +188,12 @@ static struct spi_driver cyttsp_spi_driver = {
 		.pm	= &cyttsp_pm_ops,
 	},
 	.probe  = cyttsp_spi_probe,
-	.remove = cyttsp_spi_remove,
+	.remove = __devexit_p(cyttsp_spi_remove),
 };
 
 module_spi_driver(cyttsp_spi_driver);
 
+MODULE_ALIAS("spi:cyttsp");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Cypress TrueTouch(R) Standard Product (TTSP) SPI driver");
 MODULE_AUTHOR("Cypress");

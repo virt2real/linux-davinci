@@ -33,10 +33,8 @@ enum {
 	PACKET_DIAG_TX_RING,
 	PACKET_DIAG_FANOUT,
 
-	__PACKET_DIAG_MAX,
+	PACKET_DIAG_MAX,
 };
-
-#define PACKET_DIAG_MAX (__PACKET_DIAG_MAX - 1)
 
 struct packet_diag_info {
 	__u32	pdi_index;

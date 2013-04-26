@@ -60,12 +60,16 @@ static int si2bit[8] =
 static int
 isdn_tty_try_read(modem_info *info, struct sk_buff *skb)
 {
-	struct tty_port *port = &info->port;
 	int c;
 	int len;
+	struct tty_struct *tty;
 	char last;
 
 	if (!info->online)
+		return 0;
+
+	tty = info->port.tty;
+	if (!tty)
 		return 0;
 
 	if (!(info->mcr & UART_MCR_RTS))
@@ -77,7 +81,7 @@ isdn_tty_try_read(modem_info *info, struct sk_buff *skb)
 #endif
 		;
 
-	c = tty_buffer_request_room(port, len);
+	c = tty_buffer_request_room(tty, len);
 	if (c < len)
 		return 0;
 
@@ -87,25 +91,25 @@ isdn_tty_try_read(modem_info *info, struct sk_buff *skb)
 		unsigned char *dp = skb->data;
 		while (--l) {
 			if (*dp == DLE)
-				tty_insert_flip_char(port, DLE, 0);
-			tty_insert_flip_char(port, *dp++, 0);
+				tty_insert_flip_char(tty, DLE, 0);
+			tty_insert_flip_char(tty, *dp++, 0);
 		}
 		if (*dp == DLE)
-			tty_insert_flip_char(port, DLE, 0);
+			tty_insert_flip_char(tty, DLE, 0);
 		last = *dp;
 	} else {
 #endif
 		if (len > 1)
-			tty_insert_flip_string(port, skb->data, len - 1);
+			tty_insert_flip_string(tty, skb->data, len - 1);
 		last = skb->data[len - 1];
 #ifdef CONFIG_ISDN_AUDIO
 	}
 #endif
 	if (info->emu.mdmreg[REG_CPPP] & BIT_CPPP)
-		tty_insert_flip_char(port, last, 0xFF);
+		tty_insert_flip_char(tty, last, 0xFF);
 	else
-		tty_insert_flip_char(port, last, TTY_NORMAL);
-	tty_flip_buffer_push(port);
+		tty_insert_flip_char(tty, last, TTY_NORMAL);
+	tty_flip_buffer_push(tty);
 	kfree_skb(skb);
 
 	return 1;
@@ -122,6 +126,7 @@ isdn_tty_readmodem(void)
 	int midx;
 	int i;
 	int r;
+	struct tty_struct *tty;
 	modem_info *info;
 
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
@@ -139,21 +144,20 @@ isdn_tty_readmodem(void)
 		if ((info->vonline & 1) && (info->emu.vpar[1]))
 			isdn_audio_eval_silence(info);
 #endif
-		if (info->mcr & UART_MCR_RTS) {
-			/* CISCO AsyncPPP Hack */
-			if (!(info->emu.mdmreg[REG_CPPP] & BIT_CPPP))
-				r = isdn_readbchan_tty(info->isdn_driver,
-						info->isdn_channel,
-						&info->port, 0);
-			else
-				r = isdn_readbchan_tty(info->isdn_driver,
-						info->isdn_channel,
-						&info->port, 1);
-			if (r)
-				tty_flip_buffer_push(&info->port);
+		tty = info->port.tty;
+		if (tty) {
+			if (info->mcr & UART_MCR_RTS) {
+				/* CISCO AsyncPPP Hack */
+				if (!(info->emu.mdmreg[REG_CPPP] & BIT_CPPP))
+					r = isdn_readbchan_tty(info->isdn_driver, info->isdn_channel, tty, 0);
+				else
+					r = isdn_readbchan_tty(info->isdn_driver, info->isdn_channel, tty, 1);
+				if (r)
+					tty_flip_buffer_push(tty);
+			} else
+				r = 1;
 		} else
 			r = 1;
-
 		if (r) {
 			info->rcvsched = 0;
 			resched = 1;
@@ -902,9 +906,7 @@ isdn_tty_send_msg(modem_info *info, atemu *m, char *msg)
 	int j;
 	int l;
 
-	l = min(strlen(msg), sizeof(cmd.parm) - sizeof(cmd.parm.cmsg)
-		+ sizeof(cmd.parm.cmsg.para) - 2);
-
+	l = strlen(msg);
 	if (!l) {
 		isdn_tty_modem_result(RESULT_ERROR, info);
 		return;
@@ -1847,8 +1849,6 @@ err_unregister:
 		kfree(info->fax);
 #endif
 		kfree(info->port.xmit_buf - 4);
-		info->port.xmit_buf = NULL;
-		tty_port_destroy(&info->port);
 	}
 	tty_unregister_driver(m->tty_modem);
 err:
@@ -1870,8 +1870,6 @@ isdn_tty_exit(void)
 		kfree(info->fax);
 #endif
 		kfree(info->port.xmit_buf - 4);
-		info->port.xmit_buf = NULL;
-		tty_port_destroy(&info->port);
 	}
 	tty_unregister_driver(dev->mdm.tty_modem);
 	put_tty_driver(dev->mdm.tty_modem);
@@ -2227,7 +2225,7 @@ isdn_tty_stat_callback(int i, isdn_ctrl *c)
 void
 isdn_tty_at_cout(char *msg, modem_info *info)
 {
-	struct tty_port *port = &info->port;
+	struct tty_struct *tty;
 	atemu *m = &info->emu;
 	char *p;
 	char c;
@@ -2244,14 +2242,15 @@ isdn_tty_at_cout(char *msg, modem_info *info)
 	l = strlen(msg);
 
 	spin_lock_irqsave(&info->readlock, flags);
-	if (port->flags & ASYNC_CLOSING) {
+	tty = info->port.tty;
+	if ((info->port.flags & ASYNC_CLOSING) || (!tty)) {
 		spin_unlock_irqrestore(&info->readlock, flags);
 		return;
 	}
 
 	/* use queue instead of direct, if online and */
 	/* data is in queue or buffer is full */
-	if (info->online && ((tty_buffer_request_room(port, l) < l) ||
+	if (info->online && ((tty_buffer_request_room(tty, l) < l) ||
 			     !skb_queue_empty(&dev->drv[info->isdn_driver]->rpqueue[info->isdn_channel]))) {
 		skb = alloc_skb(l, GFP_ATOMIC);
 		if (!skb) {
@@ -2282,7 +2281,7 @@ isdn_tty_at_cout(char *msg, modem_info *info)
 		if (skb) {
 			*sp++ = c;
 		} else {
-			if (tty_insert_flip_char(port, c, TTY_NORMAL) == 0)
+			if (tty_insert_flip_char(tty, c, TTY_NORMAL) == 0)
 				break;
 		}
 	}
@@ -2296,7 +2295,7 @@ isdn_tty_at_cout(char *msg, modem_info *info)
 
 	} else {
 		spin_unlock_irqrestore(&info->readlock, flags);
-		tty_flip_buffer_push(port);
+		tty_flip_buffer_push(tty);
 	}
 }
 

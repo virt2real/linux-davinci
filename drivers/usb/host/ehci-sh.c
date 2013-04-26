@@ -21,10 +21,17 @@ struct ehci_sh_priv {
 static int ehci_sh_reset(struct usb_hcd *hcd)
 {
 	struct ehci_hcd	*ehci = hcd_to_ehci(hcd);
+	int ret;
 
 	ehci->caps = hcd->regs;
 
-	return ehci_setup(hcd);
+	ret = ehci_setup(hcd);
+	if (unlikely(ret))
+		return ret;
+
+	ehci_port_power(ehci, 0);
+
+	return ret;
 }
 
 static const struct hc_driver ehci_sh_hc_driver = {
@@ -118,9 +125,10 @@ static int ehci_hcd_sh_probe(struct platform_device *pdev)
 	hcd->rsrc_start = res->start;
 	hcd->rsrc_len = resource_size(res);
 
-	hcd->regs = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(hcd->regs)) {
-		ret = PTR_ERR(hcd->regs);
+	hcd->regs = devm_request_and_ioremap(&pdev->dev, res);
+	if (hcd->regs == NULL) {
+		dev_dbg(&pdev->dev, "error mapping memory\n");
+		ret = -ENXIO;
 		goto fail_request_resource;
 	}
 

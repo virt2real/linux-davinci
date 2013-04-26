@@ -241,15 +241,15 @@ void __init of_pdt_build_devicetree(phandle root_node, struct of_pdt_ops *ops)
 	BUG_ON(!ops);
 	of_pdt_prom_ops = ops;
 
-	of_allnodes = of_pdt_create_node(root_node, NULL);
+	allnodes = of_pdt_create_node(root_node, NULL);
 #if defined(CONFIG_SPARC)
-	of_allnodes->path_component_name = "";
+	allnodes->path_component_name = "";
 #endif
-	of_allnodes->full_name = "/";
+	allnodes->full_name = "/";
 
-	nextp = &of_allnodes->allnext;
-	of_allnodes->child = of_pdt_build_tree(of_allnodes,
-			of_pdt_prom_ops->getchild(of_allnodes->phandle), &nextp);
+	nextp = &allnodes->allnext;
+	allnodes->child = of_pdt_build_tree(allnodes,
+			of_pdt_prom_ops->getchild(allnodes->phandle), &nextp);
 
 	/* Get pointer to "/chosen" and "/aliasas" nodes for use everywhere */
 	of_alias_scan(kernel_tree_alloc);

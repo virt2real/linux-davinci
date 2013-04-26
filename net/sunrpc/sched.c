@@ -98,39 +98,6 @@ __rpc_add_timer(struct rpc_wait_queue *queue, struct rpc_task *task)
 	list_add(&task->u.tk_wait.timer_list, &queue->timer_list.list);
 }
 
-static void rpc_rotate_queue_owner(struct rpc_wait_queue *queue)
-{
-	struct list_head *q = &queue->tasks[queue->priority];
-	struct rpc_task *task;
-
-	if (!list_empty(q)) {
-		task = list_first_entry(q, struct rpc_task, u.tk_wait.list);
-		if (task->tk_owner == queue->owner)
-			list_move_tail(&task->u.tk_wait.list, q);
-	}
-}
-
-static void rpc_set_waitqueue_priority(struct rpc_wait_queue *queue, int priority)
-{
-	if (queue->priority != priority) {
-		/* Fairness: rotate the list when changing priority */
-		rpc_rotate_queue_owner(queue);
-		queue->priority = priority;
-	}
-}
-
-static void rpc_set_waitqueue_owner(struct rpc_wait_queue *queue, pid_t pid)
-{
-	queue->owner = pid;
-	queue->nr = RPC_BATCH_COUNT;
-}
-
-static void rpc_reset_waitqueue_priority(struct rpc_wait_queue *queue)
-{
-	rpc_set_waitqueue_priority(queue, queue->maxpriority);
-	rpc_set_waitqueue_owner(queue, 0);
-}
-
 /*
  * Add new request to a priority queue.
  */
@@ -142,11 +109,9 @@ static void __rpc_add_wait_queue_priority(struct rpc_wait_queue *queue,
 	struct rpc_task *t;
 
 	INIT_LIST_HEAD(&task->u.tk_wait.links);
-	if (unlikely(queue_priority > queue->maxpriority))
-		queue_priority = queue->maxpriority;
-	if (queue_priority > queue->priority)
-		rpc_set_waitqueue_priority(queue, queue_priority);
 	q = &queue->tasks[queue_priority];
+	if (unlikely(queue_priority > queue->maxpriority))
+		q = &queue->tasks[queue->maxpriority];
 	list_for_each_entry(t, q, u.tk_wait.list) {
 		if (t->tk_owner == task->tk_owner) {
 			list_add_tail(&task->u.tk_wait.list, &t->u.tk_wait.links);
@@ -168,9 +133,7 @@ static void __rpc_add_wait_queue(struct rpc_wait_queue *queue,
 		struct rpc_task *task,
 		unsigned char queue_priority)
 {
-	WARN_ON_ONCE(RPC_IS_QUEUED(task));
-	if (RPC_IS_QUEUED(task))
-		return;
+	BUG_ON (RPC_IS_QUEUED(task));
 
 	if (RPC_IS_PRIORITY(queue))
 		__rpc_add_wait_queue_priority(queue, task, queue_priority);
@@ -180,8 +143,6 @@ static void __rpc_add_wait_queue(struct rpc_wait_queue *queue,
 		list_add_tail(&task->u.tk_wait.list, &queue->tasks[0]);
 	task->tk_waitqueue = queue;
 	queue->qlen++;
-	/* barrier matches the read in rpc_wake_up_task_queue_locked() */
-	smp_wmb();
 	rpc_set_queued(task);
 
 	dprintk("RPC: %5u added to queue %p \"%s\"\n",
@@ -215,6 +176,24 @@ static void __rpc_remove_wait_queue(struct rpc_wait_queue *queue, struct rpc_tas
 	queue->qlen--;
 	dprintk("RPC: %5u removed from queue %p \"%s\"\n",
 			task->tk_pid, queue, rpc_qname(queue));
+}
+
+static inline void rpc_set_waitqueue_priority(struct rpc_wait_queue *queue, int priority)
+{
+	queue->priority = priority;
+	queue->count = 1 << (priority * 2);
+}
+
+static inline void rpc_set_waitqueue_owner(struct rpc_wait_queue *queue, pid_t pid)
+{
+	queue->owner = pid;
+	queue->nr = RPC_BATCH_COUNT;
+}
+
+static inline void rpc_reset_waitqueue_priority(struct rpc_wait_queue *queue)
+{
+	rpc_set_waitqueue_priority(queue, queue->maxpriority);
+	rpc_set_waitqueue_owner(queue, 0);
 }
 
 static void __rpc_init_priority_wait_queue(struct rpc_wait_queue *queue, const char *qname, unsigned char nr_queues)
@@ -355,7 +334,7 @@ static void __rpc_sleep_on_priority(struct rpc_wait_queue *q,
 
 	__rpc_add_wait_queue(q, task, queue_priority);
 
-	WARN_ON_ONCE(task->tk_callback != NULL);
+	BUG_ON(task->tk_callback != NULL);
 	task->tk_callback = action;
 	__rpc_add_timer(q, task);
 }
@@ -364,12 +343,7 @@ void rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 				rpc_action action)
 {
 	/* We shouldn't ever put an inactive task to sleep */
-	WARN_ON_ONCE(!RPC_IS_ACTIVATED(task));
-	if (!RPC_IS_ACTIVATED(task)) {
-		task->tk_status = -EIO;
-		rpc_put_task_async(task);
-		return;
-	}
+	BUG_ON(!RPC_IS_ACTIVATED(task));
 
 	/*
 	 * Protect the queue operations.
@@ -384,12 +358,7 @@ void rpc_sleep_on_priority(struct rpc_wait_queue *q, struct rpc_task *task,
 		rpc_action action, int priority)
 {
 	/* We shouldn't ever put an inactive task to sleep */
-	WARN_ON_ONCE(!RPC_IS_ACTIVATED(task));
-	if (!RPC_IS_ACTIVATED(task)) {
-		task->tk_status = -EIO;
-		rpc_put_task_async(task);
-		return;
-	}
+	BUG_ON(!RPC_IS_ACTIVATED(task));
 
 	/*
 	 * Protect the queue operations.
@@ -398,7 +367,6 @@ void rpc_sleep_on_priority(struct rpc_wait_queue *q, struct rpc_task *task,
 	__rpc_sleep_on_priority(q, task, action, priority - RPC_PRIORITY_LOW);
 	spin_unlock_bh(&q->lock);
 }
-EXPORT_SYMBOL_GPL(rpc_sleep_on_priority);
 
 /**
  * __rpc_do_wake_up_task - wake up a single rpc_task
@@ -432,11 +400,8 @@ static void __rpc_do_wake_up_task(struct rpc_wait_queue *queue, struct rpc_task 
  */
 static void rpc_wake_up_task_queue_locked(struct rpc_wait_queue *queue, struct rpc_task *task)
 {
-	if (RPC_IS_QUEUED(task)) {
-		smp_rmb();
-		if (task->tk_waitqueue == queue)
-			__rpc_do_wake_up_task(queue, task);
-	}
+	if (RPC_IS_QUEUED(task) && task->tk_waitqueue == queue)
+		__rpc_do_wake_up_task(queue, task);
 }
 
 /*
@@ -486,7 +451,8 @@ static struct rpc_task *__rpc_find_next_queued_priority(struct rpc_wait_queue *q
 		/*
 		 * Check if we need to switch queues.
 		 */
-		goto new_owner;
+		if (--queue->count)
+			goto new_owner;
 	}
 
 	/*
@@ -731,9 +697,7 @@ static void __rpc_execute(struct rpc_task *task)
 	dprintk("RPC: %5u __rpc_execute flags=0x%x\n",
 			task->tk_pid, task->tk_flags);
 
-	WARN_ON_ONCE(RPC_IS_QUEUED(task));
-	if (RPC_IS_QUEUED(task))
-		return;
+	BUG_ON(RPC_IS_QUEUED(task));
 
 	for (;;) {
 		void (*do_action)(struct rpc_task *);
@@ -955,35 +919,16 @@ struct rpc_task *rpc_new_task(const struct rpc_task_setup *setup_data)
 	return task;
 }
 
-/*
- * rpc_free_task - release rpc task and perform cleanups
- *
- * Note that we free up the rpc_task _after_ rpc_release_calldata()
- * in order to work around a workqueue dependency issue.
- *
- * Tejun Heo states:
- * "Workqueue currently considers two work items to be the same if they're
- * on the same address and won't execute them concurrently - ie. it
- * makes a work item which is queued again while being executed wait
- * for the previous execution to complete.
- *
- * If a work function frees the work item, and then waits for an event
- * which should be performed by another work item and *that* work item
- * recycles the freed work item, it can create a false dependency loop.
- * There really is no reliable way to detect this short of verifying
- * every memory free."
- *
- */
 static void rpc_free_task(struct rpc_task *task)
 {
-	unsigned short tk_flags = task->tk_flags;
+	const struct rpc_call_ops *tk_ops = task->tk_ops;
+	void *calldata = task->tk_calldata;
 
-	rpc_release_calldata(task->tk_ops, task->tk_calldata);
-
-	if (tk_flags & RPC_TASK_DYNAMIC) {
+	if (task->tk_flags & RPC_TASK_DYNAMIC) {
 		dprintk("RPC: %5u freeing task\n", task->tk_pid);
 		mempool_free(task, rpc_task_mempool);
 	}
+	rpc_release_calldata(tk_ops, calldata);
 }
 
 static void rpc_async_release(struct work_struct *work)
@@ -993,7 +938,8 @@ static void rpc_async_release(struct work_struct *work)
 
 static void rpc_release_resources_task(struct rpc_task *task)
 {
-	xprt_release(task);
+	if (task->tk_rqstp)
+		xprt_release(task);
 	if (task->tk_msg.rpc_cred) {
 		put_rpccred(task->tk_msg.rpc_cred);
 		task->tk_msg.rpc_cred = NULL;
@@ -1035,7 +981,7 @@ static void rpc_release_task(struct rpc_task *task)
 {
 	dprintk("RPC: %5u release task\n", task->tk_pid);
 
-	WARN_ON_ONCE(RPC_IS_QUEUED(task));
+	BUG_ON (RPC_IS_QUEUED(task));
 
 	rpc_release_resources_task(task);
 

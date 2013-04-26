@@ -20,6 +20,8 @@
 #include <linux/uaccess.h>
 #include <linux/usb/serial.h>
 
+/* Version Information */
+#define DRIVER_VERSION "v1.2.0.0"
 #define DRIVER_DESC "Metrologic Instruments Inc. - USB-POS driver"
 
 /* Product information. */
@@ -95,6 +97,7 @@ static void metrousb_read_int_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
 	struct metrousb_private *metro_priv = usb_get_serial_port_data(port);
+	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 	int throttled = 0;
 	int result = 0;
@@ -123,13 +126,15 @@ static void metrousb_read_int_callback(struct urb *urb)
 
 
 	/* Set the data read from the usb port into the serial port buffer. */
-	if (urb->actual_length) {
+	tty = tty_port_tty_get(&port->port);
+	if (tty && urb->actual_length) {
 		/* Loop through the data copying each byte to the tty layer. */
-		tty_insert_flip_string(&port->port, data, urb->actual_length);
+		tty_insert_flip_string(tty, data, urb->actual_length);
 
 		/* Force the data to the tty layer. */
-		tty_flip_buffer_push(&port->port);
+		tty_flip_buffer_push(tty);
 	}
+	tty_kref_put(tty);
 
 	/* Set any port variables. */
 	spin_lock_irqsave(&metro_priv->lock, flags);
@@ -174,13 +179,16 @@ static void metrousb_cleanup(struct usb_serial_port *port)
 {
 	dev_dbg(&port->dev, "%s\n", __func__);
 
-	usb_unlink_urb(port->interrupt_in_urb);
-	usb_kill_urb(port->interrupt_in_urb);
+	if (port->serial->dev) {
+		/* Shutdown any interrupt in urbs. */
+		if (port->interrupt_in_urb) {
+			usb_unlink_urb(port->interrupt_in_urb);
+			usb_kill_urb(port->interrupt_in_urb);
+		}
 
-	mutex_lock(&port->serial->disc_mutex);
-	if (!port->serial->disconnected)
+		/* Send deactivate cmd to device */
 		metrousb_send_unidirectional_cmd(UNI_CMD_CLOSE, port);
-	mutex_unlock(&port->serial->disc_mutex);
+	}
 }
 
 static int metrousb_open(struct tty_struct *tty, struct usb_serial_port *port)
@@ -263,27 +271,51 @@ static int metrousb_set_modem_ctrl(struct usb_serial *serial, unsigned int contr
 	return retval;
 }
 
-static int metrousb_port_probe(struct usb_serial_port *port)
+static void metrousb_shutdown(struct usb_serial *serial)
 {
-	struct metrousb_private *metro_priv;
+	int i = 0;
 
-	metro_priv = kzalloc(sizeof(*metro_priv), GFP_KERNEL);
-	if (!metro_priv)
-		return -ENOMEM;
+	dev_dbg(&serial->dev->dev, "%s\n", __func__);
 
-	spin_lock_init(&metro_priv->lock);
+	/* Stop reading and writing on all ports. */
+	for (i = 0; i < serial->num_ports; ++i) {
+		/* Close any open urbs. */
+		metrousb_cleanup(serial->port[i]);
 
-	usb_set_serial_port_data(port, metro_priv);
+		/* Free memory. */
+		kfree(usb_get_serial_port_data(serial->port[i]));
+		usb_set_serial_port_data(serial->port[i], NULL);
 
-	return 0;
+		dev_dbg(&serial->dev->dev, "%s - freed port number=%d\n",
+			__func__, serial->port[i]->number);
+	}
 }
 
-static int metrousb_port_remove(struct usb_serial_port *port)
+static int metrousb_startup(struct usb_serial *serial)
 {
 	struct metrousb_private *metro_priv;
+	struct usb_serial_port *port;
+	int i = 0;
 
-	metro_priv = usb_get_serial_port_data(port);
-	kfree(metro_priv);
+	dev_dbg(&serial->dev->dev, "%s\n", __func__);
+
+	/* Loop through the serial ports setting up the private structures.
+	 * Currently we only use one port. */
+	for (i = 0; i < serial->num_ports; ++i) {
+		port = serial->port[i];
+
+		/* Declare memory. */
+		metro_priv = kzalloc(sizeof(struct metrousb_private), GFP_KERNEL);
+		if (!metro_priv)
+			return -ENOMEM;
+
+		/* Initialize memory. */
+		spin_lock_init(&metro_priv->lock);
+		usb_set_serial_port_data(port, metro_priv);
+
+		dev_dbg(&serial->dev->dev, "%s - port number=%d\n ",
+			__func__, port->number);
+	}
 
 	return 0;
 }
@@ -382,8 +414,8 @@ static struct usb_serial_driver metrousb_device = {
 	.close			= metrousb_cleanup,
 	.read_int_callback	= metrousb_read_int_callback,
 	.write_int_callback	= metrousb_write_int_callback,
-	.port_probe		= metrousb_port_probe,
-	.port_remove		= metrousb_port_remove,
+	.attach			= metrousb_startup,
+	.release		= metrousb_shutdown,
 	.throttle		= metrousb_throttle,
 	.unthrottle		= metrousb_unthrottle,
 	.tiocmget		= metrousb_tiocmget,

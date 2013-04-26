@@ -17,8 +17,7 @@
  */
 
 #include <net/ipv6.h>
-#include <linux/sunrpc/addr.h>
-#include <linux/sunrpc/msg_prot.h>
+#include <linux/sunrpc/clnt.h>
 #include <linux/slab.h>
 #include <linux/export.h>
 

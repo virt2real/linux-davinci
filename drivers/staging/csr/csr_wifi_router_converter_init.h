@@ -13,6 +13,10 @@
 #ifndef CSR_WIFI_ROUTER_CONVERTER_INIT_H__
 #define CSR_WIFI_ROUTER_CONVERTER_INIT_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef EXCLUDE_CSR_WIFI_ROUTER_MODULE
 
 #include "csr_msgconv.h"
@@ -30,5 +34,9 @@ extern void CsrWifiRouterConverterInit(void);
 #define CsrWifiRouterConverterInit()
 
 #endif /* EXCLUDE_CSR_WIFI_ROUTER_MODULE */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CSR_WIFI_ROUTER_CONVERTER_INIT_H__ */

@@ -313,8 +313,7 @@ static void platinum_set_hardware(struct fb_info_platinum *pinfo)
 /*
  * Set misc info vars for this driver
  */
-static void platinum_init_info(struct fb_info *info,
-			       struct fb_info_platinum *pinfo)
+static void __devinit platinum_init_info(struct fb_info *info, struct fb_info_platinum *pinfo)
 {
 	/* Fill fb_info */
 	info->fbops = &platinumfb_ops;
@@ -339,7 +338,7 @@ static void platinum_init_info(struct fb_info *info,
 }
 
 
-static int platinum_init_fb(struct fb_info *info)
+static int __devinit platinum_init_fb(struct fb_info *info)
 {
 	struct fb_info_platinum *pinfo = info->par;
 	struct fb_var_screeninfo var;
@@ -534,7 +533,7 @@ static int __init platinumfb_setup(char *options)
 #define invalidate_cache(addr)
 #endif
 
-static int platinumfb_probe(struct platform_device* odev)
+static int __devinit platinumfb_probe(struct platform_device* odev)
 {
 	struct device_node	*dp = odev->dev.of_node;
 	struct fb_info		*info;
@@ -646,7 +645,7 @@ static int platinumfb_probe(struct platform_device* odev)
 	return rc;
 }
 
-static int platinumfb_remove(struct platform_device* odev)
+static int __devexit platinumfb_remove(struct platform_device* odev)
 {
 	struct fb_info		*info = dev_get_drvdata(&odev->dev);
 	struct fb_info_platinum	*pinfo = info->par;
@@ -684,7 +683,7 @@ static struct platform_driver platinum_driver =
 		.of_match_table = platinumfb_match,
 	},
 	.probe		= platinumfb_probe,
-	.remove		= platinumfb_remove,
+	.remove		= __devexit_p(platinumfb_remove),
 };
 
 static int __init platinumfb_init(void)

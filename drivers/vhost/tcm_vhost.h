@@ -23,8 +23,6 @@ struct tcm_vhost_cmd {
 	struct virtio_scsi_cmd_resp __user *tvc_resp;
 	/* Pointer to vhost_scsi for our device */
 	struct vhost_scsi *tvc_vhost;
-	/* Pointer to vhost_virtqueue for the cmd */
-	struct vhost_virtqueue *tvc_vq;
 	/* Pointer to vhost nexus memory */
 	struct tcm_vhost_nexus *tvc_nexus;
 	/* The TCM I/O descriptor that is accessed via container_of() */
@@ -36,7 +34,7 @@ struct tcm_vhost_cmd {
 	/* Sense buffer that will be mapped into outgoing status */
 	unsigned char tvc_sense_buf[TRANSPORT_SENSE_BUFFER];
 	/* Completed commands list, serviced from vhost worker thread */
-	struct llist_node tvc_completion_list;
+	struct list_head tvc_completion_list;
 };
 
 struct tcm_vhost_nexus {
@@ -95,11 +93,9 @@ struct tcm_vhost_tport {
  *
  * ABI Rev 0: July 2012 version starting point for v3.6-rc merge candidate +
  *            RFC-v2 vhost-scsi userspace.  Add GET_ABI_VERSION ioctl usage
- * ABI Rev 1: January 2013. Ignore vhost_tpgt filed in struct vhost_scsi_target.
- *            All the targets under vhost_wwpn can be seen and used by guset.
  */
 
-#define VHOST_SCSI_ABI_VERSION	1
+#define VHOST_SCSI_ABI_VERSION	0
 
 struct vhost_scsi_target {
 	int abi_version;

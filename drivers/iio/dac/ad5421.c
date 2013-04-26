@@ -127,6 +127,7 @@ static int ad5421_write(struct iio_dev *indio_dev, unsigned int reg,
 static int ad5421_read(struct iio_dev *indio_dev, unsigned int reg)
 {
 	struct ad5421_state *st = iio_priv(indio_dev);
+	struct spi_message m;
 	int ret;
 	struct spi_transfer t[] = {
 		{
@@ -139,11 +140,15 @@ static int ad5421_read(struct iio_dev *indio_dev, unsigned int reg)
 		},
 	};
 
+	spi_message_init(&m);
+	spi_message_add_tail(&t[0], &m);
+	spi_message_add_tail(&t[1], &m);
+
 	mutex_lock(&indio_dev->mlock);
 
 	st->data[0].d32 = cpu_to_be32((1 << 23) | (reg << 16));
 
-	ret = spi_sync_transfer(st->spi, t, ARRAY_SIZE(t));
+	ret = spi_sync(st->spi, &m);
 	if (ret >= 0)
 		ret = be32_to_cpu(st->data[1].d32) & 0xffff;
 
@@ -444,7 +449,7 @@ static const struct iio_info ad5421_info = {
 	.driver_module =	THIS_MODULE,
 };
 
-static int ad5421_probe(struct spi_device *spi)
+static int __devinit ad5421_probe(struct spi_device *spi)
 {
 	struct ad5421_platform_data *pdata = dev_get_platdata(&spi->dev);
 	struct iio_dev *indio_dev;
@@ -511,7 +516,7 @@ error_free:
 	return ret;
 }
 
-static int ad5421_remove(struct spi_device *spi)
+static int __devexit ad5421_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 
@@ -529,7 +534,7 @@ static struct spi_driver ad5421_driver = {
 		   .owner = THIS_MODULE,
 	},
 	.probe = ad5421_probe,
-	.remove = ad5421_remove,
+	.remove = __devexit_p(ad5421_remove),
 };
 module_spi_driver(ad5421_driver);
 

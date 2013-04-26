@@ -137,7 +137,7 @@ struct dw_mci {
 
 	dma_addr_t		sg_dma;
 	void			*sg_cpu;
-	const struct dw_mci_dma_ops	*dma_ops;
+	struct dw_mci_dma_ops	*dma_ops;
 #ifdef CONFIG_MMC_DW_IDMAC
 	unsigned int		ring_size;
 #else
@@ -162,7 +162,7 @@ struct dw_mci {
 	u16			data_offset;
 	struct device		*dev;
 	struct dw_mci_board	*pdata;
-	const struct dw_mci_drv_data	*drv_data;
+	struct dw_mci_drv_data	*drv_data;
 	void			*priv;
 	struct clk		*biu_clk;
 	struct clk		*ciu_clk;
@@ -186,7 +186,7 @@ struct dw_mci {
 
 	struct regulator	*vmmc;	/* Power regulator */
 	unsigned long		irq_flags; /* IRQ flags */
-	int			irq;
+	unsigned int		irq;
 };
 
 /* DMA ops for Internal/External DMAC interface */
@@ -209,10 +209,8 @@ struct dw_mci_dma_ops {
 #define DW_MCI_QUIRK_HIGHSPEED			BIT(2)
 /* Unreliable card detection */
 #define DW_MCI_QUIRK_BROKEN_CARD_DETECTION	BIT(3)
-
-/* Slot level quirks */
-/* This slot has no write protect */
-#define DW_MCI_SLOT_QUIRK_NO_WRITE_PROTECT	BIT(0)
+/* Write Protect detection not available */
+#define DW_MCI_QUIRK_NO_WRITE_PROTECT		BIT(4)
 
 struct dma_pdata;
 
@@ -231,9 +229,8 @@ struct dw_mci_board {
 	u32 quirks; /* Workaround / Quirk flags */
 	unsigned int bus_hz; /* Clock speed at the cclk_in pad */
 
-	u32 caps;	/* Capabilities */
-	u32 caps2;	/* More capabilities */
-	u32 pm_caps;	/* PM capabilities */
+	unsigned int caps;	/* Capabilities */
+	unsigned int caps2;	/* More capabilities */
 	/*
 	 * Override fifo depth. If 0, autodetect it from the FIFOTH register,
 	 * but note that this may not be reliable after a bootloader has used

@@ -8,9 +8,7 @@
 #ifndef __ASM_NETLOGIC_IRQ_H
 #define __ASM_NETLOGIC_IRQ_H
 
-#include <asm/mach-netlogic/multi-node.h>
-#define NR_IRQS			(64 * NLM_NR_NODES)
-
+#define NR_IRQS			64
 #define MIPS_CPU_IRQ_BASE	0
 
 #endif /* __ASM_NETLOGIC_IRQ_H */

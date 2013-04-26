@@ -64,7 +64,8 @@ static int set_update_marker(struct ubi_device *ubi, struct ubi_volume *vol)
 		return 0;
 	}
 
-	vtbl_rec = ubi->vtbl[vol->vol_id];
+	memcpy(&vtbl_rec, &ubi->vtbl[vol->vol_id],
+	       sizeof(struct ubi_vtbl_record));
 	vtbl_rec.upd_marker = 1;
 
 	mutex_lock(&ubi->device_mutex);
@@ -92,7 +93,8 @@ static int clear_update_marker(struct ubi_device *ubi, struct ubi_volume *vol,
 
 	dbg_gen("clear update marker for volume %d", vol->vol_id);
 
-	vtbl_rec = ubi->vtbl[vol->vol_id];
+	memcpy(&vtbl_rec, &ubi->vtbl[vol->vol_id],
+	       sizeof(struct ubi_vtbl_record));
 	ubi_assert(vol->upd_marker && vtbl_rec.upd_marker);
 	vtbl_rec.upd_marker = 0;
 

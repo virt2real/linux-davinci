@@ -464,7 +464,8 @@ void pnv_pci_setup_iommu_table(struct iommu_table *tbl,
 	tbl->it_type = TCE_PCI;
 }
 
-static struct iommu_table *pnv_pci_setup_bml_iommu(struct pci_controller *hose)
+static struct iommu_table * __devinit
+pnv_pci_setup_bml_iommu(struct pci_controller *hose)
 {
 	struct iommu_table *tbl;
 	const __be64 *basep, *swinvp;
@@ -495,8 +496,8 @@ static struct iommu_table *pnv_pci_setup_bml_iommu(struct pci_controller *hose)
 	return tbl;
 }
 
-static void pnv_pci_dma_fallback_setup(struct pci_controller *hose,
-				       struct pci_dev *pdev)
+static void __devinit pnv_pci_dma_fallback_setup(struct pci_controller *hose,
+						 struct pci_dev *pdev)
 {
 	struct device_node *np = pci_bus_to_OF_node(hose->bus);
 	struct pci_dn *pdn;
@@ -511,7 +512,7 @@ static void pnv_pci_dma_fallback_setup(struct pci_controller *hose,
 	set_iommu_table_base(&pdev->dev, pdn->iommu_table);
 }
 
-static void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
+static void __devinit pnv_pci_dma_dev_setup(struct pci_dev *pdev)
 {
 	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
 	struct pnv_phb *phb = hose->private_data;
@@ -526,7 +527,7 @@ static void pnv_pci_dma_dev_setup(struct pci_dev *pdev)
 }
 
 /* Fixup wrong class code in p7ioc root complex */
-static void pnv_p7ioc_rc_quirk(struct pci_dev *dev)
+static void __devinit pnv_p7ioc_rc_quirk(struct pci_dev *dev)
 {
 	dev->class = PCI_CLASS_BRIDGE_PCI << 8;
 }

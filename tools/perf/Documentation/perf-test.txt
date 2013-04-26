@@ -23,10 +23,6 @@ from 'perf test list'.
 
 OPTIONS
 -------
--s::
---skip::
-	Tests to skip (comma separater numeric list).
-
 -v::
 --verbose::
 	Be more verbose.

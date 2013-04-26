@@ -68,16 +68,6 @@ static u32 hspi_read(struct hspi_priv *hspi, int reg)
 	return ioread32(hspi->addr + reg);
 }
 
-static void hspi_bit_set(struct hspi_priv *hspi, int reg, u32 mask, u32 set)
-{
-	u32 val = hspi_read(hspi, reg);
-
-	val &= ~mask;
-	val |= set & mask;
-
-	hspi_write(hspi, reg, val);
-}
-
 /*
  *		transfer function
  */
@@ -113,13 +103,6 @@ static int hspi_unprepare_transfer(struct spi_master *master)
 
 	pm_runtime_put_sync(hspi->dev);
 	return 0;
-}
-
-#define hspi_hw_cs_enable(hspi)		hspi_hw_cs_ctrl(hspi, 0)
-#define hspi_hw_cs_disable(hspi)	hspi_hw_cs_ctrl(hspi, 1)
-static void hspi_hw_cs_ctrl(struct hspi_priv *hspi, int hi)
-{
-	hspi_bit_set(hspi, SPSCR, (1 << 6), (hi) << 6);
 }
 
 static void hspi_hw_setup(struct hspi_priv *hspi,
@@ -172,7 +155,7 @@ static void hspi_hw_setup(struct hspi_priv *hspi,
 
 	hspi_write(hspi, SPCR, spcr);
 	hspi_write(hspi, SPSR, 0x0);
-	hspi_write(hspi, SPSCR, 0x21);	/* master mode / CS control */
+	hspi_write(hspi, SPSCR, 0x1);	/* master mode */
 }
 
 static int hspi_transfer_one_message(struct spi_master *master,
@@ -183,21 +166,12 @@ static int hspi_transfer_one_message(struct spi_master *master,
 	u32 tx;
 	u32 rx;
 	int ret, i;
-	unsigned int cs_change;
-	const int nsecs = 50;
 
 	dev_dbg(hspi->dev, "%s\n", __func__);
 
-	cs_change = 1;
 	ret = 0;
 	list_for_each_entry(t, &msg->transfers, transfer_list) {
-
-		if (cs_change) {
-			hspi_hw_setup(hspi, msg, t);
-			hspi_hw_cs_enable(hspi);
-			ndelay(nsecs);
-		}
-		cs_change = t->cs_change;
+		hspi_hw_setup(hspi, msg, t);
 
 		for (i = 0; i < t->len; i++) {
 
@@ -224,22 +198,9 @@ static int hspi_transfer_one_message(struct spi_master *master,
 		}
 
 		msg->actual_length += t->len;
-
-		if (t->delay_usecs)
-			udelay(t->delay_usecs);
-
-		if (cs_change) {
-			ndelay(nsecs);
-			hspi_hw_cs_disable(hspi);
-			ndelay(nsecs);
-		}
 	}
 
 	msg->status = ret;
-	if (!cs_change) {
-		ndelay(nsecs);
-		hspi_hw_cs_disable(hspi);
-	}
 	spi_finalize_current_message(master);
 
 	return ret;
@@ -268,7 +229,7 @@ static void hspi_cleanup(struct spi_device *spi)
 	dev_dbg(dev, "%s cleanup\n", spi->modalias);
 }
 
-static int hspi_probe(struct platform_device *pdev)
+static int __devinit hspi_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct spi_master *master;
@@ -290,7 +251,7 @@ static int hspi_probe(struct platform_device *pdev)
 	}
 
 	clk = clk_get(NULL, "shyway_clk");
-	if (IS_ERR(clk)) {
+	if (!clk) {
 		dev_err(&pdev->dev, "shyway_clk is required\n");
 		ret = -EINVAL;
 		goto error0;
@@ -339,7 +300,7 @@ static int hspi_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int hspi_remove(struct platform_device *pdev)
+static int __devexit hspi_remove(struct platform_device *pdev)
 {
 	struct hspi_priv *hspi = dev_get_drvdata(&pdev->dev);
 
@@ -353,7 +314,7 @@ static int hspi_remove(struct platform_device *pdev)
 
 static struct platform_driver hspi_driver = {
 	.probe = hspi_probe,
-	.remove = hspi_remove,
+	.remove = __devexit_p(hspi_remove),
 	.driver = {
 		.name = "sh-hspi",
 		.owner = THIS_MODULE,

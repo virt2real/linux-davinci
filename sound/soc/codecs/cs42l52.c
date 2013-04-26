@@ -737,7 +737,7 @@ static const struct cs42l52_clk_para clk_map_table[] = {
 
 static int cs42l52_get_clk(int mclk, int rate)
 {
-	int i, ret = -EINVAL;
+	int i, ret = 0;
 	u_int mclk1, mclk2 = 0;
 
 	for (i = 0; i < ARRAY_SIZE(clk_map_table); i++) {
@@ -749,6 +749,8 @@ static int cs42l52_get_clk(int mclk, int rate)
 			}
 		}
 	}
+	if (ret > ARRAY_SIZE(clk_map_table))
+		return -EINVAL;
 	return ret;
 }
 
@@ -761,7 +763,7 @@ static int cs42l52_set_sysclk(struct snd_soc_dai *codec_dai,
 	if ((freq >= CS42L52_MIN_CLK) && (freq <= CS42L52_MAX_CLK)) {
 		cs42l52->sysclk = freq;
 	} else {
-		dev_err(codec->dev, "Invalid freq parameter\n");
+		dev_err(codec->dev, "Invalid freq paramter\n");
 		return -EINVAL;
 	}
 	return 0;
@@ -771,6 +773,7 @@ static int cs42l52_set_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct cs42l52_private *cs42l52 = snd_soc_codec_get_drvdata(codec);
+	int ret = 0;
 	u8 iface = 0;
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
@@ -819,7 +822,7 @@ static int cs42l52_set_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 	case SND_SOC_DAIFMT_NB_IF:
 		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
 	cs42l52->config.format = iface;
 	snd_soc_write(codec, CS42L52_IFACE_CTL1, cs42l52->config.format);
@@ -1038,7 +1041,7 @@ static void cs42l52_init_beep(struct snd_soc_codec *codec)
 	struct cs42l52_private *cs42l52 = snd_soc_codec_get_drvdata(codec);
 	int ret;
 
-	cs42l52->beep = devm_input_allocate_device(codec->dev);
+	cs42l52->beep = input_allocate_device();
 	if (!cs42l52->beep) {
 		dev_err(codec->dev, "Failed to allocate beep device\n");
 		return;
@@ -1059,6 +1062,7 @@ static void cs42l52_init_beep(struct snd_soc_codec *codec)
 
 	ret = input_register_device(cs42l52->beep);
 	if (ret != 0) {
+		input_free_device(cs42l52->beep);
 		cs42l52->beep = NULL;
 		dev_err(codec->dev, "Failed to register beep device\n");
 	}
@@ -1075,6 +1079,7 @@ static void cs42l52_free_beep(struct snd_soc_codec *codec)
 	struct cs42l52_private *cs42l52 = snd_soc_codec_get_drvdata(codec);
 
 	device_remove_file(codec->dev, &dev_attr_beep);
+	input_unregister_device(cs42l52->beep);
 	cancel_work_sync(&cs42l52->beep_work);
 	cs42l52->beep = NULL;
 
@@ -1267,7 +1272,7 @@ static struct i2c_driver cs42l52_i2c_driver = {
 	},
 	.id_table = cs42l52_id,
 	.probe =    cs42l52_i2c_probe,
-	.remove =   cs42l52_i2c_remove,
+	.remove =   __devexit_p(cs42l52_i2c_remove),
 };
 
 module_i2c_driver(cs42l52_i2c_driver);

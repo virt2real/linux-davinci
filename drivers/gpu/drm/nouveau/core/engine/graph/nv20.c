@@ -1,4 +1,3 @@
-#include <core/client.h>
 #include <core/os.h>
 #include <core/class.h>
 #include <core/engctx.h>
@@ -184,7 +183,7 @@ nv20_graph_tile_prog(struct nouveau_engine *engine, int i)
 	nv_wr32(priv, NV10_PGRAPH_RDI_INDEX, 0x00EA0010 + 4 * i);
 	nv_wr32(priv, NV10_PGRAPH_RDI_DATA, tile->addr);
 
-	if (nv_device(engine)->chipset != 0x34) {
+	if (nv_device(engine)->card_type == NV_20) {
 		nv_wr32(priv, NV20_PGRAPH_ZCOMP(i), tile->zcomp);
 		nv_wr32(priv, NV10_PGRAPH_RDI_INDEX, 0x00ea0090 + 4 * i);
 		nv_wr32(priv, NV10_PGRAPH_RDI_DATA, tile->zcomp);
@@ -225,17 +224,15 @@ nv20_graph_intr(struct nouveau_subdev *subdev)
 	nv_wr32(priv, NV04_PGRAPH_FIFO, 0x00000001);
 
 	if (show) {
-		nv_error(priv, "%s", "");
+		nv_info(priv, "");
 		nouveau_bitfield_print(nv10_graph_intr_name, show);
-		pr_cont(" nsource:");
+		printk(" nsource:");
 		nouveau_bitfield_print(nv04_graph_nsource, nsource);
-		pr_cont(" nstatus:");
+		printk(" nstatus:");
 		nouveau_bitfield_print(nv10_graph_nstatus, nstatus);
-		pr_cont("\n");
-		nv_error(priv,
-			 "ch %d [%s] subc %d class 0x%04x mthd 0x%04x data 0x%08x\n",
-			 chid, nouveau_client_name(engctx), subc, class, mthd,
-			 data);
+		printk("\n");
+		nv_info(priv, "ch %d/%d class 0x%04x mthd 0x%04x data 0x%08x\n",
+			chid, subc, class, mthd, data);
 	}
 
 	nouveau_engctx_put(engctx);

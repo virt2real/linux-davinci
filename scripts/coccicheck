@@ -2,15 +2,6 @@
 
 SPATCH="`which ${SPATCH:=spatch}`"
 
-# The verbosity may be set by the environmental parameter V=
-# as for example with 'make V=1 coccicheck'
-
-if [ -n "$V" -a "$V" != "0" ]; then
-	VERBOSE=1
-else
-	VERBOSE=0
-fi
-
 if [ "$C" = "1" -o "$C" = "2" ]; then
     ONLINE=1
 
@@ -55,14 +46,6 @@ if [ "$ONLINE" = "0" ] ; then
     echo ''
 fi
 
-run_cmd() {
-	if [ $VERBOSE -ne 0 ] ; then
-		echo "Running: $@"
-	fi
-	eval $@
-}
-
-
 coccinelle () {
     COCCI="$1"
 
@@ -72,7 +55,7 @@ coccinelle () {
 #
 #    $SPATCH -D $MODE $FLAGS -parse_cocci $COCCI $OPT > /dev/null
 
-    if [ $VERBOSE -ne 0 ] ; then
+    if [ "$ONLINE" = "0" ] ; then
 
 	FILE=`echo $COCCI | sed "s|$srctree/||"`
 
@@ -108,21 +91,15 @@ coccinelle () {
     fi
 
     if [ "$MODE" = "chain" ] ; then
-	run_cmd $SPATCH -D patch   \
-		$FLAGS -sp_file $COCCI $OPT $OPTIONS               || \
-	run_cmd $SPATCH -D report  \
-		$FLAGS -sp_file $COCCI $OPT $OPTIONS -no_show_diff || \
-	run_cmd $SPATCH -D context \
-		$FLAGS -sp_file $COCCI $OPT $OPTIONS               || \
-	run_cmd $SPATCH -D org     \
-		$FLAGS -sp_file $COCCI $OPT $OPTIONS -no_show_diff || exit 1
+	$SPATCH -D patch   $FLAGS -sp_file $COCCI $OPT $OPTIONS               || \
+	$SPATCH -D report  $FLAGS -sp_file $COCCI $OPT $OPTIONS -no_show_diff || \
+	$SPATCH -D context $FLAGS -sp_file $COCCI $OPT $OPTIONS               || \
+	$SPATCH -D org     $FLAGS -sp_file $COCCI $OPT $OPTIONS -no_show_diff || exit 1
     elif [ "$MODE" = "rep+ctxt" ] ; then
-	run_cmd $SPATCH -D report  \
-		$FLAGS -sp_file $COCCI $OPT $OPTIONS -no_show_diff && \
-	run_cmd $SPATCH -D context \
-		$FLAGS -sp_file $COCCI $OPT $OPTIONS || exit 1
+	$SPATCH -D report  $FLAGS -sp_file $COCCI $OPT $OPTIONS -no_show_diff && \
+	$SPATCH -D context $FLAGS -sp_file $COCCI $OPT $OPTIONS || exit 1
     else
-	run_cmd $SPATCH -D $MODE   $FLAGS -sp_file $COCCI $OPT $OPTIONS || exit 1
+	$SPATCH -D $MODE   $FLAGS -sp_file $COCCI $OPT $OPTIONS || exit 1
     fi
 
 }

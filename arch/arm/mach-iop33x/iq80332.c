@@ -45,6 +45,10 @@ static void __init iq80332_timer_init(void)
 		iop_init_time(266000000);
 }
 
+static struct sys_timer iq80332_timer = {
+	.init		= iq80332_timer_init,
+};
+
 
 /*
  * IQ80332 PCI.
@@ -139,7 +143,7 @@ MACHINE_START(IQ80332, "Intel IQ80332")
 	.atag_offset	= 0x100,
 	.map_io		= iop3xx_map_io,
 	.init_irq	= iop33x_init_irq,
-	.init_time	= iq80332_timer_init,
+	.timer		= &iq80332_timer,
 	.init_machine	= iq80332_init_machine,
 	.restart	= iop3xx_restart,
 MACHINE_END

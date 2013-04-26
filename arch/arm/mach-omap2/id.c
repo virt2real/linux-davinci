@@ -28,9 +28,6 @@
 #include "soc.h"
 #include "control.h"
 
-#define OMAP4_SILICON_TYPE_STANDARD		0x01
-#define OMAP4_SILICON_TYPE_PERFORMANCE		0x02
-
 static unsigned int omap_revision;
 static const char *cpu_rev;
 u32 omap_features;
@@ -276,11 +273,25 @@ void __init omap4xxx_check_features(void)
 {
 	u32 si_type;
 
-	si_type =
-	(read_tap_reg(OMAP4_CTRL_MODULE_CORE_STD_FUSE_PROD_ID_1) >> 16) & 0x03;
+	if (cpu_is_omap443x())
+		omap_features |= OMAP4_HAS_MPU_1GHZ;
 
-	if (si_type == OMAP4_SILICON_TYPE_PERFORMANCE)
-		omap_features = OMAP4_HAS_PERF_SILICON;
+
+	if (cpu_is_omap446x()) {
+		si_type =
+			read_tap_reg(OMAP4_CTRL_MODULE_CORE_STD_FUSE_PROD_ID_1);
+		switch ((si_type & (3 << 16)) >> 16) {
+		case 2:
+			/* High performance device */
+			omap_features |= OMAP4_HAS_MPU_1_5GHZ;
+			break;
+		case 1:
+		default:
+			/* Standard device */
+			omap_features |= OMAP4_HAS_MPU_1_2GHZ;
+			break;
+		}
+	}
 }
 
 void __init ti81xx_check_features(void)
@@ -399,18 +410,8 @@ void __init omap3xxx_check_revision(void)
 		}
 		break;
 	case 0xb944:
-		switch (rev) {
-		case 0:
-			omap_revision = AM335X_REV_ES1_0;
-			cpu_rev = "1.0";
-			break;
-		case 1:
-		/* FALLTHROUGH */
-		default:
-			omap_revision = AM335X_REV_ES2_0;
-			cpu_rev = "2.0";
-			break;
-		}
+		omap_revision = AM335X_REV_ES1_0;
+		cpu_rev = "1.0";
 		break;
 	case 0xb8f2:
 		switch (rev) {
@@ -558,12 +559,11 @@ void __init omap5xxx_check_revision(void)
  * detect the exact revision later on in omap2_detect_revision() once map_io
  * is done.
  */
-void __init omap2_set_globals_tap(u32 class, void __iomem *tap)
+void __init omap2_set_globals_tap(struct omap_globals *omap2_globals)
 {
-	omap_revision = class;
-	tap_base = tap;
+	omap_revision = omap2_globals->class;
+	tap_base = omap2_globals->tap;
 
-	/* XXX What is this intended to do? */
 	if (cpu_is_omap34xx())
 		tap_prod_id = 0x0210;
 	else

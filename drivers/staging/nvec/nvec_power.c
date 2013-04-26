@@ -22,8 +22,6 @@
 
 #include "nvec.h"
 
-#define GET_SYSTEM_STATUS 0x00
-
 struct nvec_power {
 	struct notifier_block notifier;
 	struct delayed_work poller;
@@ -113,7 +111,7 @@ static const int bat_init[] = {
 static void get_bat_mfg_data(struct nvec_power *power)
 {
 	int i;
-	char buf[] = { NVEC_BAT, SLOT_STATUS };
+	char buf[] = { '\x02', '\x00' };
 
 	for (i = 0; i < ARRAY_SIZE(bat_init); i++) {
 		buf[1] = bat_init[i];
@@ -350,7 +348,7 @@ static int const bat_iter[] = {
 
 static void nvec_power_poll(struct work_struct *work)
 {
-	char buf[] = { NVEC_SYS, GET_SYSTEM_STATUS };
+	char buf[] = { '\x01', '\x00' };
 	struct nvec_power *power = container_of(work, struct nvec_power,
 						poller.work);
 
@@ -363,14 +361,14 @@ static void nvec_power_poll(struct work_struct *work)
 
 /* select a battery request function via round robin
    doing it all at once seems to overload the power supply */
-	buf[0] = NVEC_BAT;
+	buf[0] = '\x02';	/* battery */
 	buf[1] = bat_iter[counter++];
 	nvec_write_async(power->nvec, buf, 2);
 
 	schedule_delayed_work(to_delayed_work(work), msecs_to_jiffies(5000));
 };
 
-static int nvec_power_probe(struct platform_device *pdev)
+static int __devinit nvec_power_probe(struct platform_device *pdev)
 {
 	struct power_supply *psy;
 	struct nvec_power *power;
@@ -409,7 +407,7 @@ static int nvec_power_probe(struct platform_device *pdev)
 	return power_supply_register(&pdev->dev, psy);
 }
 
-static int nvec_power_remove(struct platform_device *pdev)
+static int __devexit nvec_power_remove(struct platform_device *pdev)
 {
 	struct nvec_power *power = platform_get_drvdata(pdev);
 
@@ -427,7 +425,7 @@ static int nvec_power_remove(struct platform_device *pdev)
 
 static struct platform_driver nvec_power_driver = {
 	.probe = nvec_power_probe,
-	.remove = nvec_power_remove,
+	.remove = __devexit_p(nvec_power_remove),
 	.driver = {
 		   .name = "nvec-power",
 		   .owner = THIS_MODULE,

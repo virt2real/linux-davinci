@@ -48,7 +48,7 @@ extdev_table(struct nouveau_bios *bios, u8 *ver, u8 *hdr, u8 *len, u8 *cnt)
 	return extdev + *hdr;
 }
 
-static u16
+u16
 nvbios_extdev_entry(struct nouveau_bios *bios, int idx, u8 *ver, u8 *len)
 {
 	u8 hdr, cnt;

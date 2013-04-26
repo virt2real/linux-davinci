@@ -109,9 +109,7 @@ static int hp_sdc_rtc_do_read_bbrtc (struct rtc_time *rtctm)
 	
 	if (hp_sdc_enqueue_transaction(&t)) return -1;
 	
-	/* Put ourselves to sleep for results. */
-	if (WARN_ON(down_interruptible(&tsem)))
-		return -1;
+	down_interruptible(&tsem);  /* Put ourselves to sleep for results. */
 	
 	/* Check for nonpresence of BBRTC */
 	if (!((tseq[83] | tseq[90] | tseq[69] | tseq[76] |
@@ -178,16 +176,11 @@ static int64_t hp_sdc_rtc_read_i8042timer (uint8_t loadcmd, int numreg)
 	t.seq =			tseq;
 	t.act.semaphore =	&i8042tregs;
 
-	/* Sleep if output regs in use. */
-	if (WARN_ON(down_interruptible(&i8042tregs)))
-		return -1;
+	down_interruptible(&i8042tregs);  /* Sleep if output regs in use. */
 
 	if (hp_sdc_enqueue_transaction(&t)) return -1;
 	
-	/* Sleep until results come back. */
-	if (WARN_ON(down_interruptible(&i8042tregs)))
-		return -1;
-
+	down_interruptible(&i8042tregs);  /* Sleep until results come back. */
 	up(&i8042tregs);
 
 	return (tseq[5] | 
@@ -283,7 +276,6 @@ static inline int hp_sdc_rtc_read_ct(struct timeval *res) {
 }
 
 
-#if 0 /* not used yet */
 /* Set the i8042 real-time clock */
 static int hp_sdc_rtc_set_rt (struct timeval *setto)
 {
@@ -394,7 +386,6 @@ static int hp_sdc_rtc_set_i8042timer (struct timeval *setto, uint8_t setcmd)
 	}
 	return 0;
 }
-#endif
 
 static ssize_t hp_sdc_rtc_read(struct file *file, char __user *buf,
 			       size_t count, loff_t *ppos) {

@@ -93,7 +93,7 @@ static struct irqaction footbridge_timer_irq = {
 /*
  * Set up timer interrupt.
  */
-void __init footbridge_timer_init(void)
+static void __init footbridge_timer_init(void)
 {
 	struct clock_event_device *ce = &ckevt_dc21285;
 
@@ -101,6 +101,14 @@ void __init footbridge_timer_init(void)
 
 	setup_irq(ce->irq, &footbridge_timer_irq);
 
+	clockevents_calc_mult_shift(ce, mem_fclk_21285, 5);
+	ce->max_delta_ns = clockevent_delta2ns(0xffffff, ce);
+	ce->min_delta_ns = clockevent_delta2ns(0x000004, ce);
 	ce->cpumask = cpumask_of(smp_processor_id());
-	clockevents_config_and_register(ce, mem_fclk_21285, 0x4, 0xffffff);
+
+	clockevents_register_device(ce);
 }
+
+struct sys_timer footbridge_timer = {
+	.init		= footbridge_timer_init,
+};

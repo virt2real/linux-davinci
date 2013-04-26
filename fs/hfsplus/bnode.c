@@ -62,8 +62,7 @@ void hfs_bnode_read_key(struct hfs_bnode *node, void *key, int off)
 
 	tree = node->tree;
 	if (node->type == HFS_NODE_LEAF ||
-	    tree->attributes & HFS_TREE_VARIDXKEYS ||
-	    node->tree->cnid == HFSPLUS_ATTR_CNID)
+	    tree->attributes & HFS_TREE_VARIDXKEYS)
 		key_len = hfs_bnode_read_u16(node, off) + 2;
 	else
 		key_len = tree->max_key_len + 2;
@@ -315,8 +314,7 @@ void hfs_bnode_dump(struct hfs_bnode *node)
 		if (i && node->type == HFS_NODE_INDEX) {
 			int tmp;
 
-			if (node->tree->attributes & HFS_TREE_VARIDXKEYS ||
-					node->tree->cnid == HFSPLUS_ATTR_CNID)
+			if (node->tree->attributes & HFS_TREE_VARIDXKEYS)
 				tmp = hfs_bnode_read_u16(node, key_off) + 2;
 			else
 				tmp = node->tree->max_key_len + 2;
@@ -648,8 +646,6 @@ void hfs_bnode_put(struct hfs_bnode *node)
 		if (test_bit(HFS_BNODE_DELETED, &node->flags)) {
 			hfs_bnode_unhash(node);
 			spin_unlock(&tree->hash_lock);
-			hfs_bnode_clear(node, 0,
-				PAGE_CACHE_SIZE * tree->pages_per_bnode);
 			hfs_bmap_free(node);
 			hfs_bnode_free(node);
 			return;

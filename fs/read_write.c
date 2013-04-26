@@ -15,9 +15,7 @@
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
 #include <linux/splice.h>
-#include <linux/compat.h>
 #include "read_write.h"
-#include "internal.h"
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -56,7 +54,7 @@ static loff_t lseek_execute(struct file *file, struct inode *inode,
  * generic_file_llseek_size - generic llseek implementation for regular files
  * @file:	file structure to seek on
  * @offset:	file offset to seek to
- * @whence:	type of seek
+ * @origin:	type of seek
  * @size:	max size of this file in file system
  * @eof:	offset used for SEEK_END position
  *
@@ -69,12 +67,12 @@ static loff_t lseek_execute(struct file *file, struct inode *inode,
  * read/writes behave like SEEK_SET against seeks.
  */
 loff_t
-generic_file_llseek_size(struct file *file, loff_t offset, int whence,
+generic_file_llseek_size(struct file *file, loff_t offset, int origin,
 		loff_t maxsize, loff_t eof)
 {
 	struct inode *inode = file->f_mapping->host;
 
-	switch (whence) {
+	switch (origin) {
 	case SEEK_END:
 		offset += eof;
 		break;
@@ -124,17 +122,17 @@ EXPORT_SYMBOL(generic_file_llseek_size);
  * generic_file_llseek - generic llseek implementation for regular files
  * @file:	file structure to seek on
  * @offset:	file offset to seek to
- * @whence:	type of seek
+ * @origin:	type of seek
  *
  * This is a generic implemenation of ->llseek useable for all normal local
  * filesystems.  It just updates the file offset to the value specified by
- * @offset and @whence under i_mutex.
+ * @offset and @origin under i_mutex.
  */
-loff_t generic_file_llseek(struct file *file, loff_t offset, int whence)
+loff_t generic_file_llseek(struct file *file, loff_t offset, int origin)
 {
 	struct inode *inode = file->f_mapping->host;
 
-	return generic_file_llseek_size(file, offset, whence,
+	return generic_file_llseek_size(file, offset, origin,
 					inode->i_sb->s_maxbytes,
 					i_size_read(inode));
 }
@@ -144,32 +142,32 @@ EXPORT_SYMBOL(generic_file_llseek);
  * noop_llseek - No Operation Performed llseek implementation
  * @file:	file structure to seek on
  * @offset:	file offset to seek to
- * @whence:	type of seek
+ * @origin:	type of seek
  *
  * This is an implementation of ->llseek useable for the rare special case when
  * userspace expects the seek to succeed but the (device) file is actually not
  * able to perform the seek. In this case you use noop_llseek() instead of
  * falling back to the default implementation of ->llseek.
  */
-loff_t noop_llseek(struct file *file, loff_t offset, int whence)
+loff_t noop_llseek(struct file *file, loff_t offset, int origin)
 {
 	return file->f_pos;
 }
 EXPORT_SYMBOL(noop_llseek);
 
-loff_t no_llseek(struct file *file, loff_t offset, int whence)
+loff_t no_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
 EXPORT_SYMBOL(no_llseek);
 
-loff_t default_llseek(struct file *file, loff_t offset, int whence)
+loff_t default_llseek(struct file *file, loff_t offset, int origin)
 {
-	struct inode *inode = file_inode(file);
+	struct inode *inode = file->f_path.dentry->d_inode;
 	loff_t retval;
 
 	mutex_lock(&inode->i_mutex);
-	switch (whence) {
+	switch (origin) {
 		case SEEK_END:
 			offset += i_size_read(inode);
 			break;
@@ -218,7 +216,7 @@ out:
 }
 EXPORT_SYMBOL(default_llseek);
 
-loff_t vfs_llseek(struct file *file, loff_t offset, int whence)
+loff_t vfs_llseek(struct file *file, loff_t offset, int origin)
 {
 	loff_t (*fn)(struct file *, loff_t, int);
 
@@ -227,11 +225,11 @@ loff_t vfs_llseek(struct file *file, loff_t offset, int whence)
 		if (file->f_op && file->f_op->llseek)
 			fn = file->f_op->llseek;
 	}
-	return fn(file, offset, whence);
+	return fn(file, offset, origin);
 }
 EXPORT_SYMBOL(vfs_llseek);
 
-SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
+SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, origin)
 {
 	off_t retval;
 	struct fd f = fdget(fd);
@@ -239,8 +237,8 @@ SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
 		return -EBADF;
 
 	retval = -EINVAL;
-	if (whence <= SEEK_MAX) {
-		loff_t res = vfs_llseek(f.file, offset, whence);
+	if (origin <= SEEK_MAX) {
+		loff_t res = vfs_llseek(f.file, offset, origin);
 		retval = res;
 		if (res != (loff_t)retval)
 			retval = -EOVERFLOW;	/* LFS: should only happen on 32 bit platforms */
@@ -249,17 +247,10 @@ SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
 	return retval;
 }
 
-#ifdef CONFIG_COMPAT
-COMPAT_SYSCALL_DEFINE3(lseek, unsigned int, fd, compat_off_t, offset, unsigned int, whence)
-{
-	return sys_lseek(fd, offset, whence);
-}
-#endif
-
 #ifdef __ARCH_WANT_SYS_LLSEEK
 SYSCALL_DEFINE5(llseek, unsigned int, fd, unsigned long, offset_high,
 		unsigned long, offset_low, loff_t __user *, result,
-		unsigned int, whence)
+		unsigned int, origin)
 {
 	int retval;
 	struct fd f = fdget(fd);
@@ -269,11 +260,11 @@ SYSCALL_DEFINE5(llseek, unsigned int, fd, unsigned long, offset_high,
 		return -EBADF;
 
 	retval = -EINVAL;
-	if (whence > SEEK_MAX)
+	if (origin > SEEK_MAX)
 		goto out_putf;
 
 	offset = vfs_llseek(f.file, ((loff_t) offset_high << 32) | offset_low,
-			whence);
+			origin);
 
 	retval = (int)offset;
 	if (offset >= 0) {
@@ -287,6 +278,7 @@ out_putf:
 }
 #endif
 
+
 /*
  * rw_verify_area doesn't like huge counts. We limit
  * them to something that fits in "int" so that others
@@ -298,7 +290,7 @@ int rw_verify_area(int read_write, struct file *file, loff_t *ppos, size_t count
 	loff_t pos;
 	int retval = -EINVAL;
 
-	inode = file_inode(file);
+	inode = file->f_path.dentry->d_inode;
 	if (unlikely((ssize_t) count < 0))
 		return retval;
 	pos = *ppos;
@@ -417,33 +409,6 @@ ssize_t do_sync_write(struct file *filp, const char __user *buf, size_t len, lof
 }
 
 EXPORT_SYMBOL(do_sync_write);
-
-ssize_t __kernel_write(struct file *file, const char *buf, size_t count, loff_t *pos)
-{
-	mm_segment_t old_fs;
-	const char __user *p;
-	ssize_t ret;
-
-	if (!file->f_op || (!file->f_op->write && !file->f_op->aio_write))
-		return -EINVAL;
-
-	old_fs = get_fs();
-	set_fs(get_ds());
-	p = (__force const char __user *)buf;
-	if (count > MAX_RW_COUNT)
-		count =  MAX_RW_COUNT;
-	if (file->f_op->write)
-		ret = file->f_op->write(file, p, count, pos);
-	else
-		ret = do_sync_write(file, p, count, pos);
-	set_fs(old_fs);
-	if (ret > 0) {
-		fsnotify_modify(file);
-		add_wchar(current, ret);
-	}
-	inc_syscw(current);
-	return ret;
-}
 
 ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
 {
@@ -936,8 +901,8 @@ ssize_t do_sendfile(int out_fd, int in_fd, loff_t *ppos, size_t count,
 	if (!(out.file->f_mode & FMODE_WRITE))
 		goto fput_out;
 	retval = -EINVAL;
-	in_inode = file_inode(in.file);
-	out_inode = file_inode(out.file);
+	in_inode = in.file->f_path.dentry->d_inode;
+	out_inode = out.file->f_path.dentry->d_inode;
 	retval = rw_verify_area(WRITE, out.file, &out.file->f_pos, count);
 	if (retval < 0)
 		goto fput_out;
@@ -970,8 +935,6 @@ ssize_t do_sendfile(int out_fd, int in_fd, loff_t *ppos, size_t count,
 	if (retval > 0) {
 		add_rchar(current, retval);
 		add_wchar(current, retval);
-		fsnotify_access(in.file);
-		fsnotify_modify(out.file);
 	}
 
 	inc_syscr(current);

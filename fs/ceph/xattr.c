@@ -29,93 +29,8 @@ struct ceph_vxattr {
 	size_t name_size;	/* strlen(name) + 1 (for '\0') */
 	size_t (*getxattr_cb)(struct ceph_inode_info *ci, char *val,
 			      size_t size);
-	bool readonly, hidden;
-	bool (*exists_cb)(struct ceph_inode_info *ci);
+	bool readonly;
 };
-
-/* layouts */
-
-static bool ceph_vxattrcb_layout_exists(struct ceph_inode_info *ci)
-{
-	size_t s;
-	char *p = (char *)&ci->i_layout;
-
-	for (s = 0; s < sizeof(ci->i_layout); s++, p++)
-		if (*p)
-			return true;
-	return false;
-}
-
-static size_t ceph_vxattrcb_layout(struct ceph_inode_info *ci, char *val,
-					size_t size)
-{
-	int ret;
-	struct ceph_fs_client *fsc = ceph_sb_to_client(ci->vfs_inode.i_sb);
-	struct ceph_osd_client *osdc = &fsc->client->osdc;
-	s64 pool = ceph_file_layout_pg_pool(ci->i_layout);
-	const char *pool_name;
-
-	dout("ceph_vxattrcb_layout %p\n", &ci->vfs_inode);
-	down_read(&osdc->map_sem);
-	pool_name = ceph_pg_pool_name_by_id(osdc->osdmap, pool);
-	if (pool_name)
-		ret = snprintf(val, size,
-		"stripe_unit=%lld stripe_count=%lld object_size=%lld pool=%s",
-		(unsigned long long)ceph_file_layout_su(ci->i_layout),
-		(unsigned long long)ceph_file_layout_stripe_count(ci->i_layout),
-	        (unsigned long long)ceph_file_layout_object_size(ci->i_layout),
-		pool_name);
-	else
-		ret = snprintf(val, size,
-		"stripe_unit=%lld stripe_count=%lld object_size=%lld pool=%lld",
-		(unsigned long long)ceph_file_layout_su(ci->i_layout),
-		(unsigned long long)ceph_file_layout_stripe_count(ci->i_layout),
-	        (unsigned long long)ceph_file_layout_object_size(ci->i_layout),
-		(unsigned long long)pool);
-
-	up_read(&osdc->map_sem);
-	return ret;
-}
-
-static size_t ceph_vxattrcb_layout_stripe_unit(struct ceph_inode_info *ci,
-					       char *val, size_t size)
-{
-	return snprintf(val, size, "%lld",
-			(unsigned long long)ceph_file_layout_su(ci->i_layout));
-}
-
-static size_t ceph_vxattrcb_layout_stripe_count(struct ceph_inode_info *ci,
-						char *val, size_t size)
-{
-	return snprintf(val, size, "%lld",
-	       (unsigned long long)ceph_file_layout_stripe_count(ci->i_layout));
-}
-
-static size_t ceph_vxattrcb_layout_object_size(struct ceph_inode_info *ci,
-					       char *val, size_t size)
-{
-	return snprintf(val, size, "%lld",
-	       (unsigned long long)ceph_file_layout_object_size(ci->i_layout));
-}
-
-static size_t ceph_vxattrcb_layout_pool(struct ceph_inode_info *ci,
-					char *val, size_t size)
-{
-	int ret;
-	struct ceph_fs_client *fsc = ceph_sb_to_client(ci->vfs_inode.i_sb);
-	struct ceph_osd_client *osdc = &fsc->client->osdc;
-	s64 pool = ceph_file_layout_pg_pool(ci->i_layout);
-	const char *pool_name;
-
-	down_read(&osdc->map_sem);
-	pool_name = ceph_pg_pool_name_by_id(osdc->osdmap, pool);
-	if (pool_name)
-		ret = snprintf(val, size, "%s", pool_name);
-	else
-		ret = snprintf(val, size, "%lld", (unsigned long long)pool);
-	up_read(&osdc->map_sem);
-	return ret;
-}
 
 /* directories */
 
@@ -168,43 +83,17 @@ static size_t ceph_vxattrcb_dir_rctime(struct ceph_inode_info *ci, char *val,
 			(long)ci->i_rctime.tv_nsec);
 }
 
-
 #define CEPH_XATTR_NAME(_type, _name)	XATTR_CEPH_PREFIX #_type "." #_name
-#define CEPH_XATTR_NAME2(_type, _name, _name2)	\
-	XATTR_CEPH_PREFIX #_type "." #_name "." #_name2
 
-#define XATTR_NAME_CEPH(_type, _name)					\
-	{								\
-		.name = CEPH_XATTR_NAME(_type, _name),			\
-		.name_size = sizeof (CEPH_XATTR_NAME(_type, _name)), \
-		.getxattr_cb = ceph_vxattrcb_ ## _type ## _ ## _name, \
-		.readonly = true,				\
-		.hidden = false,				\
-		.exists_cb = NULL,			\
-	}
-#define XATTR_LAYOUT_FIELD(_type, _name, _field)			\
-	{								\
-		.name = CEPH_XATTR_NAME2(_type, _name, _field),	\
-		.name_size = sizeof (CEPH_XATTR_NAME2(_type, _name, _field)), \
-		.getxattr_cb = ceph_vxattrcb_ ## _name ## _ ## _field, \
-		.readonly = false,				\
-		.hidden = true,			\
-		.exists_cb = ceph_vxattrcb_layout_exists,	\
-	}
+#define XATTR_NAME_CEPH(_type, _name) \
+		{ \
+			.name = CEPH_XATTR_NAME(_type, _name), \
+			.name_size = sizeof (CEPH_XATTR_NAME(_type, _name)), \
+			.getxattr_cb = ceph_vxattrcb_ ## _type ## _ ## _name, \
+			.readonly = true, \
+		}
 
 static struct ceph_vxattr ceph_dir_vxattrs[] = {
-	{
-		.name = "ceph.dir.layout",
-		.name_size = sizeof("ceph.dir.layout"),
-		.getxattr_cb = ceph_vxattrcb_layout,
-		.readonly = false,
-		.hidden = false,
-		.exists_cb = ceph_vxattrcb_layout_exists,
-	},
-	XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
-	XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
-	XATTR_LAYOUT_FIELD(dir, layout, object_size),
-	XATTR_LAYOUT_FIELD(dir, layout, pool),
 	XATTR_NAME_CEPH(dir, entries),
 	XATTR_NAME_CEPH(dir, files),
 	XATTR_NAME_CEPH(dir, subdirs),
@@ -213,26 +102,35 @@ static struct ceph_vxattr ceph_dir_vxattrs[] = {
 	XATTR_NAME_CEPH(dir, rsubdirs),
 	XATTR_NAME_CEPH(dir, rbytes),
 	XATTR_NAME_CEPH(dir, rctime),
-	{ .name = NULL, 0 }	/* Required table terminator */
+	{ 0 }	/* Required table terminator */
 };
 static size_t ceph_dir_vxattrs_name_size;	/* total size of all names */
 
 /* files */
 
+static size_t ceph_vxattrcb_file_layout(struct ceph_inode_info *ci, char *val,
+				   size_t size)
+{
+	int ret;
+
+	ret = snprintf(val, size,
+		"chunk_bytes=%lld\nstripe_count=%lld\nobject_size=%lld\n",
+		(unsigned long long)ceph_file_layout_su(ci->i_layout),
+		(unsigned long long)ceph_file_layout_stripe_count(ci->i_layout),
+		(unsigned long long)ceph_file_layout_object_size(ci->i_layout));
+	return ret;
+}
+
 static struct ceph_vxattr ceph_file_vxattrs[] = {
+	XATTR_NAME_CEPH(file, layout),
+	/* The following extended attribute name is deprecated */
 	{
-		.name = "ceph.file.layout",
-		.name_size = sizeof("ceph.file.layout"),
-		.getxattr_cb = ceph_vxattrcb_layout,
-		.readonly = false,
-		.hidden = false,
-		.exists_cb = ceph_vxattrcb_layout_exists,
+		.name = XATTR_CEPH_PREFIX "layout",
+		.name_size = sizeof (XATTR_CEPH_PREFIX "layout"),
+		.getxattr_cb = ceph_vxattrcb_file_layout,
+		.readonly = true,
 	},
-	XATTR_LAYOUT_FIELD(file, layout, stripe_unit),
-	XATTR_LAYOUT_FIELD(file, layout, stripe_count),
-	XATTR_LAYOUT_FIELD(file, layout, object_size),
-	XATTR_LAYOUT_FIELD(file, layout, pool),
-	{ .name = NULL, 0 }	/* Required table terminator */
+	{ 0 }	/* Required table terminator */
 };
 static size_t ceph_file_vxattrs_name_size;	/* total size of all names */
 
@@ -266,8 +164,7 @@ static size_t __init vxattrs_name_size(struct ceph_vxattr *vxattrs)
 	size_t size = 0;
 
 	for (vxattr = vxattrs; vxattr->name; vxattr++)
-		if (!vxattr->hidden)
-			size += vxattr->name_size;
+		size += vxattr->name_size;
 
 	return size;
 }
@@ -675,16 +572,12 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	if (!ceph_is_valid_xattr(name))
 		return -ENODATA;
 
+	/* let's see if a virtual xattr was requested */
+	vxattr = ceph_match_vxattr(inode, name);
+
 	spin_lock(&ci->i_ceph_lock);
 	dout("getxattr %p ver=%lld index_ver=%lld\n", inode,
 	     ci->i_xattrs.version, ci->i_xattrs.index_version);
-
-	/* let's see if a virtual xattr was requested */
-	vxattr = ceph_match_vxattr(inode, name);
-	if (vxattr && !(vxattr->exists_cb && !vxattr->exists_cb(ci))) {
-		err = vxattr->getxattr_cb(ci, value, size);
-		goto out;
-	}
 
 	if (__ceph_caps_issued_mask(ci, CEPH_CAP_XATTR_SHARED, 1) &&
 	    (ci->i_xattrs.index_version >= ci->i_xattrs.version)) {
@@ -699,6 +592,11 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 
 	spin_lock(&ci->i_ceph_lock);
 
+	if (vxattr && vxattr->readonly) {
+		err = vxattr->getxattr_cb(ci, value, size);
+		goto out;
+	}
+
 	err = __build_xattrs(inode);
 	if (err < 0)
 		goto out;
@@ -706,8 +604,11 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 get_xattr:
 	err = -ENODATA;  /* == ENOATTR */
 	xattr = __get_xattr(ci, name);
-	if (!xattr)
+	if (!xattr) {
+		if (vxattr)
+			err = vxattr->getxattr_cb(ci, value, size);
 		goto out;
+	}
 
 	err = -ERANGE;
 	if (size && size < xattr->val_len)
@@ -763,30 +664,23 @@ list_xattr:
 	vir_namelen = ceph_vxattrs_name_size(vxattrs);
 
 	/* adding 1 byte per each variable due to the null termination */
-	namelen = ci->i_xattrs.names_size + ci->i_xattrs.count;
+	namelen = vir_namelen + ci->i_xattrs.names_size + ci->i_xattrs.count;
 	err = -ERANGE;
-	if (size && vir_namelen + namelen > size)
+	if (size && namelen > size)
 		goto out;
 
-	err = namelen + vir_namelen;
+	err = namelen;
 	if (size == 0)
 		goto out;
 
 	names = __copy_xattr_names(ci, names);
 
 	/* virtual xattr names, too */
-	err = namelen;
-	if (vxattrs) {
+	if (vxattrs)
 		for (i = 0; vxattrs[i].name; i++) {
-			if (!vxattrs[i].hidden &&
-			    !(vxattrs[i].exists_cb &&
-			      !vxattrs[i].exists_cb(ci))) {
-				len = sprintf(names, "%s", vxattrs[i].name);
-				names += len + 1;
-				err += len + 1;
-			}
+			len = sprintf(names, "%s", vxattrs[i].name);
+			names += len + 1;
 		}
-	}
 
 out:
 	spin_unlock(&ci->i_ceph_lock);
@@ -888,10 +782,6 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	if (vxattr && vxattr->readonly)
 		return -EOPNOTSUPP;
 
-	/* pass any unhandled ceph.* xattrs through to the MDS */
-	if (!strncmp(name, XATTR_CEPH_PREFIX, XATTR_CEPH_PREFIX_LEN))
-		goto do_sync_unlocked;
-
 	/* preallocate memory for xattr name, value, index node */
 	err = -ENOMEM;
 	newname = kmemdup(name, name_len + 1, GFP_NOFS);
@@ -948,7 +838,6 @@ retry:
 
 do_sync:
 	spin_unlock(&ci->i_ceph_lock);
-do_sync_unlocked:
 	err = ceph_sync_setxattr(dentry, name, value, size, flags);
 out:
 	kfree(newname);
@@ -1003,10 +892,6 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (vxattr && vxattr->readonly)
 		return -EOPNOTSUPP;
 
-	/* pass any unhandled ceph.* xattrs through to the MDS */
-	if (!strncmp(name, XATTR_CEPH_PREFIX, XATTR_CEPH_PREFIX_LEN))
-		goto do_sync_unlocked;
-
 	err = -ENOMEM;
 	spin_lock(&ci->i_ceph_lock);
 retry:
@@ -1046,7 +931,6 @@ retry:
 	return err;
 do_sync:
 	spin_unlock(&ci->i_ceph_lock);
-do_sync_unlocked:
 	err = ceph_send_removexattr(dentry, name);
 out:
 	return err;

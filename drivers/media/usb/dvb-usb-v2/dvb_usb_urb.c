@@ -32,7 +32,9 @@ int dvb_usbv2_generic_rw(struct dvb_usb_device *d, u8 *wbuf, u16 wlen, u8 *rbuf,
 		return -EINVAL;
 	}
 
-	mutex_lock(&d->usb_mutex);
+	ret = mutex_lock_interruptible(&d->usb_mutex);
+	if (ret < 0)
+		return ret;
 
 	dev_dbg(&d->udev->dev, "%s: >>> %*ph\n", __func__, wlen, wbuf);
 

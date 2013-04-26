@@ -37,6 +37,7 @@
  *
  */
 
+#include "upc.h"
 #include "mac.h"
 #include "tether.h"
 #include "mib.h"

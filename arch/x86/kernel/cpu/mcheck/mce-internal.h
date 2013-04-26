@@ -24,6 +24,8 @@ struct mce_bank {
 int mce_severity(struct mce *a, int tolerant, char **msg);
 struct dentry *mce_get_debugfs_dir(void);
 
+extern int mce_ser;
+
 extern struct mce_bank *mce_banks;
 
 #ifdef CONFIG_X86_MCE_INTEL

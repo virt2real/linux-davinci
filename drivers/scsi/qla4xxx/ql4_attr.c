@@ -74,22 +74,16 @@ qla4_8xxx_sysfs_write_fw_dump(struct file *filep, struct kobject *kobj,
 		}
 		break;
 	case 2:
-		/* Reset HBA and collect FW dump */
+		/* Reset HBA */
 		ha->isp_ops->idc_lock(ha);
 		dev_state = qla4_8xxx_rd_direct(ha, QLA8XXX_CRB_DEV_STATE);
 		if (dev_state == QLA8XXX_DEV_READY) {
-			ql4_printk(KERN_INFO, ha, "%s: Setting Need reset\n",
-				   __func__);
+			ql4_printk(KERN_INFO, ha,
+				   "%s: Setting Need reset, reset_owner is 0x%x.\n",
+				   __func__, ha->func_num);
 			qla4_8xxx_wr_direct(ha, QLA8XXX_CRB_DEV_STATE,
 					    QLA8XXX_DEV_NEED_RESET);
-			if (is_qla8022(ha) ||
-			    (is_qla8032(ha) &&
-			     qla4_83xx_can_perform_reset(ha))) {
-				set_bit(AF_8XXX_RST_OWNER, &ha->flags);
-				set_bit(AF_FW_RECOVERY, &ha->flags);
-				ql4_printk(KERN_INFO, ha, "%s: Reset owner is 0x%x\n",
-					   __func__, ha->func_num);
-			}
+			set_bit(AF_8XXX_RST_OWNER, &ha->flags);
 		} else
 			ql4_printk(KERN_INFO, ha,
 				   "%s: Reset not performed as device state is 0x%x\n",

@@ -17,7 +17,6 @@
  * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/ratelimit.h>
@@ -296,7 +295,7 @@ static UNIVERSAL_DEV_PM_OPS(tegra30_mc_pm,
 			    tegra30_mc_suspend,
 			    tegra30_mc_resume, NULL);
 
-static const struct of_device_id tegra30_mc_of_match[] = {
+static const struct of_device_id tegra30_mc_of_match[] __devinitconst = {
 	{ .compatible = "nvidia,tegra30-mc", },
 	{},
 };
@@ -317,7 +316,7 @@ static irqreturn_t tegra30_mc_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static int tegra30_mc_probe(struct platform_device *pdev)
+static int __devinit tegra30_mc_probe(struct platform_device *pdev)
 {
 	struct resource *irq;
 	struct tegra30_mc *mc;
@@ -337,9 +336,9 @@ static int tegra30_mc_probe(struct platform_device *pdev)
 		res = platform_get_resource(pdev, IORESOURCE_MEM, i);
 		if (!res)
 			return -ENODEV;
-		mc->regs[i] = devm_ioremap_resource(&pdev->dev, res);
-		if (IS_ERR(mc->regs[i]))
-			return PTR_ERR(mc->regs[i]);
+		mc->regs[i] = devm_request_and_ioremap(&pdev->dev, res);
+		if (!mc->regs[i])
+			return -EBUSY;
 	}
 
 	irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);

@@ -191,7 +191,7 @@
 #define LCR_VCLKHW		0x1b4 /* VCLK High Width		*/
 #define LCR_OC			0x1b6 /* Output Control			*/
 
-static char *mode_option;
+static char *mode_option __devinitdata;
 
 struct tmiofb_par {
 	u32				pseudo_palette[16];
@@ -675,7 +675,7 @@ static struct fb_ops tmiofb_ops = {
 
 /*--------------------------------------------------------------------------*/
 
-static int tmiofb_probe(struct platform_device *dev)
+static int __devinit tmiofb_probe(struct platform_device *dev)
 {
 	const struct mfd_cell *cell = mfd_get_cell(dev);
 	struct tmio_fb_data *data = dev->dev.platform_data;
@@ -807,7 +807,7 @@ err_ioremap_ccr:
 	return retval;
 }
 
-static int tmiofb_remove(struct platform_device *dev)
+static int __devexit tmiofb_remove(struct platform_device *dev)
 {
 	const struct mfd_cell *cell = mfd_get_cell(dev);
 	struct fb_info *info = platform_get_drvdata(dev);
@@ -1002,7 +1002,7 @@ static struct platform_driver tmiofb_driver = {
 	.driver.name	= "tmio-fb",
 	.driver.owner	= THIS_MODULE,
 	.probe		= tmiofb_probe,
-	.remove		= tmiofb_remove,
+	.remove		= __devexit_p(tmiofb_remove),
 	.suspend	= tmiofb_suspend,
 	.resume		= tmiofb_resume,
 };

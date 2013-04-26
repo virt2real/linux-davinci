@@ -36,8 +36,7 @@ static void s3c_dma_cb(struct s3c2410_dma_chan *channel, void *param,
 }
 
 static unsigned s3c_dma_request(enum dma_ch dma_ch,
-				struct samsung_dma_req *param,
-				struct device *dev, char *ch_name)
+					struct samsung_dma_req *param)
 {
 	struct cb_data *data;
 

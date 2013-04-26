@@ -52,6 +52,7 @@ int ui__warning(const char *format, ...)
 	return ret;
 }
 
+
 /**
  * perf_error__register - Register error logging functions
  * @eops: The pointer to error logging function struct

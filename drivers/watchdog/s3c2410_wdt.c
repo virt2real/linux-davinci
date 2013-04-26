@@ -53,7 +53,7 @@
 #define CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME	(15)
 
 static bool nowayout	= WATCHDOG_NOWAYOUT;
-static int tmr_margin;
+static int tmr_margin	= CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME;
 static int tmr_atboot	= CONFIG_S3C2410_WATCHDOG_ATBOOT;
 static int soft_noboot;
 static int debug;
@@ -226,7 +226,6 @@ static struct watchdog_ops s3c2410wdt_ops = {
 static struct watchdog_device s3c2410_wdd = {
 	.info = &s3c2410_wdt_ident,
 	.ops = &s3c2410wdt_ops,
-	.timeout = CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME,
 };
 
 /* interrupt handler code */
@@ -304,12 +303,13 @@ static inline void s3c2410wdt_cpufreq_deregister(void)
 }
 #endif
 
-static int s3c2410wdt_probe(struct platform_device *pdev)
+static int __devinit s3c2410wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev;
 	unsigned int wtcon;
 	int started = 0;
 	int ret;
+	int size;
 
 	DBG("%s: probe=%p\n", __func__, pdev);
 
@@ -330,23 +330,31 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	}
 
 	/* get the memory region for the watchdog timer */
-	wdt_base = devm_request_and_ioremap(dev, wdt_mem);
-	if (wdt_base == NULL) {
-		dev_err(dev, "failed to devm_request_and_ioremap() region\n");
-		ret = -ENOMEM;
+
+	size = resource_size(wdt_mem);
+	if (!request_mem_region(wdt_mem->start, size, pdev->name)) {
+		dev_err(dev, "failed to get memory region\n");
+		ret = -EBUSY;
 		goto err;
+	}
+
+	wdt_base = ioremap(wdt_mem->start, size);
+	if (wdt_base == NULL) {
+		dev_err(dev, "failed to ioremap() region\n");
+		ret = -EINVAL;
+		goto err_req;
 	}
 
 	DBG("probe: mapped wdt_base=%p\n", wdt_base);
 
-	wdt_clock = devm_clk_get(dev, "watchdog");
+	wdt_clock = clk_get(&pdev->dev, "watchdog");
 	if (IS_ERR(wdt_clock)) {
 		dev_err(dev, "failed to find watchdog clock source\n");
 		ret = PTR_ERR(wdt_clock);
-		goto err;
+		goto err_map;
 	}
 
-	clk_prepare_enable(wdt_clock);
+	clk_enable(wdt_clock);
 
 	ret = s3c2410wdt_cpufreq_register();
 	if (ret < 0) {
@@ -357,8 +365,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	/* see if we can actually set the requested timer margin, and if
 	 * not, try the default value */
 
-	watchdog_init_timeout(&s3c2410_wdd, tmr_margin,  &pdev->dev);
-	if (s3c2410wdt_set_heartbeat(&s3c2410_wdd, s3c2410_wdd.timeout)) {
+	if (s3c2410wdt_set_heartbeat(&s3c2410_wdd, tmr_margin)) {
 		started = s3c2410wdt_set_heartbeat(&s3c2410_wdd,
 					CONFIG_S3C2410_WATCHDOG_DEFAULT_TIME);
 
@@ -371,8 +378,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 							"cannot start\n");
 	}
 
-	ret = devm_request_irq(dev, wdt_irq->start, s3c2410wdt_irq, 0,
-				pdev->name, pdev);
+	ret = request_irq(wdt_irq->start, s3c2410wdt_irq, 0, pdev->name, pdev);
 	if (ret != 0) {
 		dev_err(dev, "failed to install irq (%d)\n", ret);
 		goto err_cpufreq;
@@ -383,7 +389,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	ret = watchdog_register_device(&s3c2410_wdd);
 	if (ret) {
 		dev_err(dev, "cannot register watchdog (%d)\n", ret);
-		goto err_cpufreq;
+		goto err_irq;
 	}
 
 	if (tmr_atboot && started == 0) {
@@ -408,12 +414,22 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 
 	return 0;
 
+ err_irq:
+	free_irq(wdt_irq->start, pdev);
+
  err_cpufreq:
 	s3c2410wdt_cpufreq_deregister();
 
  err_clk:
-	clk_disable_unprepare(wdt_clock);
+	clk_disable(wdt_clock);
+	clk_put(wdt_clock);
 	wdt_clock = NULL;
+
+ err_map:
+	iounmap(wdt_base);
+
+ err_req:
+	release_mem_region(wdt_mem->start, size);
 
  err:
 	wdt_irq = NULL;
@@ -421,15 +437,21 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int s3c2410wdt_remove(struct platform_device *dev)
+static int __devexit s3c2410wdt_remove(struct platform_device *dev)
 {
 	watchdog_unregister_device(&s3c2410_wdd);
 
+	free_irq(wdt_irq->start, dev);
+
 	s3c2410wdt_cpufreq_deregister();
 
-	clk_disable_unprepare(wdt_clock);
+	clk_disable(wdt_clock);
+	clk_put(wdt_clock);
 	wdt_clock = NULL;
 
+	iounmap(wdt_base);
+
+	release_mem_region(wdt_mem->start, resource_size(wdt_mem));
 	wdt_irq = NULL;
 	wdt_mem = NULL;
 	return 0;
@@ -486,7 +508,7 @@ MODULE_DEVICE_TABLE(of, s3c2410_wdt_match);
 
 static struct platform_driver s3c2410wdt_driver = {
 	.probe		= s3c2410wdt_probe,
-	.remove		= s3c2410wdt_remove,
+	.remove		= __devexit_p(s3c2410wdt_remove),
 	.shutdown	= s3c2410wdt_shutdown,
 	.suspend	= s3c2410wdt_suspend,
 	.resume		= s3c2410wdt_resume,

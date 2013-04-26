@@ -20,6 +20,10 @@
 #include "csr_result.h"
 #include "csr_wifi_fsm_event.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define CSR_WIFI_ROUTER_CTRL_PRIM                                       (0x0401)
 
 typedef CsrPrim CsrWifiRouterCtrlPrim;
@@ -2108,6 +2112,11 @@ typedef struct
     u16                      dataLength;
     u8                      *data;
 } CsrWifiRouterCtrlWapiUnicastTxEncryptInd;
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CSR_WIFI_ROUTER_CTRL_PRIM_H__ */
 

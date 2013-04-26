@@ -9,7 +9,6 @@
  *  Copyright (C) 2012 John Crispin <blogic@openwrt.org>
  */
 
-#include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
@@ -442,17 +441,17 @@ static int xway_pinconf_get(struct pinctrl_dev *pctldev,
 		if (port == PORT3)
 			reg = GPIO3_OD;
 		else
-			reg = GPIO_OD(pin);
+			reg = GPIO_OD(port);
 		*config = LTQ_PINCONF_PACK(param,
-			!gpio_getbit(info->membase[0], reg, PORT_PIN(pin)));
+			!!gpio_getbit(info->membase[0], reg, PORT_PIN(port)));
 		break;
 
 	case LTQ_PINCONF_PARAM_PULL:
 		if (port == PORT3)
 			reg = GPIO3_PUDEN;
 		else
-			reg = GPIO_PUDEN(pin);
-		if (!gpio_getbit(info->membase[0], reg, PORT_PIN(pin))) {
+			reg = GPIO_PUDEN(port);
+		if (!gpio_getbit(info->membase[0], reg, PORT_PIN(port))) {
 			*config = LTQ_PINCONF_PACK(param, 0);
 			break;
 		}
@@ -460,18 +459,13 @@ static int xway_pinconf_get(struct pinctrl_dev *pctldev,
 		if (port == PORT3)
 			reg = GPIO3_PUDSEL;
 		else
-			reg = GPIO_PUDSEL(pin);
-		if (!gpio_getbit(info->membase[0], reg, PORT_PIN(pin)))
+			reg = GPIO_PUDSEL(port);
+		if (!gpio_getbit(info->membase[0], reg, PORT_PIN(port)))
 			*config = LTQ_PINCONF_PACK(param, 2);
 		else
 			*config = LTQ_PINCONF_PACK(param, 1);
 		break;
 
-	case LTQ_PINCONF_PARAM_OUTPUT:
-		reg = GPIO_DIR(pin);
-		*config = LTQ_PINCONF_PACK(param,
-			gpio_getbit(info->membase[0], reg, PORT_PIN(pin)));
-		break;
 	default:
 		dev_err(pctldev->dev, "Invalid config param %04x\n", param);
 		return -ENOTSUPP;
@@ -494,42 +488,31 @@ static int xway_pinconf_set(struct pinctrl_dev *pctldev,
 		if (port == PORT3)
 			reg = GPIO3_OD;
 		else
-			reg = GPIO_OD(pin);
-		if (arg == 0)
-			gpio_setbit(info->membase[0], reg, PORT_PIN(pin));
-		else
-			gpio_clearbit(info->membase[0], reg, PORT_PIN(pin));
+			reg = GPIO_OD(port);
+		gpio_setbit(info->membase[0], reg, PORT_PIN(port));
 		break;
 
 	case LTQ_PINCONF_PARAM_PULL:
 		if (port == PORT3)
 			reg = GPIO3_PUDEN;
 		else
-			reg = GPIO_PUDEN(pin);
+			reg = GPIO_PUDEN(port);
 		if (arg == 0) {
-			gpio_clearbit(info->membase[0], reg, PORT_PIN(pin));
+			gpio_clearbit(info->membase[0], reg, PORT_PIN(port));
 			break;
 		}
-		gpio_setbit(info->membase[0], reg, PORT_PIN(pin));
+		gpio_setbit(info->membase[0], reg, PORT_PIN(port));
 
 		if (port == PORT3)
 			reg = GPIO3_PUDSEL;
 		else
-			reg = GPIO_PUDSEL(pin);
+			reg = GPIO_PUDSEL(port);
 		if (arg == 1)
-			gpio_clearbit(info->membase[0], reg, PORT_PIN(pin));
+			gpio_clearbit(info->membase[0], reg, PORT_PIN(port));
 		else if (arg == 2)
-			gpio_setbit(info->membase[0], reg, PORT_PIN(pin));
+			gpio_setbit(info->membase[0], reg, PORT_PIN(port));
 		else
 			dev_err(pctldev->dev, "Invalid pull value %d\n", arg);
-		break;
-
-	case LTQ_PINCONF_PARAM_OUTPUT:
-		reg = GPIO_DIR(pin);
-		if (arg == 0)
-			gpio_clearbit(info->membase[0], reg, PORT_PIN(pin));
-		else
-			gpio_setbit(info->membase[0], reg, PORT_PIN(pin));
 		break;
 
 	default:
@@ -539,24 +522,9 @@ static int xway_pinconf_set(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-int xway_pinconf_group_set(struct pinctrl_dev *pctldev,
-			unsigned selector,
-			unsigned long config)
-{
-	struct ltq_pinmux_info *info = pinctrl_dev_get_drvdata(pctldev);
-	int i, ret = 0;
-
-	for (i = 0; i < info->grps[selector].npins && !ret; i++)
-		ret = xway_pinconf_set(pctldev,
-				info->grps[selector].pins[i], config);
-
-	return ret;
-}
-
-static struct pinconf_ops xway_pinconf_ops = {
+struct pinconf_ops xway_pinconf_ops = {
 	.pin_config_get	= xway_pinconf_get,
 	.pin_config_set	= xway_pinconf_set,
-	.pin_config_group_set = xway_pinconf_group_set,
 };
 
 static struct pinctrl_desc xway_pctrl_desc = {
@@ -590,7 +558,6 @@ static inline int xway_mux_apply(struct pinctrl_dev *pctrldev,
 static const struct ltq_cfg_param xway_cfg_params[] = {
 	{"lantiq,pull",		LTQ_PINCONF_PARAM_PULL},
 	{"lantiq,open-drain",	LTQ_PINCONF_PARAM_OPEN_DRAIN},
-	{"lantiq,output",	LTQ_PINCONF_PARAM_OUTPUT},
 };
 
 static struct ltq_pinmux_info xway_info = {
@@ -707,7 +674,7 @@ static const struct of_device_id xway_match[] = {
 };
 MODULE_DEVICE_TABLE(of, xway_match);
 
-static int pinmux_xway_probe(struct platform_device *pdev)
+static int __devinit pinmux_xway_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *match;
 	const struct pinctrl_xway_soc *xway_soc;
@@ -720,9 +687,11 @@ static int pinmux_xway_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to get resource\n");
 		return -ENOENT;
 	}
-	xway_info.membase[0] = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(xway_info.membase[0]))
-		return PTR_ERR(xway_info.membase[0]);
+	xway_info.membase[0] = devm_request_and_ioremap(&pdev->dev, res);
+	if (!xway_info.membase[0]) {
+		dev_err(&pdev->dev, "Failed to remap resource\n");
+		return -ENOMEM;
+	}
 
 	match = of_match_device(xway_match, &pdev->dev);
 	if (match)

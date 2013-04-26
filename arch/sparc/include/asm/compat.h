@@ -232,10 +232,9 @@ static inline void __user *arch_compat_alloc_user_space(long len)
 	struct pt_regs *regs = current_thread_info()->kregs;
 	unsigned long usp = regs->u_regs[UREG_I6];
 
-	if (test_thread_64bit_stack(usp))
+	if (!(test_thread_flag(TIF_32BIT)))
 		usp += STACK_BIAS;
-
-	if (test_thread_flag(TIF_32BIT))
+	else
 		usp &= 0xffffffffUL;
 
 	usp -= len;

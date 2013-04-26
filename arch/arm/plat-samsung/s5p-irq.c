@@ -13,7 +13,8 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/io.h>
-#include <linux/irqchip/arm-vic.h>
+
+#include <asm/hardware/vic.h>
 
 #include <mach/map.h>
 #include <plat/regs-timer.h>

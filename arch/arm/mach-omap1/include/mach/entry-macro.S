@@ -13,6 +13,8 @@
 #include <mach/hardware.h>
 #include <mach/irqs.h>
 
+#include "../../iomap.h"
+
 		.macro  get_irqnr_preamble, base, tmp
 		.endm
 

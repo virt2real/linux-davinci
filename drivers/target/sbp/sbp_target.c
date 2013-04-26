@@ -704,17 +704,16 @@ static void session_maintenance_work(struct work_struct *work)
 static int tgt_agent_rw_agent_state(struct fw_card *card, int tcode, void *data,
 		struct sbp_target_agent *agent)
 {
-	int state;
+	__be32 state;
 
 	switch (tcode) {
 	case TCODE_READ_QUADLET_REQUEST:
 		pr_debug("tgt_agent AGENT_STATE READ\n");
 
 		spin_lock_bh(&agent->lock);
-		state = agent->state;
+		state = cpu_to_be32(agent->state);
 		spin_unlock_bh(&agent->lock);
-
-		*(__be32 *)data = cpu_to_be32(state);
+		memcpy(data, &state, sizeof(state));
 
 		return RCODE_COMPLETE;
 
@@ -1719,7 +1718,7 @@ static struct se_node_acl *sbp_alloc_fabric_acl(struct se_portal_group *se_tpg)
 
 	nacl = kzalloc(sizeof(struct sbp_nacl), GFP_KERNEL);
 	if (!nacl) {
-		pr_err("Unable to allocate struct sbp_nacl\n");
+		pr_err("Unable to alocate struct sbp_nacl\n");
 		return NULL;
 	}
 
@@ -2208,23 +2207,20 @@ static struct se_portal_group *sbp_make_tpg(
 	tport->mgt_agt = sbp_management_agent_register(tport);
 	if (IS_ERR(tport->mgt_agt)) {
 		ret = PTR_ERR(tport->mgt_agt);
-		goto out_free_tpg;
+		kfree(tpg);
+		return ERR_PTR(ret);
 	}
 
 	ret = core_tpg_register(&sbp_fabric_configfs->tf_ops, wwn,
 			&tpg->se_tpg, (void *)tpg,
 			TRANSPORT_TPG_TYPE_NORMAL);
-	if (ret < 0)
-		goto out_unreg_mgt_agt;
+	if (ret < 0) {
+		sbp_management_agent_unregister(tport->mgt_agt);
+		kfree(tpg);
+		return ERR_PTR(ret);
+	}
 
 	return &tpg->se_tpg;
-
-out_unreg_mgt_agt:
-	sbp_management_agent_unregister(tport->mgt_agt);
-out_free_tpg:
-	tport->tpg = NULL;
-	kfree(tpg);
-	return ERR_PTR(ret);
 }
 
 static void sbp_drop_tpg(struct se_portal_group *se_tpg)
@@ -2598,7 +2594,7 @@ static int __init sbp_init(void)
 	return 0;
 };
 
-static void __exit sbp_exit(void)
+static void sbp_exit(void)
 {
 	sbp_deregister_configfs();
 };

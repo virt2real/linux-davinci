@@ -186,7 +186,7 @@ static struct miscdevice ltq_wdt_miscdev = {
 	.fops	= &ltq_wdt_fops,
 };
 
-static int
+static int __devinit
 ltq_wdt_probe(struct platform_device *pdev)
 {
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -197,9 +197,11 @@ ltq_wdt_probe(struct platform_device *pdev)
 		return -ENOENT;
 	}
 
-	ltq_wdt_membase = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(ltq_wdt_membase))
-		return PTR_ERR(ltq_wdt_membase);
+	ltq_wdt_membase = devm_request_and_ioremap(&pdev->dev, res);
+	if (!ltq_wdt_membase) {
+		dev_err(&pdev->dev, "cannot remap I/O memory region\n");
+		return -ENOMEM;
+	}
 
 	/* we do not need to enable the clock as it is always running */
 	clk = clk_get_io();
@@ -218,7 +220,7 @@ ltq_wdt_probe(struct platform_device *pdev)
 	return misc_register(&ltq_wdt_miscdev);
 }
 
-static int
+static int __devexit
 ltq_wdt_remove(struct platform_device *pdev)
 {
 	misc_deregister(&ltq_wdt_miscdev);
@@ -234,7 +236,7 @@ MODULE_DEVICE_TABLE(of, ltq_wdt_match);
 
 static struct platform_driver ltq_wdt_driver = {
 	.probe = ltq_wdt_probe,
-	.remove = ltq_wdt_remove,
+	.remove = __devexit_p(ltq_wdt_remove),
 	.driver = {
 		.name = "wdt",
 		.owner = THIS_MODULE,

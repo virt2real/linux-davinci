@@ -344,7 +344,7 @@ static int s3c_adc_probe(struct platform_device *pdev)
 	int ret;
 	unsigned tmp;
 
-	adc = devm_kzalloc(dev, sizeof(struct adc_device), GFP_KERNEL);
+	adc = kzalloc(sizeof(struct adc_device), GFP_KERNEL);
 	if (adc == NULL) {
 		dev_err(dev, "failed to allocate adc_device\n");
 		return -ENOMEM;
@@ -355,44 +355,50 @@ static int s3c_adc_probe(struct platform_device *pdev)
 	adc->pdev = pdev;
 	adc->prescale = S3C2410_ADCCON_PRSCVL(49);
 
-	adc->vdd = devm_regulator_get(dev, "vdd");
+	adc->vdd = regulator_get(dev, "vdd");
 	if (IS_ERR(adc->vdd)) {
 		dev_err(dev, "operating without regulator \"vdd\" .\n");
-		return PTR_ERR(adc->vdd);
+		ret = PTR_ERR(adc->vdd);
+		goto err_alloc;
 	}
 
 	adc->irq = platform_get_irq(pdev, 1);
 	if (adc->irq <= 0) {
 		dev_err(dev, "failed to get adc irq\n");
-		return -ENOENT;
+		ret = -ENOENT;
+		goto err_reg;
 	}
 
-	ret = devm_request_irq(dev, adc->irq, s3c_adc_irq, 0, dev_name(dev),
-				adc);
+	ret = request_irq(adc->irq, s3c_adc_irq, 0, dev_name(dev), adc);
 	if (ret < 0) {
 		dev_err(dev, "failed to attach adc irq\n");
-		return ret;
+		goto err_reg;
 	}
 
-	adc->clk = devm_clk_get(dev, "adc");
+	adc->clk = clk_get(dev, "adc");
 	if (IS_ERR(adc->clk)) {
 		dev_err(dev, "failed to get adc clock\n");
-		return PTR_ERR(adc->clk);
+		ret = PTR_ERR(adc->clk);
+		goto err_irq;
 	}
 
 	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!regs) {
 		dev_err(dev, "failed to find registers\n");
-		return -ENXIO;
+		ret = -ENXIO;
+		goto err_clk;
 	}
 
-	adc->regs = devm_ioremap_resource(dev, regs);
-	if (IS_ERR(adc->regs))
-		return PTR_ERR(adc->regs);
+	adc->regs = ioremap(regs->start, resource_size(regs));
+	if (!adc->regs) {
+		dev_err(dev, "failed to map registers\n");
+		ret = -ENXIO;
+		goto err_clk;
+	}
 
 	ret = regulator_enable(adc->vdd);
 	if (ret)
-		return ret;
+		goto err_ioremap;
 
 	clk_enable(adc->clk);
 
@@ -412,14 +418,32 @@ static int s3c_adc_probe(struct platform_device *pdev)
 	adc_dev = adc;
 
 	return 0;
+
+ err_ioremap:
+	iounmap(adc->regs);
+ err_clk:
+	clk_put(adc->clk);
+
+ err_irq:
+	free_irq(adc->irq, adc);
+ err_reg:
+	regulator_put(adc->vdd);
+ err_alloc:
+	kfree(adc);
+	return ret;
 }
 
-static int s3c_adc_remove(struct platform_device *pdev)
+static int __devexit s3c_adc_remove(struct platform_device *pdev)
 {
 	struct adc_device *adc = platform_get_drvdata(pdev);
 
+	iounmap(adc->regs);
+	free_irq(adc->irq, adc);
 	clk_disable(adc->clk);
 	regulator_disable(adc->vdd);
+	regulator_put(adc->vdd);
+	clk_put(adc->clk);
+	kfree(adc);
 
 	return 0;
 }
@@ -514,7 +538,7 @@ static struct platform_driver s3c_adc_driver = {
 		.pm	= &adc_pm_ops,
 	},
 	.probe		= s3c_adc_probe,
-	.remove		= s3c_adc_remove,
+	.remove		= __devexit_p(s3c_adc_remove),
 };
 
 static int __init adc_init(void)

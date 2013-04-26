@@ -84,8 +84,8 @@ static void ichxrom_cleanup(struct ichxrom_window *window)
 }
 
 
-static int ichxrom_init_one(struct pci_dev *pdev,
-			    const struct pci_device_id *ent)
+static int __devinit ichxrom_init_one (struct pci_dev *pdev,
+	const struct pci_device_id *ent)
 {
 	static char *rom_probe_types[] = { "cfi_probe", "jedec_probe", NULL };
 	struct ichxrom_window *window = &ichxrom_window;
@@ -315,13 +315,13 @@ static int ichxrom_init_one(struct pci_dev *pdev,
 }
 
 
-static void ichxrom_remove_one(struct pci_dev *pdev)
+static void __devexit ichxrom_remove_one (struct pci_dev *pdev)
 {
 	struct ichxrom_window *window = &ichxrom_window;
 	ichxrom_cleanup(window);
 }
 
-static struct pci_device_id ichxrom_pci_tbl[] = {
+static struct pci_device_id ichxrom_pci_tbl[] __devinitdata = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801BA_0,
 	  PCI_ANY_ID, PCI_ANY_ID, },
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82801CA_0,

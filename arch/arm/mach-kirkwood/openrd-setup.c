@@ -55,7 +55,6 @@ static struct mv_sata_platform_data openrd_sata_data = {
 
 static struct mvsdio_platform_data openrd_mvsdio_data = {
 	.gpio_card_detect = 29,	/* MPP29 used as SD card detect */
-	.gpio_write_protect = -1,
 };
 
 static unsigned int openrd_mpp_config[] __initdata = {
@@ -122,12 +121,14 @@ static int __init uart1_mpp_config(void)
 	kirkwood_mpp_conf(openrd_uart1_mpp_config);
 
 	if (gpio_request(34, "SD_UART1_SEL")) {
-		pr_err("GPIO request 34 failed for SD/UART1 selection\n");
+		printk(KERN_ERR "GPIO request failed for SD/UART1 selection"
+				", gpio: 34\n");
 		return -EIO;
 	}
 
 	if (gpio_request(28, "RS232_RS485_SEL")) {
-		pr_err("GPIO request 28 failed for RS232/RS485 selection\n");
+		printk(KERN_ERR "GPIO request failed for RS232/RS485 selection"
+				", gpio# 28\n");
 		gpio_free(34);
 		return -EIO;
 	}
@@ -184,13 +185,15 @@ static void __init openrd_init(void)
 
 	if (uart1 <= 0) {
 		if (uart1 < 0)
-			pr_err("Invalid kernel parameter to select UART1. Defaulting to SD. ERROR CODE: %d\n",
-			       uart1);
+			printk(KERN_ERR "Invalid kernel parameter to select "
+				"UART1. Defaulting to SD. ERROR CODE: %d\n",
+				uart1);
 
 		/* Select SD
 		 * Pin # 34: 0 => UART1, 1 => SD */
 		if (gpio_request(34, "SD_UART1_SEL")) {
-			pr_err("GPIO request 34 failed for SD/UART1 selection\n");
+			printk(KERN_ERR "GPIO request failed for SD/UART1 "
+					"selection, gpio: 34\n");
 		} else {
 
 			gpio_direction_output(34, 1);
@@ -222,7 +225,7 @@ MACHINE_START(OPENRD_BASE, "Marvell OpenRD Base Board")
 	.map_io		= kirkwood_map_io,
 	.init_early	= kirkwood_init_early,
 	.init_irq	= kirkwood_init_irq,
-	.init_time	= kirkwood_timer_init,
+	.timer		= &kirkwood_timer,
 	.restart	= kirkwood_restart,
 MACHINE_END
 #endif
@@ -235,7 +238,7 @@ MACHINE_START(OPENRD_CLIENT, "Marvell OpenRD Client Board")
 	.map_io		= kirkwood_map_io,
 	.init_early	= kirkwood_init_early,
 	.init_irq	= kirkwood_init_irq,
-	.init_time	= kirkwood_timer_init,
+	.timer		= &kirkwood_timer,
 	.restart	= kirkwood_restart,
 MACHINE_END
 #endif
@@ -248,7 +251,7 @@ MACHINE_START(OPENRD_ULTIMATE, "Marvell OpenRD Ultimate Board")
 	.map_io		= kirkwood_map_io,
 	.init_early	= kirkwood_init_early,
 	.init_irq	= kirkwood_init_irq,
-	.init_time	= kirkwood_timer_init,
+	.timer		= &kirkwood_timer,
 	.restart	= kirkwood_restart,
 MACHINE_END
 #endif

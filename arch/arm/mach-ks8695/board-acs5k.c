@@ -92,7 +92,7 @@ static struct i2c_board_info acs5k_i2c_devs[] __initdata = {
 	},
 };
 
-static void acs5k_i2c_init(void)
+static void __devinit acs5k_i2c_init(void)
 {
 	/* The gpio interface */
 	platform_device_register(&acs5k_i2c_device);
@@ -227,6 +227,6 @@ MACHINE_START(ACS5K, "Brivo Systems LLC ACS-5000 Master board")
 	.map_io		= ks8695_map_io,
 	.init_irq	= ks8695_init_irq,
 	.init_machine	= acs5k_init,
-	.init_time	= ks8695_timer_init,
+	.timer		= &ks8695_timer,
 	.restart	= ks8695_restart,
 MACHINE_END

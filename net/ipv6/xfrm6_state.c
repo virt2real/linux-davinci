@@ -101,7 +101,7 @@ static int __xfrm6_state_sort_cmp(void *p)
 			return 1;
 		else
 			return 3;
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
 	case XFRM_MODE_ROUTEOPTIMIZATION:
 	case XFRM_MODE_IN_TRIGGER:
 		return 2;
@@ -134,7 +134,7 @@ static int __xfrm6_tmpl_sort_cmp(void *p)
 	switch (v->mode) {
 	case XFRM_MODE_TRANSPORT:
 		return 1;
-#if IS_ENABLED(CONFIG_IPV6_MIP6)
+#if defined(CONFIG_IPV6_MIP6) || defined(CONFIG_IPV6_MIP6_MODULE)
 	case XFRM_MODE_ROUTEOPTIMIZATION:
 	case XFRM_MODE_IN_TRIGGER:
 		return 2;

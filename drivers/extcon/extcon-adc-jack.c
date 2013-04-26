@@ -14,7 +14,6 @@
  *
  */
 
-#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
@@ -91,7 +90,7 @@ static irqreturn_t adc_jack_irq_thread(int irq, void *_data)
 	return IRQ_HANDLED;
 }
 
-static int adc_jack_probe(struct platform_device *pdev)
+static int __devinit adc_jack_probe(struct platform_device *pdev)
 {
 	struct adc_jack_data *data;
 	struct adc_jack_pdata *pdata = pdev->dev.platform_data;
@@ -135,7 +134,8 @@ static int adc_jack_probe(struct platform_device *pdev)
 		;
 	data->num_conditions = i;
 
-	data->chan = iio_channel_get(&pdev->dev, pdata->consumer_channel);
+	data->chan = iio_channel_get(dev_name(&pdev->dev),
+			pdata->consumer_channel);
 	if (IS_ERR(data->chan)) {
 		err = PTR_ERR(data->chan);
 		goto out;
@@ -161,12 +161,13 @@ static int adc_jack_probe(struct platform_device *pdev)
 	err = request_any_context_irq(data->irq, adc_jack_irq_thread,
 			pdata->irq_flags, pdata->name, data);
 
-	if (err < 0) {
+	if (err) {
 		dev_err(&pdev->dev, "error: irq %d\n", data->irq);
+		err = -EINVAL;
 		goto err_irq;
 	}
 
-	return 0;
+	goto out;
 
 err_irq:
 	extcon_dev_unregister(&data->edev);
@@ -174,7 +175,7 @@ out:
 	return err;
 }
 
-static int adc_jack_remove(struct platform_device *pdev)
+static int __devexit adc_jack_remove(struct platform_device *pdev)
 {
 	struct adc_jack_data *data = platform_get_drvdata(pdev);
 
@@ -187,7 +188,7 @@ static int adc_jack_remove(struct platform_device *pdev)
 
 static struct platform_driver adc_jack_driver = {
 	.probe          = adc_jack_probe,
-	.remove         = adc_jack_remove,
+	.remove         = __devexit_p(adc_jack_remove),
 	.driver         = {
 		.name   = "adc-jack",
 		.owner  = THIS_MODULE,
@@ -195,7 +196,3 @@ static struct platform_driver adc_jack_driver = {
 };
 
 module_platform_driver(adc_jack_driver);
-
-MODULE_AUTHOR("MyungJoo Ham <myungjoo.ham@samsung.com>");
-MODULE_DESCRIPTION("ADC Jack extcon driver");
-MODULE_LICENSE("GPL v2");

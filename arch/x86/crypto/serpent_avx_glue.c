@@ -42,15 +42,46 @@
 #include <asm/crypto/ablk_helper.h>
 #include <asm/crypto/glue_helper.h>
 
-static void serpent_crypt_ctr(void *ctx, u128 *dst, const u128 *src, le128 *iv)
+static void serpent_decrypt_cbc_xway(void *ctx, u128 *dst, const u128 *src)
+{
+	u128 ivs[SERPENT_PARALLEL_BLOCKS - 1];
+	unsigned int j;
+
+	for (j = 0; j < SERPENT_PARALLEL_BLOCKS - 1; j++)
+		ivs[j] = src[j];
+
+	serpent_dec_blk_xway(ctx, (u8 *)dst, (u8 *)src);
+
+	for (j = 0; j < SERPENT_PARALLEL_BLOCKS - 1; j++)
+		u128_xor(dst + (j + 1), dst + (j + 1), ivs + j);
+}
+
+static void serpent_crypt_ctr(void *ctx, u128 *dst, const u128 *src, u128 *iv)
 {
 	be128 ctrblk;
 
-	le128_to_be128(&ctrblk, iv);
-	le128_inc(iv);
+	u128_to_be128(&ctrblk, iv);
+	u128_inc(iv);
 
 	__serpent_encrypt(ctx, (u8 *)&ctrblk, (u8 *)&ctrblk);
 	u128_xor(dst, src, (u128 *)&ctrblk);
+}
+
+static void serpent_crypt_ctr_xway(void *ctx, u128 *dst, const u128 *src,
+				   u128 *iv)
+{
+	be128 ctrblks[SERPENT_PARALLEL_BLOCKS];
+	unsigned int i;
+
+	for (i = 0; i < SERPENT_PARALLEL_BLOCKS; i++) {
+		if (dst != src)
+			dst[i] = src[i];
+
+		u128_to_be128(&ctrblks[i], iv);
+		u128_inc(iv);
+	}
+
+	serpent_enc_blk_xway_xor(ctx, (u8 *)dst, (u8 *)ctrblks);
 }
 
 static const struct common_glue_ctx serpent_enc = {
@@ -59,7 +90,7 @@ static const struct common_glue_ctx serpent_enc = {
 
 	.funcs = { {
 		.num_blocks = SERPENT_PARALLEL_BLOCKS,
-		.fn_u = { .ecb = GLUE_FUNC_CAST(serpent_ecb_enc_8way_avx) }
+		.fn_u = { .ecb = GLUE_FUNC_CAST(serpent_enc_blk_xway) }
 	}, {
 		.num_blocks = 1,
 		.fn_u = { .ecb = GLUE_FUNC_CAST(__serpent_encrypt) }
@@ -72,7 +103,7 @@ static const struct common_glue_ctx serpent_ctr = {
 
 	.funcs = { {
 		.num_blocks = SERPENT_PARALLEL_BLOCKS,
-		.fn_u = { .ctr = GLUE_CTR_FUNC_CAST(serpent_ctr_8way_avx) }
+		.fn_u = { .ctr = GLUE_CTR_FUNC_CAST(serpent_crypt_ctr_xway) }
 	}, {
 		.num_blocks = 1,
 		.fn_u = { .ctr = GLUE_CTR_FUNC_CAST(serpent_crypt_ctr) }
@@ -85,7 +116,7 @@ static const struct common_glue_ctx serpent_dec = {
 
 	.funcs = { {
 		.num_blocks = SERPENT_PARALLEL_BLOCKS,
-		.fn_u = { .ecb = GLUE_FUNC_CAST(serpent_ecb_dec_8way_avx) }
+		.fn_u = { .ecb = GLUE_FUNC_CAST(serpent_dec_blk_xway) }
 	}, {
 		.num_blocks = 1,
 		.fn_u = { .ecb = GLUE_FUNC_CAST(__serpent_decrypt) }
@@ -98,7 +129,7 @@ static const struct common_glue_ctx serpent_dec_cbc = {
 
 	.funcs = { {
 		.num_blocks = SERPENT_PARALLEL_BLOCKS,
-		.fn_u = { .cbc = GLUE_CBC_FUNC_CAST(serpent_cbc_dec_8way_avx) }
+		.fn_u = { .cbc = GLUE_CBC_FUNC_CAST(serpent_decrypt_cbc_xway) }
 	}, {
 		.num_blocks = 1,
 		.fn_u = { .cbc = GLUE_CBC_FUNC_CAST(__serpent_decrypt) }
@@ -162,7 +193,7 @@ static void encrypt_callback(void *priv, u8 *srcdst, unsigned int nbytes)
 	ctx->fpu_enabled = serpent_fpu_begin(ctx->fpu_enabled, nbytes);
 
 	if (nbytes == bsize * SERPENT_PARALLEL_BLOCKS) {
-		serpent_ecb_enc_8way_avx(ctx->ctx, srcdst, srcdst);
+		serpent_enc_blk_xway(ctx->ctx, srcdst, srcdst);
 		return;
 	}
 
@@ -179,7 +210,7 @@ static void decrypt_callback(void *priv, u8 *srcdst, unsigned int nbytes)
 	ctx->fpu_enabled = serpent_fpu_begin(ctx->fpu_enabled, nbytes);
 
 	if (nbytes == bsize * SERPENT_PARALLEL_BLOCKS) {
-		serpent_ecb_dec_8way_avx(ctx->ctx, srcdst, srcdst);
+		serpent_dec_blk_xway(ctx->ctx, srcdst, srcdst);
 		return;
 	}
 

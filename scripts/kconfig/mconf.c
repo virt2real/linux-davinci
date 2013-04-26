@@ -280,7 +280,6 @@ static struct menu *current_menu;
 static int child_count;
 static int single_menu_mode;
 static int show_all_options;
-static int save_and_exit;
 
 static void conf(struct menu *menu, struct menu *active_menu);
 static void conf_choice(struct menu *menu);
@@ -313,7 +312,7 @@ static void set_config_filename(const char *config_filename)
 
 
 struct search_data {
-	struct list_head *head;
+	struct jk_head *head;
 	struct menu **targets;
 	int *keys;
 };
@@ -324,7 +323,7 @@ static void update_text(char *buf, size_t start, size_t end, void *_data)
 	struct jump_key *pos;
 	int k = 0;
 
-	list_for_each_entry(pos, data->head, entries) {
+	CIRCLEQ_FOREACH(pos, data->head, entries) {
 		if (pos->offset >= start && pos->offset < end) {
 			char header[4];
 
@@ -349,19 +348,15 @@ static void search_conf(void)
 {
 	struct symbol **sym_arr;
 	struct gstr res;
-	struct gstr title;
 	char *dialog_input;
 	int dres, vscroll = 0, hscroll = 0;
 	bool again;
 
-	title = str_new();
-	str_printf( &title, _("Enter %s (sub)string to search for "
-			      "(with or without \"%s\")"), CONFIG_, CONFIG_);
-
 again:
 	dialog_clear();
 	dres = dialog_inputbox(_("Search Configuration Parameter"),
-			      str_get(&title),
+			      _("Enter " CONFIG_ " (sub)string to search for "
+				"(with or without \"" CONFIG_ "\")"),
 			      10, 75, "");
 	switch (dres) {
 	case 0:
@@ -370,7 +365,6 @@ again:
 		show_helptext(_("Search Configuration"), search_help);
 		goto again;
 	default:
-		str_free(&title);
 		return;
 	}
 
@@ -381,7 +375,7 @@ again:
 
 	sym_arr = sym_re_search(dialog_input);
 	do {
-		LIST_HEAD(head);
+		struct jk_head head = CIRCLEQ_HEAD_INITIALIZER(head);
 		struct menu *targets[JUMP_NB];
 		int keys[JUMP_NB + 1], i;
 		struct search_data data = {
@@ -404,7 +398,6 @@ again:
 		str_free(&res);
 	} while (again);
 	free(sym_arr);
-	str_free(&title);
 }
 
 static void build_conf(struct menu *menu)
@@ -599,6 +592,14 @@ static void conf(struct menu *menu, struct menu *active_menu)
 		build_conf(menu);
 		if (!child_count)
 			break;
+		if (menu == &rootmenu) {
+			item_make("--- ");
+			item_set_tag(':');
+			item_make(_("    Load an Alternate Configuration File"));
+			item_set_tag('L');
+			item_make(_("    Save an Alternate Configuration File"));
+			item_set_tag('S');
+		}
 		dialog_clear();
 		res = dialog_menu(prompt ? _(prompt) : _("Main Menu"),
 				  _(menu_instructions),
@@ -635,6 +636,12 @@ static void conf(struct menu *menu, struct menu *active_menu)
 			case 's':
 				conf_string(submenu);
 				break;
+			case 'L':
+				conf_load();
+				break;
+			case 'S':
+				conf_save();
+				break;
 			}
 			break;
 		case 2:
@@ -644,12 +651,6 @@ static void conf(struct menu *menu, struct menu *active_menu)
 				show_helptext(_("README"), _(mconf_readme));
 			break;
 		case 3:
-			conf_save();
-			break;
-		case 4:
-			conf_load();
-			break;
-		case 5:
 			if (item_is_tag('t')) {
 				if (sym_set_tristate_value(sym, yes))
 					break;
@@ -657,24 +658,24 @@ static void conf(struct menu *menu, struct menu *active_menu)
 					show_textbox(NULL, setmod_text, 6, 74);
 			}
 			break;
-		case 6:
+		case 4:
 			if (item_is_tag('t'))
 				sym_set_tristate_value(sym, no);
 			break;
-		case 7:
+		case 5:
 			if (item_is_tag('t'))
 				sym_set_tristate_value(sym, mod);
 			break;
-		case 8:
+		case 6:
 			if (item_is_tag('t'))
 				sym_toggle_tristate_value(sym);
 			else if (item_is_tag('m'))
 				conf(submenu, NULL);
 			break;
-		case 9:
+		case 7:
 			search_conf();
 			break;
-		case 10:
+		case 8:
 			show_all_options = !show_all_options;
 			break;
 		}
@@ -699,17 +700,6 @@ static void show_textbox(const char *title, const char *text, int r, int c)
 static void show_helptext(const char *title, const char *text)
 {
 	show_textbox(title, text, 0, 0);
-}
-
-static void conf_message_callback(const char *fmt, va_list ap)
-{
-	char buf[PATH_MAX+1];
-
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	if (save_and_exit)
-		printf("%s", buf);
-	else
-		show_textbox(NULL, buf, 6, 60);
 }
 
 static void show_help(struct menu *menu)
@@ -880,7 +870,6 @@ static int handle_exit(void)
 {
 	int res;
 
-	save_and_exit = 1;
 	dialog_clear();
 	if (conf_get_changed())
 		res = dialog_yesno(NULL,
@@ -952,7 +941,6 @@ int main(int ac, char **av)
 	}
 
 	set_config_filename(conf_get_configname());
-	conf_set_message_callback(conf_message_callback);
 	do {
 		conf(&rootmenu, NULL);
 		res = handle_exit();

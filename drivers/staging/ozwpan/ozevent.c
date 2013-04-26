@@ -79,7 +79,6 @@ void oz_event_log2(u8 evt, u8 ctx1, u16 ctx2, void *ctx3, unsigned ctx4)
 /*------------------------------------------------------------------------------
  * Context: process
  */
-#ifdef CONFIG_DEBUG_FS
 static void oz_events_clear(struct oz_evtdev *dev)
 {
 	unsigned long irqstate;
@@ -89,10 +88,11 @@ static void oz_events_clear(struct oz_evtdev *dev)
 	dev->missed_events = 0;
 	spin_unlock_irqrestore(&dev->lock, irqstate);
 }
+#ifdef CONFIG_DEBUG_FS
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static int oz_events_open(struct inode *inode, struct file *filp)
+int oz_events_open(struct inode *inode, struct file *filp)
 {
 	oz_trace("oz_evt_open()\n");
 	oz_trace("Open flags: 0x%x\n", filp->f_flags);
@@ -107,7 +107,7 @@ static int oz_events_open(struct inode *inode, struct file *filp)
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static int oz_events_release(struct inode *inode, struct file *filp)
+int oz_events_release(struct inode *inode, struct file *filp)
 {
 	oz_events_clear(&g_evtdev);
 	atomic_dec(&g_evtdev.users);
@@ -118,7 +118,7 @@ static int oz_events_release(struct inode *inode, struct file *filp)
 /*------------------------------------------------------------------------------
  * Context: process
  */
-static ssize_t oz_events_read(struct file *filp, char __user *buf, size_t count,
+ssize_t oz_events_read(struct file *filp, char __user *buf, size_t count,
 		loff_t *fpos)
 {
 	struct oz_evtdev *dev = &g_evtdev;
@@ -157,7 +157,7 @@ out:
 }
 /*------------------------------------------------------------------------------
  */
-static const struct file_operations oz_events_fops = {
+const struct file_operations oz_events_fops = {
 	.owner =	THIS_MODULE,
 	.open =		oz_events_open,
 	.release =	oz_events_release,

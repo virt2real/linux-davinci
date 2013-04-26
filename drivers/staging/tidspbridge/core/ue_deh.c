@@ -19,6 +19,7 @@
 
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
+#include <plat/dmtimer.h>
 
 #include <dspbridge/dbdefs.h>
 #include <dspbridge/dspdeh.h>

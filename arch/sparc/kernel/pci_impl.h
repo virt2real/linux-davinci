@@ -88,7 +88,7 @@ struct pci_pbm_info {
 	int				chip_revision;
 
 	/* Name used for top-level resources. */
-	const char			*name;
+	char				*name;
 
 	/* OBP specific information. */
 	struct platform_device		*op;

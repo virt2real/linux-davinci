@@ -688,7 +688,7 @@ static int
 printer_fsync(struct file *fd, loff_t start, loff_t end, int datasync)
 {
 	struct printer_dev	*dev = fd->private_data;
-	struct inode *inode = file_inode(fd);
+	struct inode *inode = fd->f_path.dentry->d_inode;
 	unsigned long		flags;
 	int			tx_list_empty;
 
@@ -983,10 +983,8 @@ static int __init printer_func_bind(struct usb_configuration *c,
 {
 	struct printer_dev *dev = container_of(f, struct printer_dev, function);
 	struct usb_composite_dev *cdev = c->cdev;
-	struct usb_ep *in_ep;
-	struct usb_ep *out_ep = NULL;
+	struct usb_ep		*in_ep, *out_ep;
 	int id;
-	int ret;
 
 	id = usb_interface_id(c, f);
 	if (id < 0)
@@ -1012,11 +1010,6 @@ autoconf_fail:
 	hs_ep_in_desc.bEndpointAddress = fs_ep_in_desc.bEndpointAddress;
 	hs_ep_out_desc.bEndpointAddress = fs_ep_out_desc.bEndpointAddress;
 
-	ret = usb_assign_descriptors(f, fs_printer_function,
-			hs_printer_function, NULL);
-	if (ret)
-		return ret;
-
 	dev->in_ep = in_ep;
 	dev->out_ep = out_ep;
 	return 0;
@@ -1025,7 +1018,6 @@ autoconf_fail:
 static void printer_func_unbind(struct usb_configuration *c,
 		struct usb_function *f)
 {
-	usb_free_all_descriptors(f);
 }
 
 static int printer_func_set_alt(struct usb_function *f,
@@ -1118,6 +1110,8 @@ static int __init printer_bind_config(struct usb_configuration *c)
 	dev = &usb_printer_gadget;
 
 	dev->function.name = shortname;
+	dev->function.descriptors = fs_printer_function;
+	dev->function.hs_descriptors = hs_printer_function;
 	dev->function.bind = printer_func_bind;
 	dev->function.setup = printer_func_setup;
 	dev->function.unbind = printer_func_unbind;

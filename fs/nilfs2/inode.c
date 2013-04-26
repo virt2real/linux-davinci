@@ -213,16 +213,6 @@ static int nilfs_set_page_dirty(struct page *page)
 	return ret;
 }
 
-void nilfs_write_failed(struct address_space *mapping, loff_t to)
-{
-	struct inode *inode = mapping->host;
-
-	if (to > inode->i_size) {
-		truncate_pagecache(inode, to, inode->i_size);
-		nilfs_truncate(inode);
-	}
-}
-
 static int nilfs_write_begin(struct file *file, struct address_space *mapping,
 			     loff_t pos, unsigned len, unsigned flags,
 			     struct page **pagep, void **fsdata)
@@ -237,7 +227,10 @@ static int nilfs_write_begin(struct file *file, struct address_space *mapping,
 	err = block_write_begin(mapping, pos, len, flags, pagep,
 				nilfs_get_block);
 	if (unlikely(err)) {
-		nilfs_write_failed(mapping, pos + len);
+		loff_t isize = mapping->host->i_size;
+		if (pos + len > isize)
+			vmtruncate(mapping->host, isize);
+
 		nilfs_transaction_abort(inode->i_sb);
 	}
 	return err;
@@ -266,7 +259,6 @@ nilfs_direct_IO(int rw, struct kiocb *iocb, const struct iovec *iov,
 		loff_t offset, unsigned long nr_segs)
 {
 	struct file *file = iocb->ki_filp;
-	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = file->f_mapping->host;
 	ssize_t size;
 
@@ -286,7 +278,7 @@ nilfs_direct_IO(int rw, struct kiocb *iocb, const struct iovec *iov,
 		loff_t end = offset + iov_length(iov, nr_segs);
 
 		if (end > isize)
-			nilfs_write_failed(mapping, end);
+			vmtruncate(inode, isize);
 	}
 
 	return size;
@@ -794,8 +786,10 @@ int nilfs_setattr(struct dentry *dentry, struct iattr *iattr)
 	if ((iattr->ia_valid & ATTR_SIZE) &&
 	    iattr->ia_size != i_size_read(inode)) {
 		inode_dio_wait(inode);
-		truncate_setsize(inode, iattr->ia_size);
-		nilfs_truncate(inode);
+
+		err = vmtruncate(inode, iattr->ia_size);
+		if (unlikely(err))
+			goto out_err;
 	}
 
 	setattr_copy(inode, iattr);

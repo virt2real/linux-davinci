@@ -99,7 +99,7 @@ MODULE_PARM_DESC(force_addr,
 static int srvrworks_csb5_delay;
 static struct pci_driver piix4_driver;
 
-static const struct dmi_system_id piix4_dmi_blacklist[] = {
+static struct dmi_system_id __devinitdata piix4_dmi_blacklist[] = {
 	{
 		.ident = "Sapphire AM2RD790",
 		.matches = {
@@ -119,7 +119,7 @@ static const struct dmi_system_id piix4_dmi_blacklist[] = {
 
 /* The IBM entry is in a separate table because we only check it
    on Intel-based systems */
-static const struct dmi_system_id piix4_dmi_ibm[] = {
+static struct dmi_system_id __devinitdata piix4_dmi_ibm[] = {
 	{
 		.ident = "IBM",
 		.matches = { DMI_MATCH(DMI_SYS_VENDOR, "IBM"), },
@@ -131,8 +131,8 @@ struct i2c_piix4_adapdata {
 	unsigned short smba;
 };
 
-static int piix4_setup(struct pci_dev *PIIX4_dev,
-		       const struct pci_device_id *id)
+static int __devinit piix4_setup(struct pci_dev *PIIX4_dev,
+				const struct pci_device_id *id)
 {
 	unsigned char temp;
 	unsigned short piix4_smba;
@@ -204,8 +204,9 @@ static int piix4_setup(struct pci_dev *PIIX4_dev,
 			 */
 			pci_write_config_byte(PIIX4_dev, SMBHSTCFG,
 					      temp | 1);
-			dev_notice(&PIIX4_dev->dev,
-				   "WARNING: SMBus interface has been FORCEFULLY ENABLED!\n");
+			dev_printk(KERN_NOTICE, &PIIX4_dev->dev,
+				"WARNING: SMBus interface has been "
+				"FORCEFULLY ENABLED!\n");
 		} else {
 			dev_err(&PIIX4_dev->dev,
 				"Host SMBus controller not enabled!\n");
@@ -230,8 +231,8 @@ static int piix4_setup(struct pci_dev *PIIX4_dev,
 	return piix4_smba;
 }
 
-static int piix4_setup_sb800(struct pci_dev *PIIX4_dev,
-			     const struct pci_device_id *id)
+static int __devinit piix4_setup_sb800(struct pci_dev *PIIX4_dev,
+				const struct pci_device_id *id)
 {
 	unsigned short piix4_smba;
 	unsigned short smba_idx = 0xcd6;
@@ -294,9 +295,9 @@ static int piix4_setup_sb800(struct pci_dev *PIIX4_dev,
 	return piix4_smba;
 }
 
-static int piix4_setup_aux(struct pci_dev *PIIX4_dev,
-			   const struct pci_device_id *id,
-			   unsigned short base_reg_addr)
+static int __devinit piix4_setup_aux(struct pci_dev *PIIX4_dev,
+				const struct pci_device_id *id,
+				unsigned short base_reg_addr)
 {
 	/* Set up auxiliary SMBus controllers found on some
 	 * AMD chipsets e.g. SP5100 (SB700 derivative) */
@@ -540,8 +541,9 @@ MODULE_DEVICE_TABLE (pci, piix4_ids);
 static struct i2c_adapter *piix4_main_adapter;
 static struct i2c_adapter *piix4_aux_adapter;
 
-static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
-			     struct i2c_adapter **padap)
+static int __devinit piix4_add_adapter(struct pci_dev *dev,
+					unsigned short smba,
+					struct i2c_adapter **padap)
 {
 	struct i2c_adapter *adap;
 	struct i2c_piix4_adapdata *adapdata;
@@ -587,7 +589,8 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 	return 0;
 }
 
-static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
+static int __devinit piix4_probe(struct pci_dev *dev,
+				const struct pci_device_id *id)
 {
 	int retval;
 
@@ -624,7 +627,7 @@ static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	return 0;
 }
 
-static void piix4_adap_remove(struct i2c_adapter *adap)
+static void __devexit piix4_adap_remove(struct i2c_adapter *adap)
 {
 	struct i2c_piix4_adapdata *adapdata = i2c_get_adapdata(adap);
 
@@ -636,7 +639,7 @@ static void piix4_adap_remove(struct i2c_adapter *adap)
 	}
 }
 
-static void piix4_remove(struct pci_dev *dev)
+static void __devexit piix4_remove(struct pci_dev *dev)
 {
 	if (piix4_main_adapter) {
 		piix4_adap_remove(piix4_main_adapter);
@@ -653,7 +656,7 @@ static struct pci_driver piix4_driver = {
 	.name		= "piix4_smbus",
 	.id_table	= piix4_ids,
 	.probe		= piix4_probe,
-	.remove		= piix4_remove,
+	.remove		= __devexit_p(piix4_remove),
 };
 
 module_pci_driver(piix4_driver);

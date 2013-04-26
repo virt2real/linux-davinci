@@ -38,6 +38,8 @@
 #include <linux/ioctl.h>
 #include "kobil_sct.h"
 
+/* Version Information */
+#define DRIVER_VERSION "21/05/2004"
 #define DRIVER_AUTHOR "KOBIL Systems GmbH - http://www.kobil.com"
 #define DRIVER_DESC "KOBIL USB Smart Card Terminal Driver (experimental)"
 
@@ -324,6 +326,7 @@ static void kobil_read_int_callback(struct urb *urb)
 {
 	int result;
 	struct usb_serial_port *port = urb->context;
+	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 	int status = urb->status;
 
@@ -332,7 +335,8 @@ static void kobil_read_int_callback(struct urb *urb)
 		return;
 	}
 
-	if (urb->actual_length) {
+	tty = tty_port_tty_get(&port->port);
+	if (tty && urb->actual_length) {
 
 		/* BEGIN DEBUG */
 		/*
@@ -351,9 +355,10 @@ static void kobil_read_int_callback(struct urb *urb)
 		*/
 		/* END DEBUG */
 
-		tty_insert_flip_string(&port->port, data, urb->actual_length);
-		tty_flip_buffer_push(&port->port);
+		tty_insert_flip_string(tty, data, urb->actual_length);
+		tty_flip_buffer_push(tty);
 	}
+	tty_kref_put(tty);
 
 	result = usb_submit_urb(port->interrupt_in_urb, GFP_ATOMIC);
 	dev_dbg(&port->dev, "%s - Send read URB returns: %i\n", __func__, result);

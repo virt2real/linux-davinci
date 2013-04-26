@@ -669,19 +669,16 @@ nv40_grctx_fill(struct nouveau_device *device, struct nouveau_gpuobj *mem)
 			   });
 }
 
-int
+void
 nv40_grctx_init(struct nouveau_device *device, u32 *size)
 {
-	u32 *ctxprog = kmalloc(256 * 4, GFP_KERNEL), i;
+	u32 ctxprog[256], i;
 	struct nouveau_grctx ctx = {
 		.device = device,
 		.mode = NOUVEAU_GRCTX_PROG,
 		.data = ctxprog,
-		.ctxprog_max = 256,
+		.ctxprog_max = ARRAY_SIZE(ctxprog)
 	};
-
-	if (!ctxprog)
-		return -ENOMEM;
 
 	nv40_grctx_generate(&ctx);
 
@@ -689,7 +686,4 @@ nv40_grctx_init(struct nouveau_device *device, u32 *size)
 	for (i = 0; i < ctx.ctxprog_len; i++)
 		nv_wr32(device, 0x400328, ctxprog[i]);
 	*size = ctx.ctxvals_pos * 4;
-
-	kfree(ctxprog);
-	return 0;
 }

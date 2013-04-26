@@ -10,7 +10,6 @@
 #define __LINUX_USB_PHY_H
 
 #include <linux/notifier.h>
-#include <linux/usb.h>
 
 enum usb_phy_events {
 	USB_EVENT_NONE,         /* no events or cable disconnected */
@@ -100,31 +99,13 @@ struct usb_phy {
 				int suspend);
 
 	/* notify phy connect status change */
-	int	(*notify_connect)(struct usb_phy *x,
-			enum usb_device_speed speed);
-	int	(*notify_disconnect)(struct usb_phy *x,
-			enum usb_device_speed speed);
+	int	(*notify_connect)(struct usb_phy *x, int port);
+	int	(*notify_disconnect)(struct usb_phy *x, int port);
 };
 
-/**
- * struct usb_phy_bind - represent the binding for the phy
- * @dev_name: the device name of the device that will bind to the phy
- * @phy_dev_name: the device name of the phy
- * @index: used if a single controller uses multiple phys
- * @phy: reference to the phy
- * @list: to maintain a linked list of the binding information
- */
-struct usb_phy_bind {
-	const char	*dev_name;
-	const char	*phy_dev_name;
-	u8		index;
-	struct usb_phy	*phy;
-	struct list_head list;
-};
 
 /* for board-specific init logic */
 extern int usb_add_phy(struct usb_phy *, enum usb_phy_type type);
-extern int usb_add_phy_dev(struct usb_phy *);
 extern void usb_remove_phy(struct usb_phy *);
 
 /* helpers for direct access thru low-level io interface */
@@ -165,14 +146,8 @@ usb_phy_shutdown(struct usb_phy *x)
 extern struct usb_phy *usb_get_phy(enum usb_phy_type type);
 extern struct usb_phy *devm_usb_get_phy(struct device *dev,
 	enum usb_phy_type type);
-extern struct usb_phy *usb_get_phy_dev(struct device *dev, u8 index);
-extern struct usb_phy *devm_usb_get_phy_dev(struct device *dev, u8 index);
-extern struct usb_phy *devm_usb_get_phy_by_phandle(struct device *dev,
-	const char *phandle, u8 index);
 extern void usb_put_phy(struct usb_phy *);
 extern void devm_usb_put_phy(struct device *dev, struct usb_phy *x);
-extern int usb_bind_phy(const char *dev_name, u8 index,
-				const char *phy_dev_name);
 #else
 static inline struct usb_phy *usb_get_phy(enum usb_phy_type type)
 {
@@ -185,22 +160,6 @@ static inline struct usb_phy *devm_usb_get_phy(struct device *dev,
 	return NULL;
 }
 
-static inline struct usb_phy *usb_get_phy_dev(struct device *dev, u8 index)
-{
-	return NULL;
-}
-
-static inline struct usb_phy *devm_usb_get_phy_dev(struct device *dev, u8 index)
-{
-	return NULL;
-}
-
-static inline struct usb_phy *devm_usb_get_phy_by_phandle(struct device *dev,
-	const char *phandle, u8 index)
-{
-	return NULL;
-}
-
 static inline void usb_put_phy(struct usb_phy *x)
 {
 }
@@ -209,11 +168,6 @@ static inline void devm_usb_put_phy(struct device *dev, struct usb_phy *x)
 {
 }
 
-static inline int usb_bind_phy(const char *dev_name, u8 index,
-				const char *phy_dev_name)
-{
-	return -EOPNOTSUPP;
-}
 #endif
 
 static inline int
@@ -235,19 +189,19 @@ usb_phy_set_suspend(struct usb_phy *x, int suspend)
 }
 
 static inline int
-usb_phy_notify_connect(struct usb_phy *x, enum usb_device_speed speed)
+usb_phy_notify_connect(struct usb_phy *x, int port)
 {
 	if (x->notify_connect)
-		return x->notify_connect(x, speed);
+		return x->notify_connect(x, port);
 	else
 		return 0;
 }
 
 static inline int
-usb_phy_notify_disconnect(struct usb_phy *x, enum usb_device_speed speed)
+usb_phy_notify_disconnect(struct usb_phy *x, int port)
 {
 	if (x->notify_disconnect)
-		return x->notify_disconnect(x, speed);
+		return x->notify_disconnect(x, port);
 	else
 		return 0;
 }

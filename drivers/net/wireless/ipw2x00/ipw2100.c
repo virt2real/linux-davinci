@@ -1788,7 +1788,10 @@ static int ipw2100_up(struct ipw2100_priv *priv, int deferred)
 	}
 
 	/* Initialize the geo */
-	libipw_set_geo(priv->ieee, &ipw_geos[0]);
+	if (libipw_set_geo(priv->ieee, &ipw_geos[0])) {
+		printk(KERN_WARNING DRV_NAME "Could not set geo\n");
+		return 0;
+	}
 	priv->ieee->freq_band = LIBIPW_24GHZ_BAND;
 
 	lock = LOCK_NONE;
@@ -2181,15 +2184,26 @@ static void isr_indicate_rf_kill(struct ipw2100_priv *priv, u32 status)
 	mod_delayed_work(system_wq, &priv->rf_kill, round_jiffies_relative(HZ));
 }
 
-static void ipw2100_scan_event(struct work_struct *work)
+static void send_scan_event(void *data)
 {
-	struct ipw2100_priv *priv = container_of(work, struct ipw2100_priv,
-						 scan_event.work);
+	struct ipw2100_priv *priv = data;
 	union iwreq_data wrqu;
 
 	wrqu.data.length = 0;
 	wrqu.data.flags = 0;
 	wireless_send_event(priv->net_dev, SIOCGIWSCAN, &wrqu, NULL);
+}
+
+static void ipw2100_scan_event_later(struct work_struct *work)
+{
+	send_scan_event(container_of(work, struct ipw2100_priv,
+					scan_event_later.work));
+}
+
+static void ipw2100_scan_event_now(struct work_struct *work)
+{
+	send_scan_event(container_of(work, struct ipw2100_priv,
+					scan_event_now));
 }
 
 static void isr_scan_complete(struct ipw2100_priv *priv, u32 status)
@@ -2201,11 +2215,13 @@ static void isr_scan_complete(struct ipw2100_priv *priv, u32 status)
 
 	/* Only userspace-requested scan completion events go out immediately */
 	if (!priv->user_requested_scan) {
-		schedule_delayed_work(&priv->scan_event,
-				      round_jiffies_relative(msecs_to_jiffies(4000)));
+		if (!delayed_work_pending(&priv->scan_event_later))
+			schedule_delayed_work(&priv->scan_event_later,
+					      round_jiffies_relative(msecs_to_jiffies(4000)));
 	} else {
 		priv->user_requested_scan = 0;
-		mod_delayed_work(system_wq, &priv->scan_event, 0);
+		cancel_delayed_work(&priv->scan_event_later);
+		schedule_work(&priv->scan_event_now);
 	}
 }
 
@@ -4446,7 +4462,8 @@ static void ipw2100_kill_works(struct ipw2100_priv *priv)
 	cancel_delayed_work_sync(&priv->wx_event_work);
 	cancel_delayed_work_sync(&priv->hang_check);
 	cancel_delayed_work_sync(&priv->rf_kill);
-	cancel_delayed_work_sync(&priv->scan_event);
+	cancel_work_sync(&priv->scan_event_now);
+	cancel_delayed_work_sync(&priv->scan_event_later);
 }
 
 static int ipw2100_tx_allocate(struct ipw2100_priv *priv)
@@ -4464,10 +4481,13 @@ static int ipw2100_tx_allocate(struct ipw2100_priv *priv)
 		return err;
 	}
 
-	priv->tx_buffers = kmalloc_array(TX_PENDED_QUEUE_LENGTH,
-					 sizeof(struct ipw2100_tx_packet),
-					 GFP_ATOMIC);
+	priv->tx_buffers =
+	    kmalloc(TX_PENDED_QUEUE_LENGTH * sizeof(struct ipw2100_tx_packet),
+		    GFP_ATOMIC);
 	if (!priv->tx_buffers) {
+		printk(KERN_ERR DRV_NAME
+		       ": %s: alloc failed form tx buffers.\n",
+		       priv->net_dev->name);
 		bd_queue_free(priv, &priv->tx_queue);
 		return -ENOMEM;
 	}
@@ -6178,7 +6198,8 @@ static struct net_device *ipw2100_alloc_device(struct pci_dev *pci_dev,
 	INIT_DELAYED_WORK(&priv->wx_event_work, ipw2100_wx_event_work);
 	INIT_DELAYED_WORK(&priv->hang_check, ipw2100_hang_check);
 	INIT_DELAYED_WORK(&priv->rf_kill, ipw2100_rf_kill);
-	INIT_DELAYED_WORK(&priv->scan_event, ipw2100_scan_event);
+	INIT_WORK(&priv->scan_event_now, ipw2100_scan_event_now);
+	INIT_DELAYED_WORK(&priv->scan_event_later, ipw2100_scan_event_later);
 
 	tasklet_init(&priv->irq_tasklet, (void (*)(unsigned long))
 		     ipw2100_irq_tasklet, (unsigned long)priv);
@@ -6392,7 +6413,7 @@ out:
 	goto out;
 }
 
-static void ipw2100_pci_remove_one(struct pci_dev *pci_dev)
+static void __devexit ipw2100_pci_remove_one(struct pci_dev *pci_dev)
 {
 	struct ipw2100_priv *priv = pci_get_drvdata(pci_dev);
 	struct net_device *dev = priv->net_dev;
@@ -6588,7 +6609,7 @@ static struct pci_driver ipw2100_pci_driver = {
 	.name = DRV_NAME,
 	.id_table = ipw2100_pci_id_table,
 	.probe = ipw2100_pci_init_one,
-	.remove = ipw2100_pci_remove_one,
+	.remove = __devexit_p(ipw2100_pci_remove_one),
 #ifdef CONFIG_PM
 	.suspend = ipw2100_suspend,
 	.resume = ipw2100_resume,

@@ -2492,7 +2492,7 @@ out_disable_dev:
  * spider_net_probe initializes pdev and registers a net_device
  * structure for it. After that, the device can be ifconfig'ed up
  **/
-static int
+static int __devinit
 spider_net_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int err = -EIO;
@@ -2531,7 +2531,7 @@ out:
  * spider_net_remove is called to remove the device and unregisters the
  * net_device
  **/
-static void
+static void __devexit
 spider_net_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev;
@@ -2559,7 +2559,7 @@ static struct pci_driver spider_net_driver = {
 	.name		= spider_net_driver_name,
 	.id_table	= spider_net_pci_tbl,
 	.probe		= spider_net_probe,
-	.remove		= spider_net_remove
+	.remove		= __devexit_p(spider_net_remove)
 };
 
 /**

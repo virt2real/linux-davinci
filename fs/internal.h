@@ -69,7 +69,7 @@ extern void __mnt_drop_write_file(struct file *);
 /*
  * fs_struct.c
  */
-extern void chroot_fs_refs(const struct path *, const struct path *);
+extern void chroot_fs_refs(struct path *, struct path *);
 
 /*
  * file_table.c
@@ -110,7 +110,6 @@ extern int open_check_o_direct(struct file *f);
  * inode.c
  */
 extern spinlock_t inode_sb_list_lock;
-extern void inode_add_lru(struct inode *inode);
 
 /*
  * fs-writeback.c
@@ -125,8 +124,3 @@ extern int invalidate_inodes(struct super_block *, bool);
  * dcache.c
  */
 extern struct dentry *__d_alloc(struct super_block *, const struct qstr *);
-
-/*
- * read_write.c
- */
-extern ssize_t __kernel_write(struct file *, const char *, size_t, loff_t *);

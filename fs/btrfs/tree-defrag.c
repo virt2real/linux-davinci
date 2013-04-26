@@ -23,14 +23,13 @@
 #include "transaction.h"
 #include "locking.h"
 
-/*
- * Defrag all the leaves in a given btree.
- * Read all the leaves and try to get key order to
+/* defrag all the leaves in a given btree.  If cache_only == 1, don't read
+ * things from disk, otherwise read all the leaves and try to get key order to
  * better reflect disk order
  */
 
 int btrfs_defrag_leaves(struct btrfs_trans_handle *trans,
-			struct btrfs_root *root)
+			struct btrfs_root *root, int cache_only)
 {
 	struct btrfs_path *path = NULL;
 	struct btrfs_key key;
@@ -41,6 +40,9 @@ int btrfs_defrag_leaves(struct btrfs_trans_handle *trans,
 	int next_key_ret = 0;
 	u64 last_ret = 0;
 	u64 min_trans = 0;
+
+	if (cache_only)
+		goto out;
 
 	if (root->fs_info->extent_root == root) {
 		/*
@@ -84,8 +86,11 @@ int btrfs_defrag_leaves(struct btrfs_trans_handle *trans,
 	}
 
 	path->keep_locks = 1;
+	if (cache_only)
+		min_trans = root->defrag_trans_start;
 
-	ret = btrfs_search_forward(root, &key, NULL, path, min_trans);
+	ret = btrfs_search_forward(root, &key, NULL, path,
+				   cache_only, min_trans);
 	if (ret < 0)
 		goto out;
 	if (ret > 0) {
@@ -104,11 +109,11 @@ int btrfs_defrag_leaves(struct btrfs_trans_handle *trans,
 		goto out;
 	}
 	path->slots[1] = btrfs_header_nritems(path->nodes[1]);
-	next_key_ret = btrfs_find_next_key(root, path, &key, 1,
+	next_key_ret = btrfs_find_next_key(root, path, &key, 1, cache_only,
 					   min_trans);
 	ret = btrfs_realloc_node(trans, root,
 				 path->nodes[1], 0,
-				 &last_ret,
+				 cache_only, &last_ret,
 				 &root->defrag_progress);
 	if (ret) {
 		WARN_ON(ret == -EAGAIN);

@@ -878,8 +878,8 @@ static int w90p910_ether_ioctl(struct net_device *dev,
 static void w90p910_get_drvinfo(struct net_device *dev,
 					struct ethtool_drvinfo *info)
 {
-	strlcpy(info->driver, DRV_MODULE_NAME, sizeof(info->driver));
-	strlcpy(info->version, DRV_MODULE_VERSION, sizeof(info->version));
+	strcpy(info->driver, DRV_MODULE_NAME);
+	strcpy(info->version, DRV_MODULE_VERSION);
 }
 
 static int w90p910_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
@@ -978,7 +978,7 @@ static int w90p910_ether_setup(struct net_device *dev)
 	return 0;
 }
 
-static int w90p910_ether_probe(struct platform_device *pdev)
+static int __devinit w90p910_ether_probe(struct platform_device *pdev)
 {
 	struct w90p910_ether *ether;
 	struct net_device *dev;
@@ -1071,7 +1071,7 @@ failed_free:
 	return error;
 }
 
-static int w90p910_ether_remove(struct platform_device *pdev)
+static int __devexit w90p910_ether_remove(struct platform_device *pdev)
 {
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct w90p910_ether *ether = netdev_priv(dev);
@@ -1096,7 +1096,7 @@ static int w90p910_ether_remove(struct platform_device *pdev)
 
 static struct platform_driver w90p910_ether_driver = {
 	.probe		= w90p910_ether_probe,
-	.remove		= w90p910_ether_remove,
+	.remove		= __devexit_p(w90p910_ether_remove),
 	.driver		= {
 		.name	= "nuc900-emc",
 		.owner	= THIS_MODULE,

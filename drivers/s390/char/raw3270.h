@@ -91,7 +91,6 @@ struct raw3270_iocb {
 
 struct raw3270;
 struct raw3270_view;
-extern struct class *class3270;
 
 /* 3270 CCW request */
 struct raw3270_request {
@@ -141,7 +140,6 @@ struct raw3270_fn {
 		     struct raw3270_request *, struct irb *);
 	void (*release)(struct raw3270_view *);
 	void (*free)(struct raw3270_view *);
-	void (*resize)(struct raw3270_view *, int, int, int);
 };
 
 /*
@@ -194,14 +192,8 @@ struct raw3270 *raw3270_setup_console(struct ccw_device *cdev);
 void raw3270_wait_cons_dev(struct raw3270 *);
 
 /* Notifier for device addition/removal */
-struct raw3270_notifier {
-	struct list_head list;
-	void (*create)(int minor);
-	void (*destroy)(int minor);
-};
-
-int raw3270_register_notifier(struct raw3270_notifier *);
-void raw3270_unregister_notifier(struct raw3270_notifier *);
+int raw3270_register_notifier(void (*notifier)(int, int));
+void raw3270_unregister_notifier(void (*notifier)(int, int));
 void raw3270_pm_unfreeze(struct raw3270_view *);
 
 /*

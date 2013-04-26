@@ -5,7 +5,7 @@
  *  http://www.gnu.org/licenses/gpl.html
  *
  *  Maintainer:
- *  Andreas Herrmann <herrmann.der.user@googlemail.com>
+ *  Andreas Herrmann <andreas.herrmann3@amd.com>
  *
  *  Based on the powernow-k7.c module written by Dave Jones.
  *  (C) 2003 Dave Jones on behalf of SuSE Labs
@@ -1052,7 +1052,14 @@ static int powernowk8_target(struct cpufreq_policy *pol,
 	struct powernowk8_target_arg pta = { .pol = pol, .targfreq = targfreq,
 					     .relation = relation };
 
-	return work_on_cpu(pol->cpu, powernowk8_target_fn, &pta);
+	/*
+	 * Must run on @pol->cpu.  cpufreq core is responsible for ensuring
+	 * that we're bound to the current CPU and pol->cpu stays online.
+	 */
+	if (smp_processor_id() == pol->cpu)
+		return powernowk8_target_fn(&pta);
+	else
+		return work_on_cpu(pol->cpu, powernowk8_target_fn, &pta);
 }
 
 /* Driver entry point to verify the policy and range of frequencies */
@@ -1186,7 +1193,7 @@ err_out:
 	return -ENODEV;
 }
 
-static int powernowk8_cpu_exit(struct cpufreq_policy *pol)
+static int __devexit powernowk8_cpu_exit(struct cpufreq_policy *pol)
 {
 	struct powernow_k8_data *data = per_cpu(powernow_data, pol->cpu);
 
@@ -1242,66 +1249,46 @@ static struct cpufreq_driver cpufreq_amd64_driver = {
 	.target		= powernowk8_target,
 	.bios_limit	= acpi_processor_get_bios_limit,
 	.init		= powernowk8_cpu_init,
-	.exit		= powernowk8_cpu_exit,
+	.exit		= __devexit_p(powernowk8_cpu_exit),
 	.get		= powernowk8_get,
 	.name		= "powernow-k8",
 	.owner		= THIS_MODULE,
 	.attr		= powernow_k8_attr,
 };
 
-static void __request_acpi_cpufreq(void)
-{
-	const char *cur_drv, *drv = "acpi-cpufreq";
-
-	cur_drv = cpufreq_get_current_driver();
-	if (!cur_drv)
-		goto request;
-
-	if (strncmp(cur_drv, drv, min_t(size_t, strlen(cur_drv), strlen(drv))))
-		pr_warn(PFX "WTF driver: %s\n", cur_drv);
-
-	return;
-
- request:
-	pr_warn(PFX "This CPU is not supported anymore, using acpi-cpufreq instead.\n");
-	request_module(drv);
-}
-
 /* driver entry point for init */
 static int __cpuinit powernowk8_init(void)
 {
 	unsigned int i, supported_cpus = 0;
-	int ret;
+	int rv;
 
 	if (static_cpu_has(X86_FEATURE_HW_PSTATE)) {
-		__request_acpi_cpufreq();
+		pr_warn(PFX "this CPU is not supported anymore, using acpi-cpufreq instead.\n");
+		request_module("acpi-cpufreq");
 		return -ENODEV;
 	}
 
 	if (!x86_match_cpu(powernow_k8_ids))
 		return -ENODEV;
 
-	get_online_cpus();
 	for_each_online_cpu(i) {
-		smp_call_function_single(i, check_supported_cpu, &ret, 1);
-		if (!ret)
+		int rc;
+		smp_call_function_single(i, check_supported_cpu, &rc, 1);
+		if (rc == 0)
 			supported_cpus++;
 	}
 
-	if (supported_cpus != num_online_cpus()) {
-		put_online_cpus();
+	if (supported_cpus != num_online_cpus())
 		return -ENODEV;
-	}
-	put_online_cpus();
 
-	ret = cpufreq_register_driver(&cpufreq_amd64_driver);
-	if (ret)
-		return ret;
+	rv = cpufreq_register_driver(&cpufreq_amd64_driver);
 
-	pr_info(PFX "Found %d %s (%d cpu cores) (" VERSION ")\n",
-		num_online_nodes(), boot_cpu_data.x86_model_id, supported_cpus);
+	if (!rv)
+		pr_info(PFX "Found %d %s (%d cpu cores) (" VERSION ")\n",
+			num_online_nodes(), boot_cpu_data.x86_model_id,
+			supported_cpus);
 
-	return ret;
+	return rv;
 }
 
 /* driver entry point for term */

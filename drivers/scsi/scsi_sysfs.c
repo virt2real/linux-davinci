@@ -247,11 +247,11 @@ show_shost_active_mode(struct device *dev,
 
 static DEVICE_ATTR(active_mode, S_IRUGO | S_IWUSR, show_shost_active_mode, NULL);
 
-static int check_reset_type(const char *str)
+static int check_reset_type(char *str)
 {
-	if (sysfs_streq(str, "adapter"))
+	if (strncmp(str, "adapter", 10) == 0)
 		return SCSI_ADAPTER_RESET;
-	else if (sysfs_streq(str, "firmware"))
+	else if (strncmp(str, "firmware", 10) == 0)
 		return SCSI_FIRMWARE_RESET;
 	else
 		return 0;
@@ -264,9 +264,12 @@ store_host_reset(struct device *dev, struct device_attribute *attr,
 	struct Scsi_Host *shost = class_to_shost(dev);
 	struct scsi_host_template *sht = shost->hostt;
 	int ret = -EINVAL;
+	char str[10];
 	int type;
 
-	type = check_reset_type(buf);
+	sscanf(buf, "%s", str);
+	type = check_reset_type(str);
+
 	if (!type)
 		goto exit_store_host_reset;
 

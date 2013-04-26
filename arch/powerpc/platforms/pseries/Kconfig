@@ -17,7 +17,6 @@ config PPC_PSERIES
 	select PPC_NATIVE
 	select PPC_PCI_CHOICE if EXPERT
 	select ZLIB_DEFLATE
-	select PPC_DOORBELL
 	default y
 
 config PPC_SPLPAR

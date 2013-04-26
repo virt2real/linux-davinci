@@ -10,6 +10,7 @@
  * ---------------------------------------------------------------------------
  */
 
+#include <linux/version.h>
 #include "unifi_priv.h"
 
 #ifdef UNIFI_SNIFF_ARPHRD
@@ -121,6 +122,8 @@ netrx_radiotap(unifi_priv_t *priv,
     struct unifi_rx_radiotap_header *unifi_rt;
     int signal, noise, snr;
 
+    func_enter();
+
     if (ind_data_len <= 0) {
         unifi_error(priv, "Invalid length in CSR_MA_SNIFFDATA_INDICATION.\n");
         return;
@@ -202,6 +205,7 @@ netrx_radiotap(unifi_priv_t *priv,
     priv->stats.rx_packets++;
     priv->stats.rx_bytes += ind_data_len;
 
+    func_exit();
 } /* netrx_radiotap() */
 #endif /* RADIOTAP */
 
@@ -251,6 +255,8 @@ netrx_prism(unifi_priv_t *priv,
         uint32  encoding;
     } *avs;
     int signal, noise, snr;
+
+    func_enter();
 
     if (ind_data_len <= 0) {
         unifi_error(priv, "Invalid length in CSR_MA_SNIFFDATA_INDICATION.\n");
@@ -313,6 +319,7 @@ netrx_prism(unifi_priv_t *priv,
     priv->stats.rx_packets++;
     priv->stats.rx_bytes += ind_data_len;
 
+    func_exit();
 } /* netrx_prism() */
 #endif /* PRISM */
 
@@ -344,8 +351,11 @@ ma_sniffdata_ind(void *ospriv,
     struct net_device *dev = priv->netdev;
     struct sk_buff *skb = (struct sk_buff*)bulkdata->d[0].os_net_buf_ptr;
 
+    func_enter();
+
     if (bulkdata->d[0].data_length == 0) {
         unifi_warning(priv, "rx: MA-SNIFFDATA indication with zero bulk data\n");
+        func_exit();
         return;
     }
 

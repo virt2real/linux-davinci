@@ -620,7 +620,7 @@ void ipath_ib_rcv(struct ipath_ibdev *dev, void *rhdr, void *data,
 		goto bail;
 	}
 
-	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
+	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	dev->opstats[opcode].n_bytes += tlen;
 	dev->opstats[opcode].n_packets++;
 

@@ -143,7 +143,7 @@ static void pxa930_trkball_close(struct input_dev *dev)
 	pxa930_trkball_disable(trkball);
 }
 
-static int pxa930_trkball_probe(struct platform_device *pdev)
+static int __devinit pxa930_trkball_probe(struct platform_device *pdev)
 {
 	struct pxa930_trkball *trkball;
 	struct input_dev *input;
@@ -230,7 +230,7 @@ failed:
 	return error;
 }
 
-static int pxa930_trkball_remove(struct platform_device *pdev)
+static int __devexit pxa930_trkball_remove(struct platform_device *pdev)
 {
 	struct pxa930_trkball *trkball = platform_get_drvdata(pdev);
 	int irq = platform_get_irq(pdev, 0);
@@ -248,7 +248,7 @@ static struct platform_driver pxa930_trkball_driver = {
 		.name	= "pxa930-trkball",
 	},
 	.probe		= pxa930_trkball_probe,
-	.remove		= pxa930_trkball_remove,
+	.remove		= __devexit_p(pxa930_trkball_remove),
 };
 module_platform_driver(pxa930_trkball_driver);
 

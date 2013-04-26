@@ -47,6 +47,7 @@ static int ade7758_spi_write_reg_16(struct device *dev,
 		u16 value)
 {
 	int ret;
+	struct spi_message msg;
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ade7758_state *st = iio_priv(indio_dev);
 	struct spi_transfer xfers[] = {
@@ -62,7 +63,9 @@ static int ade7758_spi_write_reg_16(struct device *dev,
 	st->tx[1] = (value >> 8) & 0xFF;
 	st->tx[2] = value & 0xFF;
 
-	ret = spi_sync_transfer(st->us, xfers, ARRAY_SIZE(xfers));
+	spi_message_init(&msg);
+	spi_message_add_tail(xfers, &msg);
+	ret = spi_sync(st->us, &msg);
 	mutex_unlock(&st->buf_lock);
 
 	return ret;
@@ -73,6 +76,7 @@ static int ade7758_spi_write_reg_24(struct device *dev,
 		u32 value)
 {
 	int ret;
+	struct spi_message msg;
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ade7758_state *st = iio_priv(indio_dev);
 	struct spi_transfer xfers[] = {
@@ -89,7 +93,9 @@ static int ade7758_spi_write_reg_24(struct device *dev,
 	st->tx[2] = (value >> 8) & 0xFF;
 	st->tx[3] = value & 0xFF;
 
-	ret = spi_sync_transfer(st->us, xfers, ARRAY_SIZE(xfers));
+	spi_message_init(&msg);
+	spi_message_add_tail(xfers, &msg);
+	ret = spi_sync(st->us, &msg);
 	mutex_unlock(&st->buf_lock);
 
 	return ret;
@@ -99,6 +105,7 @@ int ade7758_spi_read_reg_8(struct device *dev,
 		u8 reg_address,
 		u8 *val)
 {
+	struct spi_message msg;
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ade7758_state *st = iio_priv(indio_dev);
 	int ret;
@@ -121,7 +128,10 @@ int ade7758_spi_read_reg_8(struct device *dev,
 	st->tx[0] = ADE7758_READ_REG(reg_address);
 	st->tx[1] = 0;
 
-	ret = spi_sync_transfer(st->us, xfers, ARRAY_SIZE(xfers));
+	spi_message_init(&msg);
+	spi_message_add_tail(&xfers[0], &msg);
+	spi_message_add_tail(&xfers[1], &msg);
+	ret = spi_sync(st->us, &msg);
 	if (ret) {
 		dev_err(&st->us->dev, "problem when reading 8 bit register 0x%02X",
 				reg_address);
@@ -138,6 +148,7 @@ static int ade7758_spi_read_reg_16(struct device *dev,
 		u8 reg_address,
 		u16 *val)
 {
+	struct spi_message msg;
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ade7758_state *st = iio_priv(indio_dev);
 	int ret;
@@ -162,7 +173,10 @@ static int ade7758_spi_read_reg_16(struct device *dev,
 	st->tx[1] = 0;
 	st->tx[2] = 0;
 
-	ret = spi_sync_transfer(st->us, xfers, ARRAY_SIZE(xfers));
+	spi_message_init(&msg);
+	spi_message_add_tail(&xfers[0], &msg);
+	spi_message_add_tail(&xfers[1], &msg);
+	ret = spi_sync(st->us, &msg);
 	if (ret) {
 		dev_err(&st->us->dev, "problem when reading 16 bit register 0x%02X",
 				reg_address);
@@ -180,6 +194,7 @@ static int ade7758_spi_read_reg_24(struct device *dev,
 		u8 reg_address,
 		u32 *val)
 {
+	struct spi_message msg;
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ade7758_state *st = iio_priv(indio_dev);
 	int ret;
@@ -204,7 +219,10 @@ static int ade7758_spi_read_reg_24(struct device *dev,
 	st->tx[2] = 0;
 	st->tx[3] = 0;
 
-	ret = spi_sync_transfer(st->us, xfers, ARRAY_SIZE(xfers));
+	spi_message_init(&msg);
+	spi_message_add_tail(&xfers[0], &msg);
+	spi_message_add_tail(&xfers[1], &msg);
+	ret = spi_sync(st->us, &msg);
 	if (ret) {
 		dev_err(&st->us->dev, "problem when reading 24 bit register 0x%02X",
 				reg_address);
@@ -863,7 +881,7 @@ static const struct iio_info ade7758_info = {
 	.driver_module = THIS_MODULE,
 };
 
-static int ade7758_probe(struct spi_device *spi)
+static int __devinit ade7758_probe(struct spi_device *spi)
 {
 	int ret;
 	struct ade7758_state *st;
@@ -944,7 +962,7 @@ error_ret:
 	return ret;
 }
 
-static int ade7758_remove(struct spi_device *spi)
+static int __devexit ade7758_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 	struct ade7758_state *st = iio_priv(indio_dev);
@@ -974,7 +992,7 @@ static struct spi_driver ade7758_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe = ade7758_probe,
-	.remove = ade7758_remove,
+	.remove = __devexit_p(ade7758_remove),
 	.id_table = ade7758_id,
 };
 module_spi_driver(ade7758_driver);

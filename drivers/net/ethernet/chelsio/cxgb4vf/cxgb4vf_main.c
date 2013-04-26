@@ -33,8 +33,6 @@
  * SOFTWARE.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -198,10 +196,11 @@ void t4vf_os_link_changed(struct adapter *adapter, int pidx, int link_ok)
 			break;
 		}
 
-		netdev_info(dev, "link up, %s, full-duplex, %s PAUSE\n", s, fc);
+		printk(KERN_INFO "%s: link up, %s, full-duplex, %s PAUSE\n",
+		       dev->name, s, fc);
 	} else {
 		netif_carrier_off(dev);
-		netdev_info(dev, "link down\n");
+		printk(KERN_INFO "%s: link down\n", dev->name);
 	}
 }
 
@@ -2024,7 +2023,7 @@ static struct cxgb4vf_debugfs_entry debugfs_files[] = {
  * Set up out /sys/kernel/debug/cxgb4vf sub-nodes.  We assume that the
  * directory (debugfs_root) has already been set up.
  */
-static int setup_debugfs(struct adapter *adapter)
+static int __devinit setup_debugfs(struct adapter *adapter)
 {
 	int i;
 
@@ -2065,7 +2064,7 @@ static void cleanup_debugfs(struct adapter *adapter)
  * adapter parameters we're going to be using and initialize basic adapter
  * hardware support.
  */
-static int adap_init0(struct adapter *adapter)
+static int __devinit adap_init0(struct adapter *adapter)
 {
 	struct vf_resources *vfres = &adapter->params.vfres;
 	struct sge_params *sge_params = &adapter->params.sge;
@@ -2267,7 +2266,7 @@ static inline void init_rspq(struct sge_rspq *rspq, u8 timer_idx,
  * be modified by the admin via ethtool and cxgbtool prior to the adapter
  * being brought up for the first time.
  */
-static void cfg_queues(struct adapter *adapter)
+static void __devinit cfg_queues(struct adapter *adapter)
 {
 	struct sge *s = &adapter->sge;
 	int q10g, n10g, qidx, pidx, qs;
@@ -2362,7 +2361,7 @@ static void cfg_queues(struct adapter *adapter)
  * Reduce the number of Ethernet queues across all ports to at most n.
  * n provides at least one queue per port.
  */
-static void reduce_ethqs(struct adapter *adapter, int n)
+static void __devinit reduce_ethqs(struct adapter *adapter, int n)
 {
 	int i;
 	struct port_info *pi;
@@ -2401,7 +2400,7 @@ static void reduce_ethqs(struct adapter *adapter, int n)
  * for our "extras".  Note that this process may lower the maximum number of
  * allowed Queue Sets ...
  */
-static int enable_msix(struct adapter *adapter)
+static int __devinit enable_msix(struct adapter *adapter)
 {
 	int i, err, want, need;
 	struct msix_entry entries[MSIX_ENTRIES];
@@ -2463,9 +2462,11 @@ static const struct net_device_ops cxgb4vf_netdev_ops	= {
  * state needed to manage the device.  This routine is called "init_one" in
  * the PF Driver ...
  */
-static int cxgb4vf_pci_probe(struct pci_dev *pdev,
-			     const struct pci_device_id *ent)
+static int __devinit cxgb4vf_pci_probe(struct pci_dev *pdev,
+				       const struct pci_device_id *ent)
 {
+	static int version_printed;
+
 	int pci_using_dac;
 	int err, pidx;
 	unsigned int pmask;
@@ -2477,7 +2478,10 @@ static int cxgb4vf_pci_probe(struct pci_dev *pdev,
 	 * Print our driver banner the first time we're called to initialize a
 	 * device.
 	 */
-	pr_info_once("%s - version %s\n", DRV_DESC, DRV_VERSION);
+	if (version_printed == 0) {
+		printk(KERN_INFO "%s - version %s\n", DRV_DESC, DRV_VERSION);
+		version_printed = 1;
+	}
 
 	/*
 	 * Initialize generic PCI device state.
@@ -2765,7 +2769,7 @@ err_disable_device:
  * "probe" routine and quiesce the device (disable interrupts, etc.).  (Note
  * that this is called "remove_one" in the PF Driver.)
  */
-static void cxgb4vf_pci_remove(struct pci_dev *pdev)
+static void __devexit cxgb4vf_pci_remove(struct pci_dev *pdev)
 {
 	struct adapter *adapter = pci_get_drvdata(pdev);
 
@@ -2831,7 +2835,7 @@ static void cxgb4vf_pci_remove(struct pci_dev *pdev)
  * "Shutdown" quiesce the device, stopping Ingress Packet and Interrupt
  * delivery.
  */
-static void cxgb4vf_pci_shutdown(struct pci_dev *pdev)
+static void __devexit cxgb4vf_pci_shutdown(struct pci_dev *pdev)
 {
 	struct adapter *adapter;
 	int pidx;
@@ -2901,8 +2905,8 @@ static struct pci_driver cxgb4vf_driver = {
 	.name		= KBUILD_MODNAME,
 	.id_table	= cxgb4vf_pci_tbl,
 	.probe		= cxgb4vf_pci_probe,
-	.remove		= cxgb4vf_pci_remove,
-	.shutdown	= cxgb4vf_pci_shutdown,
+	.remove		= __devexit_p(cxgb4vf_pci_remove),
+	.shutdown	= __devexit_p(cxgb4vf_pci_shutdown),
 };
 
 /*
@@ -2916,15 +2920,18 @@ static int __init cxgb4vf_module_init(void)
 	 * Vet our module parameters.
 	 */
 	if (msi != MSI_MSIX && msi != MSI_MSI) {
-		pr_warn("bad module parameter msi=%d; must be %d (MSI-X or MSI) or %d (MSI)\n",
-			msi, MSI_MSIX, MSI_MSI);
+		printk(KERN_WARNING KBUILD_MODNAME
+		       ": bad module parameter msi=%d; must be %d"
+		       " (MSI-X or MSI) or %d (MSI)\n",
+		       msi, MSI_MSIX, MSI_MSI);
 		return -EINVAL;
 	}
 
 	/* Debugfs support is optional, just warn if this fails */
 	cxgb4vf_debugfs_root = debugfs_create_dir(KBUILD_MODNAME, NULL);
 	if (IS_ERR_OR_NULL(cxgb4vf_debugfs_root))
-		pr_warn("could not create debugfs entry, continuing\n");
+		printk(KERN_WARNING KBUILD_MODNAME ": could not create"
+		       " debugfs entry, continuing\n");
 
 	ret = pci_register_driver(&cxgb4vf_driver);
 	if (ret < 0 && !IS_ERR_OR_NULL(cxgb4vf_debugfs_root))

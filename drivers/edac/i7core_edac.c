@@ -420,21 +420,21 @@ static inline int numdimms(u32 dimms)
 
 static inline int numrank(u32 rank)
 {
-	static const int ranks[] = { 1, 2, 4, -EINVAL };
+	static int ranks[4] = { 1, 2, 4, -EINVAL };
 
 	return ranks[rank & 0x3];
 }
 
 static inline int numbank(u32 bank)
 {
-	static const int banks[] = { 4, 8, 16, -EINVAL };
+	static int banks[4] = { 4, 8, 16, -EINVAL };
 
 	return banks[bank & 0x3];
 }
 
 static inline int numrow(u32 row)
 {
-	static const int rows[] = {
+	static int rows[8] = {
 		1 << 12, 1 << 13, 1 << 14, 1 << 15,
 		1 << 16, -EINVAL, -EINVAL, -EINVAL,
 	};
@@ -444,7 +444,7 @@ static inline int numrow(u32 row)
 
 static inline int numcol(u32 col)
 {
-	static const int cols[] = {
+	static int cols[8] = {
 		1 << 10, 1 << 11, 1 << 12, -EINVAL,
 	};
 	return cols[col & 0x3];
@@ -816,7 +816,7 @@ static ssize_t i7core_inject_store_##param(			\
 	struct device_attribute *mattr,				\
 	const char *data, size_t count)				\
 {								\
-	struct mem_ctl_info *mci = dev_get_drvdata(dev);	\
+	struct mem_ctl_info *mci = to_mci(dev);			\
 	struct i7core_pvt *pvt;					\
 	long value;						\
 	int rc;							\
@@ -845,7 +845,7 @@ static ssize_t i7core_inject_show_##param(			\
 	struct device_attribute *mattr,				\
 	char *data)						\
 {								\
-	struct mem_ctl_info *mci = dev_get_drvdata(dev);	\
+	struct mem_ctl_info *mci = to_mci(dev);			\
 	struct i7core_pvt *pvt;					\
 								\
 	pvt = mci->pvt_info;					\
@@ -1052,7 +1052,7 @@ static ssize_t i7core_show_counter_##param(			\
 	struct device_attribute *mattr,				\
 	char *data)						\
 {								\
-	struct mem_ctl_info *mci = dev_get_drvdata(dev);	\
+	struct mem_ctl_info *mci = to_mci(dev);			\
 	struct i7core_pvt *pvt = mci->pvt_info;			\
 								\
 	edac_dbg(1, "\n");					\
@@ -2305,7 +2305,8 @@ fail0:
  *		< 0 for error code
  */
 
-static int i7core_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+static int __devinit i7core_probe(struct pci_dev *pdev,
+				  const struct pci_device_id *id)
 {
 	int rc, count = 0;
 	struct i7core_dev *i7core_dev;
@@ -2367,7 +2368,7 @@ fail0:
  *	i7core_remove	destructor for one instance of device
  *
  */
-static void i7core_remove(struct pci_dev *pdev)
+static void __devexit i7core_remove(struct pci_dev *pdev)
 {
 	struct i7core_dev *i7core_dev;
 
@@ -2408,7 +2409,7 @@ MODULE_DEVICE_TABLE(pci, i7core_pci_tbl);
 static struct pci_driver i7core_driver = {
 	.name     = "i7core_edac",
 	.probe    = i7core_probe,
-	.remove   = i7core_remove,
+	.remove   = __devexit_p(i7core_remove),
 	.id_table = i7core_pci_tbl,
 };
 

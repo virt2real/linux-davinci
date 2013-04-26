@@ -17,7 +17,6 @@
 #include <linux/timer.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
-#include <linux/platform_data/edma.h>
 #include <linux/gpio.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -29,13 +28,12 @@
 #include <asm/plat-sffsdr/sffsdr-fpga.h>
 #endif
 
+#include <mach/asp.h>
+#include <mach/edma.h>
 
 #include "../codecs/pcm3008.h"
 #include "davinci-pcm.h"
 #include "davinci-i2s.h"
-
-#define DAVINCI_DMA_MCBSP_TX	2
-#define DAVINCI_DMA_MCBSP_RX	3
 
 /*
  * CLKX and CLKR are the inputs for the Sample Rate Generator.
@@ -64,8 +62,13 @@ static int sffsdr_hw_params(struct snd_pcm_substream *substream,
 	}
 #endif
 
-	/* set cpu DAI configuration */
-	ret = snd_soc_dai_set_fmt(cpu_dai, AUDIO_FORMAT);
+	/* Set cpu DAI configuration:
+	 * CLKX and CLKR are the inputs for the Sample Rate Generator.
+	 * FSX and FSR are outputs, driven by the sample Rate Generator. */
+	ret = snd_soc_dai_set_fmt(cpu_dai,
+				  SND_SOC_DAIFMT_RIGHT_J |
+				  SND_SOC_DAIFMT_CBM_CFS |
+				  SND_SOC_DAIFMT_IB_NF);
 	if (ret < 0)
 		return ret;
 
@@ -119,15 +122,15 @@ struct platform_device pcm3008_codec = {
 
 static struct resource sffsdr_snd_resources[] = {
 	{
-		.start = DAVINCI_MCBSP_BASE,
-		.end = DAVINCI_MCBSP_BASE + SZ_8K - 1,
+		.start = DAVINCI_ASP0_BASE,
+		.end = DAVINCI_ASP0_BASE + SZ_8K - 1,
 		.flags = IORESOURCE_MEM,
 	},
 };
 
 static struct evm_snd_platform_data sffsdr_snd_data = {
-	.tx_dma_ch	= DAVINCI_DMA_MCBSP_TX,
-	.rx_dma_ch	= DAVINCI_DMA_MCBSP_RX,
+	.tx_dma_ch	= DAVINCI_DMA_ASP0_TX,
+	.rx_dma_ch	= DAVINCI_DMA_ASP0_RX,
 };
 
 static struct platform_device *sffsdr_snd_device;

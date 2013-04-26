@@ -87,6 +87,9 @@ void __init device_tree_init(void)
 	reserve_bootmem(base, size, BOOTMEM_DEFAULT);
 
 	unflatten_device_tree();
+
+	/* free the space reserved for the dt blob */
+	free_bootmem(base, size);
 }
 
 void __init prom_init(void)
@@ -116,7 +119,7 @@ int __init plat_of_setup(void)
 		sizeof(of_ids[0].compatible));
 	strncpy(of_ids[1].compatible, "simple-bus",
 		sizeof(of_ids[1].compatible));
-	return of_platform_populate(NULL, of_ids, NULL, NULL);
+	return of_platform_bus_probe(NULL, of_ids, NULL);
 }
 
 arch_initcall(plat_of_setup);

@@ -22,7 +22,6 @@
 #include <linux/prefetch.h>
 #include <linux/usb.h>
 #include <linux/irq.h>
-#include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/usb/nop-usb-xceiv.h>
@@ -199,7 +198,7 @@ void musb_write_fifo(struct musb_hw_ep *hw_ep, u16 len, const u8 *buf)
 		/* Best case is 32bit-aligned destination address */
 		if ((0x02 & (unsigned long) buf) == 0) {
 			if (len >= 4) {
-				iowrite32_rep(fifo, buf, len >> 2);
+				writesl(fifo, buf, len >> 2);
 				buf += (len & ~0x03);
 				len &= 0x03;
 			}
@@ -246,7 +245,7 @@ void musb_read_fifo(struct musb_hw_ep *hw_ep, u16 len, u8 *buf)
 		/* Best case is 32bit-aligned destination address */
 		if ((0x02 & (unsigned long) buf) == 0) {
 			if (len >= 4) {
-				ioread32_rep(fifo, buf, len >> 2);
+				readsl(fifo, buf, len >> 2);
 				buf += (len & ~0x03);
 				len &= 0x03;
 			}
@@ -1069,7 +1068,7 @@ static int tusb_musb_init(struct musb *musb)
 	usb_nop_xceiv_register();
 	musb->xceiv = usb_get_phy(USB_PHY_TYPE_USB2);
 	if (IS_ERR_OR_NULL(musb->xceiv))
-		return -EPROBE_DEFER;
+		return -ENODEV;
 
 	pdev = to_platform_device(musb->controller);
 
@@ -1154,13 +1153,14 @@ static const struct musb_platform_ops tusb_ops = {
 
 static u64 tusb_dmamask = DMA_BIT_MASK(32);
 
-static int tusb_probe(struct platform_device *pdev)
+static int __devinit tusb_probe(struct platform_device *pdev)
 {
 	struct musb_hdrc_platform_data	*pdata = pdev->dev.platform_data;
 	struct platform_device		*musb;
 	struct tusb6010_glue		*glue;
 
 	int				ret = -ENOMEM;
+	int				musbid;
 
 	glue = kzalloc(sizeof(*glue), GFP_KERNEL);
 	if (!glue) {
@@ -1168,12 +1168,21 @@ static int tusb_probe(struct platform_device *pdev)
 		goto err0;
 	}
 
-	musb = platform_device_alloc("musb-hdrc", PLATFORM_DEVID_AUTO);
-	if (!musb) {
-		dev_err(&pdev->dev, "failed to allocate musb device\n");
+	/* get the musb id */
+	musbid = musb_get_id(&pdev->dev, GFP_KERNEL);
+	if (musbid < 0) {
+		dev_err(&pdev->dev, "failed to allocate musb id\n");
+		ret = -ENOMEM;
 		goto err1;
 	}
 
+	musb = platform_device_alloc("musb-hdrc", musbid);
+	if (!musb) {
+		dev_err(&pdev->dev, "failed to allocate musb device\n");
+		goto err2;
+	}
+
+	musb->id			= musbid;
 	musb->dev.parent		= &pdev->dev;
 	musb->dev.dma_mask		= &tusb_dmamask;
 	musb->dev.coherent_dma_mask	= tusb_dmamask;
@@ -1209,6 +1218,9 @@ static int tusb_probe(struct platform_device *pdev)
 err3:
 	platform_device_put(musb);
 
+err2:
+	musb_put_id(&pdev->dev, musbid);
+
 err1:
 	kfree(glue);
 
@@ -1216,11 +1228,13 @@ err0:
 	return ret;
 }
 
-static int tusb_remove(struct platform_device *pdev)
+static int __devexit tusb_remove(struct platform_device *pdev)
 {
 	struct tusb6010_glue		*glue = platform_get_drvdata(pdev);
 
-	platform_device_unregister(glue->musb);
+	musb_put_id(&pdev->dev, glue->musb->id);
+	platform_device_del(glue->musb);
+	platform_device_put(glue->musb);
 	kfree(glue);
 
 	return 0;
@@ -1228,7 +1242,7 @@ static int tusb_remove(struct platform_device *pdev)
 
 static struct platform_driver tusb_driver = {
 	.probe		= tusb_probe,
-	.remove		= tusb_remove,
+	.remove		= __devexit_p(tusb_remove),
 	.driver		= {
 		.name	= "musb-tusb",
 	},
@@ -1237,4 +1251,15 @@ static struct platform_driver tusb_driver = {
 MODULE_DESCRIPTION("TUSB6010 MUSB Glue Layer");
 MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");
 MODULE_LICENSE("GPL v2");
-module_platform_driver(tusb_driver);
+
+static int __init tusb_init(void)
+{
+	return platform_driver_register(&tusb_driver);
+}
+module_init(tusb_init);
+
+static void __exit tusb_exit(void)
+{
+	platform_driver_unregister(&tusb_driver);
+}
+module_exit(tusb_exit);

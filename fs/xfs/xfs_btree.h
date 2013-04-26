@@ -188,8 +188,6 @@ struct xfs_btree_ops {
 	__int64_t (*key_diff)(struct xfs_btree_cur *cur,
 			      union xfs_btree_key *key);
 
-	const struct xfs_buf_ops	*buf_ops;
-
 #ifdef DEBUG
 	/* check that k1 is lower than k2 */
 	int	(*keys_inorder)(struct xfs_btree_cur *cur,
@@ -357,8 +355,7 @@ xfs_btree_read_bufl(
 	xfs_fsblock_t		fsbno,	/* file system block number */
 	uint			lock,	/* lock flags for read_buf */
 	struct xfs_buf		**bpp,	/* buffer for fsbno */
-	int			refval,	/* ref count value for buffer */
-	const struct xfs_buf_ops *ops);
+	int			refval);/* ref count value for buffer */
 
 /*
  * Read-ahead the block, don't wait for it, don't return a buffer.
@@ -368,8 +365,7 @@ void					/* error */
 xfs_btree_reada_bufl(
 	struct xfs_mount	*mp,	/* file system mount point */
 	xfs_fsblock_t		fsbno,	/* file system block number */
-	xfs_extlen_t		count,	/* count of filesystem blocks */
-	const struct xfs_buf_ops *ops);
+	xfs_extlen_t		count);	/* count of filesystem blocks */
 
 /*
  * Read-ahead the block, don't wait for it, don't return a buffer.
@@ -380,20 +376,8 @@ xfs_btree_reada_bufs(
 	struct xfs_mount	*mp,	/* file system mount point */
 	xfs_agnumber_t		agno,	/* allocation group number */
 	xfs_agblock_t		agbno,	/* allocation group block number */
-	xfs_extlen_t		count,	/* count of filesystem blocks */
-	const struct xfs_buf_ops *ops);
+	xfs_extlen_t		count);	/* count of filesystem blocks */
 
-/*
- * Initialise a new btree block header
- */
-void
-xfs_btree_init_block(
-	struct xfs_mount *mp,
-	struct xfs_buf	*bp,
-	__u32		magic,
-	__u16		level,
-	__u16		numrecs,
-	unsigned int	flags);
 
 /*
  * Common btree core entry points.

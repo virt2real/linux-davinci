@@ -37,7 +37,6 @@
 #include <linux/proc_fs.h>
 #include <linux/types.h>
 #include <linux/string.h>
-#include <linux/device.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/spinlock.h>
@@ -152,15 +151,20 @@ static void dgrp_read_data_block(struct ch_struct *ch, u8 *flipbuf,
  * Copys the rbuf to the flipbuf and sends to line discipline.
  * Sends input buffer data to the line discipline.
  *
+ * There are several modes to consider here:
+ *    rawreadok, tty->real_raw, and IF_PARMRK
  */
 static void dgrp_input(struct ch_struct *ch)
 {
 	struct nd_struct *nd;
 	struct tty_struct *tty;
+	int remain;
 	int data_len;
 	int len;
+	int flip_len;
 	int tty_count;
 	ulong lock_flags;
+	struct tty_ldisc *ld;
 	u8  *myflipbuf;
 	u8  *myflipflagbuf;
 
@@ -208,11 +212,37 @@ static void dgrp_input(struct ch_struct *ch)
 
 	spin_unlock_irqrestore(&nd->nd_lock, lock_flags);
 
+	/* Decide how much data we can send into the tty layer */
+	if (dgrp_rawreadok && tty->real_raw)
+		flip_len = MYFLIPLEN;
+	else
+		flip_len = TTY_FLIPBUF_SIZE;
+
 	/* data_len should be the number of chars that we read in */
 	data_len = (ch->ch_rin - ch->ch_rout) & RBUF_MASK;
+	remain = data_len;
 
 	/* len is the amount of data we are going to transfer here */
-	len = tty_buffer_request_room(&ch->port, data_len);
+	len = min(data_len, flip_len);
+
+	/* take into consideration length of ldisc */
+	len = min(len, (N_TTY_BUF_SIZE - 1) - tty->read_cnt);
+
+	ld = tty_ldisc_ref(tty);
+
+	/*
+	 * If we were unable to get a reference to the ld,
+	 * don't flush our buffer, and act like the ld doesn't
+	 * have any space to put the data right now.
+	 */
+	if (!ld) {
+		len = 0;
+	} else if (!ld->ops->receive_buf) {
+		spin_lock_irqsave(&nd->nd_lock, lock_flags);
+		ch->ch_rout = ch->ch_rin;
+		spin_unlock_irqrestore(&nd->nd_lock, lock_flags);
+		len = 0;
+	}
 
 	/* Check DPA flow control */
 	if ((nd->nd_dpa_debug) &&
@@ -224,21 +254,41 @@ static void dgrp_input(struct ch_struct *ch)
 
 		dgrp_read_data_block(ch, myflipbuf, len);
 
-		if (I_PARMRK(tty) || I_BRKINT(tty) || I_INPCK(tty))
-			parity_scan(ch, myflipbuf, myflipflagbuf, &len);
-		else
-			memset(myflipflagbuf, TTY_NORMAL, len);
+		/*
+		 * In high performance mode, we don't have to update
+		 * flag_buf or any of the counts or pointers into flip buf.
+		 */
+		if (!dgrp_rawreadok || !tty->real_raw) {
+			if (I_PARMRK(tty) || I_BRKINT(tty) || I_INPCK(tty))
+				parity_scan(ch, myflipbuf, myflipflagbuf, &len);
+			else
+				memset(myflipflagbuf, TTY_NORMAL, len);
+		}
 
 		if ((nd->nd_dpa_debug) &&
 		    (nd->nd_dpa_port == PORT_NUM(MINOR(tty_devnum(tty)))))
 			dgrp_dpa_data(nd, 1, myflipbuf, len);
 
-		tty_insert_flip_string_flags(&ch->port, myflipbuf,
-					     myflipflagbuf, len);
-		tty_flip_buffer_push(&ch->port);
+		/*
+		 * If we're doing raw reads, jam it right into the
+		 * line disc bypassing the flip buffers.
+		 */
+		if (dgrp_rawreadok && tty->real_raw)
+			ld->ops->receive_buf(tty, myflipbuf, NULL, len);
+		else {
+			len = tty_buffer_request_room(tty, len);
+			tty_insert_flip_string_flags(tty, myflipbuf,
+						     myflipflagbuf, len);
+
+			/* Tell the tty layer its okay to "eat" the data now */
+			tty_flip_buffer_push(tty);
+		}
 
 		ch->ch_rxcount += len;
 	}
+
+	if (ld)
+		tty_ldisc_deref(ld);
 
 	/*
 	 * Wake up any sleepers (maybe dgrp close) that might be waiting
@@ -1007,13 +1057,13 @@ static int dgrp_net_release(struct inode *inode, struct file *file)
 
 	spin_unlock_irqrestore(&dgrp_poll_data.poll_lock, lock_flags);
 
+done:
 	down(&nd->nd_net_semaphore);
 
 	dgrp_monitor_message(nd, "Net Close");
 
 	up(&nd->nd_net_semaphore);
 
-done:
 	module_put(THIS_MODULE);
 	file->private_data = NULL;
 	return 0;
@@ -1621,9 +1671,6 @@ static int dgrp_send(struct nd_struct *nd, long tmax)
 				 * do the job.
 				 */
 
-				/* FIXME: jiffies - ch->ch_waketime can never
-				   be < 0. Someone needs to work out what is
-				   actually intended here */
 				if (ch->ch_pun.un_open_count &&
 				    (ch->ch_pun.un_flag &
 				    (UN_EMPTY|UN_TIME|UN_LOW|UN_PWAIT)) != 0) {
@@ -2499,7 +2546,7 @@ data:
 
 			/*
 			 *  Fabricate and insert a data packet header to
-			 *  preced the remaining data when it comes in.
+			 *  preceed the remaining data when it comes in.
 			 */
 
 			if (remain < plen) {
@@ -2668,7 +2715,7 @@ data:
 						}
 
 						/*
-						 *  Handle delayed response arrival preceding
+						 *  Handle delayed response arrival preceeding
 						 *  the open response we are waiting for.
 						 */
 
@@ -2957,9 +3004,9 @@ check_query:
 			    I_BRKINT(ch->ch_tun.un_tty) &&
 			    !(I_IGNBRK(ch->ch_tun.un_tty))) {
 
-				tty_buffer_request_room(&ch->port, 1);
-				tty_insert_flip_char(&ch->port, 0, TTY_BREAK);
-				tty_flip_buffer_push(&ch->port);
+				tty_buffer_request_room(ch->ch_tun.un_tty, 1);
+				tty_insert_flip_char(ch->ch_tun.un_tty, 0, TTY_BREAK);
+				tty_flip_buffer_push(ch->ch_tun.un_tty);
 
 			}
 
@@ -3506,7 +3553,7 @@ void dgrp_poll_handler(unsigned long arg)
 		/*
 		 * Decrement statistics.  These are only for use with
 		 * KME, so don't worry that the operations are done
-		 * unlocked, and so the results are occasionally wrong.
+		 * unlocked, and so the results are occassionally wrong.
 		 */
 
 		nd->nd_read_count -= (nd->nd_read_count +

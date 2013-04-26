@@ -89,7 +89,6 @@ int cfg80211_mgd_wext_siwfreq(struct net_device *dev,
 
 	cfg80211_lock_rdev(rdev);
 	mutex_lock(&rdev->devlist_mtx);
-	mutex_lock(&rdev->sched_scan_mtx);
 	wdev_lock(wdev);
 
 	if (wdev->sme_state != CFG80211_SME_IDLE) {
@@ -120,23 +119,13 @@ int cfg80211_mgd_wext_siwfreq(struct net_device *dev,
 	 * channel we disconnected above and reconnect below.
 	 */
 	if (chan && !wdev->wext.connect.ssid_len) {
-		struct cfg80211_chan_def chandef = {
-			.width = NL80211_CHAN_WIDTH_20_NOHT,
-			.center_freq1 = freq,
-		};
-
-		chandef.chan = ieee80211_get_channel(&rdev->wiphy, freq);
-		if (chandef.chan)
-			err = cfg80211_set_monitor_channel(rdev, &chandef);
-		else
-			err = -EINVAL;
+		err = cfg80211_set_monitor_channel(rdev, freq, NL80211_CHAN_NO_HT);
 		goto out;
 	}
 
 	err = cfg80211_mgd_wext_connect(rdev, wdev);
  out:
 	wdev_unlock(wdev);
-	mutex_unlock(&rdev->sched_scan_mtx);
 	mutex_unlock(&rdev->devlist_mtx);
 	cfg80211_unlock_rdev(rdev);
 	return err;
@@ -192,7 +181,6 @@ int cfg80211_mgd_wext_siwessid(struct net_device *dev,
 
 	cfg80211_lock_rdev(rdev);
 	mutex_lock(&rdev->devlist_mtx);
-	mutex_lock(&rdev->sched_scan_mtx);
 	wdev_lock(wdev);
 
 	err = 0;
@@ -226,7 +214,6 @@ int cfg80211_mgd_wext_siwessid(struct net_device *dev,
 	err = cfg80211_mgd_wext_connect(rdev, wdev);
  out:
 	wdev_unlock(wdev);
-	mutex_unlock(&rdev->sched_scan_mtx);
 	mutex_unlock(&rdev->devlist_mtx);
 	cfg80211_unlock_rdev(rdev);
 	return err;
@@ -246,17 +233,13 @@ int cfg80211_mgd_wext_giwessid(struct net_device *dev,
 
 	wdev_lock(wdev);
 	if (wdev->current_bss) {
-		const u8 *ie;
-
-		rcu_read_lock();
-		ie = ieee80211_bss_get_ie(&wdev->current_bss->pub,
-					  WLAN_EID_SSID);
+		const u8 *ie = ieee80211_bss_get_ie(&wdev->current_bss->pub,
+						    WLAN_EID_SSID);
 		if (ie) {
 			data->flags = 1;
 			data->length = ie[1];
 			memcpy(ssid, ie + 2, data->length);
 		}
-		rcu_read_unlock();
 	} else if (wdev->wext.connect.ssid && wdev->wext.connect.ssid_len) {
 		data->flags = 1;
 		data->length = wdev->wext.connect.ssid_len;
@@ -289,7 +272,6 @@ int cfg80211_mgd_wext_siwap(struct net_device *dev,
 
 	cfg80211_lock_rdev(rdev);
 	mutex_lock(&rdev->devlist_mtx);
-	mutex_lock(&rdev->sched_scan_mtx);
 	wdev_lock(wdev);
 
 	if (wdev->sme_state != CFG80211_SME_IDLE) {
@@ -318,7 +300,6 @@ int cfg80211_mgd_wext_siwap(struct net_device *dev,
 	err = cfg80211_mgd_wext_connect(rdev, wdev);
  out:
 	wdev_unlock(wdev);
-	mutex_unlock(&rdev->sched_scan_mtx);
 	mutex_unlock(&rdev->devlist_mtx);
 	cfg80211_unlock_rdev(rdev);
 	return err;

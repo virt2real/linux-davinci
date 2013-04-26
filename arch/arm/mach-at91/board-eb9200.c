@@ -35,8 +35,9 @@
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 
-#include "at91_aic.h"
-#include "board.h"
+#include <mach/board.h>
+#include <mach/at91_aic.h>
+
 #include "generic.h"
 
 
@@ -116,7 +117,7 @@ static void __init eb9200_board_init(void)
 }
 
 MACHINE_START(ATEB9200, "Embest ATEB9200")
-	.init_time	= at91rm9200_timer_init,
+	.timer		= &at91rm9200_timer,
 	.map_io		= at91_map_io,
 	.handle_irq	= at91_aic_handle_irq,
 	.init_early	= eb9200_init_early,

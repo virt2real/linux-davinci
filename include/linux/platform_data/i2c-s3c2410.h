@@ -15,8 +15,6 @@
 
 #define S3C_IICFLG_FILTER	(1<<0)	/* enable s3c2440 filter */
 
-struct platform_device;
-
 /**
  *	struct s3c2410_platform_i2c - Platform data for s3c I2C.
  *	@bus_num: The bus number to use (if possible).

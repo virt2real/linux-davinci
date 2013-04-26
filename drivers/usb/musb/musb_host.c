@@ -634,17 +634,7 @@ static bool musb_tx_dma_program(struct dma_controller *dma,
 		mode = 1;
 		csr |= MUSB_TXCSR_DMAMODE | MUSB_TXCSR_DMAENAB;
 		/* autoset shouldn't be set in high bandwidth */
-		/*
-		 * Enable Autoset according to table
-		 * below
-		 * bulk_split hb_mult	Autoset_Enable
-		 *	0	1	Yes(Normal)
-		 *	0	>1	No(High BW ISO)
-		 *	1	1	Yes(HS bulk)
-		 *	1	>1	Yes(FS bulk)
-		 */
-		if (qh->hb_mult == 1 || (qh->hb_mult > 1 &&
-					can_bulk_split(hw_ep->musb, qh->type)))
+		if (qh->hb_mult == 1)
 			csr |= MUSB_TXCSR_AUTOSET;
 	} else {
 		mode = 0;
@@ -750,19 +740,13 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 		csr = musb_readw(epio, MUSB_TXCSR);
 
 		/* disable interrupt in case we flush */
-		int_txe = musb->intrtxe;
+		int_txe = musb_readw(mbase, MUSB_INTRTXE);
 		musb_writew(mbase, MUSB_INTRTXE, int_txe & ~(1 << epnum));
 
 		/* general endpoint setup */
 		if (epnum) {
 			/* flush all old state, set default */
-			/*
-			 * We could be flushing valid
-			 * packets in double buffering
-			 * case
-			 */
-			if (!hw_ep->tx_double_buffered)
-				musb_h_tx_flush_fifo(hw_ep);
+			musb_h_tx_flush_fifo(hw_ep);
 
 			/*
 			 * We must not clear the DMAMODE bit before or in
@@ -779,13 +763,11 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 					);
 			csr |= MUSB_TXCSR_MODE;
 
-			if (!hw_ep->tx_double_buffered) {
-				if (usb_gettoggle(urb->dev, qh->epnum, 1))
-					csr |= MUSB_TXCSR_H_WR_DATATOGGLE
-						| MUSB_TXCSR_H_DATATOGGLE;
-				else
-					csr |= MUSB_TXCSR_CLRDATATOG;
-			}
+			if (usb_gettoggle(urb->dev, qh->epnum, 1))
+				csr |= MUSB_TXCSR_H_WR_DATATOGGLE
+					| MUSB_TXCSR_H_DATATOGGLE;
+			else
+				csr |= MUSB_TXCSR_CLRDATATOG;
 
 			musb_writew(epio, MUSB_TXCSR, csr);
 			/* REVISIT may need to clear FLUSHFIFO ... */
@@ -809,19 +791,17 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 		/* protocol/endpoint/interval/NAKlimit */
 		if (epnum) {
 			musb_writeb(epio, MUSB_TXTYPE, qh->type_reg);
-			if (musb->double_buffer_not_ok) {
+			if (musb->double_buffer_not_ok)
 				musb_writew(epio, MUSB_TXMAXP,
 						hw_ep->max_packet_sz_tx);
-			} else if (can_bulk_split(musb, qh->type)) {
-				qh->hb_mult = hw_ep->max_packet_sz_tx
-						/ packet_sz;
+			else if (can_bulk_split(musb, qh->type))
 				musb_writew(epio, MUSB_TXMAXP, packet_sz
-					| ((qh->hb_mult) - 1) << 11);
-			} else {
+					| ((hw_ep->max_packet_sz_tx /
+						packet_sz) - 1) << 11);
+			else
 				musb_writew(epio, MUSB_TXMAXP,
 						qh->maxpacket |
 						((qh->hb_mult - 1) << 11));
-			}
 			musb_writeb(epio, MUSB_TXINTERVAL, qh->intv_reg);
 		} else {
 			musb_writeb(epio, MUSB_NAKLIMIT0, qh->intv_reg);

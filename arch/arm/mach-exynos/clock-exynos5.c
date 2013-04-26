@@ -24,6 +24,7 @@
 
 #include <mach/map.h>
 #include <mach/regs-clock.h>
+#include <mach/sysmmu.h>
 
 #include "common.h"
 
@@ -79,8 +80,6 @@ static struct sleep_save exynos5_clock_save[] = {
 	SAVE_ITEM(EXYNOS5_VPLL_CON0),
 	SAVE_ITEM(EXYNOS5_VPLL_CON1),
 	SAVE_ITEM(EXYNOS5_VPLL_CON2),
-	SAVE_ITEM(EXYNOS5_PWR_CTRL1),
-	SAVE_ITEM(EXYNOS5_PWR_CTRL2),
 };
 #endif
 
@@ -197,11 +196,6 @@ static int exynos5_clk_ip_isp1_ctrl(struct clk *clk, int enable)
 	return s5p_gatectrl(EXYNOS5_CLKGATE_IP_ISP1, clk, enable);
 }
 
-static int exynos5_clk_hdmiphy_ctrl(struct clk *clk, int enable)
-{
-	return s5p_gatectrl(S5P_HDMI_PHY_CONTROL, clk, enable);
-}
-
 /* Core list of CMU_CPU side */
 
 static struct clksrc_clk exynos5_clk_mout_apll = {
@@ -298,7 +292,7 @@ static struct clksrc_sources exynos5_clk_src_mpll = {
 	.nr_sources	= ARRAY_SIZE(exynos5_clk_src_mpll_list),
 };
 
-static struct clksrc_clk exynos5_clk_mout_mpll = {
+struct clksrc_clk exynos5_clk_mout_mpll = {
 	.clk = {
 		.name		= "mout_mpll",
 	},
@@ -473,12 +467,12 @@ static struct clksrc_clk exynos5_clk_pclk_acp = {
 
 /* Core list of CMU_TOP side */
 
-static struct clk *exynos5_clkset_aclk_top_list[] = {
+struct clk *exynos5_clkset_aclk_top_list[] = {
 	[0] = &exynos5_clk_mout_mpll_user.clk,
 	[1] = &exynos5_clk_mout_bpll_user.clk,
 };
 
-static struct clksrc_sources exynos5_clkset_aclk = {
+struct clksrc_sources exynos5_clkset_aclk = {
 	.sources	= exynos5_clkset_aclk_top_list,
 	.nr_sources	= ARRAY_SIZE(exynos5_clkset_aclk_top_list),
 };
@@ -492,12 +486,12 @@ static struct clksrc_clk exynos5_clk_aclk_400 = {
 	.reg_div = { .reg = EXYNOS5_CLKDIV_TOP0, .shift = 24, .size = 3 },
 };
 
-static struct clk *exynos5_clkset_aclk_333_166_list[] = {
+struct clk *exynos5_clkset_aclk_333_166_list[] = {
 	[0] = &exynos5_clk_mout_cpll.clk,
 	[1] = &exynos5_clk_mout_mpll_user.clk,
 };
 
-static struct clksrc_sources exynos5_clkset_aclk_333_166 = {
+struct clksrc_sources exynos5_clkset_aclk_333_166 = {
 	.sources	= exynos5_clkset_aclk_333_166_list,
 	.nr_sources	= ARRAY_SIZE(exynos5_clkset_aclk_333_166_list),
 };
@@ -622,11 +616,6 @@ static struct clk exynos5_init_clocks_off[] = {
 		.enable		= exynos5_clk_ip_peric_ctrl,
 		.ctrlbit	= (1 << 24),
 	}, {
-		.name		= "tmu_apbif",
-		.parent		= &exynos5_clk_aclk_66.clk,
-		.enable		= exynos5_clk_ip_peris_ctrl,
-		.ctrlbit	= (1 << 21),
-	}, {
 		.name		= "rtc",
 		.parent		= &exynos5_clk_aclk_66.clk,
 		.enable		= exynos5_clk_ip_peris_ctrl,
@@ -662,47 +651,32 @@ static struct clk exynos5_init_clocks_off[] = {
 		.ctrlbit	= (1 << 15),
 	}, {
 		.name		= "sata",
-		.devname	= "exynos5-sata",
-		.parent         = &exynos5_clk_aclk_200.clk,
+		.devname	= "ahci",
 		.enable		= exynos5_clk_ip_fsys_ctrl,
 		.ctrlbit	= (1 << 6),
 	}, {
-		.name		= "sata-phy",
-		.devname	= "exynos5-sata-phy",
-		.parent         = &exynos5_clk_aclk_200.clk,
+		.name		= "sata_phy",
 		.enable		= exynos5_clk_ip_fsys_ctrl,
 		.ctrlbit	= (1 << 24),
 	}, {
-		.name		= "i2c",
-		.devname	= "exynos5-sata-phy-i2c",
-		.parent         = &exynos5_clk_aclk_200.clk,
+		.name		= "sata_phy_i2c",
 		.enable		= exynos5_clk_ip_fsys_ctrl,
 		.ctrlbit	= (1 << 25),
 	}, {
 		.name		= "mfc",
-		.devname	= "s5p-mfc-v6",
+		.devname	= "s5p-mfc",
 		.enable		= exynos5_clk_ip_mfc_ctrl,
 		.ctrlbit	= (1 << 0),
 	}, {
 		.name		= "hdmi",
-		.devname	= "exynos5-hdmi",
+		.devname	= "exynos4-hdmi",
 		.enable		= exynos5_clk_ip_disp1_ctrl,
 		.ctrlbit	= (1 << 6),
 	}, {
-		.name		= "hdmiphy",
-		.devname	= "exynos5-hdmi",
-		.enable		= exynos5_clk_hdmiphy_ctrl,
-		.ctrlbit	= (1 << 0),
-	}, {
 		.name		= "mixer",
-		.devname	= "exynos5-mixer",
+		.devname	= "s5p-mixer",
 		.enable		= exynos5_clk_ip_disp1_ctrl,
 		.ctrlbit	= (1 << 5),
-	}, {
-		.name		= "dp",
-		.devname	= "exynos-dp",
-		.enable		= exynos5_clk_ip_disp1_ctrl,
-		.ctrlbit	= (1 << 4),
 	}, {
 		.name		= "jpeg",
 		.enable		= exynos5_clk_ip_gen_ctrl,
@@ -858,78 +832,73 @@ static struct clk exynos5_init_clocks_off[] = {
 		.enable		= exynos5_clk_ip_gscl_ctrl,
 		.ctrlbit	= (1 << 3),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.1",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(mfc_l, 0),
 		.enable		= &exynos5_clk_ip_mfc_ctrl,
 		.ctrlbit	= (1 << 1),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.0",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(mfc_r, 1),
 		.enable		= &exynos5_clk_ip_mfc_ctrl,
 		.ctrlbit	= (1 << 2),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.2",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(tv, 2),
 		.enable		= &exynos5_clk_ip_disp1_ctrl,
 		.ctrlbit	= (1 << 9)
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.3",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(jpeg, 3),
 		.enable		= &exynos5_clk_ip_gen_ctrl,
 		.ctrlbit	= (1 << 7),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.4",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(rot, 4),
 		.enable		= &exynos5_clk_ip_gen_ctrl,
 		.ctrlbit	= (1 << 6)
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.5",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(gsc0, 5),
 		.enable		= &exynos5_clk_ip_gscl_ctrl,
 		.ctrlbit	= (1 << 7),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.6",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(gsc1, 6),
 		.enable		= &exynos5_clk_ip_gscl_ctrl,
 		.ctrlbit	= (1 << 8),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.7",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(gsc2, 7),
 		.enable		= &exynos5_clk_ip_gscl_ctrl,
 		.ctrlbit	= (1 << 9),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.8",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(gsc3, 8),
 		.enable		= &exynos5_clk_ip_gscl_ctrl,
 		.ctrlbit	= (1 << 10),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.9",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(isp, 9),
 		.enable		= &exynos5_clk_ip_isp0_ctrl,
 		.ctrlbit	= (0x3F << 8),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.10",
+		.name		= SYSMMU_CLOCK_NAME2,
+		.devname	= SYSMMU_CLOCK_DEVNAME(isp, 9),
 		.enable		= &exynos5_clk_ip_isp1_ctrl,
 		.ctrlbit	= (0xF << 4),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.11",
-		.enable		= &exynos5_clk_ip_disp1_ctrl,
-		.ctrlbit	= (1 << 8)
-	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.12",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(camif0, 12),
 		.enable		= &exynos5_clk_ip_gscl_ctrl,
 		.ctrlbit	= (1 << 11),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.13",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(camif1, 13),
 		.enable		= &exynos5_clk_ip_gscl_ctrl,
 		.ctrlbit	= (1 << 12),
 	}, {
-		.name		= "sysmmu",
-		.devname	= "exynos-sysmmu.14",
+		.name		= SYSMMU_CLOCK_NAME,
+		.devname	= SYSMMU_CLOCK_DEVNAME(2d, 14),
 		.enable		= &exynos5_clk_ip_acp_ctrl,
 		.ctrlbit	= (1 << 7)
 	}
@@ -997,7 +966,7 @@ static struct clk exynos5_clk_fimd1 = {
 	.ctrlbit	= (1 << 0),
 };
 
-static struct clk *exynos5_clkset_group_list[] = {
+struct clk *exynos5_clkset_group_list[] = {
 	[0] = &clk_ext_xtal_mux,
 	[1] = NULL,
 	[2] = &exynos5_clk_sclk_hdmi24m,
@@ -1010,7 +979,7 @@ static struct clk *exynos5_clkset_group_list[] = {
 	[9] = &exynos5_clk_mout_cpll.clk,
 };
 
-static struct clksrc_sources exynos5_clkset_group = {
+struct clksrc_sources exynos5_clkset_group = {
 	.sources	= exynos5_clkset_group_list,
 	.nr_sources	= ARRAY_SIZE(exynos5_clkset_group_list),
 };
@@ -1226,7 +1195,7 @@ static struct clksrc_clk exynos5_clk_sclk_spi2 = {
 	.reg_div = { .reg = EXYNOS5_CLKDIV_PERIC2, .shift = 8, .size = 8 },
 };
 
-static struct clksrc_clk exynos5_clk_sclk_fimd1 = {
+struct clksrc_clk exynos5_clk_sclk_fimd1 = {
 	.clk	= {
 		.name		= "sclk_fimd",
 		.devname	= "exynos5-fb.1",
@@ -1255,16 +1224,6 @@ static struct clksrc_clk exynos5_clksrcs[] = {
 		.sources = &exynos5_clkset_aclk,
 		.reg_src = { .reg = EXYNOS5_CLKSRC_TOP0, .shift = 20, .size = 1 },
 		.reg_div = { .reg = EXYNOS5_CLKDIV_TOP0, .shift = 24, .size = 3 },
-	}, {
-		.clk	= {
-			.name		= "sclk_sata",
-			.devname	= "exynos5-sata",
-			.enable		= exynos5_clksrc_mask_fsys_ctrl,
-			.ctrlbit	= (1 << 24),
-		},
-		.sources = &exynos5_clkset_aclk,
-		.reg_src = { .reg = EXYNOS5_CLKSRC_FSYS, .shift = 24, .size = 1 },
-		.reg_div = { .reg = EXYNOS5_CLKDIV_FSYS0, .shift = 20, .size = 4 },
 	}, {
 		.clk	= {
 			.name		= "sclk_gscl_wrap",
@@ -1517,7 +1476,7 @@ static void exynos5_clock_resume(void)
 #define exynos5_clock_resume NULL
 #endif
 
-static struct syscore_ops exynos5_clock_syscore_ops = {
+struct syscore_ops exynos5_clock_syscore_ops = {
 	.suspend	= exynos5_clock_suspend,
 	.resume		= exynos5_clock_resume,
 };

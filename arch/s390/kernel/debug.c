@@ -611,7 +611,7 @@ debug_open(struct inode *inode, struct file *file)
 	debug_info_t *debug_info, *debug_info_snapshot;
 
 	mutex_lock(&debug_mutex);
-	debug_info = file_inode(file)->i_private;
+	debug_info = file->f_path.dentry->d_inode->i_private;
 	/* find debug view */
 	for (i = 0; i < DEBUG_MAX_VIEWS; i++) {
 		if (!debug_info->views[i])
@@ -867,7 +867,7 @@ static inline void
 debug_finish_entry(debug_info_t * id, debug_entry_t* active, int level,
 			int exception)
 {
-	active->id.stck = get_tod_clock();
+	active->id.stck = get_clock();
 	active->id.fields.cpuid = smp_processor_id();
 	active->caller = __builtin_return_address(0);
 	active->id.fields.exception = exception;
@@ -1127,14 +1127,13 @@ debug_register_view(debug_info_t * id, struct debug_view *view)
 	if (i == DEBUG_MAX_VIEWS) {
 		pr_err("Registering view %s/%s would exceed the maximum "
 		       "number of views %i\n", id->name, view->name, i);
+		debugfs_remove(pde);
 		rc = -1;
 	} else {
 		id->views[i] = view;
 		id->debugfs_entries[i] = pde;
 	}
 	spin_unlock_irqrestore(&id->lock, flags);
-	if (rc)
-		debugfs_remove(pde);
 out:
 	return rc;
 }
@@ -1147,9 +1146,9 @@ EXPORT_SYMBOL(debug_register_view);
 int
 debug_unregister_view(debug_info_t * id, struct debug_view *view)
 {
-	struct dentry *dentry = NULL;
+	int rc = 0;
+	int i;
 	unsigned long flags;
-	int i, rc = 0;
 
 	if (!id)
 		goto out;
@@ -1161,12 +1160,10 @@ debug_unregister_view(debug_info_t * id, struct debug_view *view)
 	if (i == DEBUG_MAX_VIEWS)
 		rc = -1;
 	else {
-		dentry = id->debugfs_entries[i];
+		debugfs_remove(id->debugfs_entries[i]);
 		id->views[i] = NULL;
-		id->debugfs_entries[i] = NULL;
 	}
 	spin_unlock_irqrestore(&id->lock, flags);
-	debugfs_remove(dentry);
 out:
 	return rc;
 }

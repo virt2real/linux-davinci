@@ -25,18 +25,13 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/mtd/gpmi-nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_mtd.h>
 #include "gpmi-nand.h"
-
-/* Resource names for the GPMI NAND driver. */
-#define GPMI_NAND_GPMI_REGS_ADDR_RES_NAME  "gpmi-nand"
-#define GPMI_NAND_BCH_REGS_ADDR_RES_NAME   "bch"
-#define GPMI_NAND_BCH_INTERRUPT_RES_NAME   "bch"
-#define GPMI_NAND_DMA_INTERRUPT_RES_NAME   "gpmi-dma"
 
 /* add our owner bbt descriptor */
 static uint8_t scan_ff_pattern[] = { 0xff };
@@ -94,25 +89,6 @@ static inline int get_ecc_strength(struct gpmi_nand_data *this)
 	return round_down(ecc_strength, 2);
 }
 
-static inline bool gpmi_check_ecc(struct gpmi_nand_data *this)
-{
-	struct bch_geometry *geo = &this->bch_geometry;
-
-	/* Do the sanity check. */
-	if (GPMI_IS_MX23(this) || GPMI_IS_MX28(this)) {
-		/* The mx23/mx28 only support the GF13. */
-		if (geo->gf_len == 14)
-			return false;
-
-		if (geo->ecc_strength > MXS_ECC_STRENGTH_MAX)
-			return false;
-	} else if (GPMI_IS_MX6Q(this)) {
-		if (geo->ecc_strength > MX6_ECC_STRENGTH_MAX)
-			return false;
-	}
-	return true;
-}
-
 int common_nfc_set_geometry(struct gpmi_nand_data *this)
 {
 	struct bch_geometry *geo = &this->bch_geometry;
@@ -131,24 +107,17 @@ int common_nfc_set_geometry(struct gpmi_nand_data *this)
 	/* The default for the length of Galois Field. */
 	geo->gf_len = 13;
 
-	/* The default for chunk size. */
+	/* The default for chunk size. There is no oobsize greater then 512. */
 	geo->ecc_chunk_size = 512;
-	while (geo->ecc_chunk_size < mtd->oobsize) {
+	while (geo->ecc_chunk_size < mtd->oobsize)
 		geo->ecc_chunk_size *= 2; /* keep C >= O */
-		geo->gf_len = 14;
-	}
 
 	geo->ecc_chunk_count = mtd->writesize / geo->ecc_chunk_size;
 
 	/* We use the same ECC strength for all chunks. */
 	geo->ecc_strength = get_ecc_strength(this);
-	if (!gpmi_check_ecc(this)) {
-		dev_err(this->dev,
-			"We can not support this nand chip."
-			" Its required ecc strength(%d) is beyond our"
-			" capability(%d).\n", geo->ecc_strength,
-			(GPMI_IS_MX6Q(this) ? MX6_ECC_STRENGTH_MAX
-					: MXS_ECC_STRENGTH_MAX));
+	if (!geo->ecc_strength) {
+		pr_err("wrong ECC strength.\n");
 		return -EINVAL;
 	}
 
@@ -253,7 +222,7 @@ void prepare_data_dma(struct gpmi_nand_data *this, enum dma_data_direction dr)
 
 		ret = dma_map_sg(this->dev, sgl, 1, dr);
 		if (ret == 0)
-			pr_err("DMA mapping failed.\n");
+			pr_err("map failed.\n");
 
 		this->direct_dma_map_ok = false;
 	}
@@ -345,8 +314,8 @@ int start_dma_with_bch_irq(struct gpmi_nand_data *this,
 	return 0;
 }
 
-static int acquire_register_block(struct gpmi_nand_data *this,
-				  const char *res_name)
+static int __devinit
+acquire_register_block(struct gpmi_nand_data *this, const char *res_name)
 {
 	struct platform_device *pdev = this->pdev;
 	struct resources *res = &this->resources;
@@ -386,7 +355,8 @@ static void release_register_block(struct gpmi_nand_data *this)
 	res->bch_regs = NULL;
 }
 
-static int acquire_bch_irq(struct gpmi_nand_data *this, irq_handler_t irq_h)
+static int __devinit
+acquire_bch_irq(struct gpmi_nand_data *this, irq_handler_t irq_h)
 {
 	struct platform_device *pdev = this->pdev;
 	struct resources *res = &this->resources;
@@ -452,7 +422,7 @@ static void release_dma_channels(struct gpmi_nand_data *this)
 		}
 }
 
-static int acquire_dma_channels(struct gpmi_nand_data *this)
+static int __devinit acquire_dma_channels(struct gpmi_nand_data *this)
 {
 	struct platform_device *pdev = this->pdev;
 	struct resource *r_dma;
@@ -486,7 +456,7 @@ static int acquire_dma_channels(struct gpmi_nand_data *this)
 
 	dma_chan = dma_request_channel(mask, gpmi_dma_filter, this);
 	if (!dma_chan) {
-		pr_err("Failed to request DMA channel.\n");
+		pr_err("dma_request_channel failed.\n");
 		goto acquire_err;
 	}
 
@@ -517,7 +487,7 @@ static char *extra_clks_for_mx6q[GPMI_CLK_MAX] = {
 	"gpmi_apb", "gpmi_bch", "gpmi_bch_apb", "per1_bch",
 };
 
-static int gpmi_get_clks(struct gpmi_nand_data *this)
+static int __devinit gpmi_get_clks(struct gpmi_nand_data *this)
 {
 	struct resources *r = &this->resources;
 	char **extra_clks = NULL;
@@ -563,7 +533,7 @@ err_clock:
 	return -ENOMEM;
 }
 
-static int acquire_resources(struct gpmi_nand_data *this)
+static int __devinit acquire_resources(struct gpmi_nand_data *this)
 {
 	struct pinctrl *pinctrl;
 	int ret;
@@ -613,7 +583,7 @@ static void release_resources(struct gpmi_nand_data *this)
 	release_dma_channels(this);
 }
 
-static int init_hardware(struct gpmi_nand_data *this)
+static int __devinit init_hardware(struct gpmi_nand_data *this)
 {
 	int ret;
 
@@ -655,8 +625,7 @@ static int read_page_prepare(struct gpmi_nand_data *this,
 						length, DMA_FROM_DEVICE);
 		if (dma_mapping_error(dev, dest_phys)) {
 			if (alt_size < length) {
-				pr_err("%s, Alternate buffer is too small\n",
-					__func__);
+				pr_err("Alternate buffer is too small\n");
 				return -ENOMEM;
 			}
 			goto map_failed;
@@ -706,8 +675,7 @@ static int send_page_prepare(struct gpmi_nand_data *this,
 						DMA_TO_DEVICE);
 		if (dma_mapping_error(dev, source_phys)) {
 			if (alt_size < length) {
-				pr_err("%s, Alternate buffer is too small\n",
-					__func__);
+				pr_err("Alternate buffer is too small\n");
 				return -ENOMEM;
 			}
 			goto map_failed;
@@ -795,7 +763,7 @@ static int gpmi_alloc_dma_buffer(struct gpmi_nand_data *this)
 
 error_alloc:
 	gpmi_free_dma_buffer(this);
-	pr_err("Error allocating DMA buffers!\n");
+	pr_err("allocate DMA buffer ret!!\n");
 	return -ENOMEM;
 }
 
@@ -946,7 +914,8 @@ static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 	dma_addr_t    auxiliary_phys;
 	unsigned int  i;
 	unsigned char *status;
-	unsigned int  max_bitflips = 0;
+	unsigned int  failed;
+	unsigned int  corrected;
 	int           ret;
 
 	pr_debug("page number is : %d\n", page);
@@ -970,25 +939,35 @@ static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 			payload_virt, payload_phys);
 	if (ret) {
 		pr_err("Error in ECC-based read: %d\n", ret);
-		return ret;
+		goto exit_nfc;
 	}
 
 	/* handle the block mark swapping */
 	block_mark_swapping(this, payload_virt, auxiliary_virt);
 
 	/* Loop over status bytes, accumulating ECC status. */
-	status = auxiliary_virt + nfc_geo->auxiliary_status_offset;
+	failed		= 0;
+	corrected	= 0;
+	status		= auxiliary_virt + nfc_geo->auxiliary_status_offset;
 
 	for (i = 0; i < nfc_geo->ecc_chunk_count; i++, status++) {
 		if ((*status == STATUS_GOOD) || (*status == STATUS_ERASED))
 			continue;
 
 		if (*status == STATUS_UNCORRECTABLE) {
-			mtd->ecc_stats.failed++;
+			failed++;
 			continue;
 		}
-		mtd->ecc_stats.corrected += *status;
-		max_bitflips = max_t(unsigned int, max_bitflips, *status);
+		corrected += *status;
+	}
+
+	/*
+	 * Propagate ECC status to the owning MTD only when failed or
+	 * corrected times nearly reaches our ECC correction threshold.
+	 */
+	if (failed || corrected >= (nfc_geo->ecc_strength - 1)) {
+		mtd->ecc_stats.failed    += failed;
+		mtd->ecc_stats.corrected += corrected;
 	}
 
 	if (oob_required) {
@@ -1010,8 +989,8 @@ static int gpmi_ecc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 			this->payload_virt, this->payload_phys,
 			nfc_geo->payload_size,
 			payload_virt, payload_phys);
-
-	return max_bitflips;
+exit_nfc:
+	return ret;
 }
 
 static int gpmi_ecc_write_page(struct mtd_info *mtd, struct nand_chip *chip,
@@ -1495,7 +1474,7 @@ static int gpmi_set_geometry(struct gpmi_nand_data *this)
 	/* Set up the NFC geometry which is used by BCH. */
 	ret = bch_set_geometry(this);
 	if (ret) {
-		pr_err("Error setting BCH geometry : %d\n", ret);
+		pr_err("set geometry ret : %d\n", ret);
 		return ret;
 	}
 
@@ -1556,7 +1535,7 @@ static void gpmi_nfc_exit(struct gpmi_nand_data *this)
 	gpmi_free_dma_buffer(this);
 }
 
-static int gpmi_nfc_init(struct gpmi_nand_data *this)
+static int __devinit gpmi_nfc_init(struct gpmi_nand_data *this)
 {
 	struct mtd_info  *mtd = &this->mtd;
 	struct nand_chip *chip = &this->nand;
@@ -1639,7 +1618,7 @@ static const struct of_device_id gpmi_nand_id_table[] = {
 };
 MODULE_DEVICE_TABLE(of, gpmi_nand_id_table);
 
-static int gpmi_nand_probe(struct platform_device *pdev)
+static int __devinit gpmi_nand_probe(struct platform_device *pdev)
 {
 	struct gpmi_nand_data *this;
 	const struct of_device_id *of_id;
@@ -1683,13 +1662,13 @@ exit_nfc_init:
 	release_resources(this);
 exit_acquire_resources:
 	platform_set_drvdata(pdev, NULL);
-	dev_err(this->dev, "driver registration failed: %d\n", ret);
 	kfree(this);
+	dev_err(this->dev, "driver registration failed: %d\n", ret);
 
 	return ret;
 }
 
-static int gpmi_nand_remove(struct platform_device *pdev)
+static int __devexit gpmi_nand_remove(struct platform_device *pdev)
 {
 	struct gpmi_nand_data *this = platform_get_drvdata(pdev);
 
@@ -1706,7 +1685,7 @@ static struct platform_driver gpmi_nand_driver = {
 		.of_match_table = gpmi_nand_id_table,
 	},
 	.probe   = gpmi_nand_probe,
-	.remove  = gpmi_nand_remove,
+	.remove  = __devexit_p(gpmi_nand_remove),
 	.id_table = gpmi_ids,
 };
 module_platform_driver(gpmi_nand_driver);

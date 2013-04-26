@@ -84,7 +84,7 @@ struct hv_netvsc_packet {
 };
 
 struct netvsc_device_info {
-	unsigned char mac_adr[ETH_ALEN];
+	unsigned char mac_adr[6];
 	bool link_state;	/* 0 - link up, 1 - link down */
 	int  ring_size;
 };

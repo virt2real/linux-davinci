@@ -10,31 +10,6 @@ LD	 = ld
 AWK	 = awk -f
 AR	 = ar
 RANLIB	 = ranlib
-OBJS	 = int1.o int2.o int4.o int8.o int16.o int32.o recov.o algos.o tables.o
-
-ARCH := $(shell uname -m 2>/dev/null | sed -e /s/i.86/i386/)
-ifeq ($(ARCH),i386)
-        CFLAGS += -DCONFIG_X86_32
-        IS_X86 = yes
-endif
-ifeq ($(ARCH),x86_64)
-        CFLAGS += -DCONFIG_X86_64
-        IS_X86 = yes
-endif
-
-ifeq ($(IS_X86),yes)
-        OBJS   += mmx.o sse1.o sse2.o avx2.o recov_ssse3.o recov_avx2.o
-        CFLAGS += $(shell echo "vpbroadcastb %xmm0, %ymm1" |	\
-                    gcc -c -x assembler - >&/dev/null &&	\
-                    rm ./-.o && echo -DCONFIG_AS_AVX2=1)
-else
-        HAS_ALTIVEC := $(shell echo -e '\#include <altivec.h>\nvector int a;' |\
-                         gcc -c -x c - >&/dev/null && \
-                         rm ./-.o && echo yes)
-        ifeq ($(HAS_ALTIVEC),yes)
-                OBJS += altivec1.o altivec2.o altivec4.o altivec8.o
-        endif
-endif
 
 .c.o:
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -47,7 +22,9 @@ endif
 
 all:	raid6.a raid6test
 
-raid6.a: $(OBJS)
+raid6.a: int1.o int2.o int4.o int8.o int16.o int32.o mmx.o sse1.o sse2.o \
+	 altivec1.o altivec2.o altivec4.o altivec8.o recov.o recov_ssse3.o algos.o \
+	 tables.o
 	 rm -f $@
 	 $(AR) cq $@ $^
 	 $(RANLIB) $@

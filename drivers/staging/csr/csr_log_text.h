@@ -12,6 +12,10 @@
 
 #include "csr_log_configure.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct CsrLogSubOrigin
 {
     u16            subOriginNumber;  /* Id of the given SubOrigin */
@@ -119,6 +123,10 @@ void CsrLogTextBufferDebug(CsrLogTextTaskId taskId, u16 subOrigin, size_t buffer
     CSR_LOG_TEXT_CRITICAL((origin, suborigin, "Unhandled primitive 0x%04X:0x%04X at %s:%u", primClass, primType, __FILE__, __LINE__))
 #else
 #define CSR_LOG_TEXT_UNHANDLED_PRIMITIVE(origin, suborigin, primClass, primType)
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

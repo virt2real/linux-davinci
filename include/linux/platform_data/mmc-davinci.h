@@ -23,6 +23,9 @@ struct davinci_mmc_config {
 	/* any additional host capabilities: OR'd in to mmc->f_caps */
 	u32     caps;
 
+	/* Version of the MMC/SD controller */
+	u8	version;
+
 	/* Number of sg segments */
 	u8	nr_sg;
 };

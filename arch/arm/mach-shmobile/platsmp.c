@@ -12,6 +12,7 @@
  */
 #include <linux/init.h>
 #include <linux/smp.h>
+#include <asm/hardware/gic.h>
 
 void __init shmobile_smp_init_cpus(unsigned int ncores)
 {
@@ -25,4 +26,6 @@ void __init shmobile_smp_init_cpus(unsigned int ncores)
 
 	for (i = 0; i < ncores; i++)
 		set_cpu_possible(i, true);
+
+	set_smp_cross_call(gic_raise_softirq);
 }

@@ -13,7 +13,6 @@ struct nvbios_init {
 	u32 nested;
 	u16 repeat;
 	u16 repend;
-	u32 ramcfg;
 };
 
 int nvbios_exec(struct nvbios_init *);

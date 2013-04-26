@@ -40,20 +40,13 @@ You should also find the complete GPL in the COPYING file accompanying this sour
   +-----------------------------------------------------------------------+
 */
 
-#define APCI1710_30MHZ			30
-#define APCI1710_33MHZ			33
-#define APCI1710_40MHZ			40
+/*
++----------------------------------------------------------------------------+
+|                               Included files                               |
++----------------------------------------------------------------------------+
+*/
 
-#define APCI1710_BINARY_MODE		0x1
-#define APCI1710_GRAY_MODE		0x0
-
-#define APCI1710_SSI_READ1VALUE		1
-#define APCI1710_SSI_READALLVALUE	2
-
-#define APCI1710_SSI_SET_CHANNELON	0
-#define APCI1710_SSI_SET_CHANNELOFF	1
-#define APCI1710_SSI_READ_1CHANNEL	2
-#define APCI1710_SSI_READ_ALLCHANNEL	3
+#include "APCI1710_Ssi.h"
 
 /*
 +----------------------------------------------------------------------------+
@@ -126,12 +119,9 @@ You should also find the complete GPL in the COPYING file accompanying this sour
 +----------------------------------------------------------------------------+
 */
 
-static int i_APCI1710_InsnConfigInitSSI(struct comedi_device *dev,
-					struct comedi_subdevice *s,
-					struct comedi_insn *insn,
-					unsigned int *data)
+int i_APCI1710_InsnConfigInitSSI(struct comedi_device *dev, struct comedi_subdevice *s,
+	struct comedi_insn *insn, unsigned int *data)
 {
-	struct addi_private *devpriv = dev->private;
 	int i_ReturnValue = 0;
 	unsigned int ui_TimerValue;
 	unsigned char b_ModulNbr, b_SSIProfile, b_PositionTurnLength, b_TurnCptLength,
@@ -396,12 +386,9 @@ pul_Position	=	(unsigned int *) &data[0];
 +----------------------------------------------------------------------------+
 */
 
-static int i_APCI1710_InsnReadSSIValue(struct comedi_device *dev,
-				       struct comedi_subdevice *s,
-				       struct comedi_insn *insn,
-				       unsigned int *data)
+int i_APCI1710_InsnReadSSIValue(struct comedi_device *dev, struct comedi_subdevice *s,
+	struct comedi_insn *insn, unsigned int *data)
 {
-	struct addi_private *devpriv = dev->private;
 	int i_ReturnValue = 0;
 	unsigned char b_Cpt;
 	unsigned char b_Length;
@@ -732,12 +719,9 @@ static int i_APCI1710_InsnReadSSIValue(struct comedi_device *dev,
 +----------------------------------------------------------------------------+
 */
 
-static int i_APCI1710_InsnBitsSSIDigitalIO(struct comedi_device *dev,
-					   struct comedi_subdevice *s,
-					   struct comedi_insn *insn,
-					   unsigned int *data)
+int i_APCI1710_InsnBitsSSIDigitalIO(struct comedi_device *dev, struct comedi_subdevice *s,
+	struct comedi_insn *insn, unsigned int *data)
 {
-	struct addi_private *devpriv = dev->private;
 	int i_ReturnValue = 0;
 	unsigned int dw_StatusReg;
 	unsigned char b_ModulNbr;
@@ -745,7 +729,6 @@ static int i_APCI1710_InsnBitsSSIDigitalIO(struct comedi_device *dev,
 	unsigned char *pb_ChannelStatus;
 	unsigned char *pb_InputStatus;
 	unsigned char b_IOType;
-
 	i_ReturnValue = insn->n;
 	b_ModulNbr = (unsigned char) CR_AREF(insn->chanspec);
 	b_IOType = (unsigned char) data[0];

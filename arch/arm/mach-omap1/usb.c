@@ -301,7 +301,7 @@ static inline void otg_device_init(struct omap_usb_config *pdata)
 
 #endif
 
-static u32 __init omap1_usb0_init(unsigned nwires, unsigned is_device)
+u32 __init omap1_usb0_init(unsigned nwires, unsigned is_device)
 {
 	u32	syscon1 = 0;
 
@@ -409,7 +409,7 @@ static u32 __init omap1_usb0_init(unsigned nwires, unsigned is_device)
 	return syscon1 << 16;
 }
 
-static u32 __init omap1_usb1_init(unsigned nwires)
+u32 __init omap1_usb1_init(unsigned nwires)
 {
 	u32	syscon1 = 0;
 
@@ -475,7 +475,7 @@ bad:
 	return syscon1 << 20;
 }
 
-static u32 __init omap1_usb2_init(unsigned nwires, unsigned alt_pingroup)
+u32 __init omap1_usb2_init(unsigned nwires, unsigned alt_pingroup)
 {
 	u32	syscon1 = 0;
 
@@ -629,14 +629,8 @@ static void __init omap_1510_usb_init(struct omap_usb_config *config)
 static inline void omap_1510_usb_init(struct omap_usb_config *config) {}
 #endif
 
-void __init omap1_usb_init(struct omap_usb_config *_pdata)
+void __init omap1_usb_init(struct omap_usb_config *pdata)
 {
-	struct omap_usb_config *pdata;
-
-	pdata = kmemdup(_pdata, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata)
-		return;
-
 	pdata->usb0_init = omap1_usb0_init;
 	pdata->usb1_init = omap1_usb1_init;
 	pdata->usb2_init = omap1_usb2_init;

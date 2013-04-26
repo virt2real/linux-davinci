@@ -214,7 +214,7 @@ struct pci_mmap_map {
 	unsigned long prot_mask;
 };
 
-static struct fb_fix_screeninfo atyfb_fix = {
+static struct fb_fix_screeninfo atyfb_fix __devinitdata = {
 	.id		= "ATY Mach64",
 	.type		= FB_TYPE_PACKED_PIXELS,
 	.visual		= FB_VISUAL_PSEUDOCOLOR,
@@ -309,18 +309,18 @@ static int vram;
 static int pll;
 static int mclk;
 static int xclk;
-static int comp_sync = -1;
+static int comp_sync __devinitdata = -1;
 static char *mode;
 
 #ifdef CONFIG_PMAC_BACKLIGHT
-static int backlight = 1;
+static int backlight __devinitdata = 1;
 #else
-static int backlight = 0;
+static int backlight __devinitdata = 0;
 #endif
 
 #ifdef CONFIG_PPC
-static int default_vmode = VMODE_CHOOSE;
-static int default_cmode = CMODE_CHOOSE;
+static int default_vmode __devinitdata = VMODE_CHOOSE;
+static int default_cmode __devinitdata = CMODE_CHOOSE;
 
 module_param_named(vmode, default_vmode, int, 0);
 MODULE_PARM_DESC(vmode, "int: video mode for mac");
@@ -329,10 +329,10 @@ MODULE_PARM_DESC(cmode, "int: color mode for mac");
 #endif
 
 #ifdef CONFIG_ATARI
-static unsigned int mach64_count = 0;
-static unsigned long phys_vmembase[FB_MAX] = { 0, };
-static unsigned long phys_size[FB_MAX] = { 0, };
-static unsigned long phys_guiregbase[FB_MAX] = { 0, };
+static unsigned int mach64_count __devinitdata = 0;
+static unsigned long phys_vmembase[FB_MAX] __devinitdata = { 0, };
+static unsigned long phys_size[FB_MAX] __devinitdata = { 0, };
+static unsigned long phys_guiregbase[FB_MAX] __devinitdata = { 0, };
 #endif
 
 /* top -> down is an evolution of mach64 chipset, any corrections? */
@@ -371,7 +371,7 @@ static struct {
 	const char *name;
 	int pll, mclk, xclk, ecp_max;
 	u32 features;
-} aty_chips[] = {
+} aty_chips[] __devinitdata = {
 #ifdef CONFIG_FB_ATY_GX
 	/* Mach64 GX */
 	{ PCI_CHIP_MACH64GX, "ATI888GX00 (Mach64 GX)", 135, 50, 50, 0, ATI_CHIP_88800GX },
@@ -426,7 +426,7 @@ static struct {
 #endif /* CONFIG_FB_ATY_CT */
 };
 
-static int correct_chipset(struct atyfb_par *par)
+static int __devinit correct_chipset(struct atyfb_par *par)
 {
 	u8 rev;
 	u16 type;
@@ -531,34 +531,34 @@ static int correct_chipset(struct atyfb_par *par)
 	return 0;
 }
 
-static char ram_dram[] = "DRAM";
-static char ram_resv[] = "RESV";
+static char ram_dram[] __devinitdata = "DRAM";
+static char ram_resv[] __devinitdata = "RESV";
 #ifdef CONFIG_FB_ATY_GX
-static char ram_vram[] = "VRAM";
+static char ram_vram[] __devinitdata = "VRAM";
 #endif /* CONFIG_FB_ATY_GX */
 #ifdef CONFIG_FB_ATY_CT
-static char ram_edo[] = "EDO";
-static char ram_sdram[] = "SDRAM (1:1)";
-static char ram_sgram[] = "SGRAM (1:1)";
-static char ram_sdram32[] = "SDRAM (2:1) (32-bit)";
-static char ram_wram[] = "WRAM";
-static char ram_off[] = "OFF";
+static char ram_edo[] __devinitdata = "EDO";
+static char ram_sdram[] __devinitdata = "SDRAM (1:1)";
+static char ram_sgram[] __devinitdata = "SGRAM (1:1)";
+static char ram_sdram32[] __devinitdata = "SDRAM (2:1) (32-bit)";
+static char ram_wram[] __devinitdata = "WRAM";
+static char ram_off[] __devinitdata = "OFF";
 #endif /* CONFIG_FB_ATY_CT */
 
 
 #ifdef CONFIG_FB_ATY_GX
-static char *aty_gx_ram[8] = {
+static char *aty_gx_ram[8] __devinitdata = {
 	ram_dram, ram_vram, ram_vram, ram_dram,
 	ram_dram, ram_vram, ram_vram, ram_resv
 };
 #endif /* CONFIG_FB_ATY_GX */
 
 #ifdef CONFIG_FB_ATY_CT
-static char *aty_ct_ram[8] = {
+static char *aty_ct_ram[8] __devinitdata = {
 	ram_off, ram_dram, ram_edo, ram_edo,
 	ram_sdram, ram_sgram, ram_wram, ram_resv
 };
-static char *aty_xl_ram[8] = {
+static char *aty_xl_ram[8] __devinitdata = {
 	ram_off, ram_dram, ram_edo, ram_edo,
 	ram_sdram, ram_sgram, ram_sdram32, ram_resv
 };
@@ -588,7 +588,7 @@ static u32 atyfb_get_pixclock(struct fb_var_screeninfo *var,
  * Apple monitor sense
  */
 
-static int read_aty_sense(const struct atyfb_par *par)
+static int __devinit read_aty_sense(const struct atyfb_par *par)
 {
 	int sense, i;
 
@@ -2273,7 +2273,7 @@ static void aty_bl_exit(struct backlight_device *bd)
 
 #endif /* CONFIG_FB_ATY_BACKLIGHT */
 
-static void aty_calc_mem_refresh(struct atyfb_par *par, int xclk)
+static void __devinit aty_calc_mem_refresh(struct atyfb_par *par, int xclk)
 {
 	const int ragepro_tbl[] = {
 		44, 50, 55, 66, 75, 80, 100
@@ -2307,8 +2307,8 @@ static void aty_calc_mem_refresh(struct atyfb_par *par, int xclk)
 static struct fb_info *fb_list = NULL;
 
 #if defined(__i386__) && defined(CONFIG_FB_ATY_GENERIC_LCD)
-static int atyfb_get_timings_from_lcd(struct atyfb_par *par,
-				      struct fb_var_screeninfo *var)
+static int __devinit atyfb_get_timings_from_lcd(struct atyfb_par *par,
+						struct fb_var_screeninfo *var)
 {
 	int ret = -EINVAL;
 
@@ -2333,7 +2333,7 @@ static int atyfb_get_timings_from_lcd(struct atyfb_par *par,
 }
 #endif /* defined(__i386__) && defined(CONFIG_FB_ATY_GENERIC_LCD) */
 
-static int aty_init(struct fb_info *info)
+static int __devinit aty_init(struct fb_info *info)
 {
 	struct atyfb_par *par = (struct atyfb_par *) info->par;
 	const char *ramname = NULL, *xtal;
@@ -2787,7 +2787,7 @@ aty_init_exit:
 }
 
 #if defined(CONFIG_ATARI) && !defined(MODULE)
-static int store_video_par(char *video_str, unsigned char m64_num)
+static int __devinit store_video_par(char *video_str, unsigned char m64_num)
 {
 	char *p;
 	unsigned long vmembase, size, guiregbase;
@@ -2961,8 +2961,9 @@ static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
 #ifdef __sparc__
 
-static int atyfb_setup_sparc(struct pci_dev *pdev, struct fb_info *info,
-			     unsigned long addr)
+static int __devinit atyfb_setup_sparc(struct pci_dev *pdev,
+				       struct fb_info *info,
+				       unsigned long addr)
 {
 	struct atyfb_par *par = info->par;
 	struct device_node *dp;
@@ -3160,7 +3161,7 @@ static int atyfb_setup_sparc(struct pci_dev *pdev, struct fb_info *info,
 
 #ifdef __i386__
 #ifdef CONFIG_FB_ATY_GENERIC_LCD
-static void aty_init_lcd(struct atyfb_par *par, u32 bios_base)
+static void __devinit aty_init_lcd(struct atyfb_par *par, u32 bios_base)
 {
 	u32 driv_inf_tab, sig;
 	u16 lcd_ofs;
@@ -3391,7 +3392,7 @@ static void aty_init_lcd(struct atyfb_par *par, u32 bios_base)
 }
 #endif /* CONFIG_FB_ATY_GENERIC_LCD */
 
-static int init_from_bios(struct atyfb_par *par)
+static int __devinit init_from_bios(struct atyfb_par *par)
 {
 	u32 bios_base, rom_addr;
 	int ret;
@@ -3444,8 +3445,9 @@ static int init_from_bios(struct atyfb_par *par)
 }
 #endif /* __i386__ */
 
-static int atyfb_setup_generic(struct pci_dev *pdev, struct fb_info *info,
-			       unsigned long addr)
+static int __devinit atyfb_setup_generic(struct pci_dev *pdev,
+					 struct fb_info *info,
+					 unsigned long addr)
 {
 	struct atyfb_par *par = info->par;
 	u16 tmp;
@@ -3523,8 +3525,8 @@ atyfb_setup_generic_fail:
 
 #endif /* !__sparc__ */
 
-static int atyfb_pci_probe(struct pci_dev *pdev,
-			   const struct pci_device_id *ent)
+static int __devinit atyfb_pci_probe(struct pci_dev *pdev,
+				     const struct pci_device_id *ent)
 {
 	unsigned long addr, res_start, res_size;
 	struct fb_info *info;
@@ -3712,7 +3714,7 @@ static int __init atyfb_atari_probe(void)
 
 #ifdef CONFIG_PCI
 
-static void atyfb_remove(struct fb_info *info)
+static void __devexit atyfb_remove(struct fb_info *info)
 {
 	struct atyfb_par *par = (struct atyfb_par *) info->par;
 
@@ -3760,7 +3762,7 @@ static void atyfb_remove(struct fb_info *info)
 }
 
 
-static void atyfb_pci_remove(struct pci_dev *pdev)
+static void __devexit atyfb_pci_remove(struct pci_dev *pdev)
 {
 	struct fb_info *info = pci_get_drvdata(pdev);
 
@@ -3832,7 +3834,7 @@ static struct pci_driver atyfb_driver = {
 	.name		= "atyfb",
 	.id_table	= atyfb_pci_tbl,
 	.probe		= atyfb_pci_probe,
-	.remove		= atyfb_pci_remove,
+	.remove		= __devexit_p(atyfb_pci_remove),
 #ifdef CONFIG_PM
 	.suspend	= atyfb_pci_suspend,
 	.resume		= atyfb_pci_resume,

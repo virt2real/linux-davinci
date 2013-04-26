@@ -108,7 +108,7 @@ struct clk *imx_clk_busy_divider(const char *name, const char *parent_name,
 	busy->div.hw.init = &init;
 
 	clk = clk_register(NULL, &busy->div.hw);
-	if (IS_ERR(clk))
+	if (!clk)
 		kfree(busy);
 
 	return clk;

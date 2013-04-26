@@ -28,8 +28,6 @@
  */
 
 #include <linux/gfp.h>
-#include <linux/sched.h>
-#include <linux/sched/rt.h>
 #include "cpupri.h"
 
 /* Convert between a 140 based task->prio, and our 102 based cpupri */

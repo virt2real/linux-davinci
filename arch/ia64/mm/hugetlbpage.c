@@ -148,7 +148,7 @@ void hugetlb_free_pgd_range(struct mmu_gather *tlb,
 unsigned long hugetlb_get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		unsigned long pgoff, unsigned long flags)
 {
-	struct vm_unmapped_area_info info;
+	struct vm_area_struct *vmm;
 
 	if (len > RGN_MAP_LIMIT)
 		return -ENOMEM;
@@ -165,14 +165,16 @@ unsigned long hugetlb_get_unmapped_area(struct file *file, unsigned long addr, u
 	/* This code assumes that RGN_HPAGE != 0. */
 	if ((REGION_NUMBER(addr) != RGN_HPAGE) || (addr & (HPAGE_SIZE - 1)))
 		addr = HPAGE_REGION_BASE;
-
-	info.flags = 0;
-	info.length = len;
-	info.low_limit = addr;
-	info.high_limit = HPAGE_REGION_BASE + RGN_MAP_LIMIT;
-	info.align_mask = PAGE_MASK & (HPAGE_SIZE - 1);
-	info.align_offset = 0;
-	return vm_unmapped_area(&info);
+	else
+		addr = ALIGN(addr, HPAGE_SIZE);
+	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {
+		/* At this point:  (!vmm || addr < vmm->vm_end). */
+		if (REGION_OFFSET(addr) + len > RGN_MAP_LIMIT)
+			return -ENOMEM;
+		if (!vmm || (addr + len) <= vmm->vm_start)
+			return addr;
+		addr = ALIGN(vmm->vm_end, HPAGE_SIZE);
+	}
 }
 
 static int __init hugetlb_setup_sz(char *str)

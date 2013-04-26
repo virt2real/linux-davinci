@@ -19,6 +19,7 @@
 #include <asm/mach/map.h>
 
 #include <mach/cputype.h>
+#include <mach/edma.h>
 #include <mach/psc.h>
 #include <mach/mux.h>
 #include <mach/irqs.h>
@@ -27,7 +28,6 @@
 #include <mach/common.h>
 #include <linux/platform_data/spi-davinci.h>
 #include <mach/gpio-davinci.h>
-#include <linux/platform_data/edma.h>
 
 #include "davinci.h"
 #include "clock.h"
@@ -361,8 +361,8 @@ static struct clk_lookup dm355_clks[] = {
 	CLK("i2c_davinci.1", NULL, &i2c_clk),
 	CLK("davinci-mcbsp.0", NULL, &asp0_clk),
 	CLK("davinci-mcbsp.1", NULL, &asp1_clk),
-	CLK("dm6441-mmc.0", NULL, &mmcsd0_clk),
-	CLK("dm6441-mmc.1", NULL, &mmcsd1_clk),
+	CLK("davinci_mmc.0", NULL, &mmcsd0_clk),
+	CLK("davinci_mmc.1", NULL, &mmcsd1_clk),
 	CLK("spi_davinci.0", NULL, &spi0_clk),
 	CLK("spi_davinci.1", NULL, &spi1_clk),
 	CLK("spi_davinci.2", NULL, &spi2_clk),

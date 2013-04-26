@@ -1278,7 +1278,7 @@ netdev_tx_t t3_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	/* update port statistics */
-	if (skb->ip_summed == CHECKSUM_PARTIAL)
+	if (skb->ip_summed == CHECKSUM_COMPLETE)
 		qs->port_stats[SGE_PSTAT_TX_CSUM]++;
 	if (skb_shinfo(skb)->gso_size)
 		qs->port_stats[SGE_PSTAT_TSO]++;
@@ -2130,10 +2130,8 @@ static void lro_add_page(struct adapter *adap, struct sge_qset *qs,
 
 	skb_record_rx_queue(skb, qs - &adap->sge.qs[pi->first_qset]);
 
-	if (cpl->vlan_valid) {
-		qs->port_stats[SGE_PSTAT_VLANEX]++;
+	if (cpl->vlan_valid)
 		__vlan_hwaccel_put_tag(skb, ntohs(cpl->vlan));
-	}
 	napi_gro_frags(&qs->napi);
 }
 

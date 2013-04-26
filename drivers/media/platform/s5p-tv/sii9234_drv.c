@@ -315,8 +315,8 @@ static const struct v4l2_subdev_ops sii9234_ops = {
 	.video = &sii9234_video_ops,
 };
 
-static int sii9234_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int __devinit sii9234_probe(struct i2c_client *client,
+	const struct i2c_device_id *id)
 {
 	struct device *dev = &client->dev;
 	struct sii9234_platform_data *pdata = dev->platform_data;
@@ -338,7 +338,7 @@ static int sii9234_probe(struct i2c_client *client,
 	}
 
 	ctx->gpio_n_reset = pdata->gpio_n_reset;
-	ret = devm_gpio_request(dev, ctx->gpio_n_reset, "MHL_RST");
+	ret = gpio_request(ctx->gpio_n_reset, "MHL_RST");
 	if (ret) {
 		dev_err(dev, "failed to acquire MHL_RST gpio\n");
 		return ret;
@@ -370,6 +370,7 @@ fail_pm_get:
 
 fail_pm:
 	pm_runtime_disable(dev);
+	gpio_free(ctx->gpio_n_reset);
 
 fail:
 	dev_err(dev, "probe failed\n");
@@ -377,11 +378,14 @@ fail:
 	return ret;
 }
 
-static int sii9234_remove(struct i2c_client *client)
+static int __devexit sii9234_remove(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
+	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	struct sii9234_context *ctx = sd_to_context(sd);
 
 	pm_runtime_disable(dev);
+	gpio_free(ctx->gpio_n_reset);
 
 	dev_info(dev, "remove successful\n");
 
@@ -402,7 +406,7 @@ static struct i2c_driver sii9234_driver = {
 		.pm = &sii9234_pm_ops,
 	},
 	.probe		= sii9234_probe,
-	.remove		= sii9234_remove,
+	.remove		= __devexit_p(sii9234_remove),
 	.id_table = sii9234_id,
 };
 

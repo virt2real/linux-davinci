@@ -349,7 +349,7 @@ static u32 notrace u300_read_sched_clock(void)
 /*
  * This sets up the system timers, clock source and clock event.
  */
-void __init u300_timer_init(void)
+static void __init u300_timer_init(void)
 {
 	struct clk *clk;
 	unsigned long rate;
@@ -413,3 +413,11 @@ void __init u300_timer_init(void)
 	 * used by hrtimers!
 	 */
 }
+
+/*
+ * Very simple system timer that only register the clock event and
+ * clock source.
+ */
+struct sys_timer u300_timer = {
+	.init		= u300_timer_init,
+};

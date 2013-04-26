@@ -11,9 +11,11 @@
 #undef DEBUG
 
 #include <linux/kernel.h>
-#include <linux/clk-provider.h>
+#include <linux/clk.h>
 #include <linux/io.h>
 
+#include <plat/clock.h>
+#include <plat/prcm.h>
 
 #include "clock.h"
 #include "clock2xxx.h"
@@ -23,7 +25,7 @@
 /* Private functions */
 
 /* XXX */
-void omap2_clkt_iclk_allow_idle(struct clk_hw_omap *clk)
+void omap2_clkt_iclk_allow_idle(struct clk *clk)
 {
 	u32 v, r;
 
@@ -35,7 +37,7 @@ void omap2_clkt_iclk_allow_idle(struct clk_hw_omap *clk)
 }
 
 /* XXX */
-void omap2_clkt_iclk_deny_idle(struct clk_hw_omap *clk)
+void omap2_clkt_iclk_deny_idle(struct clk *clk)
 {
 	u32 v, r;
 
@@ -48,17 +50,33 @@ void omap2_clkt_iclk_deny_idle(struct clk_hw_omap *clk)
 
 /* Public data */
 
-const struct clk_hw_omap_ops clkhwops_iclk = {
-	.allow_idle	= omap2_clkt_iclk_allow_idle,
-	.deny_idle	= omap2_clkt_iclk_deny_idle,
-};
-
-const struct clk_hw_omap_ops clkhwops_iclk_wait = {
-	.allow_idle	= omap2_clkt_iclk_allow_idle,
-	.deny_idle	= omap2_clkt_iclk_deny_idle,
-	.find_idlest	= omap2_clk_dflt_find_idlest,
+const struct clkops clkops_omap2_iclk_dflt_wait = {
+	.enable		= omap2_dflt_clk_enable,
+	.disable	= omap2_dflt_clk_disable,
 	.find_companion	= omap2_clk_dflt_find_companion,
+	.find_idlest	= omap2_clk_dflt_find_idlest,
+	.allow_idle	= omap2_clkt_iclk_allow_idle,
+	.deny_idle	= omap2_clkt_iclk_deny_idle,
 };
 
+const struct clkops clkops_omap2_iclk_dflt = {
+	.enable		= omap2_dflt_clk_enable,
+	.disable	= omap2_dflt_clk_disable,
+	.allow_idle	= omap2_clkt_iclk_allow_idle,
+	.deny_idle	= omap2_clkt_iclk_deny_idle,
+};
 
+const struct clkops clkops_omap2_iclk_idle_only = {
+	.allow_idle	= omap2_clkt_iclk_allow_idle,
+	.deny_idle	= omap2_clkt_iclk_deny_idle,
+};
+
+const struct clkops clkops_omap2_mdmclk_dflt_wait = {
+	.enable		= omap2_dflt_clk_enable,
+	.disable	= omap2_dflt_clk_disable,
+	.find_companion	= omap2_clk_dflt_find_companion,
+	.find_idlest	= omap2_clk_dflt_find_idlest,
+	.allow_idle	= omap2_clkt_iclk_allow_idle,
+	.deny_idle	= omap2_clkt_iclk_deny_idle,
+};
 

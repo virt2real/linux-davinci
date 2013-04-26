@@ -201,8 +201,11 @@ netxen_setup_minidump(struct netxen_adapter *adapter)
 	adapter->mdump.md_template =
 		kmalloc(adapter->mdump.md_template_size, GFP_KERNEL);
 
-	if (!adapter->mdump.md_template)
+	if (!adapter->mdump.md_template) {
+		dev_err(&adapter->pdev->dev, "Unable to allocate memory "
+			"for minidump template.\n");
 		return -ENOMEM;
+	}
 
 	err = netxen_get_minidump_template(adapter);
 	if (err) {

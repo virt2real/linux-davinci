@@ -106,26 +106,16 @@ static int nr_channels;
 
 static int how_many_channels(struct pci_dev *pdev)
 {
-	int n_channels;
-
 	unsigned char capid0_8b; /* 8th byte of CAPID0 */
 
 	pci_read_config_byte(pdev, I3200_CAPID0 + 8, &capid0_8b);
-
 	if (capid0_8b & 0x20) { /* check DCD: Dual Channel Disable */
 		edac_dbg(0, "In single channel mode\n");
-		n_channels = 1;
+		return 1;
 	} else {
 		edac_dbg(0, "In dual channel mode\n");
-		n_channels = 2;
+		return 2;
 	}
-
-	if (capid0_8b & 0x10) /* check if both channels are filled */
-		edac_dbg(0, "2 DIMMS per channel disabled\n");
-	else
-		edac_dbg(0, "2 DIMMS per channel enabled\n");
-
-	return n_channels;
 }
 
 static unsigned long eccerrlog_syndrome(u64 log)
@@ -300,8 +290,6 @@ static void i3200_get_drbs(void __iomem *window,
 	for (i = 0; i < I3200_RANKS_PER_CHANNEL; i++) {
 		drbs[0][i] = readw(window + I3200_C0DRB + 2*i) & I3200_DRB_MASK;
 		drbs[1][i] = readw(window + I3200_C1DRB + 2*i) & I3200_DRB_MASK;
-
-		edac_dbg(0, "drb[0][%d] = %d, drb[1][%d] = %d\n", i, drbs[0][i], i, drbs[1][i]);
 	}
 }
 
@@ -323,9 +311,6 @@ static unsigned long drb_to_nr_pages(
 	int n;
 
 	n = drbs[channel][rank];
-	if (!n)
-		return 0;
-
 	if (rank > 0)
 		n -= drbs[channel][rank - 1];
 	if (stacked && (channel == 1) &&
@@ -392,19 +377,19 @@ static int i3200_probe1(struct pci_dev *pdev, int dev_idx)
 	 * cumulative; the last one will contain the total memory
 	 * contained in all ranks.
 	 */
-	for (i = 0; i < I3200_DIMMS; i++) {
+	for (i = 0; i < mci->nr_csrows; i++) {
 		unsigned long nr_pages;
+		struct csrow_info *csrow = mci->csrows[i];
+
+		nr_pages = drb_to_nr_pages(drbs, stacked,
+			i / I3200_RANKS_PER_CHANNEL,
+			i % I3200_RANKS_PER_CHANNEL);
+
+		if (nr_pages == 0)
+			continue;
 
 		for (j = 0; j < nr_channels; j++) {
-			struct dimm_info *dimm = EDAC_DIMM_PTR(mci->layers, mci->dimms,
-							       mci->n_layers, i, j, 0);
-
-			nr_pages = drb_to_nr_pages(drbs, stacked, j, i);
-			if (nr_pages == 0)
-				continue;
-
-			edac_dbg(0, "csrow %d, channel %d%s, size = %ld Mb\n", i, j,
-				 stacked ? " (stacked)" : "", PAGES_TO_MiB(nr_pages));
+			struct dimm_info *dimm = csrow->channels[j]->dimm;
 
 			dimm->nr_pages = nr_pages;
 			dimm->grain = nr_pages << PAGE_SHIFT;
@@ -434,7 +419,8 @@ fail:
 	return rc;
 }
 
-static int i3200_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int __devinit i3200_init_one(struct pci_dev *pdev,
+		const struct pci_device_id *ent)
 {
 	int rc;
 
@@ -450,7 +436,7 @@ static int i3200_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return rc;
 }
 
-static void i3200_remove_one(struct pci_dev *pdev)
+static void __devexit i3200_remove_one(struct pci_dev *pdev)
 {
 	struct mem_ctl_info *mci;
 	struct i3200_priv *priv;
@@ -481,7 +467,7 @@ MODULE_DEVICE_TABLE(pci, i3200_pci_tbl);
 static struct pci_driver i3200_driver = {
 	.name = EDAC_MOD_STR,
 	.probe = i3200_init_one,
-	.remove = i3200_remove_one,
+	.remove = __devexit_p(i3200_remove_one),
 	.id_table = i3200_pci_tbl,
 };
 

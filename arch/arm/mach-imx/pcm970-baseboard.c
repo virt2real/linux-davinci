@@ -23,10 +23,11 @@
 
 #include <asm/mach/arch.h>
 
-#include "common.h"
+#include <mach/common.h>
+#include <mach/iomux-mx27.h>
+#include <mach/hardware.h>
+
 #include "devices-imx27.h"
-#include "hardware.h"
-#include "iomux-mx27.h"
 
 static const int pcm970_pins[] __initconst = {
 	/* SDHC */

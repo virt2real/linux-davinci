@@ -890,10 +890,8 @@ static int mg_probe(struct platform_device *plat_dev)
 	gpio_direction_output(host->rst, 1);
 
 	/* reset out pin */
-	if (!(prv_data->dev_attr & MG_DEV_MASK)) {
-		err = -EINVAL;
+	if (!(prv_data->dev_attr & MG_DEV_MASK))
 		goto probe_err_3a;
-	}
 
 	if (prv_data->dev_attr != MG_BOOT_DEV) {
 		rsc = platform_get_resource_byname(plat_dev, IORESOURCE_IO,

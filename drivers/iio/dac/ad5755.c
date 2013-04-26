@@ -153,6 +153,7 @@ static int ad5755_write_ctrl(struct iio_dev *indio_dev, unsigned int channel,
 static int ad5755_read(struct iio_dev *indio_dev, unsigned int addr)
 {
 	struct ad5755_state *st = iio_priv(indio_dev);
+	struct spi_message m;
 	int ret;
 	struct spi_transfer t[] = {
 		{
@@ -166,12 +167,16 @@ static int ad5755_read(struct iio_dev *indio_dev, unsigned int addr)
 		},
 	};
 
+	spi_message_init(&m);
+	spi_message_add_tail(&t[0], &m);
+	spi_message_add_tail(&t[1], &m);
+
 	mutex_lock(&indio_dev->mlock);
 
 	st->data[0].d32 = cpu_to_be32(AD5755_READ_FLAG | (addr << 16));
 	st->data[1].d32 = cpu_to_be32(AD5755_NOOP);
 
-	ret = spi_sync_transfer(st->spi, t, ARRAY_SIZE(t));
+	ret = spi_sync(st->spi, &m);
 	if (ret >= 0)
 		ret = be32_to_cpu(st->data[1].d32) & 0xffff;
 
@@ -442,8 +447,8 @@ static bool ad5755_is_valid_mode(struct ad5755_state *st, enum ad5755_mode mode)
 	}
 }
 
-static int ad5755_setup_pdata(struct iio_dev *indio_dev,
-			      const struct ad5755_platform_data *pdata)
+static int __devinit ad5755_setup_pdata(struct iio_dev *indio_dev,
+	const struct ad5755_platform_data *pdata)
 {
 	struct ad5755_state *st = iio_priv(indio_dev);
 	unsigned int val;
@@ -498,7 +503,7 @@ static int ad5755_setup_pdata(struct iio_dev *indio_dev,
 	return 0;
 }
 
-static bool ad5755_is_voltage_mode(enum ad5755_mode mode)
+static bool __devinit ad5755_is_voltage_mode(enum ad5755_mode mode)
 {
 	switch (mode) {
 	case AD5755_MODE_VOLTAGE_0V_5V:
@@ -511,8 +516,8 @@ static bool ad5755_is_voltage_mode(enum ad5755_mode mode)
 	}
 }
 
-static int ad5755_init_channels(struct iio_dev *indio_dev,
-				const struct ad5755_platform_data *pdata)
+static int __devinit ad5755_init_channels(struct iio_dev *indio_dev,
+	const struct ad5755_platform_data *pdata)
 {
 	struct ad5755_state *st = iio_priv(indio_dev);
 	struct iio_chan_spec *channels = st->channels;
@@ -557,7 +562,7 @@ static const struct ad5755_platform_data ad5755_default_pdata = {
 	},
 };
 
-static int ad5755_probe(struct spi_device *spi)
+static int __devinit ad5755_probe(struct spi_device *spi)
 {
 	enum ad5755_type type = spi_get_device_id(spi)->driver_data;
 	const struct ad5755_platform_data *pdata = dev_get_platdata(&spi->dev);
@@ -609,7 +614,7 @@ error_free:
 	return ret;
 }
 
-static int ad5755_remove(struct spi_device *spi)
+static int __devexit ad5755_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 
@@ -635,7 +640,7 @@ static struct spi_driver ad5755_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe = ad5755_probe,
-	.remove = ad5755_remove,
+	.remove = __devexit_p(ad5755_remove),
 	.id_table = ad5755_id,
 };
 module_spi_driver(ad5755_driver);

@@ -32,6 +32,7 @@
 #include <linux/hdreg.h>
 #include <linux/init.h>
 #include <linux/mutex.h>
+#include <linux/kthread.h>
 #include <asm/uaccess.h>
 
 #include "mtdcore.h"
@@ -120,14 +121,16 @@ static int do_blktrans_request(struct mtd_blktrans_ops *tr,
 
 int mtd_blktrans_cease_background(struct mtd_blktrans_dev *dev)
 {
+	if (kthread_should_stop())
+		return 1;
+
 	return dev->bg_stop;
 }
 EXPORT_SYMBOL_GPL(mtd_blktrans_cease_background);
 
-static void mtd_blktrans_work(struct work_struct *work)
+static int mtd_blktrans_thread(void *arg)
 {
-	struct mtd_blktrans_dev *dev =
-		container_of(work, struct mtd_blktrans_dev, work);
+	struct mtd_blktrans_dev *dev = arg;
 	struct mtd_blktrans_ops *tr = dev->tr;
 	struct request_queue *rq = dev->rq;
 	struct request *req = NULL;
@@ -135,7 +138,7 @@ static void mtd_blktrans_work(struct work_struct *work)
 
 	spin_lock_irq(rq->queue_lock);
 
-	while (1) {
+	while (!kthread_should_stop()) {
 		int res;
 
 		dev->bg_stop = false;
@@ -153,7 +156,15 @@ static void mtd_blktrans_work(struct work_struct *work)
 				background_done = !dev->bg_stop;
 				continue;
 			}
-			break;
+			set_current_state(TASK_INTERRUPTIBLE);
+
+			if (kthread_should_stop())
+				set_current_state(TASK_RUNNING);
+
+			spin_unlock_irq(rq->queue_lock);
+			schedule();
+			spin_lock_irq(rq->queue_lock);
+			continue;
 		}
 
 		spin_unlock_irq(rq->queue_lock);
@@ -174,6 +185,8 @@ static void mtd_blktrans_work(struct work_struct *work)
 		__blk_end_request_all(req, -EIO);
 
 	spin_unlock_irq(rq->queue_lock);
+
+	return 0;
 }
 
 static void mtd_blktrans_request(struct request_queue *rq)
@@ -186,8 +199,10 @@ static void mtd_blktrans_request(struct request_queue *rq)
 	if (!dev)
 		while ((req = blk_fetch_request(rq)) != NULL)
 			__blk_end_request_all(req, -ENODEV);
-	else
-		queue_work(dev->wq, &dev->work);
+	else {
+		dev->bg_stop = true;
+		wake_up_process(dev->thread);
+	}
 }
 
 static int blktrans_open(struct block_device *bdev, fmode_t mode)
@@ -310,7 +325,7 @@ unlock:
 	return ret;
 }
 
-static const struct block_device_operations mtd_block_ops = {
+static const struct block_device_operations mtd_blktrans_ops = {
 	.owner		= THIS_MODULE,
 	.open		= blktrans_open,
 	.release	= blktrans_release,
@@ -386,7 +401,7 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 	gd->private_data = new;
 	gd->major = tr->major;
 	gd->first_minor = (new->devnum) << tr->part_bits;
-	gd->fops = &mtd_block_ops;
+	gd->fops = &mtd_blktrans_ops;
 
 	if (tr->part_bits)
 		if (new->devnum < 26)
@@ -422,13 +437,14 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 
 	gd->queue = new->rq;
 
-	/* Create processing workqueue */
-	new->wq = alloc_workqueue("%s%d", 0, 0,
-				  tr->name, new->mtd->index);
-	if (!new->wq)
+	/* Create processing thread */
+	/* TODO: workqueue ? */
+	new->thread = kthread_run(mtd_blktrans_thread, new,
+			"%s%d", tr->name, new->mtd->index);
+	if (IS_ERR(new->thread)) {
+		ret = PTR_ERR(new->thread);
 		goto error4;
-	INIT_WORK(&new->work, mtd_blktrans_work);
-
+	}
 	gd->driverfs_dev = &new->mtd->dev;
 
 	if (new->readonly)
@@ -468,8 +484,9 @@ int del_mtd_blktrans_dev(struct mtd_blktrans_dev *old)
 	/* Stop new requests to arrive */
 	del_gendisk(old->disk);
 
-	/* Stop workqueue. This will perform any pending request. */
-	destroy_workqueue(old->wq);
+
+	/* Stop the thread */
+	kthread_stop(old->thread);
 
 	/* Kill current requests */
 	spin_lock_irqsave(&old->queue_lock, flags);

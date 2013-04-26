@@ -540,7 +540,7 @@ out:
 	pci_dev_put(pdev);
 }
 
-static int p54p_probe(struct pci_dev *pdev,
+static int __devinit p54p_probe(struct pci_dev *pdev,
 				const struct pci_device_id *id)
 {
 	struct p54p_priv *priv;
@@ -559,7 +559,6 @@ static int p54p_probe(struct pci_dev *pdev,
 	mem_len = pci_resource_len(pdev, 0);
 	if (mem_len < sizeof(struct p54p_csr)) {
 		dev_err(&pdev->dev, "Too short PCI resources\n");
-		err = -ENODEV;
 		goto err_disable_dev;
 	}
 
@@ -569,10 +568,8 @@ static int p54p_probe(struct pci_dev *pdev,
 		goto err_disable_dev;
 	}
 
-	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
-	if (!err)
-		err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
-	if (err) {
+	if (pci_set_dma_mask(pdev, DMA_BIT_MASK(32)) ||
+	    pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32))) {
 		dev_err(&pdev->dev, "No suitable DMA available\n");
 		goto err_free_reg;
 	}
@@ -642,7 +639,7 @@ static int p54p_probe(struct pci_dev *pdev,
 	return err;
 }
 
-static void p54p_remove(struct pci_dev *pdev)
+static void __devexit p54p_remove(struct pci_dev *pdev)
 {
 	struct ieee80211_hw *dev = pci_get_drvdata(pdev);
 	struct p54p_priv *priv;
@@ -662,7 +659,7 @@ static void p54p_remove(struct pci_dev *pdev)
 	p54_free_common(dev);
 }
 
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_PM
 static int p54p_suspend(struct device *device)
 {
 	struct pci_dev *pdev = to_pci_dev(device);
@@ -684,18 +681,25 @@ static int p54p_resume(struct device *device)
 	return pci_set_power_state(pdev, PCI_D0);
 }
 
-static SIMPLE_DEV_PM_OPS(p54pci_pm_ops, p54p_suspend, p54p_resume);
+static const struct dev_pm_ops p54pci_pm_ops = {
+	.suspend = p54p_suspend,
+	.resume = p54p_resume,
+	.freeze = p54p_suspend,
+	.thaw = p54p_resume,
+	.poweroff = p54p_suspend,
+	.restore = p54p_resume,
+};
 
 #define P54P_PM_OPS (&p54pci_pm_ops)
 #else
 #define P54P_PM_OPS (NULL)
-#endif /* CONFIG_PM_SLEEP */
+#endif /* CONFIG_PM */
 
 static struct pci_driver p54p_driver = {
 	.name		= "p54pci",
 	.id_table	= p54p_table,
 	.probe		= p54p_probe,
-	.remove		= p54p_remove,
+	.remove		= __devexit_p(p54p_remove),
 	.driver.pm	= P54P_PM_OPS,
 };
 

@@ -294,13 +294,13 @@ int st5481_setup_usb(struct st5481_adapter *adapter)
 	// Allocate URBs and buffers for interrupt endpoint
 	urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!urb) {
-		goto err1;
+		return -ENOMEM;
 	}
 	intr->urb = urb;
 
 	buf = kmalloc(INT_PKT_SIZE, GFP_KERNEL);
 	if (!buf) {
-		goto err2;
+		return -ENOMEM;
 	}
 
 	endpoint = &altsetting->endpoint[EP_INT-1];
@@ -313,14 +313,6 @@ int st5481_setup_usb(struct st5481_adapter *adapter)
 			 endpoint->desc.bInterval);
 
 	return 0;
-err2:
-	usb_free_urb(intr->urb);
-	intr->urb = NULL;
-err1:
-	usb_free_urb(ctrl->urb);
-	ctrl->urb = NULL;
-
-	return -ENOMEM;
 }
 
 /*

@@ -62,7 +62,7 @@ static const struct smb_to_posix_error mapping_table_ERRDOS[] = {
 	{ERRdiffdevice, -EXDEV},
 	{ERRnofiles, -ENOENT},
 	{ERRwriteprot, -EROFS},
-	{ERRbadshare, -EBUSY},
+	{ERRbadshare, -ETXTBSY},
 	{ERRlock, -EACCES},
 	{ERRunsup, -EINVAL},
 	{ERRnosuchshare, -ENXIO},
@@ -204,7 +204,7 @@ cifs_convert_address(struct sockaddr *dst, const char *src, int len)
 	return rc;
 }
 
-void
+int
 cifs_set_port(struct sockaddr *addr, const unsigned short int port)
 {
 	switch (addr->sa_family) {
@@ -214,7 +214,19 @@ cifs_set_port(struct sockaddr *addr, const unsigned short int port)
 	case AF_INET6:
 		((struct sockaddr_in6 *)addr)->sin6_port = htons(port);
 		break;
+	default:
+		return 0;
 	}
+	return 1;
+}
+
+int
+cifs_fill_sockaddr(struct sockaddr *dst, const char *src, int len,
+		   const unsigned short int port)
+{
+	if (!cifs_convert_address(dst, src, len))
+		return 0;
+	return cifs_set_port(dst, port);
 }
 
 /*****************************************************************************

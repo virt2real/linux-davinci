@@ -25,8 +25,9 @@
  *  - FPSR and FPCR
  *  - 32 128-bit data registers
  *
- * Note that user_fpsimd forms a prefix of this structure, which is
- * relied upon in the ptrace FP/SIMD accessors.
+ * Note that user_fp forms a prefix of this structure, which is relied
+ * upon in the ptrace FP/SIMD accessors. struct user_fpsimd_state must
+ * form a prefix of struct fpsimd_state.
  */
 struct fpsimd_state {
 	union {

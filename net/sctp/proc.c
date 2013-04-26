@@ -102,7 +102,7 @@ static const struct file_operations sctp_snmp_seq_fops = {
 	.open	 = sctp_snmp_seq_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
-	.release = single_release_net,
+	.release = single_release,
 };
 
 /* Set up the proc fs entry for 'snmp' object. */
@@ -139,11 +139,7 @@ static void sctp_seq_dump_local_addrs(struct seq_file *seq, struct sctp_ep_commo
 	    primary = &peer->saddr;
 	}
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(laddr, &epb->bind_addr.address_list, list) {
-		if (!laddr->valid)
-			continue;
-
+	list_for_each_entry(laddr, &epb->bind_addr.address_list, list) {
 		addr = &laddr->a;
 		af = sctp_get_af_specific(addr->sa.sa_family);
 		if (primary && af->cmp_addr(addr, primary)) {
@@ -151,7 +147,6 @@ static void sctp_seq_dump_local_addrs(struct seq_file *seq, struct sctp_ep_commo
 		}
 		af->seq_dump_addr(seq, addr);
 	}
-	rcu_read_unlock();
 }
 
 /* Dump remote addresses of an association. */
@@ -162,20 +157,15 @@ static void sctp_seq_dump_remote_addrs(struct seq_file *seq, struct sctp_associa
 	struct sctp_af *af;
 
 	primary = &assoc->peer.primary_addr;
-	rcu_read_lock();
-	list_for_each_entry_rcu(transport, &assoc->peer.transport_addr_list,
+	list_for_each_entry(transport, &assoc->peer.transport_addr_list,
 			transports) {
 		addr = &transport->ipaddr;
-		if (transport->dead)
-			continue;
-
 		af = sctp_get_af_specific(addr->sa.sa_family);
 		if (af->cmp_addr(addr, primary)) {
 			seq_printf(seq, "*");
 		}
 		af->seq_dump_addr(seq, addr);
 	}
-	rcu_read_unlock();
 }
 
 static void * sctp_eps_seq_start(struct seq_file *seq, loff_t *pos)
@@ -213,6 +203,7 @@ static int sctp_eps_seq_show(struct seq_file *seq, void *v)
 	struct sctp_ep_common *epb;
 	struct sctp_endpoint *ep;
 	struct sock *sk;
+	struct hlist_node *node;
 	int    hash = *(loff_t *)v;
 
 	if (hash >= sctp_ep_hashsize)
@@ -221,7 +212,7 @@ static int sctp_eps_seq_show(struct seq_file *seq, void *v)
 	head = &sctp_ep_hashtable[hash];
 	sctp_local_bh_disable();
 	read_lock(&head->lock);
-	sctp_for_each_hentry(epb, &head->chain) {
+	sctp_for_each_hentry(epb, node, &head->chain) {
 		ep = sctp_ep(epb);
 		sk = epb->sk;
 		if (!net_eq(sock_net(sk), seq_file_net(seq)))
@@ -260,7 +251,7 @@ static const struct file_operations sctp_eps_seq_fops = {
 	.open	 = sctp_eps_seq_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
-	.release = seq_release_net,
+	.release = seq_release,
 };
 
 /* Set up the proc fs entry for 'eps' object. */
@@ -320,6 +311,7 @@ static int sctp_assocs_seq_show(struct seq_file *seq, void *v)
 	struct sctp_ep_common *epb;
 	struct sctp_association *assoc;
 	struct sock *sk;
+	struct hlist_node *node;
 	int    hash = *(loff_t *)v;
 
 	if (hash >= sctp_assoc_hashsize)
@@ -328,7 +320,7 @@ static int sctp_assocs_seq_show(struct seq_file *seq, void *v)
 	head = &sctp_assoc_hashtable[hash];
 	sctp_local_bh_disable();
 	read_lock(&head->lock);
-	sctp_for_each_hentry(epb, &head->chain) {
+	sctp_for_each_hentry(epb, node, &head->chain) {
 		assoc = sctp_assoc(epb);
 		sk = epb->sk;
 		if (!net_eq(sock_net(sk), seq_file_net(seq)))
@@ -380,7 +372,7 @@ static const struct file_operations sctp_assocs_seq_fops = {
 	.open	 = sctp_assocs_seq_open,
 	.read	 = seq_read,
 	.llseek	 = seq_lseek,
-	.release = seq_release_net,
+	.release = seq_release,
 };
 
 /* Set up the proc fs entry for 'assocs' object. */
@@ -434,6 +426,7 @@ static int sctp_remaddr_seq_show(struct seq_file *seq, void *v)
 	struct sctp_hashbucket *head;
 	struct sctp_ep_common *epb;
 	struct sctp_association *assoc;
+	struct hlist_node *node;
 	struct sctp_transport *tsp;
 	int    hash = *(loff_t *)v;
 
@@ -443,16 +436,12 @@ static int sctp_remaddr_seq_show(struct seq_file *seq, void *v)
 	head = &sctp_assoc_hashtable[hash];
 	sctp_local_bh_disable();
 	read_lock(&head->lock);
-	rcu_read_lock();
-	sctp_for_each_hentry(epb, &head->chain) {
+	sctp_for_each_hentry(epb, node, &head->chain) {
 		if (!net_eq(sock_net(epb->sk), seq_file_net(seq)))
 			continue;
 		assoc = sctp_assoc(epb);
-		list_for_each_entry_rcu(tsp, &assoc->peer.transport_addr_list,
+		list_for_each_entry(tsp, &assoc->peer.transport_addr_list,
 					transports) {
-			if (tsp->dead)
-				continue;
-
 			/*
 			 * The remote address (ADDR)
 			 */
@@ -498,7 +487,6 @@ static int sctp_remaddr_seq_show(struct seq_file *seq, void *v)
 		}
 	}
 
-	rcu_read_unlock();
 	read_unlock(&head->lock);
 	sctp_local_bh_enable();
 
@@ -529,7 +517,7 @@ static const struct file_operations sctp_remaddr_seq_fops = {
 	.open = sctp_remaddr_seq_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = seq_release_net,
+	.release = seq_release,
 };
 
 int __net_init sctp_remaddr_proc_init(struct net *net)

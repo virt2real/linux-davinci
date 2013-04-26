@@ -49,19 +49,15 @@
 #define VM_FAULT_BADCONTEXT	0x010000
 #define VM_FAULT_BADMAP		0x020000
 #define VM_FAULT_BADACCESS	0x040000
-#define VM_FAULT_SIGNAL		0x080000
+#define VM_FAULT_SIGNAL	0x080000
 
-static unsigned long store_indication __read_mostly;
+static unsigned long store_indication;
 
-#ifdef CONFIG_64BIT
-static int __init fault_init(void)
+void fault_init(void)
 {
-	if (test_facility(75))
+	if (test_facility(2) && test_facility(75))
 		store_indication = 0xc00;
-	return 0;
 }
-early_initcall(fault_init);
-#endif
 
 static inline int notify_page_fault(struct pt_regs *regs)
 {
@@ -277,16 +273,10 @@ static inline int do_exception(struct pt_regs *regs, int access)
 	unsigned int flags;
 	int fault;
 
-	tsk = current;
-	/*
-	 * The instruction that caused the program check has
-	 * been nullified. Don't signal single step via SIGTRAP.
-	 */
-	clear_tsk_thread_flag(tsk, TIF_PER_TRAP);
-
 	if (notify_page_fault(regs))
 		return 0;
 
+	tsk = current;
 	mm = tsk->mm;
 	trans_exc_code = regs->int_parm_long;
 
@@ -382,6 +372,11 @@ retry:
 			goto retry;
 		}
 	}
+	/*
+	 * The instruction that caused the program check will
+	 * be repeated. Don't signal single step via SIGTRAP.
+	 */
+	clear_tsk_thread_flag(tsk, TIF_PER_TRAP);
 	fault = 0;
 out_up:
 	up_read(&mm->mmap_sem);
@@ -427,12 +422,6 @@ void __kprobes do_asce_exception(struct pt_regs *regs)
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	unsigned long trans_exc_code;
-
-	/*
-	 * The instruction that caused the program check has
-	 * been nullified. Don't signal single step via SIGTRAP.
-	 */
-	clear_tsk_thread_flag(current, TIF_PER_TRAP);
 
 	trans_exc_code = regs->int_parm_long;
 	if (unlikely(!user_space_fault(trans_exc_code) || in_atomic() || !mm))
@@ -569,7 +558,7 @@ static void pfault_interrupt(struct ext_code ext_code,
 	subcode = ext_code.subcode;
 	if ((subcode & 0xff00) != __SUBCODE_MASK)
 		return;
-	inc_irq_stat(IRQEXT_PFL);
+	kstat_cpu(smp_processor_id()).irqs[EXTINT_PFL]++;
 	/* Get the token (= pid of the affected task). */
 	pid = sizeof(void *) == 4 ? param32 : param64;
 	rcu_read_lock();

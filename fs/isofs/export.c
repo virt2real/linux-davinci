@@ -125,10 +125,10 @@ isofs_export_encode_fh(struct inode *inode,
 	 */
 	if (parent && (len < 5)) {
 		*max_len = 5;
-		return FILEID_INVALID;
+		return 255;
 	} else if (len < 3) {
 		*max_len = 3;
-		return FILEID_INVALID;
+		return 255;
 	}
 
 	len = 3;

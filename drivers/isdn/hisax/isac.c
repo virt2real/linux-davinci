@@ -24,11 +24,11 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-static char *ISACVer[] =
+static char *ISACVer[] __devinitdata =
 {"2086/2186 V1.1", "2085 B1", "2085 B2",
  "2085 V2.3"};
 
-void ISACVersion(struct IsdnCardState *cs, char *s)
+void __devinit ISACVersion(struct IsdnCardState *cs, char *s)
 {
 	int val;
 
@@ -669,7 +669,8 @@ void clear_pending_isac_ints(struct IsdnCardState *cs)
 	cs->writeisac(cs, ISAC_MASK, 0xFF);
 }
 
-void setup_isac(struct IsdnCardState *cs)
+void __devinit
+setup_isac(struct IsdnCardState *cs)
 {
 	INIT_WORK(&cs->tqueue, isac_bh);
 	cs->dbusytimer.function = (void *) dbusy_timer_handler;

@@ -1270,10 +1270,10 @@ static int udf_encode_fh(struct inode *inode, __u32 *fh, int *lenp,
 
 	if (parent && (len < 5)) {
 		*lenp = 5;
-		return FILEID_INVALID;
+		return 255;
 	} else if (len < 3) {
 		*lenp = 3;
-		return FILEID_INVALID;
+		return 255;
 	}
 
 	*lenp = 3;

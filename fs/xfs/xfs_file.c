@@ -31,8 +31,6 @@
 #include "xfs_error.h"
 #include "xfs_vnodeops.h"
 #include "xfs_da_btree.h"
-#include "xfs_dir2_format.h"
-#include "xfs_dir2_priv.h"
 #include "xfs_ioctl.h"
 #include "xfs_trace.h"
 
@@ -86,7 +84,7 @@ xfs_rw_ilock_demote(
  *	valid before the operation, it will be read from disk before
  *	being partially zeroed.
  */
-int
+STATIC int
 xfs_iozero(
 	struct xfs_inode	*ip,	/* inode			*/
 	loff_t			pos,	/* offset in file		*/
@@ -257,14 +255,15 @@ xfs_file_aio_read(
 		xfs_buftarg_t	*target =
 			XFS_IS_REALTIME_INODE(ip) ?
 				mp->m_rtdev_targp : mp->m_ddev_targp;
-		if ((pos & target->bt_smask) || (size & target->bt_smask)) {
-			if (pos == i_size_read(inode))
+		if ((iocb->ki_pos & target->bt_smask) ||
+		    (size & target->bt_smask)) {
+			if (iocb->ki_pos == i_size_read(inode))
 				return 0;
 			return -XFS_ERROR(EINVAL);
 		}
 	}
 
-	n = mp->m_super->s_maxbytes - pos;
+	n = mp->m_super->s_maxbytes - iocb->ki_pos;
 	if (n <= 0 || size == 0)
 		return 0;
 
@@ -290,21 +289,20 @@ xfs_file_aio_read(
 		xfs_rw_ilock(ip, XFS_IOLOCK_EXCL);
 
 		if (inode->i_mapping->nrpages) {
-			ret = -filemap_write_and_wait_range(
-							VFS_I(ip)->i_mapping,
-							pos, -1);
+			ret = -xfs_flushinval_pages(ip,
+					(iocb->ki_pos & PAGE_CACHE_MASK),
+					-1, FI_REMAPF_LOCKED);
 			if (ret) {
 				xfs_rw_iunlock(ip, XFS_IOLOCK_EXCL);
 				return ret;
 			}
-			truncate_pagecache_range(VFS_I(ip), pos, -1);
 		}
 		xfs_rw_ilock_demote(ip, XFS_IOLOCK_EXCL);
 	}
 
-	trace_xfs_file_read(ip, size, pos, ioflags);
+	trace_xfs_file_read(ip, size, iocb->ki_pos, ioflags);
 
-	ret = generic_file_aio_read(iocb, iovp, nr_segs, pos);
+	ret = generic_file_aio_read(iocb, iovp, nr_segs, iocb->ki_pos);
 	if (ret > 0)
 		XFS_STATS_ADD(xs_read_bytes, ret);
 
@@ -672,11 +670,10 @@ xfs_file_dio_aio_write(
 		goto out;
 
 	if (mapping->nrpages) {
-		ret = -filemap_write_and_wait_range(VFS_I(ip)->i_mapping,
-						    pos, -1);
+		ret = -xfs_flushinval_pages(ip, (pos & PAGE_CACHE_MASK), -1,
+							FI_REMAPF_LOCKED);
 		if (ret)
 			goto out;
-		truncate_pagecache_range(VFS_I(ip), pos, -1);
 	}
 
 	/*
@@ -731,17 +728,16 @@ xfs_file_buffered_aio_write(
 write_retry:
 	trace_xfs_file_buffered_write(ip, count, iocb->ki_pos, 0);
 	ret = generic_file_buffered_write(iocb, iovp, nr_segs,
-			pos, &iocb->ki_pos, count, 0);
-
+			pos, &iocb->ki_pos, count, ret);
 	/*
-	 * If we just got an ENOSPC, try to write back all dirty inodes to
-	 * convert delalloc space to free up some of the excess reserved
-	 * metadata space.
+	 * if we just got an ENOSPC, flush the inode now we aren't holding any
+	 * page locks and retry *once*
 	 */
 	if (ret == -ENOSPC && !enospc) {
 		enospc = 1;
-		xfs_flush_inodes(ip->i_mount);
-		goto write_retry;
+		ret = -xfs_flush_pages(ip, 0, -1, 0, FI_NONE);
+		if (!ret)
+			goto write_retry;
 	}
 
 	current->backing_dev_info = NULL;
@@ -811,7 +807,7 @@ xfs_file_fallocate(
 	loff_t		offset,
 	loff_t		len)
 {
-	struct inode	*inode = file_inode(file);
+	struct inode	*inode = file->f_path.dentry->d_inode;
 	long		error;
 	loff_t		new_size = 0;
 	xfs_flock64_t	bf;
@@ -893,7 +889,7 @@ xfs_dir_open(
 	 */
 	mode = xfs_ilock_map_shared(ip);
 	if (ip->i_d.di_nextents > 0)
-		xfs_dir2_data_readahead(NULL, ip, 0, -1);
+		xfs_da_reada_buf(NULL, ip, 0, XFS_DATA_FORK);
 	xfs_iunlock(ip, mode);
 	return 0;
 }
@@ -912,7 +908,7 @@ xfs_file_readdir(
 	void		*dirent,
 	filldir_t	filldir)
 {
-	struct inode	*inode = file_inode(filp);
+	struct inode	*inode = filp->f_path.dentry->d_inode;
 	xfs_inode_t	*ip = XFS_I(inode);
 	int		error;
 	size_t		bufsize;

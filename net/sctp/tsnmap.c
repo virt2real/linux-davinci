@@ -51,7 +51,7 @@
 static void sctp_tsnmap_update(struct sctp_tsnmap *map);
 static void sctp_tsnmap_find_gap_ack(unsigned long *map, __u16 off,
 				     __u16 len, __u16 *start, __u16 *end);
-static int sctp_tsnmap_grow(struct sctp_tsnmap *map, u16 size);
+static int sctp_tsnmap_grow(struct sctp_tsnmap *map, u16 gap);
 
 /* Initialize a block of memory as a tsnmap.  */
 struct sctp_tsnmap *sctp_tsnmap_init(struct sctp_tsnmap *map, __u16 len,
@@ -124,7 +124,7 @@ int sctp_tsnmap_mark(struct sctp_tsnmap *map, __u32 tsn,
 
 	gap = tsn - map->base_tsn;
 
-	if (gap >= map->len && !sctp_tsnmap_grow(map, gap + 1))
+	if (gap >= map->len && !sctp_tsnmap_grow(map, gap))
 		return -ENOMEM;
 
 	if (!sctp_tsnmap_has_gap(map) && gap == 0) {
@@ -272,7 +272,7 @@ __u16 sctp_tsnmap_pending(struct sctp_tsnmap *map)
 	__u32 max_tsn = map->max_tsn_seen;
 	__u32 base_tsn = map->base_tsn;
 	__u16 pending_data;
-	u32 gap;
+	u32 gap, i;
 
 	pending_data = max_tsn - cum_tsn;
 	gap = max_tsn - base_tsn;
@@ -280,7 +280,11 @@ __u16 sctp_tsnmap_pending(struct sctp_tsnmap *map)
 	if (gap == 0 || gap >= map->len)
 		goto out;
 
-	pending_data -= bitmap_weight(map->tsn_map, gap + 1);
+	for (i = 0; i < gap+1; i++) {
+		if (test_bit(i, map->tsn_map))
+			pending_data--;
+	}
+
 out:
 	return pending_data;
 }
@@ -360,24 +364,23 @@ __u16 sctp_tsnmap_num_gabs(struct sctp_tsnmap *map,
 	return ngaps;
 }
 
-static int sctp_tsnmap_grow(struct sctp_tsnmap *map, u16 size)
+static int sctp_tsnmap_grow(struct sctp_tsnmap *map, u16 gap)
 {
 	unsigned long *new;
 	unsigned long inc;
 	u16  len;
 
-	if (size > SCTP_TSN_MAP_SIZE)
+	if (gap >= SCTP_TSN_MAP_SIZE)
 		return 0;
 
-	inc = ALIGN((size - map->len), BITS_PER_LONG) + SCTP_TSN_MAP_INCREMENT;
+	inc = ALIGN((gap - map->len),BITS_PER_LONG) + SCTP_TSN_MAP_INCREMENT;
 	len = min_t(u16, map->len + inc, SCTP_TSN_MAP_SIZE);
 
 	new = kzalloc(len>>3, GFP_ATOMIC);
 	if (!new)
 		return 0;
 
-	bitmap_copy(new, map->tsn_map,
-		map->max_tsn_seen - map->cumulative_tsn_ack_point);
+	bitmap_copy(new, map->tsn_map, map->max_tsn_seen - map->base_tsn);
 	kfree(map->tsn_map);
 	map->tsn_map = new;
 	map->len = len;

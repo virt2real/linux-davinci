@@ -158,7 +158,8 @@ static int map_mat_entry(acpi_handle handle, int type, u32 acpi_id)
 	}
 
 exit:
-	kfree(buffer.pointer);
+	if (buffer.pointer)
+		kfree(buffer.pointer);
 	return apic_id;
 }
 

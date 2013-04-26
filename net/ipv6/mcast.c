@@ -163,7 +163,7 @@ int ipv6_sock_mc_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 		rt = rt6_lookup(net, addr, NULL, 0, 0);
 		if (rt) {
 			dev = rt->dst.dev;
-			ip6_rt_put(rt);
+			dst_release(&rt->dst);
 		}
 	} else
 		dev = dev_get_by_index_rcu(net, ifindex);
@@ -260,7 +260,7 @@ static struct inet6_dev *ip6_mc_find_dev_rcu(struct net *net,
 
 		if (rt) {
 			dev = rt->dst.dev;
-			ip6_rt_put(rt);
+			dst_release(&rt->dst);
 		}
 	} else
 		dev = dev_get_by_index_rcu(net, ifindex);
@@ -283,9 +283,6 @@ void ipv6_sock_mc_close(struct sock *sk)
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct ipv6_mc_socklist *mc_lst;
 	struct net *net = sock_net(sk);
-
-	if (!rcu_access_pointer(np->ipv6_mc_list))
-		return;
 
 	spin_lock(&ipv6_sk_mc_lock);
 	while ((mc_lst = rcu_dereference_protected(np->ipv6_mc_list,
@@ -376,7 +373,8 @@ int ip6_mc_source(int add, int omode, struct sock *sk,
 			goto done;	/* err = -EADDRNOTAVAIL */
 		rv = !0;
 		for (i=0; i<psl->sl_count; i++) {
-			rv = !ipv6_addr_equal(&psl->sl_addr[i], source);
+			rv = memcmp(&psl->sl_addr[i], source,
+				sizeof(struct in6_addr));
 			if (rv == 0)
 				break;
 		}
@@ -426,10 +424,12 @@ int ip6_mc_source(int add, int omode, struct sock *sk,
 	}
 	rv = 1;	/* > 0 for insert logic below if sl_count is 0 */
 	for (i=0; i<psl->sl_count; i++) {
-		rv = !ipv6_addr_equal(&psl->sl_addr[i], source);
-		if (rv == 0) /* There is an error in the address. */
-			goto done;
+		rv = memcmp(&psl->sl_addr[i], source, sizeof(struct in6_addr));
+		if (rv == 0)
+			break;
 	}
+	if (rv == 0)		/* address already there is an error */
+		goto done;
 	for (j=psl->sl_count-1; j>=i; j--)
 		psl->sl_addr[j+1] = psl->sl_addr[j];
 	psl->sl_addr[i] = *source;
@@ -661,10 +661,6 @@ static void igmp6_group_added(struct ifmcaddr6 *mc)
 	struct net_device *dev = mc->idev->dev;
 	char buf[MAX_ADDR_LEN];
 
-	if (IPV6_ADDR_MC_SCOPE(&mc->mca_addr) <
-	    IPV6_ADDR_SCOPE_LINKLOCAL)
-		return;
-
 	spin_lock_bh(&mc->mca_lock);
 	if (!(mc->mca_flags&MAF_LOADED)) {
 		mc->mca_flags |= MAF_LOADED;
@@ -690,10 +686,6 @@ static void igmp6_group_dropped(struct ifmcaddr6 *mc)
 {
 	struct net_device *dev = mc->idev->dev;
 	char buf[MAX_ADDR_LEN];
-
-	if (IPV6_ADDR_MC_SCOPE(&mc->mca_addr) <
-	    IPV6_ADDR_SCOPE_LINKLOCAL)
-		return;
 
 	spin_lock_bh(&mc->mca_lock);
 	if (mc->mca_flags&MAF_LOADED) {
@@ -937,6 +929,33 @@ int ipv6_dev_mc_dec(struct net_device *dev, const struct in6_addr *addr)
 
 	rcu_read_unlock();
 	return err;
+}
+
+/*
+ * identify MLD packets for MLD filter exceptions
+ */
+bool ipv6_is_mld(struct sk_buff *skb, int nexthdr)
+{
+	struct icmp6hdr *pic;
+
+	if (nexthdr != IPPROTO_ICMPV6)
+		return false;
+
+	if (!pskb_may_pull(skb, sizeof(struct icmp6hdr)))
+		return false;
+
+	pic = icmp6_hdr(skb);
+
+	switch (pic->icmp6_type) {
+	case ICMPV6_MGM_QUERY:
+	case ICMPV6_MGM_REPORT:
+	case ICMPV6_MGM_REDUCTION:
+	case ICMPV6_MLD2_REPORT:
+		return true;
+	default:
+		break;
+	}
+	return false;
 }
 
 /*
@@ -1318,31 +1337,6 @@ mld_scount(struct ifmcaddr6 *pmc, int type, int gdeleted, int sdeleted)
 	return scount;
 }
 
-static void ip6_mc_hdr(struct sock *sk, struct sk_buff *skb,
-		       struct net_device *dev,
-		       const struct in6_addr *saddr,
-		       const struct in6_addr *daddr,
-		       int proto, int len)
-{
-	struct ipv6hdr *hdr;
-
-	skb->protocol = htons(ETH_P_IPV6);
-	skb->dev = dev;
-
-	skb_reset_network_header(skb);
-	skb_put(skb, sizeof(struct ipv6hdr));
-	hdr = ipv6_hdr(skb);
-
-	ip6_flow_hdr(hdr, 0, 0);
-
-	hdr->payload_len = htons(len);
-	hdr->nexthdr = proto;
-	hdr->hop_limit = inet6_sk(sk)->hop_limit;
-
-	hdr->saddr = *saddr;
-	hdr->daddr = *daddr;
-}
-
 static struct sk_buff *mld_newpack(struct net_device *dev, int size)
 {
 	struct net *net = dev_net(dev);
@@ -1378,7 +1372,7 @@ static struct sk_buff *mld_newpack(struct net_device *dev, int size)
 	} else
 		saddr = &addr_buf;
 
-	ip6_mc_hdr(sk, skb, dev, saddr, &mld2_all_mcr, NEXTHDR_HOP, 0);
+	ip6_nd_hdr(sk, skb, dev, saddr, &mld2_all_mcr, NEXTHDR_HOP, 0);
 
 	memcpy(skb_put(skb, sizeof(ra)), ra, sizeof(ra));
 
@@ -1421,7 +1415,7 @@ static void mld_sendpack(struct sk_buff *skb)
 	icmpv6_flow_init(net->ipv6.igmp_sk, &fl6, ICMPV6_MLD2_REPORT,
 			 &ipv6_hdr(skb)->saddr, &ipv6_hdr(skb)->daddr,
 			 skb->dev->ifindex);
-	dst = icmp6_dst_alloc(skb->dev, &fl6);
+	dst = icmp6_dst_alloc(skb->dev, NULL, &fl6);
 
 	err = 0;
 	if (IS_ERR(dst)) {
@@ -1770,7 +1764,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 	} else
 		saddr = &addr_buf;
 
-	ip6_mc_hdr(sk, skb, dev, saddr, snd_addr, NEXTHDR_HOP, payload_len);
+	ip6_nd_hdr(sk, skb, dev, saddr, snd_addr, NEXTHDR_HOP, payload_len);
 
 	memcpy(skb_put(skb, sizeof(ra)), ra, sizeof(ra));
 
@@ -1789,7 +1783,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 	icmpv6_flow_init(sk, &fl6, type,
 			 &ipv6_hdr(skb)->saddr, &ipv6_hdr(skb)->daddr,
 			 skb->dev->ifindex);
-	dst = icmp6_dst_alloc(skb->dev, &fl6);
+	dst = icmp6_dst_alloc(skb->dev, NULL, &fl6);
 	if (IS_ERR(dst)) {
 		err = PTR_ERR(dst);
 		goto err_out;
@@ -2599,10 +2593,10 @@ static int __net_init igmp6_proc_init(struct net *net)
 	int err;
 
 	err = -ENOMEM;
-	if (!proc_create("igmp6", S_IRUGO, net->proc_net, &igmp6_mc_seq_fops))
+	if (!proc_net_fops_create(net, "igmp6", S_IRUGO, &igmp6_mc_seq_fops))
 		goto out;
-	if (!proc_create("mcfilter6", S_IRUGO, net->proc_net,
-			 &igmp6_mcf_seq_fops))
+	if (!proc_net_fops_create(net, "mcfilter6", S_IRUGO,
+				  &igmp6_mcf_seq_fops))
 		goto out_proc_net_igmp6;
 
 	err = 0;
@@ -2610,14 +2604,14 @@ out:
 	return err;
 
 out_proc_net_igmp6:
-	remove_proc_entry("igmp6", net->proc_net);
+	proc_net_remove(net, "igmp6");
 	goto out;
 }
 
 static void __net_exit igmp6_proc_exit(struct net *net)
 {
-	remove_proc_entry("mcfilter6", net->proc_net);
-	remove_proc_entry("igmp6", net->proc_net);
+	proc_net_remove(net, "mcfilter6");
+	proc_net_remove(net, "igmp6");
 }
 #else
 static inline int igmp6_proc_init(struct net *net)

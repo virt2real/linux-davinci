@@ -64,8 +64,6 @@ int arch_uprobe_pre_xol(struct arch_uprobe *auprobe, struct pt_regs *regs)
 	autask->saved_trap_nr = current->thread.trap_nr;
 	current->thread.trap_nr = UPROBE_TRAP_NR;
 	regs->nip = current->utask->xol_vaddr;
-
-	user_enable_single_step(current);
 	return 0;
 }
 
@@ -121,8 +119,6 @@ int arch_uprobe_post_xol(struct arch_uprobe *auprobe, struct pt_regs *regs)
 	 * to be executed.
 	 */
 	regs->nip = utask->vaddr + MAX_UINSN_BYTES;
-
-	user_disable_single_step(current);
 	return 0;
 }
 
@@ -166,8 +162,6 @@ void arch_uprobe_abort_xol(struct arch_uprobe *auprobe, struct pt_regs *regs)
 
 	current->thread.trap_nr = utask->autask.saved_trap_nr;
 	instruction_pointer_set(regs, utask->vaddr);
-
-	user_disable_single_step(current);
 }
 
 /*

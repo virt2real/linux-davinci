@@ -205,24 +205,7 @@ void pci_cleanup_rom(struct pci_dev *pdev)
 	}
 }
 
-/**
- * pci_platform_rom - provides a pointer to any ROM image provided by the
- * platform
- * @pdev: pointer to pci device struct
- * @size: pointer to receive size of pci window over ROM
- */
-void __iomem *pci_platform_rom(struct pci_dev *pdev, size_t *size)
-{
-	if (pdev->rom && pdev->romlen) {
-		*size = pdev->romlen;
-		return phys_to_virt((phys_addr_t)pdev->rom);
-	}
-
-	return NULL;
-}
-
 EXPORT_SYMBOL(pci_map_rom);
 EXPORT_SYMBOL(pci_unmap_rom);
 EXPORT_SYMBOL_GPL(pci_enable_rom);
 EXPORT_SYMBOL_GPL(pci_disable_rom);
-EXPORT_SYMBOL(pci_platform_rom);

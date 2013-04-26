@@ -29,9 +29,6 @@
 #include <linux/if_vlan.h>
 #include <net/tcp.h>
 #include <net/udp.h>
-#include <net/addrconf.h>
-#include <net/ndisc.h>
-#include <net/ip6_checksum.h>
 #include <asm/unaligned.h>
 #include <trace/events/napi.h>
 
@@ -47,8 +44,6 @@ static struct sk_buff_head skb_pool;
 
 static atomic_t trapped;
 
-static struct srcu_struct netpoll_srcu;
-
 #define USEC_PER_POLL	50
 #define NETPOLL_RX_ENABLED  1
 #define NETPOLL_RX_DROP     2
@@ -60,8 +55,7 @@ static struct srcu_struct netpoll_srcu;
 	 MAX_UDP_CHUNK)
 
 static void zap_completion_queue(void);
-static void netpoll_neigh_reply(struct sk_buff *skb, struct netpoll_info *npinfo);
-static void netpoll_async_cleanup(struct work_struct *work);
+static void netpoll_arp_reply(struct sk_buff *skb, struct netpoll_info *npinfo);
 
 static unsigned int carrier_timeout = 4;
 module_param(carrier_timeout, uint, 0644);
@@ -187,13 +181,13 @@ static void poll_napi(struct net_device *dev)
 	}
 }
 
-static void service_neigh_queue(struct netpoll_info *npi)
+static void service_arp_queue(struct netpoll_info *npi)
 {
 	if (npi) {
 		struct sk_buff *skb;
 
-		while ((skb = skb_dequeue(&npi->neigh_tx)))
-			netpoll_neigh_reply(skb, npi);
+		while ((skb = skb_dequeue(&npi->arp_tx)))
+			netpoll_arp_reply(skb, npi);
 	}
 }
 
@@ -202,75 +196,34 @@ static void netpoll_poll_dev(struct net_device *dev)
 	const struct net_device_ops *ops;
 	struct netpoll_info *ni = rcu_dereference_bh(dev->npinfo);
 
-	/* Don't do any rx activity if the dev_lock mutex is held
-	 * the dev_open/close paths use this to block netpoll activity
-	 * while changing device state
-	 */
-	if (!mutex_trylock(&ni->dev_lock))
+	if (!dev || !netif_running(dev))
 		return;
-
-	if (!netif_running(dev)) {
-		mutex_unlock(&ni->dev_lock);
-		return;
-	}
 
 	ops = dev->netdev_ops;
-	if (!ops->ndo_poll_controller) {
-		mutex_unlock(&ni->dev_lock);
+	if (!ops->ndo_poll_controller)
 		return;
-	}
 
 	/* Process pending work on NIC */
 	ops->ndo_poll_controller(dev);
 
 	poll_napi(dev);
 
-	mutex_unlock(&ni->dev_lock);
-
 	if (dev->flags & IFF_SLAVE) {
 		if (ni) {
-			struct net_device *bond_dev;
+			struct net_device *bond_dev = dev->master;
 			struct sk_buff *skb;
-			struct netpoll_info *bond_ni;
-
-			bond_dev = netdev_master_upper_dev_get_rcu(dev);
-			bond_ni = rcu_dereference_bh(bond_dev->npinfo);
-			while ((skb = skb_dequeue(&ni->neigh_tx))) {
+			struct netpoll_info *bond_ni = rcu_dereference_bh(bond_dev->npinfo);
+			while ((skb = skb_dequeue(&ni->arp_tx))) {
 				skb->dev = bond_dev;
-				skb_queue_tail(&bond_ni->neigh_tx, skb);
+				skb_queue_tail(&bond_ni->arp_tx, skb);
 			}
 		}
 	}
 
-	service_neigh_queue(ni);
+	service_arp_queue(ni);
 
 	zap_completion_queue();
 }
-
-int netpoll_rx_disable(struct net_device *dev)
-{
-	struct netpoll_info *ni;
-	int idx;
-	might_sleep();
-	idx = srcu_read_lock(&netpoll_srcu);
-	ni = srcu_dereference(dev->npinfo, &netpoll_srcu);
-	if (ni)
-		mutex_lock(&ni->dev_lock);
-	srcu_read_unlock(&netpoll_srcu, idx);
-	return 0;
-}
-EXPORT_SYMBOL(netpoll_rx_disable);
-
-void netpoll_rx_enable(struct net_device *dev)
-{
-	struct netpoll_info *ni;
-	rcu_read_lock();
-	ni = rcu_dereference(dev->npinfo);
-	if (ni)
-		mutex_unlock(&ni->dev_lock);
-	rcu_read_unlock();
-}
-EXPORT_SYMBOL(netpoll_rx_enable);
 
 static void refill_skbs(void)
 {
@@ -428,14 +381,9 @@ void netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 	struct iphdr *iph;
 	struct ethhdr *eth;
 	static atomic_t ip_ident;
-	struct ipv6hdr *ip6h;
 
 	udp_len = len + sizeof(*udph);
-	if (np->ipv6)
-		ip_len = udp_len + sizeof(*ip6h);
-	else
-		ip_len = udp_len + sizeof(*iph);
-
+	ip_len = udp_len + sizeof(*iph);
 	total_len = ip_len + LL_RESERVED_SPACE(np->dev);
 
 	skb = find_skb(np, total_len + np->dev->needed_tailroom,
@@ -452,66 +400,34 @@ void netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 	udph->source = htons(np->local_port);
 	udph->dest = htons(np->remote_port);
 	udph->len = htons(udp_len);
+	udph->check = 0;
+	udph->check = csum_tcpudp_magic(np->local_ip,
+					np->remote_ip,
+					udp_len, IPPROTO_UDP,
+					csum_partial(udph, udp_len, 0));
+	if (udph->check == 0)
+		udph->check = CSUM_MANGLED_0;
 
-	if (np->ipv6) {
-		udph->check = 0;
-		udph->check = csum_ipv6_magic(&np->local_ip.in6,
-					      &np->remote_ip.in6,
-					      udp_len, IPPROTO_UDP,
-					      csum_partial(udph, udp_len, 0));
-		if (udph->check == 0)
-			udph->check = CSUM_MANGLED_0;
+	skb_push(skb, sizeof(*iph));
+	skb_reset_network_header(skb);
+	iph = ip_hdr(skb);
 
-		skb_push(skb, sizeof(*ip6h));
-		skb_reset_network_header(skb);
-		ip6h = ipv6_hdr(skb);
+	/* iph->version = 4; iph->ihl = 5; */
+	put_unaligned(0x45, (unsigned char *)iph);
+	iph->tos      = 0;
+	put_unaligned(htons(ip_len), &(iph->tot_len));
+	iph->id       = htons(atomic_inc_return(&ip_ident));
+	iph->frag_off = 0;
+	iph->ttl      = 64;
+	iph->protocol = IPPROTO_UDP;
+	iph->check    = 0;
+	put_unaligned(np->local_ip, &(iph->saddr));
+	put_unaligned(np->remote_ip, &(iph->daddr));
+	iph->check    = ip_fast_csum((unsigned char *)iph, iph->ihl);
 
-		/* ip6h->version = 6; ip6h->priority = 0; */
-		put_unaligned(0x60, (unsigned char *)ip6h);
-		ip6h->flow_lbl[0] = 0;
-		ip6h->flow_lbl[1] = 0;
-		ip6h->flow_lbl[2] = 0;
-
-		ip6h->payload_len = htons(sizeof(struct udphdr) + len);
-		ip6h->nexthdr = IPPROTO_UDP;
-		ip6h->hop_limit = 32;
-		ip6h->saddr = np->local_ip.in6;
-		ip6h->daddr = np->remote_ip.in6;
-
-		eth = (struct ethhdr *) skb_push(skb, ETH_HLEN);
-		skb_reset_mac_header(skb);
-		skb->protocol = eth->h_proto = htons(ETH_P_IPV6);
-	} else {
-		udph->check = 0;
-		udph->check = csum_tcpudp_magic(np->local_ip.ip,
-						np->remote_ip.ip,
-						udp_len, IPPROTO_UDP,
-						csum_partial(udph, udp_len, 0));
-		if (udph->check == 0)
-			udph->check = CSUM_MANGLED_0;
-
-		skb_push(skb, sizeof(*iph));
-		skb_reset_network_header(skb);
-		iph = ip_hdr(skb);
-
-		/* iph->version = 4; iph->ihl = 5; */
-		put_unaligned(0x45, (unsigned char *)iph);
-		iph->tos      = 0;
-		put_unaligned(htons(ip_len), &(iph->tot_len));
-		iph->id       = htons(atomic_inc_return(&ip_ident));
-		iph->frag_off = 0;
-		iph->ttl      = 64;
-		iph->protocol = IPPROTO_UDP;
-		iph->check    = 0;
-		put_unaligned(np->local_ip.ip, &(iph->saddr));
-		put_unaligned(np->remote_ip.ip, &(iph->daddr));
-		iph->check    = ip_fast_csum((unsigned char *)iph, iph->ihl);
-
-		eth = (struct ethhdr *) skb_push(skb, ETH_HLEN);
-		skb_reset_mac_header(skb);
-		skb->protocol = eth->h_proto = htons(ETH_P_IP);
-	}
-
+	eth = (struct ethhdr *) skb_push(skb, ETH_HLEN);
+	skb_reset_mac_header(skb);
+	skb->protocol = eth->h_proto = htons(ETH_P_IP);
 	memcpy(eth->h_source, np->dev->dev_addr, ETH_ALEN);
 	memcpy(eth->h_dest, np->remote_mac, ETH_ALEN);
 
@@ -521,16 +437,18 @@ void netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 }
 EXPORT_SYMBOL(netpoll_send_udp);
 
-static void netpoll_neigh_reply(struct sk_buff *skb, struct netpoll_info *npinfo)
+static void netpoll_arp_reply(struct sk_buff *skb, struct netpoll_info *npinfo)
 {
-	int size, type = ARPOP_REPLY;
+	struct arphdr *arp;
+	unsigned char *arp_ptr;
+	int size, type = ARPOP_REPLY, ptype = ETH_P_ARP;
 	__be32 sip, tip;
 	unsigned char *sha;
 	struct sk_buff *send_skb;
 	struct netpoll *np, *tmp;
 	unsigned long flags;
 	int hlen, tlen;
-	int hits = 0, proto;
+	int hits = 0;
 
 	if (list_empty(&npinfo->rx_np))
 		return;
@@ -548,214 +466,94 @@ static void netpoll_neigh_reply(struct sk_buff *skb, struct netpoll_info *npinfo
 	if (!hits)
 		return;
 
-	proto = ntohs(eth_hdr(skb)->h_proto);
-	if (proto == ETH_P_IP) {
-		struct arphdr *arp;
-		unsigned char *arp_ptr;
-		/* No arp on this interface */
-		if (skb->dev->flags & IFF_NOARP)
-			return;
+	/* No arp on this interface */
+	if (skb->dev->flags & IFF_NOARP)
+		return;
 
-		if (!pskb_may_pull(skb, arp_hdr_len(skb->dev)))
-			return;
+	if (!pskb_may_pull(skb, arp_hdr_len(skb->dev)))
+		return;
 
-		skb_reset_network_header(skb);
-		skb_reset_transport_header(skb);
-		arp = arp_hdr(skb);
+	skb_reset_network_header(skb);
+	skb_reset_transport_header(skb);
+	arp = arp_hdr(skb);
 
-		if ((arp->ar_hrd != htons(ARPHRD_ETHER) &&
-		     arp->ar_hrd != htons(ARPHRD_IEEE802)) ||
-		    arp->ar_pro != htons(ETH_P_IP) ||
-		    arp->ar_op != htons(ARPOP_REQUEST))
-			return;
+	if ((arp->ar_hrd != htons(ARPHRD_ETHER) &&
+	     arp->ar_hrd != htons(ARPHRD_IEEE802)) ||
+	    arp->ar_pro != htons(ETH_P_IP) ||
+	    arp->ar_op != htons(ARPOP_REQUEST))
+		return;
 
-		arp_ptr = (unsigned char *)(arp+1);
-		/* save the location of the src hw addr */
-		sha = arp_ptr;
-		arp_ptr += skb->dev->addr_len;
-		memcpy(&sip, arp_ptr, 4);
+	arp_ptr = (unsigned char *)(arp+1);
+	/* save the location of the src hw addr */
+	sha = arp_ptr;
+	arp_ptr += skb->dev->addr_len;
+	memcpy(&sip, arp_ptr, 4);
+	arp_ptr += 4;
+	/* If we actually cared about dst hw addr,
+	   it would get copied here */
+	arp_ptr += skb->dev->addr_len;
+	memcpy(&tip, arp_ptr, 4);
+
+	/* Should we ignore arp? */
+	if (ipv4_is_loopback(tip) || ipv4_is_multicast(tip))
+		return;
+
+	size = arp_hdr_len(skb->dev);
+
+	spin_lock_irqsave(&npinfo->rx_lock, flags);
+	list_for_each_entry_safe(np, tmp, &npinfo->rx_np, rx) {
+		if (tip != np->local_ip)
+			continue;
+
+		hlen = LL_RESERVED_SPACE(np->dev);
+		tlen = np->dev->needed_tailroom;
+		send_skb = find_skb(np, size + hlen + tlen, hlen);
+		if (!send_skb)
+			continue;
+
+		skb_reset_network_header(send_skb);
+		arp = (struct arphdr *) skb_put(send_skb, size);
+		send_skb->dev = skb->dev;
+		send_skb->protocol = htons(ETH_P_ARP);
+
+		/* Fill the device header for the ARP frame */
+		if (dev_hard_header(send_skb, skb->dev, ptype,
+				    sha, np->dev->dev_addr,
+				    send_skb->len) < 0) {
+			kfree_skb(send_skb);
+			continue;
+		}
+
+		/*
+		 * Fill out the arp protocol part.
+		 *
+		 * we only support ethernet device type,
+		 * which (according to RFC 1390) should
+		 * always equal 1 (Ethernet).
+		 */
+
+		arp->ar_hrd = htons(np->dev->type);
+		arp->ar_pro = htons(ETH_P_IP);
+		arp->ar_hln = np->dev->addr_len;
+		arp->ar_pln = 4;
+		arp->ar_op = htons(type);
+
+		arp_ptr = (unsigned char *)(arp + 1);
+		memcpy(arp_ptr, np->dev->dev_addr, np->dev->addr_len);
+		arp_ptr += np->dev->addr_len;
+		memcpy(arp_ptr, &tip, 4);
 		arp_ptr += 4;
-		/* If we actually cared about dst hw addr,
-		   it would get copied here */
-		arp_ptr += skb->dev->addr_len;
-		memcpy(&tip, arp_ptr, 4);
+		memcpy(arp_ptr, sha, np->dev->addr_len);
+		arp_ptr += np->dev->addr_len;
+		memcpy(arp_ptr, &sip, 4);
 
-		/* Should we ignore arp? */
-		if (ipv4_is_loopback(tip) || ipv4_is_multicast(tip))
-			return;
+		netpoll_send_skb(np, send_skb);
 
-		size = arp_hdr_len(skb->dev);
-
-		spin_lock_irqsave(&npinfo->rx_lock, flags);
-		list_for_each_entry_safe(np, tmp, &npinfo->rx_np, rx) {
-			if (tip != np->local_ip.ip)
-				continue;
-
-			hlen = LL_RESERVED_SPACE(np->dev);
-			tlen = np->dev->needed_tailroom;
-			send_skb = find_skb(np, size + hlen + tlen, hlen);
-			if (!send_skb)
-				continue;
-
-			skb_reset_network_header(send_skb);
-			arp = (struct arphdr *) skb_put(send_skb, size);
-			send_skb->dev = skb->dev;
-			send_skb->protocol = htons(ETH_P_ARP);
-
-			/* Fill the device header for the ARP frame */
-			if (dev_hard_header(send_skb, skb->dev, ETH_P_ARP,
-					    sha, np->dev->dev_addr,
-					    send_skb->len) < 0) {
-				kfree_skb(send_skb);
-				continue;
-			}
-
-			/*
-			 * Fill out the arp protocol part.
-			 *
-			 * we only support ethernet device type,
-			 * which (according to RFC 1390) should
-			 * always equal 1 (Ethernet).
-			 */
-
-			arp->ar_hrd = htons(np->dev->type);
-			arp->ar_pro = htons(ETH_P_IP);
-			arp->ar_hln = np->dev->addr_len;
-			arp->ar_pln = 4;
-			arp->ar_op = htons(type);
-
-			arp_ptr = (unsigned char *)(arp + 1);
-			memcpy(arp_ptr, np->dev->dev_addr, np->dev->addr_len);
-			arp_ptr += np->dev->addr_len;
-			memcpy(arp_ptr, &tip, 4);
-			arp_ptr += 4;
-			memcpy(arp_ptr, sha, np->dev->addr_len);
-			arp_ptr += np->dev->addr_len;
-			memcpy(arp_ptr, &sip, 4);
-
-			netpoll_send_skb(np, send_skb);
-
-			/* If there are several rx_hooks for the same address,
-			   we're fine by sending a single reply */
-			break;
-		}
-		spin_unlock_irqrestore(&npinfo->rx_lock, flags);
-	} else if( proto == ETH_P_IPV6) {
-#if IS_ENABLED(CONFIG_IPV6)
-		struct nd_msg *msg;
-		u8 *lladdr = NULL;
-		struct ipv6hdr *hdr;
-		struct icmp6hdr *icmp6h;
-		const struct in6_addr *saddr;
-		const struct in6_addr *daddr;
-		struct inet6_dev *in6_dev = NULL;
-		struct in6_addr *target;
-
-		in6_dev = in6_dev_get(skb->dev);
-		if (!in6_dev || !in6_dev->cnf.accept_ra)
-			return;
-
-		if (!pskb_may_pull(skb, skb->len))
-			return;
-
-		msg = (struct nd_msg *)skb_transport_header(skb);
-
-		__skb_push(skb, skb->data - skb_transport_header(skb));
-
-		if (ipv6_hdr(skb)->hop_limit != 255)
-			return;
-		if (msg->icmph.icmp6_code != 0)
-			return;
-		if (msg->icmph.icmp6_type != NDISC_NEIGHBOUR_SOLICITATION)
-			return;
-
-		saddr = &ipv6_hdr(skb)->saddr;
-		daddr = &ipv6_hdr(skb)->daddr;
-
-		size = sizeof(struct icmp6hdr) + sizeof(struct in6_addr);
-
-		spin_lock_irqsave(&npinfo->rx_lock, flags);
-		list_for_each_entry_safe(np, tmp, &npinfo->rx_np, rx) {
-			if (!ipv6_addr_equal(daddr, &np->local_ip.in6))
-				continue;
-
-			hlen = LL_RESERVED_SPACE(np->dev);
-			tlen = np->dev->needed_tailroom;
-			send_skb = find_skb(np, size + hlen + tlen, hlen);
-			if (!send_skb)
-				continue;
-
-			send_skb->protocol = htons(ETH_P_IPV6);
-			send_skb->dev = skb->dev;
-
-			skb_reset_network_header(send_skb);
-			skb_put(send_skb, sizeof(struct ipv6hdr));
-			hdr = ipv6_hdr(send_skb);
-
-			*(__be32*)hdr = htonl(0x60000000);
-
-			hdr->payload_len = htons(size);
-			hdr->nexthdr = IPPROTO_ICMPV6;
-			hdr->hop_limit = 255;
-			hdr->saddr = *saddr;
-			hdr->daddr = *daddr;
-
-			send_skb->transport_header = send_skb->tail;
-			skb_put(send_skb, size);
-
-			icmp6h = (struct icmp6hdr *)skb_transport_header(skb);
-			icmp6h->icmp6_type = NDISC_NEIGHBOUR_ADVERTISEMENT;
-			icmp6h->icmp6_router = 0;
-			icmp6h->icmp6_solicited = 1;
-			target = (struct in6_addr *)(skb_transport_header(send_skb) + sizeof(struct icmp6hdr));
-			*target = msg->target;
-			icmp6h->icmp6_cksum = csum_ipv6_magic(saddr, daddr, size,
-							      IPPROTO_ICMPV6,
-							      csum_partial(icmp6h,
-									   size, 0));
-
-			if (dev_hard_header(send_skb, skb->dev, ETH_P_IPV6,
-					    lladdr, np->dev->dev_addr,
-					    send_skb->len) < 0) {
-				kfree_skb(send_skb);
-				continue;
-			}
-
-			netpoll_send_skb(np, send_skb);
-
-			/* If there are several rx_hooks for the same address,
-			   we're fine by sending a single reply */
-			break;
-		}
-		spin_unlock_irqrestore(&npinfo->rx_lock, flags);
-#endif
+		/* If there are several rx_hooks for the same address,
+		   we're fine by sending a single reply */
+		break;
 	}
-}
-
-static bool pkt_is_ns(struct sk_buff *skb)
-{
-	struct nd_msg *msg;
-	struct ipv6hdr *hdr;
-
-	if (skb->protocol != htons(ETH_P_ARP))
-		return false;
-	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr) + sizeof(struct nd_msg)))
-		return false;
-
-	msg = (struct nd_msg *)skb_transport_header(skb);
-	__skb_push(skb, skb->data - skb_transport_header(skb));
-	hdr = ipv6_hdr(skb);
-
-	if (hdr->nexthdr != IPPROTO_ICMPV6)
-		return false;
-	if (hdr->hop_limit != 255)
-		return false;
-	if (msg->icmph.icmp6_code != 0)
-		return false;
-	if (msg->icmph.icmp6_type != NDISC_NEIGHBOUR_SOLICITATION)
-		return false;
-
-	return true;
+	spin_unlock_irqrestore(&npinfo->rx_lock, flags);
 }
 
 int __netpoll_rx(struct sk_buff *skb, struct netpoll_info *npinfo)
@@ -773,11 +571,9 @@ int __netpoll_rx(struct sk_buff *skb, struct netpoll_info *npinfo)
 		goto out;
 
 	/* check if netpoll clients need ARP */
-	if (skb->protocol == htons(ETH_P_ARP) && atomic_read(&trapped)) {
-		skb_queue_tail(&npinfo->neigh_tx, skb);
-		return 1;
-	} else if (pkt_is_ns(skb) && atomic_read(&trapped)) {
-		skb_queue_tail(&npinfo->neigh_tx, skb);
+	if (skb->protocol == htons(ETH_P_ARP) &&
+	    atomic_read(&trapped)) {
+		skb_queue_tail(&npinfo->arp_tx, skb);
 		return 1;
 	}
 
@@ -788,100 +584,60 @@ int __netpoll_rx(struct sk_buff *skb, struct netpoll_info *npinfo)
 	}
 
 	proto = ntohs(eth_hdr(skb)->h_proto);
-	if (proto != ETH_P_IP && proto != ETH_P_IPV6)
+	if (proto != ETH_P_IP)
 		goto out;
 	if (skb->pkt_type == PACKET_OTHERHOST)
 		goto out;
 	if (skb_shared(skb))
 		goto out;
 
-	if (proto == ETH_P_IP) {
-		if (!pskb_may_pull(skb, sizeof(struct iphdr)))
-			goto out;
-		iph = (struct iphdr *)skb->data;
-		if (iph->ihl < 5 || iph->version != 4)
-			goto out;
-		if (!pskb_may_pull(skb, iph->ihl*4))
-			goto out;
-		iph = (struct iphdr *)skb->data;
-		if (ip_fast_csum((u8 *)iph, iph->ihl) != 0)
-			goto out;
+	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
+		goto out;
+	iph = (struct iphdr *)skb->data;
+	if (iph->ihl < 5 || iph->version != 4)
+		goto out;
+	if (!pskb_may_pull(skb, iph->ihl*4))
+		goto out;
+	iph = (struct iphdr *)skb->data;
+	if (ip_fast_csum((u8 *)iph, iph->ihl) != 0)
+		goto out;
 
-		len = ntohs(iph->tot_len);
-		if (skb->len < len || len < iph->ihl*4)
-			goto out;
+	len = ntohs(iph->tot_len);
+	if (skb->len < len || len < iph->ihl*4)
+		goto out;
 
-		/*
-		 * Our transport medium may have padded the buffer out.
-		 * Now We trim to the true length of the frame.
-		 */
-		if (pskb_trim_rcsum(skb, len))
-			goto out;
+	/*
+	 * Our transport medium may have padded the buffer out.
+	 * Now We trim to the true length of the frame.
+	 */
+	if (pskb_trim_rcsum(skb, len))
+		goto out;
 
-		iph = (struct iphdr *)skb->data;
-		if (iph->protocol != IPPROTO_UDP)
-			goto out;
+	iph = (struct iphdr *)skb->data;
+	if (iph->protocol != IPPROTO_UDP)
+		goto out;
 
-		len -= iph->ihl*4;
-		uh = (struct udphdr *)(((char *)iph) + iph->ihl*4);
-		ulen = ntohs(uh->len);
+	len -= iph->ihl*4;
+	uh = (struct udphdr *)(((char *)iph) + iph->ihl*4);
+	ulen = ntohs(uh->len);
 
-		if (ulen != len)
-			goto out;
-		if (checksum_udp(skb, uh, ulen, iph->saddr, iph->daddr))
-			goto out;
-		list_for_each_entry_safe(np, tmp, &npinfo->rx_np, rx) {
-			if (np->local_ip.ip && np->local_ip.ip != iph->daddr)
-				continue;
-			if (np->remote_ip.ip && np->remote_ip.ip != iph->saddr)
-				continue;
-			if (np->local_port && np->local_port != ntohs(uh->dest))
-				continue;
+	if (ulen != len)
+		goto out;
+	if (checksum_udp(skb, uh, ulen, iph->saddr, iph->daddr))
+		goto out;
 
-			np->rx_hook(np, ntohs(uh->source),
-				       (char *)(uh+1),
-				       ulen - sizeof(struct udphdr));
-			hits++;
-		}
-	} else {
-#if IS_ENABLED(CONFIG_IPV6)
-		const struct ipv6hdr *ip6h;
+	list_for_each_entry_safe(np, tmp, &npinfo->rx_np, rx) {
+		if (np->local_ip && np->local_ip != iph->daddr)
+			continue;
+		if (np->remote_ip && np->remote_ip != iph->saddr)
+			continue;
+		if (np->local_port && np->local_port != ntohs(uh->dest))
+			continue;
 
-		if (!pskb_may_pull(skb, sizeof(struct ipv6hdr)))
-			goto out;
-		ip6h = (struct ipv6hdr *)skb->data;
-		if (ip6h->version != 6)
-			goto out;
-		len = ntohs(ip6h->payload_len);
-		if (!len)
-			goto out;
-		if (len + sizeof(struct ipv6hdr) > skb->len)
-			goto out;
-		if (pskb_trim_rcsum(skb, len + sizeof(struct ipv6hdr)))
-			goto out;
-		ip6h = ipv6_hdr(skb);
-		if (!pskb_may_pull(skb, sizeof(struct udphdr)))
-			goto out;
-		uh = udp_hdr(skb);
-		ulen = ntohs(uh->len);
-		if (ulen != skb->len)
-			goto out;
-		if (udp6_csum_init(skb, uh, IPPROTO_UDP))
-			goto out;
-		list_for_each_entry_safe(np, tmp, &npinfo->rx_np, rx) {
-			if (!ipv6_addr_equal(&np->local_ip.in6, &ip6h->daddr))
-				continue;
-			if (!ipv6_addr_equal(&np->remote_ip.in6, &ip6h->saddr))
-				continue;
-			if (np->local_port && np->local_port != ntohs(uh->dest))
-				continue;
-
-			np->rx_hook(np, ntohs(uh->source),
-				       (char *)(uh+1),
-				       ulen - sizeof(struct udphdr));
-			hits++;
-		}
-#endif
+		np->rx_hook(np, ntohs(uh->source),
+			       (char *)(uh+1),
+			       ulen - sizeof(struct udphdr));
+		hits++;
 	}
 
 	if (!hits)
@@ -902,51 +658,23 @@ out:
 void netpoll_print_options(struct netpoll *np)
 {
 	np_info(np, "local port %d\n", np->local_port);
-	if (np->ipv6)
-		np_info(np, "local IPv6 address %pI6c\n", &np->local_ip.in6);
-	else
-		np_info(np, "local IPv4 address %pI4\n", &np->local_ip.ip);
+	np_info(np, "local IP %pI4\n", &np->local_ip);
 	np_info(np, "interface '%s'\n", np->dev_name);
 	np_info(np, "remote port %d\n", np->remote_port);
-	if (np->ipv6)
-		np_info(np, "remote IPv6 address %pI6c\n", &np->remote_ip.in6);
-	else
-		np_info(np, "remote IPv4 address %pI4\n", &np->remote_ip.ip);
+	np_info(np, "remote IP %pI4\n", &np->remote_ip);
 	np_info(np, "remote ethernet address %pM\n", np->remote_mac);
 }
 EXPORT_SYMBOL(netpoll_print_options);
 
-static int netpoll_parse_ip_addr(const char *str, union inet_addr *addr)
-{
-	const char *end;
-
-	if (!strchr(str, ':') &&
-	    in4_pton(str, -1, (void *)addr, -1, &end) > 0) {
-		if (!*end)
-			return 0;
-	}
-	if (in6_pton(str, -1, addr->in6.s6_addr, -1, &end) > 0) {
-#if IS_ENABLED(CONFIG_IPV6)
-		if (!*end)
-			return 1;
-#else
-		return -1;
-#endif
-	}
-	return -1;
-}
-
 int netpoll_parse_options(struct netpoll *np, char *opt)
 {
 	char *cur=opt, *delim;
-	int ipv6;
 
 	if (*cur != '@') {
 		if ((delim = strchr(cur, '@')) == NULL)
 			goto parse_failed;
 		*delim = 0;
-		if (kstrtou16(cur, 10, &np->local_port))
-			goto parse_failed;
+		np->local_port = simple_strtol(cur, NULL, 10);
 		cur = delim;
 	}
 	cur++;
@@ -955,11 +683,7 @@ int netpoll_parse_options(struct netpoll *np, char *opt)
 		if ((delim = strchr(cur, '/')) == NULL)
 			goto parse_failed;
 		*delim = 0;
-		ipv6 = netpoll_parse_ip_addr(cur, &np->local_ip);
-		if (ipv6 < 0)
-			goto parse_failed;
-		else
-			np->ipv6 = (bool)ipv6;
+		np->local_ip = in_aton(cur);
 		cur = delim;
 	}
 	cur++;
@@ -981,8 +705,7 @@ int netpoll_parse_options(struct netpoll *np, char *opt)
 		*delim = 0;
 		if (*cur == ' ' || *cur == '\t')
 			np_info(np, "warning: whitespace is not allowed\n");
-		if (kstrtou16(cur, 10, &np->remote_port))
-			goto parse_failed;
+		np->remote_port = simple_strtol(cur, NULL, 10);
 		cur = delim;
 	}
 	cur++;
@@ -991,13 +714,7 @@ int netpoll_parse_options(struct netpoll *np, char *opt)
 	if ((delim = strchr(cur, '/')) == NULL)
 		goto parse_failed;
 	*delim = 0;
-	ipv6 = netpoll_parse_ip_addr(cur, &np->remote_ip);
-	if (ipv6 < 0)
-		goto parse_failed;
-	else if (np->ipv6 != (bool)ipv6)
-		goto parse_failed;
-	else
-		np->ipv6 = (bool)ipv6;
+	np->remote_ip = in_aton(cur);
 	cur = delim + 1;
 
 	if (*cur != 0) {
@@ -1025,7 +742,6 @@ int __netpoll_setup(struct netpoll *np, struct net_device *ndev, gfp_t gfp)
 
 	np->dev = ndev;
 	strlcpy(np->dev_name, ndev->name, IFNAMSIZ);
-	INIT_WORK(&np->cleanup_work, netpoll_async_cleanup);
 
 	if ((ndev->priv_flags & IFF_DISABLE_NETPOLL) ||
 	    !ndev->netdev_ops->ndo_poll_controller) {
@@ -1046,8 +762,7 @@ int __netpoll_setup(struct netpoll *np, struct net_device *ndev, gfp_t gfp)
 		INIT_LIST_HEAD(&npinfo->rx_np);
 
 		spin_lock_init(&npinfo->rx_lock);
-		mutex_init(&npinfo->dev_lock);
-		skb_queue_head_init(&npinfo->neigh_tx);
+		skb_queue_head_init(&npinfo->arp_tx);
 		skb_queue_head_init(&npinfo->txq);
 		INIT_DELAYED_WORK(&npinfo->tx_work, queue_process);
 
@@ -1060,7 +775,7 @@ int __netpoll_setup(struct netpoll *np, struct net_device *ndev, gfp_t gfp)
 				goto free_npinfo;
 		}
 	} else {
-		npinfo = rtnl_dereference(ndev->npinfo);
+		npinfo = ndev->npinfo;
 		atomic_inc(&npinfo->refcnt);
 	}
 
@@ -1091,19 +806,14 @@ int netpoll_setup(struct netpoll *np)
 	struct in_device *in_dev;
 	int err;
 
-	rtnl_lock();
-	if (np->dev_name) {
-		struct net *net = current->nsproxy->net_ns;
-		ndev = __dev_get_by_name(net, np->dev_name);
-	}
+	if (np->dev_name)
+		ndev = dev_get_by_name(&init_net, np->dev_name);
 	if (!ndev) {
 		np_err(np, "%s doesn't exist, aborting\n", np->dev_name);
-		err = -ENODEV;
-		goto unlock;
+		return -ENODEV;
 	}
-	dev_hold(ndev);
 
-	if (netdev_master_upper_dev_get(ndev)) {
+	if (ndev->master) {
 		np_err(np, "%s is a slave device, aborting\n", np->dev_name);
 		err = -EBUSY;
 		goto put;
@@ -1114,14 +824,15 @@ int netpoll_setup(struct netpoll *np)
 
 		np_info(np, "device %s not up yet, forcing it\n", np->dev_name);
 
+		rtnl_lock();
 		err = dev_open(ndev);
+		rtnl_unlock();
 
 		if (err) {
 			np_err(np, "failed to open %s\n", ndev->name);
 			goto put;
 		}
 
-		rtnl_unlock();
 		atleast = jiffies + HZ/10;
 		atmost = jiffies + carrier_timeout * HZ;
 		while (!netif_carrier_ok(ndev)) {
@@ -1141,70 +852,39 @@ int netpoll_setup(struct netpoll *np)
 			np_notice(np, "carrier detect appears untrustworthy, waiting 4 seconds\n");
 			msleep(4000);
 		}
-		rtnl_lock();
 	}
 
-	if (!np->local_ip.ip) {
-		if (!np->ipv6) {
-			in_dev = __in_dev_get_rtnl(ndev);
+	if (!np->local_ip) {
+		rcu_read_lock();
+		in_dev = __in_dev_get_rcu(ndev);
 
-			if (!in_dev || !in_dev->ifa_list) {
-				np_err(np, "no IP address for %s, aborting\n",
-				       np->dev_name);
-				err = -EDESTADDRREQ;
-				goto put;
-			}
-
-			np->local_ip.ip = in_dev->ifa_list->ifa_local;
-			np_info(np, "local IP %pI4\n", &np->local_ip.ip);
-		} else {
-#if IS_ENABLED(CONFIG_IPV6)
-			struct inet6_dev *idev;
-
-			err = -EDESTADDRREQ;
-			idev = __in6_dev_get(ndev);
-			if (idev) {
-				struct inet6_ifaddr *ifp;
-
-				read_lock_bh(&idev->lock);
-				list_for_each_entry(ifp, &idev->addr_list, if_list) {
-					if (ipv6_addr_type(&ifp->addr) & IPV6_ADDR_LINKLOCAL)
-						continue;
-					np->local_ip.in6 = ifp->addr;
-					err = 0;
-					break;
-				}
-				read_unlock_bh(&idev->lock);
-			}
-			if (err) {
-				np_err(np, "no IPv6 address for %s, aborting\n",
-				       np->dev_name);
-				goto put;
-			} else
-				np_info(np, "local IPv6 %pI6c\n", &np->local_ip.in6);
-#else
-			np_err(np, "IPv6 is not supported %s, aborting\n",
+		if (!in_dev || !in_dev->ifa_list) {
+			rcu_read_unlock();
+			np_err(np, "no IP address for %s, aborting\n",
 			       np->dev_name);
-			err = -EINVAL;
+			err = -EDESTADDRREQ;
 			goto put;
-#endif
 		}
+
+		np->local_ip = in_dev->ifa_list->ifa_local;
+		rcu_read_unlock();
+		np_info(np, "local IP %pI4\n", &np->local_ip);
 	}
 
 	/* fill up the skb queue */
 	refill_skbs();
 
+	rtnl_lock();
 	err = __netpoll_setup(np, ndev, GFP_KERNEL);
+	rtnl_unlock();
+
 	if (err)
 		goto put;
 
-	rtnl_unlock();
 	return 0;
 
 put:
 	dev_put(ndev);
-unlock:
-	rtnl_unlock();
 	return err;
 }
 EXPORT_SYMBOL(netpoll_setup);
@@ -1212,7 +892,6 @@ EXPORT_SYMBOL(netpoll_setup);
 static int __init netpoll_init(void)
 {
 	skb_queue_head_init(&skb_pool);
-	init_srcu_struct(&netpoll_srcu);
 	return 0;
 }
 core_initcall(netpoll_init);
@@ -1222,7 +901,7 @@ static void rcu_cleanup_netpoll_info(struct rcu_head *rcu_head)
 	struct netpoll_info *npinfo =
 			container_of(rcu_head, struct netpoll_info, rcu);
 
-	skb_queue_purge(&npinfo->neigh_tx);
+	skb_queue_purge(&npinfo->arp_tx);
 	skb_queue_purge(&npinfo->txq);
 
 	/* we can't call cancel_delayed_work_sync here, as we are in softirq */
@@ -1240,11 +919,7 @@ void __netpoll_cleanup(struct netpoll *np)
 	struct netpoll_info *npinfo;
 	unsigned long flags;
 
-	/* rtnl_dereference would be preferable here but
-	 * rcu_cleanup_netpoll path can put us in here safely without
-	 * holding the rtnl, so plain rcu_dereference it is
-	 */
-	npinfo = rtnl_dereference(np->dev->npinfo);
+	npinfo = np->dev->npinfo;
 	if (!npinfo)
 		return;
 
@@ -1256,8 +931,6 @@ void __netpoll_cleanup(struct netpoll *np)
 		spin_unlock_irqrestore(&npinfo->rx_lock, flags);
 	}
 
-	synchronize_srcu(&netpoll_srcu);
-
 	if (atomic_dec_and_test(&npinfo->refcnt)) {
 		const struct net_device_ops *ops;
 
@@ -1265,27 +938,25 @@ void __netpoll_cleanup(struct netpoll *np)
 		if (ops->ndo_netpoll_cleanup)
 			ops->ndo_netpoll_cleanup(np->dev);
 
-		rcu_assign_pointer(np->dev->npinfo, NULL);
+		RCU_INIT_POINTER(np->dev->npinfo, NULL);
 		call_rcu_bh(&npinfo->rcu, rcu_cleanup_netpoll_info);
 	}
 }
 EXPORT_SYMBOL_GPL(__netpoll_cleanup);
 
-static void netpoll_async_cleanup(struct work_struct *work)
+static void rcu_cleanup_netpoll(struct rcu_head *rcu_head)
 {
-	struct netpoll *np = container_of(work, struct netpoll, cleanup_work);
+	struct netpoll *np = container_of(rcu_head, struct netpoll, rcu);
 
-	rtnl_lock();
 	__netpoll_cleanup(np);
-	rtnl_unlock();
 	kfree(np);
 }
 
-void __netpoll_free_async(struct netpoll *np)
+void __netpoll_free_rcu(struct netpoll *np)
 {
-	schedule_work(&np->cleanup_work);
+	call_rcu_bh(&np->rcu, rcu_cleanup_netpoll);
 }
-EXPORT_SYMBOL_GPL(__netpoll_free_async);
+EXPORT_SYMBOL_GPL(__netpoll_free_rcu);
 
 void netpoll_cleanup(struct netpoll *np)
 {

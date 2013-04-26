@@ -128,32 +128,30 @@ static int wis_tw2804_command(struct i2c_client *client,
 		int *input = arg;
 
 		if (*input < 0 || *input > 3) {
-			dev_err(&client->dev,
-				"channel %d is not between 0 and 3!\n", *input);
+			printk(KERN_ERR "wis-tw2804: channel %d is not "
+					"between 0 and 3!\n", *input);
 			return 0;
 		}
 		dec->channel = *input;
-		dev_dbg(&client->dev, "initializing TW2804 channel %d\n",
-			dec->channel);
+		printk(KERN_DEBUG "wis-tw2804: initializing TW2804 "
+				"channel %d\n", dec->channel);
 		if (dec->channel == 0 &&
 				write_regs(client, global_registers, 0) < 0) {
-			dev_err(&client->dev,
-				"error initializing TW2804 global registers\n");
+			printk(KERN_ERR "wis-tw2804: error initializing "
+					"TW2804 global registers\n");
 			return 0;
 		}
 		if (write_regs(client, channel_registers, dec->channel) < 0) {
-			dev_err(&client->dev,
-				"error initializing TW2804 channel %d\n",
-				dec->channel);
+			printk(KERN_ERR "wis-tw2804: error initializing "
+					"TW2804 channel %d\n", dec->channel);
 			return 0;
 		}
 		return 0;
 	}
 
 	if (dec->channel < 0) {
-		dev_dbg(&client->dev,
-			"ignoring command %08x until channel number is set\n",
-			cmd);
+		printk(KERN_DEBUG "wis-tw2804: ignoring command %08x until "
+				"channel number is set\n", cmd);
 		return 0;
 	}
 
@@ -313,7 +311,7 @@ static int wis_tw2804_probe(struct i2c_client *client,
 	dec->hue = 128;
 	i2c_set_clientdata(client, dec);
 
-	dev_dbg(&client->dev, "creating TW2804 at address %d on %s\n",
+	printk(KERN_DEBUG "wis-tw2804: creating TW2804 at address %d on %s\n",
 		client->addr, adapter->name);
 
 	return 0;
@@ -343,6 +341,17 @@ static struct i2c_driver wis_tw2804_driver = {
 	.id_table	= wis_tw2804_id,
 };
 
-module_i2c_driver(wis_tw2804_driver);
+static int __init wis_tw2804_init(void)
+{
+	return i2c_add_driver(&wis_tw2804_driver);
+}
+
+static void __exit wis_tw2804_cleanup(void)
+{
+	i2c_del_driver(&wis_tw2804_driver);
+}
+
+module_init(wis_tw2804_init);
+module_exit(wis_tw2804_cleanup);
 
 MODULE_LICENSE("GPL v2");

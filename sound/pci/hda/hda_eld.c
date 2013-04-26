@@ -246,8 +246,8 @@ static void hdmi_update_short_audio_desc(struct cea_sad *a,
 /*
  * Be careful, ELD buf could be totally rubbish!
  */
-int snd_hdmi_parse_eld(struct parsed_hdmi_eld *e,
-			  const unsigned char *buf, int size)
+static int hdmi_update_eld(struct hdmi_eld *e,
+			   const unsigned char *buf, int size)
 {
 	int mnl;
 	int i;
@@ -260,6 +260,7 @@ int snd_hdmi_parse_eld(struct parsed_hdmi_eld *e,
 		goto out_fail;
 	}
 
+	e->eld_size = size;
 	e->baseline_len = GRAB_BITS(buf, 2, 0, 8);
 	mnl		= GRAB_BITS(buf, 4, 0, 5);
 	e->cea_edid_ver	= GRAB_BITS(buf, 4, 5, 3);
@@ -304,6 +305,7 @@ int snd_hdmi_parse_eld(struct parsed_hdmi_eld *e,
 	if (!e->spk_alloc)
 		e->spk_alloc = 0xffff;
 
+	e->eld_valid = true;
 	return 0;
 
 out_fail:
@@ -316,16 +318,17 @@ int snd_hdmi_get_eld_size(struct hda_codec *codec, hda_nid_t nid)
 						 AC_DIPSIZE_ELD_BUF);
 }
 
-int snd_hdmi_get_eld(struct hda_codec *codec, hda_nid_t nid,
-		     unsigned char *buf, int *eld_size)
+int snd_hdmi_get_eld(struct hdmi_eld *eld,
+		     struct hda_codec *codec, hda_nid_t nid)
 {
 	int i;
-	int ret = 0;
+	int ret;
 	int size;
+	unsigned char *buf;
 
 	/*
 	 * ELD size is initialized to zero in caller function. If no errors and
-	 * ELD is valid, actual eld_size is assigned.
+	 * ELD is valid, actual eld_size is assigned in hdmi_update_eld()
 	 */
 
 	size = snd_hdmi_get_eld_size(codec, nid);
@@ -340,6 +343,8 @@ int snd_hdmi_get_eld(struct hda_codec *codec, hda_nid_t nid,
 	}
 
 	/* set ELD buffer */
+	buf = eld->eld_buffer;
+
 	for (i = 0; i < size; i++) {
 		unsigned int val = hdmi_get_eld_data(codec, nid, i);
 		/*
@@ -367,7 +372,8 @@ int snd_hdmi_get_eld(struct hda_codec *codec, hda_nid_t nid,
 		buf[i] = val;
 	}
 
-	*eld_size = size;
+	ret = hdmi_update_eld(eld, buf, size);
+
 error:
 	return ret;
 }
@@ -432,7 +438,7 @@ void snd_print_channel_allocation(int spk_alloc, char *buf, int buflen)
 	buf[j] = '\0';	/* necessary when j == 0 */
 }
 
-void snd_hdmi_show_eld(struct parsed_hdmi_eld *e)
+void snd_hdmi_show_eld(struct hdmi_eld *e)
 {
 	int i;
 
@@ -481,11 +487,10 @@ static void hdmi_print_sad_info(int i, struct cea_sad *a,
 static void hdmi_print_eld_info(struct snd_info_entry *entry,
 				struct snd_info_buffer *buffer)
 {
-	struct hdmi_eld *eld = entry->private_data;
-	struct parsed_hdmi_eld *e = &eld->info;
+	struct hdmi_eld *e = entry->private_data;
 	char buf[SND_PRINT_CHANNEL_ALLOCATION_ADVISED_BUFSIZE];
 	int i;
-	static char *eld_version_names[32] = {
+	static char *eld_versoin_names[32] = {
 		"reserved",
 		"reserved",
 		"CEA-861D or below",
@@ -500,18 +505,15 @@ static void hdmi_print_eld_info(struct snd_info_entry *entry,
 		[4 ... 7] = "reserved"
 	};
 
-	mutex_lock(&eld->lock);
-	snd_iprintf(buffer, "monitor_present\t\t%d\n", eld->monitor_present);
-	snd_iprintf(buffer, "eld_valid\t\t%d\n", eld->eld_valid);
-	if (!eld->eld_valid) {
-		mutex_unlock(&eld->lock);
+	snd_iprintf(buffer, "monitor_present\t\t%d\n", e->monitor_present);
+	snd_iprintf(buffer, "eld_valid\t\t%d\n", e->eld_valid);
+	if (!e->eld_valid)
 		return;
-	}
 	snd_iprintf(buffer, "monitor_name\t\t%s\n", e->monitor_name);
 	snd_iprintf(buffer, "connection_type\t\t%s\n",
 				eld_connection_type_names[e->conn_type]);
 	snd_iprintf(buffer, "eld_version\t\t[0x%x] %s\n", e->eld_ver,
-					eld_version_names[e->eld_ver]);
+					eld_versoin_names[e->eld_ver]);
 	snd_iprintf(buffer, "edid_version\t\t[0x%x] %s\n", e->cea_edid_ver,
 				cea_edid_version_names[e->cea_edid_ver]);
 	snd_iprintf(buffer, "manufacture_id\t\t0x%x\n", e->manufacture_id);
@@ -528,21 +530,18 @@ static void hdmi_print_eld_info(struct snd_info_entry *entry,
 
 	for (i = 0; i < e->sad_count; i++)
 		hdmi_print_sad_info(i, e->sad + i, buffer);
-	mutex_unlock(&eld->lock);
 }
 
 static void hdmi_write_eld_info(struct snd_info_entry *entry,
 				struct snd_info_buffer *buffer)
 {
-	struct hdmi_eld *eld = entry->private_data;
-	struct parsed_hdmi_eld *e = &eld->info;
+	struct hdmi_eld *e = entry->private_data;
 	char line[64];
 	char name[64];
 	char *sname;
 	long long val;
 	unsigned int n;
 
-	mutex_lock(&eld->lock);
 	while (!snd_info_get_line(buffer, line, sizeof(line))) {
 		if (sscanf(line, "%s %llx", name, &val) != 2)
 			continue;
@@ -552,9 +551,9 @@ static void hdmi_write_eld_info(struct snd_info_entry *entry,
 		 * 	eld_version edid_version
 		 */
 		if (!strcmp(name, "monitor_present"))
-			eld->monitor_present = val;
+			e->monitor_present = val;
 		else if (!strcmp(name, "eld_valid"))
-			eld->eld_valid = val;
+			e->eld_valid = val;
 		else if (!strcmp(name, "connection_type"))
 			e->conn_type = val;
 		else if (!strcmp(name, "port_id"))
@@ -594,7 +593,6 @@ static void hdmi_write_eld_info(struct snd_info_entry *entry,
 				e->sad_count = n + 1;
 		}
 	}
-	mutex_unlock(&eld->lock);
 }
 
 
@@ -629,7 +627,7 @@ void snd_hda_eld_proc_free(struct hda_codec *codec, struct hdmi_eld *eld)
 #endif /* CONFIG_PROC_FS */
 
 /* update PCM info based on ELD */
-void snd_hdmi_eld_update_pcm_info(struct parsed_hdmi_eld *e,
+void snd_hdmi_eld_update_pcm_info(struct hdmi_eld *eld,
 			      struct hda_pcm_stream *hinfo)
 {
 	u32 rates;
@@ -646,8 +644,8 @@ void snd_hdmi_eld_update_pcm_info(struct parsed_hdmi_eld *e,
 	formats = SNDRV_PCM_FMTBIT_S16_LE;
 	maxbps = 16;
 	channels_max = 2;
-	for (i = 0; i < e->sad_count; i++) {
-		struct cea_sad *a = &e->sad[i];
+	for (i = 0; i < eld->sad_count; i++) {
+		struct cea_sad *a = &eld->sad[i];
 		rates |= a->rates;
 		if (a->channels > channels_max)
 			channels_max = a->channels;
