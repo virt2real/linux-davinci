@@ -1,0 +1,26 @@
+menuconfig V2R_DRIVERS
+	bool "Virt2real device drivers"
+	---help---
+	  Dallas' 1-wire bus is useful to connect slow 1-pin devices
+
+config V2R_ADC
+	depends on V2R_DRIVERS
+	bool "ADC driver"
+	default y
+	---help---
+	  This allows to communicate with userspace using connector. For more
+
+config V2R_GPIO
+	depends on V2R_DRIVERS
+	bool "GPIO driver"
+	default y
+	---help---
+	  This allows to communicate with userspace using connector. For more
+
+config V2R_SWPWM
+	depends on V2R_DRIVERS
+	bool "SW PWM driver"
+	default y
+	---help---
+	  This allows to communicate with userspace using connector. For more
+
