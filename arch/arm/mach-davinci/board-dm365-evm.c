@@ -13,6 +13,12 @@
  * GNU General Public License for more details.
  */
 #include <linux/kernel.h>
+
+/*added by Gol*/
+#include <linux/module.h>
+#include <asm/mach/map.h>
+/*end added by Gol */
+
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -27,6 +33,10 @@
 #include <linux/input.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/eeprom.h>
+
+/*added by Gol*/
+#include <linux/gpio.h>
+/*end added by Gol*/
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -55,7 +65,8 @@ static inline int have_tvp7002(void)
 	return 0;
 }
 
-#define DM365_EVM_PHY_ID		"davinci_mdio-0:00"
+//#define DM365_EVM_PHY_ID		"davinci_mdio-0:01"  // replaced by Gol
+#define DM365_EVM_PHY_ID		"davinci_mdio-0:00"   
 /*
  * A MAX-II CPLD is used for various board control functions.
  */
@@ -590,6 +601,221 @@ static struct spi_board_info dm365_evm_spi_info[] __initconst = {
 	},
 };
 
+
+/*added by Gol */
+
+static void dm365_evm_gpio_configure(void){
+//
+	gpio_request(22, "GPIO22");
+	gpio_direction_input(22);
+	davinci_cfg_reg(DM365_GPIO22);
+	gpio_free(22);
+//
+	gpio_request(23, "GPIO23");
+	gpio_direction_input(23);
+	davinci_cfg_reg(DM365_GPIO23);
+	gpio_free(23);
+//
+	gpio_request(24, "GPIO24");
+	gpio_direction_input(24);
+	davinci_cfg_reg(DM365_GPIO24);
+	gpio_free(24);
+//
+	gpio_request(25, "GPIO25");
+	gpio_direction_input(25);
+	davinci_cfg_reg(DM365_GPIO25);
+	gpio_free(25);
+//
+	gpio_request(26, "GPIO26");
+	gpio_direction_input(26);
+	davinci_cfg_reg(DM365_GPIO26);
+	gpio_free(26);
+//
+	gpio_request(27, "GPIO27");
+	gpio_direction_input(27);
+	davinci_cfg_reg(DM365_GPIO27);
+	gpio_free(27);
+//
+	gpio_request(28, "GPIO28");
+	gpio_direction_input(28);
+	davinci_cfg_reg(DM365_GPIO28);
+	gpio_free(28);
+//
+	gpio_request(29, "GPIO29");
+	gpio_direction_input(29);
+	davinci_cfg_reg(DM365_GPIO29);
+	gpio_free(29);
+//
+	gpio_request(30, "GPIO30");
+	gpio_direction_input(30);
+	davinci_cfg_reg(DM365_GPIO30);
+	gpio_free(30);
+//
+	gpio_request(31, "GPIO31");
+	gpio_direction_input(31);
+	davinci_cfg_reg(DM365_GPIO31);
+	gpio_free(31);
+//
+	gpio_request(32, "GPIO32");
+	gpio_direction_input(32);
+	davinci_cfg_reg(DM365_GPIO32);
+	gpio_free(32);
+//
+	gpio_request(33, "GPIO33");
+	gpio_direction_input(33);
+	davinci_cfg_reg(DM365_GPIO33);
+	gpio_free(33);
+//
+	gpio_request(34, "GPIO34");
+	gpio_direction_input(34);
+	davinci_cfg_reg(DM365_GPIO34);
+	gpio_free(34);
+//
+	gpio_request(35, "GPIO35");
+	gpio_direction_input(35);
+	davinci_cfg_reg(DM365_GPIO35);
+	gpio_free(35);
+//
+	gpio_request(44, "GPIO44");
+	gpio_direction_input(44);
+	davinci_cfg_reg(DM365_GPIO44);
+	gpio_free(44);
+//
+	gpio_request(45, "GPIO45");
+	gpio_direction_input(45);
+	davinci_cfg_reg(DM365_GPIO45);
+	gpio_free(45);
+//
+	gpio_request(46, "GPIO46");
+	gpio_direction_input(46);
+	davinci_cfg_reg(DM365_GPIO46);
+	gpio_free(46);
+//
+	gpio_request(47, "GPIO47");
+	gpio_direction_input(47);
+	davinci_cfg_reg(DM365_GPIO47);
+	gpio_free(47);
+//
+	gpio_request(48, "GPIO48");
+	gpio_direction_input(48);
+	davinci_cfg_reg(DM365_GPIO48);
+	gpio_free(48);
+//
+	gpio_request(49, "GPIO49");
+	gpio_direction_input(49);
+	davinci_cfg_reg(DM365_GPIO49);
+	gpio_free(49);
+//
+	gpio_request(50, "GPIO50");
+	gpio_direction_input(50);
+	davinci_cfg_reg(DM365_GPIO50);
+	gpio_free(50);
+//
+	gpio_request(51, "GPIO51");
+	gpio_direction_input(51);
+	davinci_cfg_reg(DM365_GPIO51);
+	gpio_free(51);
+//
+	gpio_request(67, "GPIO67");
+	gpio_direction_input(67);
+	davinci_cfg_reg(DM365_GPIO67);
+	gpio_free(67);
+//
+	gpio_request(79, "GPIO79");
+	gpio_direction_input(79);
+	davinci_cfg_reg(DM365_GPIO79);
+	gpio_free(79);
+//
+	gpio_request(80, "GPIO80");
+	gpio_direction_input(80);
+	davinci_cfg_reg(DM365_GPIO80);
+	gpio_free(80);
+//
+	gpio_request(81, "GPIO81");
+	gpio_direction_input(81);
+	davinci_cfg_reg(DM365_GPIO81);
+	gpio_free(81);
+//
+	gpio_request(82, "GPIO82");
+	gpio_direction_input(82);
+	davinci_cfg_reg(DM365_GPIO82);
+	gpio_free(82);
+//
+	gpio_request(83, "GPIO83");
+	gpio_direction_input(83);
+	davinci_cfg_reg(DM365_GPIO83);
+	gpio_free(83);
+//
+	gpio_request(84, "GPIO84");
+	gpio_direction_input(84);
+	davinci_cfg_reg(DM365_GPIO84);
+	gpio_free(84);
+//
+	gpio_request(85, "GPIO85");
+	gpio_direction_input(85);
+	davinci_cfg_reg(DM365_GPIO85);
+	gpio_free(85);
+//
+	gpio_request(86, "GPIO86");
+	gpio_direction_input(86);
+	davinci_cfg_reg(DM365_GPIO86);
+	gpio_free(86);
+//
+	gpio_request(87, "GPIO87");
+	gpio_direction_input(87);
+	davinci_cfg_reg(DM365_GPIO87);
+	gpio_free(87);
+//
+	gpio_request(88, "GPIO88");
+	gpio_direction_input(88);
+	davinci_cfg_reg(DM365_GPIO88);
+	gpio_free(88);
+//
+	gpio_request(89, "GPIO89");
+	gpio_direction_input(89);
+	davinci_cfg_reg(DM365_GPIO89);
+	gpio_free(89);
+//
+	gpio_request(90, "GPIO90");
+	gpio_direction_input(90);
+	davinci_cfg_reg(DM365_GPIO90);
+	gpio_free(90);
+//
+	gpio_request(91, "GPIO91");
+	gpio_direction_input(91);
+	davinci_cfg_reg(DM365_GPIO91);
+	gpio_free(91);
+//
+	gpio_request(92, "GPIO92");
+	gpio_direction_input(92);
+	davinci_cfg_reg(DM365_GPIO92);
+	gpio_free(92);
+//
+	gpio_request(100, "GPIO100");
+	gpio_direction_input(100);
+	davinci_cfg_reg(DM365_GPIO100);
+	gpio_free(100);
+//
+	gpio_request(101, "GPIO101");
+	gpio_direction_input(101);
+	davinci_cfg_reg(DM365_GPIO101);
+	gpio_free(101);
+//
+	gpio_request(102, "GPIO102");
+	gpio_direction_input(102);
+	davinci_cfg_reg(DM365_GPIO102);
+	gpio_free(102);
+//
+	gpio_request(103, "GPIO103");
+	gpio_direction_input(103);
+	davinci_cfg_reg(DM365_GPIO103);
+	gpio_free(103);
+}
+
+
+/*end added by Gol */
+
+
 static __init void dm365_evm_init(void)
 {
 	evm_init_i2c();
@@ -613,6 +839,12 @@ static __init void dm365_evm_init(void)
 
 	dm365_init_spi0(BIT(0), dm365_evm_spi_info,
 			ARRAY_SIZE(dm365_evm_spi_info));
+
+	/* added by Gol */
+        dm365_evm_gpio_configure();
+        printk("virt2real GPIO configured\r\n");
+	/* end added by Gol */
+
 }
 
 MACHINE_START(DAVINCI_DM365_EVM, "DaVinci DM365 EVM")

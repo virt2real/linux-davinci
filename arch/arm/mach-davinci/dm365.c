@@ -485,6 +485,15 @@ static struct clk_lookup dm365_clks[] = {
 #define INTMUX		0x18
 #define EVTMUX		0x1c
 
+/* added by Gol */
+#define PINMUX0		0x00
+#define PINMUX1		0x04
+#define PINMUX2		0x08
+#define PINMUX3		0x0c
+#define PINMUX4		0x10
+/* end added by Gol */
+
+
 
 static const struct mux_config dm365_pins[] = {
 #ifdef CONFIG_DAVINCI_MUX
@@ -590,12 +599,63 @@ MUX_CFG(DM365,	CLKOUT0,	4,   20,    3,    3,     false)
 MUX_CFG(DM365,	CLKOUT1,	4,   16,    3,    3,     false)
 MUX_CFG(DM365,	CLKOUT2,	4,   8,     3,    3,     false)
 
+/*  commented by Gol */
+/*
 MUX_CFG(DM365,	GPIO20,		3,   21,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO30,		4,   6,     3,	  0,	 false)
 MUX_CFG(DM365,	GPIO31,		4,   8,     3,	  0,	 false)
 MUX_CFG(DM365,	GPIO32,		4,   10,    3,	  0,	 false)
 MUX_CFG(DM365,	GPIO33,		4,   12,    3,	  0,	 false)
 MUX_CFG(DM365,	GPIO40,		4,   26,    3,	  0,	 false)
+*/
+/* end replaced by Gol */
+
+/*added by Gol*/
+MUX_CFG(DM365,	GPIO20,		3,   21,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO22,		3,   25,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO23,		3,   26,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO24,		3,   28,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO25,		3,   29,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO26,		3,   31,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO27,		4,    0,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO28,		4,    2,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO29,		4,    4,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO30,		4,    6,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO31,		4,    8,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO32,		4,   10,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO33,		4,   12,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO34,		4,   14,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO35,		4,   16,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO44,		0,   18,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO45,		0,   19,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO46,		0,   20,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO47,		0,   21,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO48,		0,   22,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO49,		0,   23,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO50,		2,   12,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO51,		2,   11,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO66,		2,   0,     3,	  0,	 false)
+MUX_CFG(DM365,	GPIO67,		2,    0,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO79,		1,   22,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO80,		1,   20,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO81,		1,   18,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO82,		1,   17,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO83,		1,   16,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO84,		1,   16,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO85,		1,   14,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO86,		1,   12,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO87,		1,   10,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO88,		1,    8,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO89,		1,    6,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO90,		1,    4,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO91,		1,    2,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO92,		1,    0,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO100,	0,    6,    3,    1,	 false)
+MUX_CFG(DM365,	GPIO101,	0,    4,    3,    1,	 false)
+MUX_CFG(DM365,	GPIO102,	0,    2,    3,    1,	 false)
+MUX_CFG(DM365,	GPIO103,	0,    0,    3,    1,	 false)
+/*end added by Gol*/
+
 MUX_CFG(DM365,	GPIO64_57,	2,   6,     1,	  0,	 false)
 
 MUX_CFG(DM365,	VOUT_FIELD,	1,   18,    3,	  1,	 false)
