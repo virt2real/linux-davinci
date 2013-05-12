@@ -718,16 +718,11 @@ static const struct platform_device_id *platform_match_id(
  * and compare it against the name of the driver. Return whether they match
  * or not.
  */
-extern void early_print(const char *str, ...);
-
 static int platform_match(struct device *dev, struct device_driver *drv)
 {
-	struct platform_device *pdev = 0;//to_platform_device(dev);
-	struct platform_driver *pdrv = 0;//to_platform_driver(drv);
-    int result = 0;
-    // early_print("Platform match\r\n");
-    pdev = to_platform_device(dev);
-    pdrv = to_platform_driver(drv);
+	struct platform_device *pdev = to_platform_device(dev);
+	struct platform_driver *pdrv = to_platform_driver(drv);
+
 	/* Attempt an OF style match first */
 	if (of_driver_match_device(dev, drv))
 		return 1;
@@ -741,17 +736,7 @@ static int platform_match(struct device *dev, struct device_driver *drv)
 		return platform_match_id(pdrv->id_table, pdev) != NULL;
 
 	/* fall-back to driver name match */
-	//if (pdev->name) early_print("1. Platform match pdev=%s\r\n", pdev->name);
-	//if (drv->name)  early_print("2. Platform match drv=%s\r\n",  drv->name);
-	//early_print("platform match->>>>\r\n");
-	if (!pdev->name){
-		early_print("Attention!!!\r\nPlatform match: Empty device name!!!\r\n ");
-		early_print("Device ID: %X (%d)\r\n", pdev->id,  pdev->id);
-		//return 0;
-	}
-	result = (strcmp(pdev->name, drv->name) == 0);
-	//early_print("platform match-<<<<\r\n");
-	return result;
+	return (strcmp(pdev->name, drv->name) == 0);
 }
 
 #ifdef CONFIG_PM_SLEEP

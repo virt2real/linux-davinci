@@ -351,13 +351,11 @@ static void __init get_fs_names(char *page)
 	}
 	*s = '\0';
 }
-extern void early_print(const char *str, ...);
+
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
 	int err = sys_mount(name, "/root", fs, flags, data);
-	early_print("\r\nDo mount root\r\n");
-	printk("\r\nPrintk: do mount block\r\n");
 	if (err)
 		return err;
 

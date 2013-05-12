@@ -3608,7 +3608,6 @@ EXPORT_SYMBOL(register_con_driver);
  *
  * The driver must unbind first prior to unregistration.
  */
-int do_unregister_con_driver(const struct consw *csw);
 int unregister_con_driver(const struct consw *csw)
 {
 	int retval;

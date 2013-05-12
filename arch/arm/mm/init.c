@@ -156,6 +156,7 @@ static void __init arm_bootmem_init(unsigned long start_pfn,
 	unsigned int boot_pages;
 	phys_addr_t bitmap;
 	pg_data_t *pgdat;
+
 	/*
 	 * Allocate the bootmem bitmap page.  This must be in a region
 	 * of memory which has already been mapped.
@@ -598,7 +599,7 @@ void __init mem_init(void)
 	extern u32 dtcm_end;
 	extern u32 itcm_end;
 #endif
-    early_print("\r\nMem init\r\n");
+
 	max_mapnr   = pfn_to_page(max_pfn + PHYS_PFN_OFFSET) - mem_map;
 
 	/* this will put all unused low memory onto the freelists */

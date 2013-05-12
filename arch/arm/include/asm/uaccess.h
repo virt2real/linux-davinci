@@ -200,8 +200,8 @@ extern int __put_user_8(void *, unsigned long long);
 #define USER_DS			KERNEL_DS
 
 #define segment_eq(a,b)		(1)
-#define __addr_ok(addr)		(1)
-#define __range_ok(addr,size)	(0)
+#define __addr_ok(addr)		((void)(addr),1)
+#define __range_ok(addr,size)	((void)(addr),0)
 #define get_fs()		(KERNEL_DS)
 
 static inline void set_fs(mm_segment_t fs)
@@ -450,11 +450,8 @@ static inline unsigned long __must_check copy_to_user(void __user *to, const voi
 
 static inline unsigned long __must_check clear_user(void __user *to, unsigned long n)
 {
-	bool ok = false;
-	printk("clear user: before access_ok");
-	ok = access_ok(VERIFY_WRITE, to, n);
-	printk("clear user: after access_ok");
-	if (ok) 	n = __clear_user(to, n);
+	if (access_ok(VERIFY_WRITE, to, n))
+		n = __clear_user(to, n);
 	return n;
 }
 
