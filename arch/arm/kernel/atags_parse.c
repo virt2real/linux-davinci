@@ -184,7 +184,7 @@ struct machine_desc * __init setup_machine_tags(phys_addr_t __atags_pointer,
 	struct tag *tags = (struct tag *)&default_tags;
 	struct machine_desc *mdesc = NULL, *p;
 	char *from = default_command_line;
-
+    early_print("Setup machine tags");
 	default_tags.mem.start = PHYS_OFFSET;
 
 	/*

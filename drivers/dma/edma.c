@@ -510,7 +510,7 @@ static enum dma_status edma_tx_status(struct dma_chan *chan,
 	return ret;
 }
 
-static void __init edma_chan_init(struct edma_cc *ecc,
+static void edma_chan_init(struct edma_cc *ecc,
 				  struct dma_device *dma,
 				  struct edma_chan *echans)
 {

@@ -1167,7 +1167,7 @@ static struct platform_device_id davinci_mmc_devtype[] = {
 		.name	= "dm6441-mmc",
 		.driver_data = MMC_CTLR_VERSION_1,
 	}, {
-		.name	= "da830-mmc",
+		.name	= "dm365-mmc",
 		.driver_data = MMC_CTLR_VERSION_2,
 	},
 	{},
@@ -1180,7 +1180,7 @@ static const struct of_device_id davinci_mmc_dt_ids[] = {
 		.data = &davinci_mmc_devtype[MMC_CTLR_VERSION_1],
 	},
 	{
-		.compatible = "ti,da830-mmc",
+		.compatible = "ti,dm365-mmc",
 		.data = &davinci_mmc_devtype[MMC_CTLR_VERSION_2],
 	},
 	{},

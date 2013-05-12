@@ -476,7 +476,7 @@ static struct rtc_class_ops davinci_rtc_ops = {
 	.set_alarm		= davinci_rtc_set_alarm,
 };
 
-static int __init davinci_rtc_probe(struct platform_device *pdev)
+static int davinci_rtc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct davinci_rtc *davinci_rtc;

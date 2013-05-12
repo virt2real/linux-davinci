@@ -89,6 +89,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+
+extern void early_print(const char *str, ...);
+
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
 	unsigned long delta;
@@ -6871,7 +6874,7 @@ void __init sched_init(void)
 {
 	int i, j;
 	unsigned long alloc_size = 0, ptr;
-
+	early_print("\r\nSched_init\r\n");
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	alloc_size += 2 * nr_cpu_ids * sizeof(void **);
 #endif

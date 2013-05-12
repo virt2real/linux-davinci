@@ -38,6 +38,9 @@
 #include <asm/uaccess.h>
 #include "internal.h"
 
+
+extern void early_print(const char *str, ...);
+
 #define RAMFS_DEFAULT_MODE	0755
 
 static const struct super_operations ramfs_ops;
@@ -277,7 +280,7 @@ module_init(init_ramfs_fs)
 int __init init_rootfs(void)
 {
 	int err;
-
+    early_print("Init ROOTFS");
 	err = bdi_init(&ramfs_backing_dev_info);
 	if (err)
 		return err;

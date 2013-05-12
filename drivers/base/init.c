@@ -10,7 +10,7 @@
 #include <linux/memory.h>
 
 #include "base.h"
-
+extern void early_print(const char *str, ...);
 /**
  * driver_init - initialize driver model.
  *
@@ -20,6 +20,7 @@
 void __init driver_init(void)
 {
 	/* These are the core pieces */
+	early_print("\r\nDrivers/base/init.c->driver_init()\r\n");
 	devtmpfs_init();
 	devices_init();
 	buses_init();

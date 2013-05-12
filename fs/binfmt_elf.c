@@ -106,13 +106,20 @@ static int set_brk(unsigned long start, unsigned long end)
 static int padzero(unsigned long elf_bss)
 {
 	unsigned long nbyte;
-
+    printk("padzero: elf_bss=%x\r\n", elf_bss);
 	nbyte = ELF_PAGEOFFSET(elf_bss);
+    printk("padzero: nbyte=%x\r\n", nbyte);
 	if (nbyte) {
+	    printk("padzero: nbyte passed\r\n");
 		nbyte = ELF_MIN_ALIGN - nbyte;
-		if (clear_user((void __user *) elf_bss, nbyte))
+	    printk("padzero: new nbyte=%x\r\n", nbyte);
+		if (clear_user((void __user *) elf_bss, nbyte)){
+			printk("padzero: return EFAULT\r\n");
 			return -EFAULT;
+		}
+	    printk("padzero: clear_user completed\r\n");
 	}
+    printk("padzero: return 0\r\n");
 	return 0;
 }
 
@@ -585,7 +592,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		struct elfhdr elf_ex;
 		struct elfhdr interp_elf_ex;
 	} *loc;
-
+    printk("Load elf binary %s, %s\r\n", bprm->filename, bprm->interp);
 	loc = kmalloc(sizeof(*loc), GFP_KERNEL);
 	if (!loc) {
 		retval = -ENOMEM;

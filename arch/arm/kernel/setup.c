@@ -337,7 +337,7 @@ static void __init cacheid_init(void)
  */
 extern struct proc_info_list *lookup_processor_type(unsigned int);
 
-void __init early_print(const char *str, ...)
+void /*__init*/ early_print(const char *str, ...)
 {
 	extern void printascii(const char *);
 	char buf[256];
@@ -749,7 +749,7 @@ void __init hyp_mode_check(void)
 void __init setup_arch(char **cmdline_p)
 {
 	struct machine_desc *mdesc;
-
+    early_print("\r\nSetup arch\r\n");
 	setup_processor();
 	mdesc = setup_machine_fdt(__atags_pointer);
 	if (!mdesc)

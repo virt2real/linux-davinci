@@ -342,6 +342,7 @@ static inline void smp_prepare_cpus(unsigned int maxcpus) { }
  */
 static void __init setup_command_line(char *command_line)
 {
+	early_print("\r\nSetup comamand line\r\n");
 	saved_command_line = alloc_bootmem(strlen (boot_command_line)+1);
 	static_command_line = alloc_bootmem(strlen (command_line)+1);
 	strcpy (saved_command_line, boot_command_line);
@@ -459,6 +460,7 @@ static void __init mm_init(void)
 	 * page_cgroup requires contiguous pages,
 	 * bigger than MAX_ORDER unless SPARSEMEM.
 	 */
+	early_print("\r\nMM INIT\r\n");
 	page_cgroup_init_flatmem();
 	mem_init();
 	kmem_cache_init();
@@ -471,7 +473,7 @@ asmlinkage void __init start_kernel(void)
 {
 	char * command_line;
 	extern const struct kernel_param __start___param[], __stop___param[];
-
+    early_print("Start kernel\r\n");
 	/*
 	 * Need to run as early as possible, to initialize the
 	 * lockdep hash:
@@ -810,6 +812,7 @@ void __init load_default_modules(void)
 static int run_init_process(const char *init_filename)
 {
 	argv_init[0] = init_filename;
+	//early_print("\r\nRun init process\r\n");
 	return do_execve(init_filename,
 		(const char __user *const __user *)argv_init,
 		(const char __user *const __user *)envp_init);
@@ -819,6 +822,7 @@ static noinline void __init kernel_init_freeable(void);
 
 static int __ref kernel_init(void *unused)
 {
+	early_print("\r\nAttention!!! Kernel init\r\n");
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();

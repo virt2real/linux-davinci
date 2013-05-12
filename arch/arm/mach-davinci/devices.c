@@ -239,7 +239,7 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 			mmcsd1_resources[0].end = DM365_MMCSD1_BASE +
 							SZ_4K - 1;
 			mmcsd1_resources[2].start = IRQ_DM365_SDIOINT1;
-			davinci_mmcsd1_device.name = "da830-mmc";
+			davinci_mmcsd1_device.name = "dm365-mmc";
 		} else
 			break;
 
@@ -261,7 +261,7 @@ void __init davinci_setup_mmc(int module, struct davinci_mmc_config *config)
 			mmcsd0_resources[0].end = DM365_MMCSD0_BASE +
 							SZ_4K - 1;
 			mmcsd0_resources[2].start = IRQ_DM365_SDIOINT0;
-			davinci_mmcsd0_device.name = "da830-mmc";
+			davinci_mmcsd0_device.name = "dm365-mmc";
 		} else if (cpu_is_davinci_dm644x()) {
 			/* REVISIT: should this be in board-init code? */
 			/* Power-on 3.3V IO cells */

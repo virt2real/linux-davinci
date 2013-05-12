@@ -21,7 +21,7 @@
 #include <mach/serial.h>
 
 #define UART_SHIFT	2
-
+#define CONFIG_DEBUG_DAVINCI_DMx_UART0
 #if defined(CONFIG_DEBUG_DAVINCI_DMx_UART0)
 #define UART_BASE	DAVINCI_UART0_BASE
 #elif defined(CONFIG_DEBUG_DAVINCI_DA8XX_UART1)
