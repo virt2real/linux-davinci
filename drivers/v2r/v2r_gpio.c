@@ -599,7 +599,7 @@ MODULE_LICENSE("GPL");
 
 #define V2R_NDEVICES 1 
 #define V2R_BUFFER_SIZE 8192
-#define V2R_DEVICE_NAME "v2rpins"
+#define V2R_DEVICE_NAME "v2r_pins"
 
 /* The structure to represent 'v2r' devices. 
  *  data - data buffer;
@@ -661,7 +661,7 @@ int v2r_release(struct inode *inode, struct file *filp){
 ssize_t v2r_read(struct file *filp, char __user *buf, size_t count,	loff_t *f_pos){
 	struct v2r_dev *dev = (struct v2r_dev *)filp->private_data;
 	ssize_t retval = 0;
-	//printk("v2rpins device read\r\n");
+	//printk("v2r_pins device read\r\n");
 	if (mutex_lock_killable(&dev->v2r_mutex)) return -EINTR;
 	if (*f_pos >= dev->buffer_data_size) goto out;/* EOF */
 	if (*f_pos + count > dev->buffer_data_size)	count = dev->buffer_data_size - *f_pos;
@@ -670,7 +670,7 @@ ssize_t v2r_read(struct file *filp, char __user *buf, size_t count,	loff_t *f_po
 		goto out;
 	}
 	*f_pos += count;
-	//printk("v2rpins copied %d bytes to user\r\n", count);
+	//printk("v2r_pins copied %d bytes to user\r\n", count);
 	retval = count;
 out:
   	mutex_unlock(&dev->v2r_mutex);
@@ -683,7 +683,7 @@ ssize_t v2r_write(struct file *filp, const char __user *buf, size_t count, loff_
 	char *tmp = 0;
 	int nIndex = 0;
 	char** data = 0;
-	//printk("v2rpins write\r\n");
+	//printk("v2r_pins write\r\n");
 	if (mutex_lock_killable(&dev->v2r_mutex)) return -EINTR;
 	if (*f_pos !=0) {
     /* Writing in the middle of the file is not allowed */
@@ -735,7 +735,7 @@ static int v2r_construct_device(struct v2r_dev *dev, int minor, struct class *cl
 	struct device *device = NULL;
 	BUG_ON(dev == NULL || class == NULL);
 	/* Memory is to be allocated when the device is opened the first time */
-	//printk("v2rpins construct device:%d\r\n", minor);
+	//printk("v2r_pins construct device:%d\r\n", minor);
 	dev->data = NULL;     
 	dev->buffer_size = v2r_buffer_size;
 	mutex_init(&dev->v2r_mutex);
@@ -753,7 +753,7 @@ static int v2r_construct_device(struct v2r_dev *dev, int minor, struct class *cl
         cdev_del(&dev->cdev);
         return err;
     }
-	//printk("v2rpins device is constructed successfully\r\n");
+	//printk("v2r_pins device is constructed successfully\r\n");
 	return 0;
 }
 
@@ -789,7 +789,7 @@ static int __init v2r_init_module(void){
 	int i = 0;
 	int devices_to_destroy = 0;
 	dev_t dev = 0;
-	printk("V2Rpins MODULE version 1.0 INIT\r\n");
+	printk("V2R_PINS MODULE version 1.0 INIT\r\n");
 	if (v2r_ndevices <= 0){
 		//printk("V2R Invalid value of v2r_ndevices: %d\n", v2r_ndevices);
 		return -EINVAL;
@@ -801,26 +801,26 @@ static int __init v2r_init_module(void){
 		return err;
 	}
 	v2r_major = MAJOR(dev);
-	//printk("v2rpind device major: %d\r\n", v2r_major);
+	//printk("v2r_pins device major: %d\r\n", v2r_major);
 	/* Create device class (before allocation of the array of devices) */
 	v2r_class = class_create(THIS_MODULE, V2R_DEVICE_NAME);
 	if (IS_ERR(v2r_class)){
 		err = PTR_ERR(v2r_class);
-		//printk("v2rpins class not created %d\r\n", err);
+		//printk("v2r_pins class not created %d\r\n", err);
 		goto fail;
     }
 	/* Allocate the array of devices */
 	v2r_devices = (struct v2r_dev *)kzalloc( v2r_ndevices * sizeof(struct v2r_dev), GFP_KERNEL);
 	if (v2r_devices == NULL) {
 		err = -ENOMEM;
-		//printk("v2rpins devices not allocated %d\r\n", err);
+		//printk("v2r_pins devices not allocated %d\r\n", err);
 		goto fail;
 	}
 	/* Construct devices */
 	for (i = 0; i < v2r_ndevices; ++i) {
 		err = v2r_construct_device(&v2r_devices[i], i, v2r_class);
 		if (err) {
-			//printk("v2rpins device is not constructed\r\n");
+			//printk("v2r_pins device is not constructed\r\n");
 			devices_to_destroy = i;
 			goto fail;
         }
@@ -833,7 +833,7 @@ fail:
 }
 
 static void __exit v2r_exit_module(void){
-	printk("V2Rpins module exit\r\n");
+	printk("V2R_PINS module exit\r\n");
 	v2r_cleanup_module(v2r_ndevices);
 	return;
 }
