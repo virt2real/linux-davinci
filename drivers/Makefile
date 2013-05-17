@@ -150,3 +150,4 @@ obj-$(CONFIG_IPACK_BUS)		+= ipack/
 obj-$(CONFIG_NTB)		+= ntb/
 
 obj-$(CONFIG_V2R_DRIVERS)       += v2r/
+obj-$(CONFIG_V2R_IMU_DRIVERS)   += v2r/IMU/

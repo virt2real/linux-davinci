@@ -1,0 +1,36 @@
+menuconfig V2R_IMU_DRIVERS
+	bool "Virt2real IMU board"
+	---help---
+	Virt2real IMU board devices
+
+if V2R_IMU_DRIVERS
+
+config V2R_BMA180
+	depends on V2R_IMU_DRIVERS
+	tristate "BMA180 driver"
+	default y
+	---help---
+	BMA180 accelerometer
+
+config V2R_BMP085
+	depends on V2R_IMU_DRIVERS
+	tristate "BMP085 driver"
+	default y
+	---help---
+	BMP085 barometer and gradusnik
+
+config V2R_HMC5843
+	depends on V2R_IMU_DRIVERS
+	tristate "HMC5843 driver"
+	default y
+	---help---
+	HMC5843 digital compass
+
+config V2R_ITG3200
+	depends on V2R_IMU_DRIVERS
+	tristate "ITG3200 driver"
+	default y
+	---help---
+	ITG3200 gyroscope
+
+endif
