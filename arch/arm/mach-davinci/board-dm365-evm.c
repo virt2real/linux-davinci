@@ -43,6 +43,12 @@
 
 #include "davinci.h"
 
+#include "board-virt2real-dm365.h"
+
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+static void v2r_parse_cmdline(char * string);
+#endif
+
 static inline int have_imager(void)
 {
 	/* REVISIT when it's supported, trigger via Kconfig */
@@ -598,6 +604,11 @@ static __init void dm365_evm_init(void)
 	dm365evm_emac_configure();
 	dm365evm_mmc_configure();
 
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+	//printk (KERN_INFO "Parse cmdline: %s\n", saved_command_line);
+	v2r_parse_cmdline(saved_command_line);
+#endif
+
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
 
 	/* maybe setup mmc1/etc ... _after_ mmc0 */
@@ -614,6 +625,62 @@ static __init void dm365_evm_init(void)
 	dm365_init_spi0(BIT(0), dm365_evm_spi_info,
 			ARRAY_SIZE(dm365_evm_spi_info));
 }
+
+
+/* Virt2real board devices init functions */
+
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+static void v2r_parse_cmdline(char * string)
+{
+
+    printk(KERN_INFO "Parse kernel cmdline:\n");
+
+    char *p;
+    char *temp_string;
+    char *temp_param;
+    char *param_name;
+    char *param_value;
+    
+    temp_string = kstrdup(string, GFP_KERNEL);
+
+    do
+    {
+	p = strsep(&temp_string, " ");
+	if (p) {
+	    // split param string into two parts
+	    temp_param = kstrdup(p, GFP_KERNEL);
+	    param_name = strsep(&temp_param, "=");
+	    if (!param_name) continue;
+	    //printk(KERN_INFO "%s\n", temp_value);
+	    param_value = strsep(&temp_param, " ");
+	    if (!param_value) continue;
+	    //printk(KERN_INFO "%s\n", param_value);
+	    //printk (KERN_INFO "param %s = %s\n", param_name, param_value);
+	    
+	    // i'd like to use switch, but fig tam
+	    
+	    if (!strcmp(param_name, "camera")) {
+		if (!strcmp(param_value, "ov5642")) {
+		    printk(KERN_INFO "Use camera OmniVision OV5642\n");
+		}
+		if (!strcmp(param_value, "ov7675")) {
+		    printk(KERN_INFO "Use camera OmniVision OV7675\n");
+		}
+		if (!strcmp(param_value, "ov9710")) {
+		    printk(KERN_INFO "Use camera OmniVision OV9710\n");
+		}
+	    }
+	    
+	}
+
+    } while(p);
+
+}
+
+#endif
+
+/* End virt2real board devices init functions */
+
 
 MACHINE_START(DAVINCI_DM365_EVM, "DaVinci DM365 EVM")
 	.atag_offset	= 0x100,
