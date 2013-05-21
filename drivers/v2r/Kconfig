@@ -7,6 +7,10 @@ if V2R_DRIVERS
 source "drivers/v2r/IMU/Kconfig"	
 endif
 
+if V2R_DRIVERS
+source "drivers/v2r/init/Kconfig"	
+endif
+
 config V2R_ADC
 	depends on V2R_DRIVERS
 	tristate "ADC driver"
