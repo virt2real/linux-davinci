@@ -1109,6 +1109,365 @@ void __init dm365_init_asp(struct snd_platform_data *pdata)
 	platform_device_register(&dm365_asp_device);
 }
 
+ void ShowClocksInfo(void) {
+ 	static void __iomem *SystemRegisters; //access to system registers via memory remap
+ 	u32 regval; //Register value
+ 	char str[40]; //short strings container
+ 	char strEn[3]; //string "en" container
+ 	char strDis[4]; //string "dis" container
+ 	char vcCfg;
+ 
+ 	u32 mCLOCKOUT0EN;
+ 	u32 mCLOCKOUT1EN;
+ 	u32 mCLOCKOUT2EN;
+ 	u32 mDIV1;
+ 	u32 mDIV2;
+ 	u32 mDIV3;
+ 	u32 mHDVICPCLKS;
+ 	u32 mDDRCLKS;
+ 	u32 mKEYSCLKS;
+ 	u32 mARMCLKS;
+ 	u32 mPRTCCLKS;
+ 
+ 	u32 mIsPLL1en;
+ 	u32 mPLL1PreDiv;
+ 	u32 mPLL1Mul;
+ 	u32 mPLL1PostDiv;
+ 	u32 mIsPLL1PostDiv;
+ 	u32 mPLL1Clk;
+ 	u32 mPLL1DIV1;
+ 	u32 mPLL1DIV1en;
+ 	u32 mPLL1DIV2;
+ 	u32 mPLL1DIV2en;
+ 	u32 mPLL1DIV3;
+ 	u32 mPLL1DIV3en;
+ 	u32 mPLL1DIV4;
+ 	u32 mPLL1DIV4en;
+ 	u32 mPLL1DIV5;
+ 	u32 mPLL1DIV5en;
+ 	u32 mPLL1DIV6;
+ 	u32 mPLL1DIV6en;
+ 	u32 mPLL1DIV7;
+ 	u32 mPLL1DIV7en;
+ 	u32 mPLL1DIV8;
+ 	u32 mPLL1DIV8en;
+ 	u32 mPLL1DIV9;
+ 	u32 mPLL1DIV9en;
+ 
+ 	u32 mIsPLL2en;
+ 	u32 mPLL2PreDiv;
+ 	u32 mPLL2Mul;
+ 	u32 mPLL2PostDiv;
+ 	u32 mIsPLL2PostDiv;
+ 	u32 mPLL2Clk;
+ 	u32 mPLL2DIV1;
+ 	u32 mPLL2DIV1en;
+ 	u32 mPLL2DIV2;
+ 	u32 mPLL2DIV2en;
+ 	u32 mPLL2DIV3;
+ 	u32 mPLL2DIV3en;
+ 	u32 mPLL2DIV4;
+ 	u32 mPLL2DIV4en;
+ 	u32 mPLL2DIV5;
+ 	u32 mPLL2DIV5en;
+ 
+ 	u32 mARMCORECLK;
+ 	u32 mHDVICPCORECLK;
+ 	u32 mDDRCORECLK;
+ 
+ 	u32 mVoiceCodecCLK;
+ 
+ 
+ #ifndef CONFIG_SND_DM365_SHOWFREQ //if undefined
+ //This is applicable only if VoiceCodec selected in Linux Config
+ //if no (for example, if AIC codec used) exit now.
+ 	return;
+ #endif
+ 
+ 	strcpy(str,"unknown");
+ 	vcCfg=0;
+ 
+ #ifdef CONFIG_SND_DM365_VOICE_CODEC_8KHZ
+ 	vcCfg=1;
+ 	strcpy(str,"8 kHz");
+ #endif
+ 
+ #ifdef CONFIG_SND_DM365_VOICE_CODEC_16KHZ
+ 	vcCfg=2;
+ 	strcpy(str,"16 kHz");
+ #endif
+ 
+ 	printk("*** VOICECODEC CONFIGURATION is %s\n",str);
+ 
+ 	if(vcCfg==0) return;
+ 
+         SystemRegisters=ioremap(DAVINCI_SYSTEM_MODULE_BASE,SECTION_SIZE); //try remap
+         if(!SystemRegisters) {//if bad
+ 	  release_mem_region(DAVINCI_SYSTEM_MODULE_BASE,SECTION_SIZE);
+ 	  pr_err("ERROR: can't map DAVINCI_SYSTEM_MODULE_BASE\n");
+ 	  return; //EXIT
+         }//if bad
+ 
+ 	//else remap is good
+ 
+ 	if(vcCfg==1) {//if Fs=8kHz
+ // Fs ~= 8000 Hz  ; Actual Fs = 594000000/29/10/256=8001 ; Err=0.013%, 125ppm
+ 	  __raw_writel(0x801C,SystemRegisters+0xC00+0x160); //PLL2DIV4=28(29)
+           __raw_writel(0x243f04fc,SystemRegisters+0x48);    //div2=9(10)
+ 	}//if Fs=8kHz
+ 
+ 	if(vcCfg==2) {//if Fs=16kHz
+ // Fs ~= 16000 Hz ; Actual Fs = 594000000/29/5/256=16002 ; Err=0.013%, 125ppm
+ 	  __raw_writel(0x801C,SystemRegisters+0xC00+0x160); //PLL2DIV4=28(29)
+           __raw_writel(0x243f027c,SystemRegisters+0x48);    //div2=4(5)
+ 	}//if Fs=16kHz
+ 
+ // WARNING!!! 'Fs' is derived from PLL2 Clock. 
+ // It is assumed that the PLL2 frequency is equal to 594000000 Hz in your system.
+ // If not, you need to change PLL2DIV4 and div2 (see above).
+ // See "TMS320DM36x Digital Media System-on-Chip (DMSoC) ARM Subsystem User's Guide"
+ // chapter 5 "Device Clocking" and chapter 6 "PLL Controllers (PLLCs)"
+ 
+ 
+ 
+ 	strEn[0]='e'; 	strEn[1]='n'; 	strEn[2]=0; 			//"en"
+ 	strDis[0]='d'; 	strDis[1]='i'; 	strDis[2]='s';	strDis[3]=0;	//"dis"
+ 
+         printk("*** Board Clocks:\n");
+ 
+         regval= __raw_readl(SystemRegisters+0x48); //Read PERI_CLKCTL
+         printk("* PERI_CLKCTL=0x%08X\n",regval);
+ 
+ 	mCLOCKOUT0EN 	= (regval&0x00000001)>>0;
+ 	mCLOCKOUT1EN 	= (regval&0x00000002)>>1;
+ 	mCLOCKOUT2EN 	= (regval&0x00000004)>>2;
+ 	mDIV1        	= (regval&0x00000078)>>3;
+ 	mDIV2        	= (regval&0x0000FF80)>>7;
+ 	mDIV3        	= (regval&0x03FF0000)>>16;
+ 	mHDVICPCLKS  	= (regval&0x04000000)>>26;
+ 	mDDRCLKS     	= (regval&0x08000000)>>27;
+ 	mKEYSCLKS    	= (regval&0x10000000)>>28;
+ 	mARMCLKS     	= (regval&0x20000000)>>29;
+ 	mPRTCCLKS    	= (regval&0x40000000)>>30;
+ 
+         strcpy(str,strEn); if(mCLOCKOUT0EN!=0) strcpy(str,strDis);
+         printk("* CLOCKOUT0EN is %2d = %s\n",mCLOCKOUT0EN,str);
+ 
+         strcpy(str,strEn); if(mCLOCKOUT1EN!=0) strcpy(str,strDis);
+         printk("* CLOCKOUT1EN is %2d = %s\n",mCLOCKOUT1EN,str);
+ 
+         strcpy(str,strEn); if(mCLOCKOUT2EN!=0) strcpy(str,strDis);
+         printk("* CLOCKOUT2EN is %2d = %s\n",mCLOCKOUT2EN,str);
+ 
+         printk("* DIV1        is %2d = %d\n",mDIV1,mDIV1+1);
+ 
+         printk("* DIV2        is %2d = %d\n",mDIV2,mDIV2+1);
+ 
+         printk("* DIV3        is %2d = %d\n",mDIV3,mDIV3+1);
+ 
+         strcpy(str,"PLLC1SYSCLK2"); if(mHDVICPCLKS!=0) strcpy(str,"PLLC2SYSCLK2");
+         printk("* HDVICPCLKS  is %2d = %s\n",mHDVICPCLKS,str);
+ 
+         strcpy(str,"PLLC1SYSCLK7"); if(mDDRCLKS!=0) strcpy(str,"PLLC2SYSCLK3");
+         printk("* DDRCLKS     is %2d = %s\n",mDDRCLKS,str);
+ 
+         strcpy(str,"RTCXI (MXI)"); if(mKEYSCLKS!=0) strcpy(str,"PLLC1AUXCLK");
+         printk("* KEYSCLKS    is %2d = %s\n",mKEYSCLKS,str);
+ 
+         strcpy(str,"PLLC1SYSCLK2"); if(mARMCLKS!=0) strcpy(str,"PLLC2SYSCLK2");
+         printk("* ARMCLKS     is %2d = %s\n",mARMCLKS,str);
+ 
+         strcpy(str,"RTCXI (OSC)"); if(mPRTCCLKS!=0) strcpy(str,"PLLC1AUXCLK");
+         printk("* PRTCCLKS    is %2d = %s\n",mPRTCCLKS,str);
+ 
+         printk("* CLKIN       = %d Hz\n",DM365_REF_FREQ);
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x110); //Read PLL1CTL
+ 	mIsPLL1en		= (regval&0x00000001)>>0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x114); //Read PLL1PreDiv
+ 	mPLL1PreDiv		= (regval&0x0000001F)>>0;
+ 
+         printk("* PLL1PreDiv  is %2d = %2d\n",mPLL1PreDiv,mPLL1PreDiv+1);
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x110); //Read PLL1Mul
+ 	mPLL1Mul		= (regval&0x000003FF)>>0;
+         printk("* PLL1Mul     is %4d = %4d\n",mPLL1Mul,mPLL1Mul*2);
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x128); //Read PLL1PostDiv
+ 	mPLL1PostDiv		= (regval&0x0000001F)>>0;
+ 	mIsPLL1PostDiv		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mIsPLL1PostDiv!=0) strcpy(str,strEn);
+         printk("* PLL1PostDiv is %2d = %2d -- %s\n",mPLL1PostDiv,mPLL1PostDiv+1,str);
+         if(mIsPLL1PostDiv==0) mPLL1PostDiv=0;
+ 
+ 	strcpy(str,"bypass"); if(mIsPLL1en!=0) strcpy(str,strEn);
+ 	mPLL1Clk = ( (DM365_REF_FREQ / (mPLL1PreDiv+1)) * (2*mPLL1Mul) ) / (mPLL1PostDiv+1);
+         if(mIsPLL1en==0) mPLL1Clk=DM365_REF_FREQ;
+         printk("* PLL1 CLK    = %d Hz -- %s\n",mPLL1Clk,str);
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x118); //Read PLL1DIV1
+ 	mPLL1DIV1		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV1en		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV1en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV1    is %2d = %2d -- %s\n",mPLL1DIV1,mPLL1DIV1+1,str);
+ 	if(mPLL1DIV1en==0) mPLL1DIV1=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x11C); //Read PLL1DIV2
+ 	mPLL1DIV2		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV2en		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV2en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV2    is %2d = %2d -- %s\n",mPLL1DIV2,mPLL1DIV2+1,str);
+ 	if(mPLL1DIV2en==0) mPLL1DIV2=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x120); //Read PLL1DIV3
+ 	mPLL1DIV3		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV3en		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV3en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV3    is %2d = %2d -- %s\n",mPLL1DIV3,mPLL1DIV3+1,str);
+ 	if(mPLL1DIV3en==0) mPLL1DIV3=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x160); //Read PLL1DIV4
+ 	mPLL1DIV4		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV4en		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV4en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV4    is %2d = %2d -- %s\n",mPLL1DIV4,mPLL1DIV4+1,str);
+ 	if(mPLL1DIV4en==0) mPLL1DIV4=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x164); //Read PLL1DIV5
+ 	mPLL1DIV5		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV5en		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV5en!=0) strcpy(str,strEn);
+ 	printk("* PLL1DIV5    is %2d = %2d -- %s\n",mPLL1DIV5,mPLL1DIV5+1,str);
+ 	if(mPLL1DIV5en==0) mPLL1DIV5=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x168); //Read PLL1DIV6
+ 	mPLL1DIV6		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV6en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV6en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV6    is %2d = %2d -- %s\n",mPLL1DIV6,mPLL1DIV6+1,str);
+ 	if(mPLL1DIV6en==0) mPLL1DIV6=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x16C); //Read PLL1DIV7
+ 	mPLL1DIV7		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV7en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV7en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV7    is %2d = %2d -- %s\n",mPLL1DIV7,mPLL1DIV7+1,str);
+ 	if(mPLL1DIV7en==0) mPLL1DIV7=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x170); //Read PLL1DIV8
+ 	mPLL1DIV8		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV8en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV8en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV8    is %2d = %2d -- %s\n",mPLL1DIV8,mPLL1DIV8+1,str);
+ 	if(mPLL1DIV8en==0) mPLL1DIV8=0;
+ 
+         regval= __raw_readl(SystemRegisters+0x800+0x174); //Read PLL1DIV9
+ 	mPLL1DIV9		= (regval&0x0000001F)>>0;
+ 	mPLL1DIV9en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL1DIV9en!=0) strcpy(str,strEn);
+         printk("* PLL1DIV9    is %2d = %2d -- %s\n",mPLL1DIV9,mPLL1DIV9+1,str);
+ 	if(mPLL1DIV9en==0) mPLL1DIV9=0;
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x110); //Read PLL2CTL
+ 	mIsPLL2en		= (regval&0x00000001)>>0;
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x114); //Read PLL2PreDiv
+ 	mPLL2PreDiv		= (regval&0x0000001F)>>0;
+         printk("* PLL2PreDiv  is %2d = %2d\n",mPLL2PreDiv,mPLL2PreDiv+1);
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x110); //Read PLL2Mul
+ 	mPLL2Mul		= (regval&0x000003FF)>>0;
+         printk("* PLL2Mul     is %4d = %4d\n",mPLL2Mul,mPLL2Mul*2);
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x128); //Read PLL2PostDiv
+ 	mPLL2PostDiv		= (regval&0x0000001F)>>0;
+ 	mIsPLL2PostDiv		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mIsPLL2PostDiv!=0) strcpy(str,strEn);
+         printk("* PLL2PostDiv is %2d = %2d -- %s\n",mPLL2PostDiv,mPLL2PostDiv+1,str);
+ 	if(mIsPLL2PostDiv==0) mPLL2PostDiv=0;
+ 
+ 	strcpy(str,"bypass"); if(mIsPLL2en!=0) strcpy(str,strEn);
+ 	mPLL2Clk = ( (DM365_REF_FREQ / (mPLL2PreDiv+1)) * (2*mPLL2Mul) ) / (mPLL2PostDiv+1);
+ 	if(mIsPLL2en==0) mPLL2Clk=DM365_REF_FREQ;
+         printk("* PLL2 CLK    = %d Hz -- %s\n",mPLL2Clk,str);
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x118); //Read PLL2DIV1
+ 	mPLL2DIV1		= (regval&0x0000001F)>>0;
+ 	mPLL2DIV1en		= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL2DIV1en!=0) strcpy(str,strEn);
+         printk("* PLL2DIV1    is %2d = %2d -- %s\n",mPLL2DIV1,mPLL2DIV1+1,str);
+ 	if(mPLL2DIV1en==0) mPLL2DIV1=0;
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x11C); //Read PLL2DIV2
+ 	mPLL2DIV2		= (regval&0x0000001F)>>0;
+ 	mPLL2DIV2en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL2DIV2en!=0) strcpy(str,strEn);
+         printk("* PLL2DIV2    is %2d = %2d -- %s\n",mPLL2DIV2,mPLL2DIV2+1,str);
+ 	if(mPLL2DIV2en==0) mPLL2DIV2=0;
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x120); //Read PLL2DIV3
+ 	mPLL2DIV3		= (regval&0x0000001F)>>0;
+ 	mPLL2DIV3en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL2DIV3en!=0) strcpy(str,strEn);
+         printk("* PLL2DIV3    is %2d = %2d -- %s\n",mPLL2DIV3,mPLL2DIV3+1,str);
+ 	if(mPLL2DIV3en==0) mPLL2DIV3=0;
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x160); //Read PLL2DIV4
+ 	mPLL2DIV4		= (regval&0x0000001F)>>0;
+ 	mPLL2DIV4en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL2DIV4en!=0) strcpy(str,strEn);
+         printk("* PLL2DIV4    is %2d = %2d -- %s\n",mPLL2DIV4,mPLL2DIV4+1,str);
+ 	if(mPLL2DIV4en==0) mPLL2DIV4=0;
+ 
+         regval= __raw_readl(SystemRegisters+0xC00+0x164); //Read PLL2DIV5
+ 	mPLL2DIV5		= (regval&0x0000001F)>>0;
+ 	mPLL2DIV5en	= (regval&0x00008000)>>15;
+ 	strcpy(str,strDis); if(mPLL2DIV5en!=0) strcpy(str,strEn);
+         printk("* PLL2DIV5    is %2d = %2d -- %s\n",mPLL2DIV5,mPLL2DIV5+1,str);
+ 	if(mPLL2DIV5en==0) mPLL2DIV5=0;
+ 
+ 	//check ARM CLOCK source
+ 	if(mARMCLKS==0) {
+         	mARMCORECLK = mPLL1Clk / (mPLL1DIV2+1);
+         }
+ 	else {
+         	mARMCORECLK = mPLL2Clk / (mPLL2DIV2+1);
+ 	}
+ 	printk("* ARM CORE CLK           = %d Hz\n",mARMCORECLK);
+ 
+ 
+ 	//check HDVICP CLOCK source
+ 	if(mHDVICPCLKS==0) {
+         	mHDVICPCORECLK = mPLL1Clk / (mPLL1DIV2+1);
+         }
+ 	else {
+         	mHDVICPCORECLK = mPLL2Clk / (mPLL2DIV2+1);
+ 	}
+ 	printk("* HDVICP CLK             = %d Hz\n",mHDVICPCORECLK);
+ 
+         //check DDR CLOCK source
+ 	if(mDDRCLKS==0) {
+         	mDDRCORECLK = mPLL1Clk / (mPLL1DIV7+1);
+         }
+ 	else {
+         	mDDRCORECLK = mPLL2Clk / (mPLL2DIV3+1);
+ 	}
+ 	printk("* DDR CLK supply for PHY = %d Hz ; Real DDR clk = %d Hz\n",mDDRCORECLK,mDDRCORECLK/2);
+ 
+ 	//calc VoiceCodec Clock	
+ 	mVoiceCodecCLK=(mPLL2Clk/(mPLL2DIV4+1))/(mDIV2+1);
+ 	printk("* VoiceCodec CLK         = %d Hz ; Sample Freq = %d Hz\n",mVoiceCodecCLK,mVoiceCodecCLK/256);
+ 
+ 	if(mPLL2Clk!=594000000) {
+ 		printk("*** WARNING!!! Your PPL2 clock is not 594Mhz. Check VoiceCodec sampling frequency (see above).\n");
+ 		printk("*** The VoiceCodec can work with Fs at range from 8kHz to 16kHz.\n");
+ 		printk("*** Maybe you need to change the divider in 'dm365.c' ('arch/arm/mach-davinci').\n");
+ 	}
+ 
+ }
+
+
 void __init dm365_init_vc(struct snd_platform_data *pdata)
 {
 	davinci_cfg_reg(DM365_EVT2_VC_TX);
@@ -1132,6 +1491,7 @@ void __init dm365_init_rtc(void)
 void __init dm365_init(void)
 {
 	davinci_common_init(&davinci_soc_info_dm365);
+	ShowClocksInfo(); //Show Board Clocks
 	davinci_map_sysmod();
 }
 
