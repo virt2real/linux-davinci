@@ -1,0 +1,15 @@
+menuconfig V2R_INIT
+	bool "Boot process"
+	---help---
+	Any settings for boot process
+
+if V2R_INIT
+
+config V2R_PARSE_CMDLINE
+
+	bool "parse kernel cmdline"
+	default y
+	---help---
+	Allow virt2real init function to parse kernel cmdline (from uEnv.txt) for device initialization
+
+endif

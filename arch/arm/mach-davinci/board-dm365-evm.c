@@ -44,6 +44,17 @@
 
 #include "davinci.h"
 
+#include "board-virt2real-dm365.h"
+
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+static void v2r_parse_cmdline(char * string);
+#endif
+
+static inline int have_imager(void)
+{
+	/* REVISIT when it's supported, trigger via Kconfig */
+	return 0;
+}
 
 
 //#define DM365_EVM_PHY_ID		"davinci_mdio-0:01"  // replaced by Gol
@@ -91,11 +102,11 @@ static struct mtd_partition davinci_nand_partitions[] = {
 };
 
 static struct davinci_nand_pdata davinci_nand_data = {
-	.mask_chipsel	= BIT(14),
+	.mask_chipsel		= BIT(14),
 	.parts			= davinci_nand_partitions,
 	.nr_parts		= ARRAY_SIZE(davinci_nand_partitions),
 	.ecc_mode		= NAND_ECC_HW,
-	.bbt_options	= NAND_BBT_USE_FLASH,
+	.bbt_options		= NAND_BBT_USE_FLASH,
 	.ecc_bits		= 4,
 };
 
@@ -597,6 +608,11 @@ static __init void dm365_evm_init(void)
 
 	dm365evm_mmc_configure();
 
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+	//printk (KERN_INFO "Parse cmdline: %s\n", saved_command_line);
+	v2r_parse_cmdline(saved_command_line);
+#endif
+
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
 //	davinci_setup_mmc(1, &dm365evm_mmc_config);
 	/* maybe setup mmc1/etc ... _after_ mmc0 */
@@ -609,6 +625,62 @@ static __init void dm365_evm_init(void)
 	dm365_init_rtc();
 	dm365_usb_configure();
 }
+
+
+/* Virt2real board devices init functions */
+
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+static void v2r_parse_cmdline(char * string)
+{
+
+    printk(KERN_INFO "Parse kernel cmdline:\n");
+
+    char *p;
+    char *temp_string;
+    char *temp_param;
+    char *param_name;
+    char *param_value;
+    
+    temp_string = kstrdup(string, GFP_KERNEL);
+
+    do
+    {
+	p = strsep(&temp_string, " ");
+	if (p) {
+	    // split param string into two parts
+	    temp_param = kstrdup(p, GFP_KERNEL);
+	    param_name = strsep(&temp_param, "=");
+	    if (!param_name) continue;
+	    //printk(KERN_INFO "%s\n", temp_value);
+	    param_value = strsep(&temp_param, " ");
+	    if (!param_value) continue;
+	    //printk(KERN_INFO "%s\n", param_value);
+	    //printk (KERN_INFO "param %s = %s\n", param_name, param_value);
+	    
+	    // i'd like to use switch, but fig tam
+	    
+	    if (!strcmp(param_name, "camera")) {
+		if (!strcmp(param_value, "ov5642")) {
+		    printk(KERN_INFO "Use camera OmniVision OV5642\n");
+		}
+		if (!strcmp(param_value, "ov7675")) {
+		    printk(KERN_INFO "Use camera OmniVision OV7675\n");
+		}
+		if (!strcmp(param_value, "ov9710")) {
+		    printk(KERN_INFO "Use camera OmniVision OV9710\n");
+		}
+	    }
+	    
+	}
+
+    } while(p);
+
+}
+
+#endif
+
+/* End virt2real board devices init functions */
+
 
 MACHINE_START(DAVINCI_DM365_EVM, "DaVinci DM365 EVM")
 	.atag_offset	= 0x100,
