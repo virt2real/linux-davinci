@@ -93,6 +93,8 @@ deps_config := \
 	fs/ext3/Kconfig \
 	fs/ext2/Kconfig \
 	fs/Kconfig \
+	drivers/v2r/IMU/Kconfig \
+	drivers/v2r/Kconfig \
 	drivers/ipack/devices/Kconfig \
 	drivers/ipack/carriers/Kconfig \
 	drivers/ipack/Kconfig \

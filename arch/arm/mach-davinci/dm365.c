@@ -29,6 +29,9 @@
 #include <mach/time.h>
 #include <mach/serial.h>
 #include <mach/common.h>
+
+
+
 #include <linux/platform_data/keyscan-davinci.h>
 #include <linux/platform_data/spi-davinci.h>
 #include <mach/gpio-davinci.h>
@@ -356,7 +359,7 @@ static struct clk pwm2_clk = {
 
 static struct clk pwm3_clk = {
 	.name		= "pwm3",
-	.parent		= &ref_clk,
+	.parent		= &pll1_aux_clk,
 	.lpsc		= DM365_LPSC_PWM3,
 };
 
@@ -500,21 +503,9 @@ MUX_CFG(DM365,	SD1_DATA0,	4,   22,    3,	  1,	 false)
 MUX_CFG(DM365,	I2C_SDA,	3,   23,    3,	  2,	 false)
 MUX_CFG(DM365,	I2C_SCL,	3,   21,    3,	  2,	 false)
 
-MUX_CFG(DM365,	AEMIF_AR_A14,	2,   0,     3,	  1,	 false)
-MUX_CFG(DM365,	AEMIF_AR_BA0,	2,   0,     3,	  2,	 false)
-MUX_CFG(DM365,	AEMIF_A3,	2,   2,     3,	  1,	 false)
-MUX_CFG(DM365,	AEMIF_A7,	2,   4,     3,	  1,	 false)
-MUX_CFG(DM365,	AEMIF_D15_8,	2,   6,     1,	  1,	 false)
 MUX_CFG(DM365,	AEMIF_CE0,	2,   7,     1,	  0,	 false)
-MUX_CFG(DM365,	AEMIF_CE1,	2,   8,     1,    0,     false)
-MUX_CFG(DM365,	AEMIF_WE_OE,	2,   9,     1,    0,     false)
+MUX_CFG(DM365,	AEMIF_CE1,	2,   8,     1,	  0,	 false)
 
-MUX_CFG(DM365,	MCBSP0_BDX,	0,   23,    1,	  1,	 false)
-MUX_CFG(DM365,	MCBSP0_X,	0,   22,    1,	  1,	 false)
-MUX_CFG(DM365,	MCBSP0_BFSX,	0,   21,    1,	  1,	 false)
-MUX_CFG(DM365,	MCBSP0_BDR,	0,   20,    1,	  1,	 false)
-MUX_CFG(DM365,	MCBSP0_R,	0,   19,    1,	  1,	 false)
-MUX_CFG(DM365,	MCBSP0_BFSR,	0,   18,    1,	  1,	 false)
 
 MUX_CFG(DM365,	SPI0_SCLK,	3,   28,    1,    1,	 false)
 MUX_CFG(DM365,	SPI0_SDI,	3,   26,    3,    1,	 false)
@@ -546,8 +537,6 @@ MUX_CFG(DM365,  EMAC_RX_ER,	3,   3,     1,    1,     false)
 MUX_CFG(DM365,  EMAC_CRS,	3,   2,     1,    1,     false)
 MUX_CFG(DM365,  EMAC_MDIO,	3,   1,     1,    1,     false)
 MUX_CFG(DM365,  EMAC_MDCLK,	3,   0,     1,    1,     false)
-
-MUX_CFG(DM365,	KEYSCAN,	2,   0,     0x3f, 0x3f,  false)
 
 MUX_CFG(DM365,	PWM0,		1,   0,     3,    2,     false)
 MUX_CFG(DM365,	PWM0_G23,	3,   26,    3,    3,     false)
@@ -583,31 +572,61 @@ MUX_CFG(DM365,	SPI3_SDENA1,	0,   6,     3,    3,	 false)
 MUX_CFG(DM365,	SPI4_SCLK,	4,   18,    3,    1,	 false)
 MUX_CFG(DM365,	SPI4_SDI,	4,   14,    3,    1,	 false)
 MUX_CFG(DM365,	SPI4_SDO,	4,   16,    3,    1,	 false)
-MUX_CFG(DM365,	SPI4_SDENA0,	4,   20,    3,    1,	 false)
+MUX_CFG(DM365,	SPI4_SDENA0,	4,   20,    3,    0,	 false)
 MUX_CFG(DM365,	SPI4_SDENA1,	4,   16,    3,    2,	 false)
 
 MUX_CFG(DM365,	CLKOUT0,	4,   20,    3,    3,     false)
 MUX_CFG(DM365,	CLKOUT1,	4,   16,    3,    3,     false)
 MUX_CFG(DM365,	CLKOUT2,	4,   8,     3,    3,     false)
 
-MUX_CFG(DM365,	GPIO20,		3,   21,    3,    0,	 false)
-MUX_CFG(DM365,	GPIO30,		4,   6,     3,	  0,	 false)
-MUX_CFG(DM365,	GPIO31,		4,   8,     3,	  0,	 false)
-MUX_CFG(DM365,	GPIO32,		4,   10,    3,	  0,	 false)
-MUX_CFG(DM365,	GPIO33,		4,   12,    3,	  0,	 false)
-MUX_CFG(DM365,	GPIO40,		4,   26,    3,	  0,	 false)
-MUX_CFG(DM365,	GPIO64_57,	2,   6,     1,	  0,	 false)
 
-MUX_CFG(DM365,	VOUT_FIELD,	1,   18,    3,	  1,	 false)
-MUX_CFG(DM365,	VOUT_FIELD_G81,	1,   18,    3,	  0,	 false)
-MUX_CFG(DM365,	VOUT_HVSYNC,	1,   16,    1,	  0,	 false)
-MUX_CFG(DM365,	VOUT_COUTL_EN,	1,   0,     0xff, 0x55,  false)
-MUX_CFG(DM365,	VOUT_COUTH_EN,	1,   8,     0xff, 0x55,  false)
-MUX_CFG(DM365,	VIN_CAM_WEN,	0,   14,    3,	  0,	 false)
+MUX_CFG(DM365,	GPIO20,		3,   21,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO22,		3,   25,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO23,		3,   26,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO24,		3,   28,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO25,		3,   29,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO26,		3,   31,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO27,		4,    0,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO28,		4,    2,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO29,		4,    4,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO30,		4,    6,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO31,		4,    8,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO32,		4,   10,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO33,		4,   12,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO34,		4,   14,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO35,		4,   16,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO44,		0,   18,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO45,		0,   19,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO46,		0,   20,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO47,		0,   21,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO48,		0,   22,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO49,		0,   23,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO50,		2,   12,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO51,		2,   11,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO66,		2,   0,     3,	  0,	 false)
+MUX_CFG(DM365,	GPIO67,		2,    0,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO79,		1,   22,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO80,		1,   20,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO81,		1,   18,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO82,		1,   17,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO83,		1,   16,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO84,		1,   16,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO85,		1,   14,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO86,		1,   12,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO87,		1,   10,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO88,		1,    8,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO89,		1,    6,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO90,		1,    4,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO91,		1,    2,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO92,		1,    0,    3,    0,	 false)
+MUX_CFG(DM365,	GPIO100,	0,    6,    3,    1,	 false)
+MUX_CFG(DM365,	GPIO101,	0,    4,    3,    1,	 false)
+MUX_CFG(DM365,	GPIO102,	0,    2,    3,    1,	 false)
+MUX_CFG(DM365,	GPIO103,	0,    0,    3,    1,	 false)
+
 MUX_CFG(DM365,	VIN_CAM_VD,	0,   13,    1,	  0,	 false)
 MUX_CFG(DM365,	VIN_CAM_HD,	0,   12,    1,	  0,	 false)
-MUX_CFG(DM365,	VIN_YIN4_7_EN,	0,   0,     0xff, 0,	 false)
-MUX_CFG(DM365,	VIN_YIN0_3_EN,	0,   8,     0xf,  0,	 false)
+MUX_CFG(DM365,  EXTCLK,         0,   14,    0x03, 2,     false)
 
 INT_CFG(DM365,  INT_EDMA_CC,         2,     1,    1,     false)
 INT_CFG(DM365,  INT_EDMA_TC0_ERR,    3,     1,    1,     false)
@@ -674,6 +693,36 @@ static struct platform_device dm365_spi0_device = {
 	.num_resources = ARRAY_SIZE(dm365_spi0_resources),
 	.resource = dm365_spi0_resources,
 };
+
+/* IPIPEIF device configuration */
+static u64 dm365_ipipeif_dma_mask = DMA_BIT_MASK(32);
+static struct resource dm365_ipipeif_resources[] = {
+	{
+		.start          = 0x01C71200,
+		.end            = 0x01C71200 + 0x60,
+		.flags          = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device dm365_ipipeif_dev = {
+	.name		= "dm3xx_ipipeif",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(dm365_ipipeif_resources),
+	.resource	= dm365_ipipeif_resources,
+	.dev = {
+		.dma_mask		= &dm365_ipipeif_dma_mask,
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+		/* For IPIPEIF device type. 1 - DM365 */
+		.platform_data		= (void *)1,
+	},
+};
+
+
+
+
+
+
+
 
 void __init dm365_init_spi0(unsigned chipselect_mask,
 		const struct spi_board_info *info, unsigned len)
@@ -1242,8 +1291,11 @@ static int __init dm365_init_devices(void)
 	/* Add isif clock alias */
 	clk_add_alias("master", dm365_isif_dev.name, "vpss_master", NULL);
 	platform_device_register(&dm365_vpss_device);
+	platform_device_register(&dm365_ipipeif_dev);
 	platform_device_register(&dm365_isif_dev);
 	platform_device_register(&vpfe_capture_dev);
+
+
 	return 0;
 }
 postcore_initcall(dm365_init_devices);
