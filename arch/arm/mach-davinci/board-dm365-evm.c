@@ -614,8 +614,9 @@ static __init void dm365_evm_init(void)
 #endif
 
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
-//	davinci_setup_mmc(1, &dm365evm_mmc_config);
+	davinci_setup_mmc(1, &dm365evm_mmc_config);
 	/* maybe setup mmc1/etc ... _after_ mmc0 */
+	dm365_wifi_configure();
 
 #ifdef CONFIG_SND_DM365_AIC3X_CODEC
 	dm365_init_asp(&dm365_evm_snd_data);
