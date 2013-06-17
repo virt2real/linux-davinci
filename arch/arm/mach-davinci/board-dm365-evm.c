@@ -614,7 +614,7 @@ static __init void dm365_evm_init(void)
 #endif
 
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
-	davinci_setup_mmc(1, &dm365evm_mmc_config);
+	//davinci_setup_mmc(1, &dm365evm_mmc_config);
 	/* maybe setup mmc1/etc ... _after_ mmc0 */
 	dm365_wifi_configure();
 
