@@ -1487,7 +1487,7 @@ static int ks8851_probe(struct spi_device *spi)
 
 	/* cache the contents of the CCR register for EEPROM, etc. */
 	ks->rc_ccr = ks8851_rdreg16(ks, KS_CCR);
-
+	ks->rc_ccr |= CCR_EEPROM;
 	if (ks->rc_ccr & CCR_EEPROM)
 		ks->eeprom_size = 128;
 	else
