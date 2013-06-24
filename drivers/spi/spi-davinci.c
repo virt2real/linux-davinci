@@ -256,7 +256,7 @@ static inline int davinci_spi_get_prescale(struct davinci_spi *dspi,
 	int ret;
 
 	ret = DIV_ROUND_UP(clk_get_rate(dspi->clk), max_speed_hz);
-
+    //printk("SPI CLK=%d, MAX_SPEED=%d, PRESCALER=%d\r\n", clk_get_rate(dspi->clk), max_speed_hz, ret);
 	if (ret < 3 || ret > 256)
 		return -EINVAL;
 

@@ -396,6 +396,8 @@ enum davinci_dm365_index {
 	DM365_EVT2_VC_TX,
 	DM365_EVT3_VC_RX,
 	DM365_EVT26_MMC0_RX,
+	DM365_EVT18_SPI3_TX,
+	DM365_EVT19_SPI3_RX,
 };
 
 enum da830_index {

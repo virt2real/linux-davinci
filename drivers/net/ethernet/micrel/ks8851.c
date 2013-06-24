@@ -426,10 +426,12 @@ static void ks8851_read_mac_addr(struct net_device *dev)
 static void ks8851_init_mac(struct ks8851_net *ks)
 {
 	struct net_device *dev = ks->netdev;
-
+    printk("Init mac address\r\n");
 	/* first, try reading what we've got already */
 	if (ks->rc_ccr & CCR_EEPROM) {
+	    printk("EEPROM PRESENT\r\n");
 		ks8851_read_mac_addr(dev);
+	    printk("EEPROM PRESENT %x\r\n", dev->dev_addr);
 		if (is_valid_ether_addr(dev->dev_addr))
 			return;
 
@@ -595,6 +597,13 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 
 	mutex_lock(&ks->lock);
 
+	/*
+	 * Turn off hardware interrupt during receive processing.  This fixes
+	 * the receive problem under heavy TCP traffic while transmit done
+	 * is enabled.
+	*/
+	ks8851_wrreg16(ks, KS_IER, 0);
+	//
 	status = ks8851_rdreg16(ks, KS_ISR);
 
 	netif_dbg(ks, intr, ks->netdev,
@@ -661,6 +670,9 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 		ks8851_wrreg16(ks, KS_RXCR2, rxc->rxcr2);
 		ks8851_wrreg16(ks, KS_RXCR1, rxc->rxcr1);
 	}
+
+	/* Re-enable hardware interrupt. */
+	ks8851_wrreg16(ks, KS_IER, ks->rc_ier);
 
 	mutex_unlock(&ks->lock);
 
@@ -1485,7 +1497,7 @@ static int ks8851_probe(struct spi_device *spi)
 	ks8851_init_mac(ks);
 
 	ret = request_threaded_irq(spi->irq, NULL, ks8851_irq,
-				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				   ndev->name, ks);
 	if (ret < 0) {
 		dev_err(&spi->dev, "failed to get irq\n");

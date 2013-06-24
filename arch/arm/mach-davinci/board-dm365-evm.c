@@ -43,6 +43,7 @@
 #include <media/tvp514x.h>
 
 #include "davinci.h"
+#include "dm365_spi.h"
 
 #include "board-virt2real-dm365.h"
 
@@ -349,7 +350,12 @@ static void dm365leopard_camera_configure(void){
 	davinci_cfg_reg(DM365_EXTCLK);
 
 }
-
+static void dm365_ks8851_init(void){
+	gpio_request(0, "KSZ8851");
+	gpio_direction_input(0);
+	davinci_cfg_reg(DM365_EVT18_SPI3_TX);
+	davinci_cfg_reg(DM365_EVT19_SPI3_RX);
+}
 static void dm365_gpio_configure(void){
 	return;//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \<<< Here is return
 //
@@ -590,6 +596,39 @@ static void __init dm365_evm_map_io(void)
 }
 
 
+static struct davinci_spi_config ksz8851_mcspi_config = {
+		.io_type = SPI_IO_TYPE_DMA,
+		.c2tdelay = 0,
+		.t2cdelay = 0
+};
+
+static struct spi_board_info ksz8851_snl_info[] __initdata = {
+	{
+		.modalias	= "ks8851",
+		.bus_num	= 3,
+		.chip_select	= 0,
+		.max_speed_hz	= 48000000,
+		.controller_data = &ksz8851_mcspi_config,
+		.irq		= IRQ_DM365_GPIO0
+     }
+};
+
+static struct davinci_spi_unit_desc dm365_evm_spi_udesc_KSZ8851 = {
+	.spi_hwunit	= 3,
+	.chipsel	= BIT(0),
+	.irq		= IRQ_DM365_SPIINT3_0,
+	.dma_tx_chan	= 18,
+	.dma_rx_chan	= 19,
+	.dma_evtq	= EVENTQ_3,
+	.pdata		= {
+		.version 	= SPI_VERSION_1,
+		.num_chipselect = 2,
+		.intr_line = 0,
+		.chip_sel = 0,
+		.cshold_bug = 0,
+		.dma_event_q	= EVENTQ_3,
+	}
+};
 
 static __init void dm365_evm_init(void)
 {
@@ -603,8 +642,8 @@ static __init void dm365_evm_init(void)
 	evm_init_i2c();
 	davinci_serial_init(&uart_config);
 
-	dm365evm_emac_configure();
-	soc_info->emac_pdata->phy_id = DM365_EVM_PHY_ID;
+	//dm365evm_emac_configure();
+	//soc_info->emac_pdata->phy_id = DM365_EVM_PHY_ID;
 
 	dm365evm_mmc_configure();
 
@@ -625,11 +664,13 @@ static __init void dm365_evm_init(void)
 #endif
 	dm365_init_rtc();
 	dm365_usb_configure();
+	dm365_ks8851_init();
+	davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info),	ksz8851_snl_info);
+	return;
 }
 
 
 /* Virt2real board devices init functions */
-
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 static void v2r_parse_cmdline(char * string)
 {
