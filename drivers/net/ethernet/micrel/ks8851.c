@@ -459,8 +459,8 @@ static void ks8851_rdfifo(struct ks8851_net *ks, u8 *buff, unsigned len)
 	u8 txb[1];
 	int ret;
 
-	netif_dbg(ks, rx_status, ks->netdev,
-		  "%s: %d@%p\n", __func__, len, buff);
+	//netif_dbg(ks, rx_status, ks->netdev,
+	//	  "%s: %d@%p\n", __func__, len, buff);
 
 	/* set the operation we're issuing */
 	txb[0] = KS_SPIOP_RXFIFO;
@@ -514,8 +514,8 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 
 	rxfc = ks8851_rdreg8(ks, KS_RXFC);
 
-	netif_dbg(ks, rx_status, ks->netdev,
-		  "%s: %d packets\n", __func__, rxfc);
+	//netif_dbg(ks, rx_status, ks->netdev,
+	//	  "%s: %d packets\n", __func__, rxfc);
 
 	/* Currently we're issuing a read per packet, but we could possibly
 	 * improve the code by issuing a single read, getting the receive
@@ -532,8 +532,8 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 		rxstat = rxh & 0xffff;
 		rxlen = (rxh >> 16) & 0xfff;
 
-		netif_dbg(ks, rx_status, ks->netdev,
-			  "rx: stat 0x%04x, len 0x%04x\n", rxstat, rxlen);
+		//netif_dbg(ks, rx_status, ks->netdev,
+		//	  "rx: stat 0x%04x, len 0x%04x\n", rxstat, rxlen);
 
 		/* the length of the packet includes the 32bit CRC */
 
@@ -606,8 +606,8 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	//
 	status = ks8851_rdreg16(ks, KS_ISR);
 
-	netif_dbg(ks, intr, ks->netdev,
-		  "%s: status 0x%04x\n", __func__, status);
+	//netif_dbg(ks, intr, ks->netdev,
+	//	  "%s: status 0x%04x\n", __func__, status);
 
 	if (status & IRQ_LCI)
 		handled |= IRQ_LCI;
@@ -632,8 +632,8 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 		 * system */
 		ks->tx_space = ks8851_rdreg16(ks, KS_TXMIR);
 
-		netif_dbg(ks, intr, ks->netdev,
-			  "%s: txspace %d\n", __func__, ks->tx_space);
+		//netif_dbg(ks, intr, ks->netdev,
+		//	  "%s: txspace %d\n", __func__, ks->tx_space);
 	}
 
 	if (status & IRQ_RXI)
@@ -715,8 +715,8 @@ static void ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
 	unsigned fid = 0;
 	int ret;
 
-	netif_dbg(ks, tx_queued, ks->netdev, "%s: skb %p, %d@%p, irq %d\n",
-		  __func__, txp, txp->len, txp->data, irq);
+	//netif_dbg(ks, tx_queued, ks->netdev, "%s: skb %p, %d@%p, irq %d\n",
+	//	  __func__, txp, txp->len, txp->data, irq);
 
 	fid = ks->fid++;
 	fid &= TXFR_TXFID_MASK;
@@ -805,7 +805,7 @@ static int ks8851_net_open(struct net_device *dev)
 	 * else at the moment */
 	mutex_lock(&ks->lock);
 
-	netif_dbg(ks, ifup, ks->netdev, "opening\n");
+	//netif_dbg(ks, ifup, ks->netdev, "opening\n");
 
 	/* bring chip out of any power saving mode it was in */
 	ks8851_set_powermode(ks, PMECR_PM_NORMAL);
@@ -861,7 +861,7 @@ static int ks8851_net_open(struct net_device *dev)
 
 	netif_start_queue(ks->netdev);
 
-	netif_dbg(ks, ifup, ks->netdev, "network device up\n");
+	//netif_dbg(ks, ifup, ks->netdev, "network device up\n");
 
 	mutex_unlock(&ks->lock);
 	return 0;
@@ -908,8 +908,8 @@ static int ks8851_net_stop(struct net_device *dev)
 	while (!skb_queue_empty(&ks->txq)) {
 		struct sk_buff *txb = skb_dequeue(&ks->txq);
 
-		netif_dbg(ks, ifdown, ks->netdev,
-			  "%s: freeing txb %p\n", __func__, txb);
+		//netif_dbg(ks, ifdown, ks->netdev,
+		//	  "%s: freeing txb %p\n", __func__, txb);
 
 		dev_kfree_skb(txb);
 	}
@@ -937,8 +937,8 @@ static netdev_tx_t ks8851_start_xmit(struct sk_buff *skb,
 	unsigned needed = calc_txlen(skb->len);
 	netdev_tx_t ret = NETDEV_TX_OK;
 
-	netif_dbg(ks, tx_queued, ks->netdev,
-		  "%s: skb %p, %d@%p\n", __func__, skb, skb->len, skb->data);
+	//netif_dbg(ks, tx_queued, ks->netdev,
+	//	  "%s: skb %p, %d@%p\n", __func__, skb, skb->len, skb->data);
 
 	spin_lock(&ks->statelock);
 
@@ -1497,7 +1497,7 @@ static int ks8851_probe(struct spi_device *spi)
 	ks8851_init_mac(ks);
 
 	ret = request_threaded_irq(spi->irq, NULL, ks8851_irq,
-					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					IRQF_TRIGGER_FALLING /*| IRQF_ONESHOT*/,
 				   ndev->name, ks);
 	if (ret < 0) {
 		dev_err(&spi->dev, "failed to get irq\n");
