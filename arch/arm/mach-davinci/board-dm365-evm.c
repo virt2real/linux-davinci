@@ -701,6 +701,18 @@ static void v2r_parse_cmdline(char * string)
 	    
 	    // i'd like to use switch, but fig tam
 	    
+	    if (!strcmp(param_name, "pwrled")) {
+		if (!strcmp(param_value, "on")) {
+		    printk(KERN_INFO "Power LED set ON\n");
+		    gpio_direction_output(74, 1);
+		}
+		if (!strcmp(param_value, "off")) {
+		    printk(KERN_INFO "Power LED set OFF\n");
+		    gpio_direction_output(74, 0);
+		}
+	    }
+
+	    
 	    if (!strcmp(param_name, "camera")) {
 		if (!strcmp(param_value, "ov5642")) {
 		    printk(KERN_INFO "Use camera OmniVision OV5642\n");
