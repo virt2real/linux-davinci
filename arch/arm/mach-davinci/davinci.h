@@ -27,7 +27,9 @@
 #include <linux/platform_data/keyscan-davinci.h>
 #include <mach/hardware.h>
 
-#include <media/davinci/vpfe_capture.h>
+#include <media/davinci/vpfe.h>
+#include <media/davinci/vpfe_types.h>
+//#include <media/davinci/vpfe_capture.h>
 #include <media/davinci/vpif_types.h>
 #include <media/davinci/vpss.h>
 #include <media/davinci/vpbe_types.h>

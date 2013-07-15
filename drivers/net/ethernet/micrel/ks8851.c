@@ -57,7 +57,7 @@ struct ks8851_rxctrl {
  */
 union ks8851_tx_hdr {
 	u8	txb[6];
-	__le16	txw[3];
+	u16	txw[3];
 };
 
 /**
@@ -159,11 +159,11 @@ static void ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
 {
 	struct spi_transfer *xfer = &ks->spi_xfer1;
 	struct spi_message *msg = &ks->spi_msg1;
-	__le16 txb[2];
+	u16 txb[2];
 	int ret;
 
-	txb[0] = cpu_to_le16(MK_OP(reg & 2 ? 0xC : 0x03, reg) | KS_SPIOP_WR);
-	txb[1] = cpu_to_le16(val);
+	txb[0] = (MK_OP(reg & 2 ? 0xC : 0x03, reg) | KS_SPIOP_WR);
+	txb[1] = (val);
 
 	xfer->tx_buf = txb;
 	xfer->rx_buf = NULL;
@@ -186,13 +186,13 @@ static void ks8851_wrreg8(struct ks8851_net *ks, unsigned reg, unsigned val)
 {
 	struct spi_transfer *xfer = &ks->spi_xfer1;
 	struct spi_message *msg = &ks->spi_msg1;
-	__le16 txb[2];
+	u16 txb[2];
 	int ret;
 	int bit;
 
 	bit = 1 << (reg & 3);
 
-	txb[0] = cpu_to_le16(MK_OP(bit, reg) | KS_SPIOP_WR);
+	txb[0] = (MK_OP(bit, reg) | KS_SPIOP_WR);
 	txb[1] = val;
 
 	xfer->tx_buf = txb;
@@ -238,11 +238,11 @@ static void ks8851_rdreg(struct ks8851_net *ks, unsigned op,
 {
 	struct spi_transfer *xfer;
 	struct spi_message *msg;
-	__le16 *txb = (__le16 *)ks->txd;
+	u16 *txb = (u16 *)ks->txd;
 	u8 *trx = ks->rxd;
 	int ret;
 
-	txb[0] = cpu_to_le16(op | KS_SPIOP_RD);
+	txb[0] = (op | KS_SPIOP_RD);
 
 	if (ks8851_rx_1msg(ks)) {
 		msg = &ks->spi_msg1;
@@ -298,10 +298,10 @@ static unsigned ks8851_rdreg8(struct ks8851_net *ks, unsigned reg)
 */
 static unsigned ks8851_rdreg16(struct ks8851_net *ks, unsigned reg)
 {
-	__le16 rx = 0;
+	u16 rx = 0;
 
 	ks8851_rdreg(ks, MK_OP(reg & 2 ? 0xC : 0x3, reg), (u8 *)&rx, 2);
-	return le16_to_cpu(rx);
+	return (rx);
 }
 
 /**
@@ -315,12 +315,12 @@ static unsigned ks8851_rdreg16(struct ks8851_net *ks, unsigned reg)
 */
 static unsigned ks8851_rdreg32(struct ks8851_net *ks, unsigned reg)
 {
-	__le32 rx = 0;
+	u32 rx = 0;
 
 	WARN_ON(reg & 3);
 
 	ks8851_rdreg(ks, MK_OP(0xf, reg), (u8 *)&rx, 4);
-	return le32_to_cpu(rx);
+	return (rx);
 }
 
 /**
@@ -602,7 +602,7 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	 * the receive problem under heavy TCP traffic while transmit done
 	 * is enabled.
 	*/
-	ks8851_wrreg16(ks, KS_IER, 0);
+	//ks8851_wrreg16(ks, KS_IER, 0);
 	//
 	status = ks8851_rdreg16(ks, KS_ISR);
 
@@ -672,7 +672,7 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	}
 
 	/* Re-enable hardware interrupt. */
-	ks8851_wrreg16(ks, KS_IER, ks->rc_ier);
+	//ks8851_wrreg16(ks, KS_IER, ks->rc_ier);
 
 	mutex_unlock(&ks->lock);
 
@@ -726,8 +726,8 @@ static void ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
 
 	/* start header at txb[1] to align txw entries */
 	ks->txh.txb[1] = KS_SPIOP_TXFIFO;
-	ks->txh.txw[1] = cpu_to_le16(fid);
-	ks->txh.txw[2] = cpu_to_le16(txp->len);
+	ks->txh.txw[1] = (fid);
+	ks->txh.txw[2] = (txp->len);
 
 	xfer->tx_buf = &ks->txh.txb[1];
 	xfer->rx_buf = NULL;
@@ -1239,7 +1239,7 @@ static int ks8851_get_eeprom(struct net_device *dev,
 
 	ee->magic = KS_EEPROM_MAGIC;
 
-	eeprom_93cx6_multiread(&ks->eeprom, offset/2, (__le16 *)data, len/2);
+	eeprom_93cx6_multiread(&ks->eeprom, offset/2, (u16 *)data, len/2);
 	ks8851_eeprom_release(ks);
 
 	return 0;

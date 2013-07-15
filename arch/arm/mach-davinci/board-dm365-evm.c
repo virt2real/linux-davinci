@@ -40,7 +40,6 @@
 #include <linux/platform_data/keyscan-davinci.h>
 #include <linux/platform_data/usb-davinci.h>
 #include <mach/gpio.h>
-#include <media/tvp514x.h>
 
 #include "davinci.h"
 #include "dm365_spi.h"
@@ -135,14 +134,7 @@ static struct platform_device davinci_nand_device = {
 		.platform_data	= &davinci_nand_data,
 	},
 };
-//Need to be deleted
-static struct at24_platform_data eeprom_info = {
-	.byte_len       = (256*1024) / 8,
-	.page_size      = 64,
-	.flags          = AT24_FLAG_ADDR16,
-	.setup          = davinci_get_mac_addr,
-	.context	= (void *)0x7f00,
-};
+
 
 static struct snd_platform_data dm365_evm_snd_data = {
 	.asp_chan_q = EVENTQ_3,
@@ -150,16 +142,7 @@ static struct snd_platform_data dm365_evm_snd_data = {
 
 //Here owr cameras support shold be added
 static struct i2c_board_info i2c_info[] = {
-	{
-		I2C_BOARD_INFO("dm365evm_keys", 0x25),
-	},
-	{
-		I2C_BOARD_INFO("24c256", 0x50),
-		.platform_data	= &eeprom_info,
-	},
-	{
-		I2C_BOARD_INFO("tlv320aic3x", 0x18),
-	},
+
 };
 
 static struct davinci_i2c_platform_data i2c_pdata = {
@@ -171,12 +154,42 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 
 /* Input available at the ov7690 */
 //Shadrin camera
-static struct v4l2_input ov7690_inputs[] = {
+static struct v4l2_input ov2643_inputs[] = {
 	{
 		.index = 0,
 		.name = "Camera",
 		.type = V4L2_INPUT_TYPE_CAMERA,
 	}
+};
+//Shadrin camera
+static struct vpfe_ext_subdev_info vpfe_sub_devs[] = {
+	{
+		//Clock for camera????
+		.module_name = "ov2643",
+		.is_camera = 1,
+		.grp_id = VPFE_SUBDEV_OV2643,
+		.num_inputs = ARRAY_SIZE(ov2643_inputs),
+		.inputs = ov2643_inputs,
+		.ccdc_if_params = {
+			.if_type = VPFE_RAW_BAYER,
+
+			.hdpol = VPFE_PINPOL_POSITIVE,
+			.vdpol = VPFE_PINPOL_POSITIVE,
+		},
+		.board_info = {
+			I2C_BOARD_INFO("ov2643", 0x21),
+			/* this is for PCLK rising edge */
+			.platform_data = (void *)1,
+		},
+	}
+};
+
+static struct vpfe_config vpfe_cfg = {
+       .num_subdevs = ARRAY_SIZE(vpfe_sub_devs),
+       .sub_devs = vpfe_sub_devs,
+       .card_name = "DM365 VIRT2REAL",
+       .num_clocks = 1,
+       .clocks = {"vpss_master"},
 };
 
 //SD card configuration functions
@@ -254,30 +267,6 @@ static void dm365evm_mmc_configure(void)
 	davinci_cfg_reg(DM365_SD1_DATA0);
 }
 
-//Will be removed
-static struct tvp514x_platform_data tvp5146_pdata = {
-	.clk_polarity = 0,
-	.hs_polarity = 1,
-	.vs_polarity = 1
-};
-
-#define TVP514X_STD_ALL        (V4L2_STD_NTSC | V4L2_STD_PAL)
-/* Inputs available at the TVP5146 */
-static struct v4l2_input tvp5146_inputs[] = {
-	{
-		.index = 0,
-		.name = "Composite",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.std = TVP514X_STD_ALL,
-	},
-	{
-		.index = 1,
-		.name = "S-Video",
-		.type = V4L2_INPUT_TYPE_CAMERA,
-		.std = TVP514X_STD_ALL,
-	},
-};
-
 //to support usb
 __init static void dm365_usb_configure(void)
 {
@@ -289,66 +278,12 @@ __init static void dm365_usb_configure(void)
 //For future use
 static void dm365_wifi_configure(void)
 {
-	/*
-	* CLKOUT1 pin is multiplexed with GPIO35 and SPI4
-	* Further details are available at the DM365 ARM
-	* Subsystem Users Guide(sprufg5.pdf) pages 118, 127 - 129
-	*/
-	/* Setup PWCTRO2 to generate 32kHz
-	 * Setup GPIO36 as output 1 (WLAN RESET)
-	 * Setup GPIO69 as output 1 (WLAN_SHDN)
-	 * Setup sd2/mmc2 interface
-	 * The HDG104 driver will be loaded later
-	 */
-	//Setup PWCTRO2 to generate 32kHz
-	printk("Before start WiFi 32k\r\n");
-	//configure_prtcss_32k();
-	printk("After start WiFi 32k\r\n");
-	//SET WLAN RESET
-	{
-		volatile int i = 0;
-		for (i = 0; i < 65536; i++){
-			if ((i%4096) == 0) printk("*");
-
-		}
-	}
-	gpio_request(36, "wifi_reset");
-	gpio_direction_output(36, 1);
-	//SET WLAN_SHDN
-	gpio_request(69, "wifi_shdn");
-	gpio_direction_output(69, 1);
-	//LETS CONSIDER SD2 AS INITIALIZED
-
-#if 0
-	struct clk *clkout1_clk;
-
-	davinci_cfg_reg(DM365_CLKOUT1);
-
-	clkout1_clk = clk_get(NULL, "clkout1");
-	if (IS_ERR(clkout1_clk))
-		return;
-	clk_enable(clkout1_clk);
-
-	/*
-	* Configure CLKOUT1 OBSCLK registers
-	*/
-
-	/* (reg OCSEL) Setting OBSCLK source with Oscillator divider output enable */
-	__raw_writel(0x0,IO_ADDRESS(0x01C40C00 + 0x104));
-
-	/* (reg OSCDIV1) Setting the Oscillator divider enable with a divider ratio of 1 */
-	__raw_writel(0x8000,IO_ADDRESS(0x01C40C00 + 0x124));
-
-	/* (reg CKEN) Setting the OBSCLK clock enable */
-	__raw_writel(0x02,IO_ADDRESS(0x01C40C00 + 0x148));
-#endif
 }
 static void dm365leopard_camera_configure(void){
 	gpio_request(70, "Camera_on_off");
 	gpio_direction_output(70, 1);
 	davinci_cfg_reg(DM365_SPI4_SDENA0);
 	davinci_cfg_reg(DM365_EXTCLK);
-
 }
 static void dm365_ks8851_init(void){
 	gpio_request(0, "KSZ8851");
@@ -524,49 +459,7 @@ static void dm365_gpio_configure(void){
 	davinci_cfg_reg(DM365_GPIO103);
 }
 
-/*
- * this is the route info for connecting each input to decoder
- * ouput that goes to vpfe. There is a one to one correspondence
- * with tvp5146_inputs
- */
-static struct vpfe_route tvp5146_routes[] = {
-	{
-		.input = INPUT_CVBS_VI2B,
-		.output = OUTPUT_10BIT_422_EMBEDDED_SYNC,
-	},
-{
-		.input = INPUT_SVIDEO_VI2C_VI1C,
-		.output = OUTPUT_10BIT_422_EMBEDDED_SYNC,
-	},
-};
 
-static struct vpfe_subdev_info vpfe_sub_devs[] = {
-	{
-		.name = "tvp5146",
-		.grp_id = 0,
-		.num_inputs = ARRAY_SIZE(tvp5146_inputs),
-		.inputs = tvp5146_inputs,
-		.routes = tvp5146_routes,
-		.can_route = 1,
-		.ccdc_if_params = {
-			.if_type = VPFE_BT656,
-			.hdpol = VPFE_PINPOL_POSITIVE,
-			.vdpol = VPFE_PINPOL_POSITIVE,
-		},
-		.board_info = {
-			I2C_BOARD_INFO("tvp5146", 0x5d),
-			.platform_data = &tvp5146_pdata,
-		},
-	},
-};
-
-static struct vpfe_config vpfe_cfg = {
-	.num_subdevs = ARRAY_SIZE(vpfe_sub_devs),
-	.sub_devs = vpfe_sub_devs,
-	.i2c_adapter_id = 1,
-	.card_name = "DM365 EVM",
-	.ccdc = "ISIF",
-};
 
 static void __init evm_init_i2c(void)
 {
@@ -653,15 +546,13 @@ static __init void dm365_evm_init(void)
 #endif
 
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
-	//davinci_setup_mmc(1, &dm365evm_mmc_config);
+	davinci_setup_mmc(1, &dm365evm_mmc_config);
 	/* maybe setup mmc1/etc ... _after_ mmc0 */
 	dm365_wifi_configure();
 
-#ifdef CONFIG_SND_DM365_AIC3X_CODEC
-	dm365_init_asp(&dm365_evm_snd_data);
-#elif defined(CONFIG_SND_DM365_VOICE_CODEC)
+
 	dm365_init_vc(&dm365_evm_snd_data);
-#endif
+
 	dm365_init_rtc();
 	dm365_usb_configure();
 	dm365_ks8851_init();
