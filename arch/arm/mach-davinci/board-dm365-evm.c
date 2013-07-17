@@ -546,11 +546,6 @@ static __init void dm365_evm_init(void)
 #endif
 
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
-	davinci_setup_mmc(1, &dm365evm_mmc_config);
-	/* maybe setup mmc1/etc ... _after_ mmc0 */
-	dm365_wifi_configure();
-
-
 	dm365_init_vc(&dm365_evm_snd_data);
 
 	dm365_init_rtc();
@@ -603,7 +598,15 @@ static void v2r_parse_cmdline(char * string)
 		}
 	    }
 
-	    
+	    if (!strcmp(param_name, "wifi")) {
+		if (!strcmp(param_value, "on")) {
+		    printk(KERN_INFO "Wi-Fi board enabled\n");
+		    davinci_setup_mmc(1, &dm365evm_mmc_config);
+		    /* maybe setup mmc1/etc ... _after_ mmc0 */
+		    dm365_wifi_configure();
+		}
+	    }
+
 	    if (!strcmp(param_name, "camera")) {
 		if (!strcmp(param_value, "ov5642")) {
 		    printk(KERN_INFO "Use camera OmniVision OV5642\n");
