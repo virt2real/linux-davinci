@@ -41,6 +41,9 @@
 #include <linux/platform_data/usb-davinci.h>
 #include <mach/gpio.h>
 
+#include <mach/mux.h>
+#include <linux/w1-gpio.h>
+
 #include "davinci.h"
 #include "dm365_spi.h"
 
@@ -49,6 +52,8 @@
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 static void v2r_parse_cmdline(char * string);
 #endif
+
+static void w1_enable_external_pullup(int enable);
 
 static inline int have_imager(void)
 {
@@ -523,6 +528,38 @@ static struct davinci_spi_unit_desc dm365_evm_spi_udesc_KSZ8851 = {
 	}
 };
 
+
+/* 1-wire init block */
+
+static struct w1_gpio_platform_data w1_gpio_pdata = {
+	.pin		= 22,
+	.is_open_drain	= 0,
+	.enable_external_pullup	= w1_enable_external_pullup,
+	.ext_pullup_enable_pin	= 23
+};
+
+static struct platform_device w1_device = {
+	.name			= "w1-gpio",
+	.id			= -1,
+	.dev.platform_data	= &w1_gpio_pdata,
+};
+
+static void w1_enable_external_pullup(int enable) {
+	gpio_set_value(w1_gpio_pdata.ext_pullup_enable_pin, enable);
+}
+
+static void w1_gpio_init() {
+	int err;
+	err = platform_device_register(&w1_device);
+	if (err)
+		printk(KERN_INFO "Failed to register w1-gpio\n");
+	else
+		printk(KERN_INFO "w1-gpio conected to GPIO22\n");
+}
+
+
+/* end 1-wire init block */
+
 static __init void dm365_evm_init(void)
 {
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
@@ -543,6 +580,8 @@ static __init void dm365_evm_init(void)
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	//printk (KERN_INFO "Parse cmdline: %s\n", saved_command_line);
 	v2r_parse_cmdline(saved_command_line);
+
+	if (w1_run) w1_gpio_init(); // run 1-wire master
 #endif
 
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
@@ -552,6 +591,7 @@ static __init void dm365_evm_init(void)
 	dm365_usb_configure();
 	dm365_ks8851_init();
 	davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info),	ksz8851_snl_info);
+
 	return;
 }
 
@@ -605,6 +645,22 @@ static void v2r_parse_cmdline(char * string)
 		    /* maybe setup mmc1/etc ... _after_ mmc0 */
 		    dm365_wifi_configure();
 		}
+	    }
+
+	    if (!strcmp(param_name, "1wire")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		w1_gpio_pdata.pin = temp;
+		printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp);
+		w1_run = 1;
+		
+	    }
+
+	    if (!strcmp(param_name, "1wirepullup")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		w1_gpio_pdata.ext_pullup_enable_pin = temp;
+		printk(KERN_INFO "Use 1-wire pullup resistor on GPIO%d\n", temp);
 	    }
 
 	    if (!strcmp(param_name, "camera")) {
