@@ -630,11 +630,11 @@ static void v2r_parse_cmdline(char * string)
 	    if (!strcmp(param_name, "pwrled")) {
 		if (!strcmp(param_value, "on")) {
 		    printk(KERN_INFO "Power LED set ON\n");
-		    gpio_direction_output(74, 1);
-		}
-		if (!strcmp(param_value, "off")) {
-		    printk(KERN_INFO "Power LED set OFF\n");
-		    gpio_direction_output(74, 0);
+		    // turn on blue led
+		    u8 result = 0;
+		    result = davinci_rtcss_read(0x00);
+		    result |= (1<<3);
+		    davinci_rtcss_write(result, 0x00);
 		}
 	    }
 
