@@ -399,6 +399,56 @@ static void w1_gpio_init() {
 
 /* end 1-wire init block */
 
+
+/* LED triggers block */
+
+#if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
+
+static struct gpio_led v2r_led[] = {
+    {
+	.name = "v2r:red:user",
+	.default_trigger = "none",
+	.gpio = 74,
+	.active_low = 0,
+    },
+    {
+	.name = "v2r:green:user",
+	.default_trigger = "none",
+	.gpio = 73,
+	.active_low = 0,
+    },
+};
+
+static struct gpio_led_platform_data v2r_led_data = {
+    .num_leds = ARRAY_SIZE(v2r_led),
+    .leds = v2r_led
+};
+
+static struct platform_device v2r_led_dev = {
+    .name = "leds-gpio",
+    .id	 = -1,
+    .dev = {
+        .platform_data	= &v2r_led_data,
+    },
+};
+
+static void led_init() {
+	int err;
+	err = platform_device_register(&v2r_led_dev);
+	if (err)
+		printk(KERN_INFO "Failed to register LED triggers\n");
+	else
+		printk(KERN_INFO "LED triggers init success\n");
+}
+
+#endif /* CONFIG_LEDS_GPIO */
+
+/* end LED triggers block */
+
+
+
+
+
 static __init void dm365_evm_init(void)
 {
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
@@ -419,6 +469,10 @@ static __init void dm365_evm_init(void)
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	//printk (KERN_INFO "Parse cmdline: %s\n", saved_command_line);
 	v2r_parse_cmdline(saved_command_line);
+
+	#if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
+	led_init();
+	#endif
 
 	if (w1_run) w1_gpio_init(); // run 1-wire master
 #endif
@@ -476,6 +530,16 @@ static void v2r_parse_cmdline(char * string)
 		    davinci_rtcss_write(result, 0x00);
 		}
 	    }
+
+	    #if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
+	    if (!strcmp(param_name, "redled")) {
+		v2r_led[0].default_trigger = param_value;
+	    }
+
+	    if (!strcmp(param_name, "greenled")) {
+		v2r_led[1].default_trigger = param_value;
+	    }
+	    #endif
 
 	    if (!strcmp(param_name, "wifi")) {
 		if (!strcmp(param_value, "on")) {
