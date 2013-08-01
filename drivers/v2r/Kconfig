@@ -18,12 +18,19 @@ config V2R_ADC
 	---help---
 	Virt2real ADC driver (6 channels)
 
+config V2R_PINS
+	depends on V2R_DRIVERS
+	tristate "pins driver"
+	default y
+	---help---
+	Virt2real pins driver
+
 config V2R_GPIO
 	depends on V2R_DRIVERS
 	tristate "GPIO driver"
 	default y
 	---help---
-	Virt2real GPIO driver (PIN and PWM)
+	Virt2real GPIO driver
 
 config V2R_SWPWM
 	depends on V2R_DRIVERS
