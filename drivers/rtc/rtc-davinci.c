@@ -539,7 +539,14 @@ static int davinci_rtc_probe(struct platform_device *pdev)
 			    PRTCSS_RTC_INTC_EXTENA1);
 
 	rtcss_write(davinci_rtc, PRTCSS_RTC_CCTRL_CAEN, PRTCSS_RTC_CCTRL);
-
+	{
+		u8 rtc_res = 0xFF;
+		rtc_res = rtcss_read(davinci_rtc, 0x04);
+		printk("Setting 32 kHz output in RTC driver: start %d, %x\r\n", rtc_res, (unsigned int)davinci_rtc->base);
+		rtcss_write(davinci_rtc, 0x01, 0x04);
+		rtc_res = rtcss_read(davinci_rtc, 0x04);
+		printk("Setting 32 kHz output in RTC driver: finish %d\r\n", rtc_res);
+	}
 	device_init_wakeup(&pdev->dev, 0);
 
 	return 0;
