@@ -41,6 +41,9 @@
 #include <linux/platform_data/usb-davinci.h>
 #include <mach/gpio.h>
 
+#include <mach/mux.h>
+#include <linux/w1-gpio.h>
+
 #include "davinci.h"
 #include "dm365_spi.h"
 
@@ -49,6 +52,8 @@
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 static void v2r_parse_cmdline(char * string);
 #endif
+
+static void w1_enable_external_pullup(int enable);
 
 static inline int have_imager(void)
 {
@@ -291,175 +296,15 @@ static void dm365_ks8851_init(void){
 	davinci_cfg_reg(DM365_EVT18_SPI3_TX);
 	davinci_cfg_reg(DM365_EVT19_SPI3_RX);
 }
+
 static void dm365_gpio_configure(void){
-	return;//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \<<< Here is return
-//
-	gpio_request(22, "GPIO22");
-	gpio_direction_input(22);
-	davinci_cfg_reg(DM365_GPIO22);
-//
-	gpio_request(23, "GPIO23");
-	gpio_direction_input(23);
-	davinci_cfg_reg(DM365_GPIO23);
-//
-	gpio_request(24, "GPIO24");
-	gpio_direction_input(24);
-	davinci_cfg_reg(DM365_GPIO24);
-//
-	gpio_request(25, "GPIO25");
-	gpio_direction_input(25);
-	davinci_cfg_reg(DM365_GPIO25);
-//
-	gpio_request(26, "GPIO26");
-	gpio_direction_input(26);
-	davinci_cfg_reg(DM365_GPIO26);
-//
-	gpio_request(27, "GPIO27");
-	gpio_direction_input(27);
-	davinci_cfg_reg(DM365_GPIO27);
-//
-	gpio_request(28, "GPIO28");
-	gpio_direction_input(28);
-	davinci_cfg_reg(DM365_GPIO28);
-//
-	gpio_request(29, "GPIO29");
-	gpio_direction_input(29);
-	davinci_cfg_reg(DM365_GPIO29);
-//
-	gpio_request(30, "GPIO30");
-	gpio_direction_input(30);
-	davinci_cfg_reg(DM365_GPIO30);
-//
-	gpio_request(31, "GPIO31");
-	gpio_direction_input(31);
-	davinci_cfg_reg(DM365_GPIO31);
-//
-	gpio_request(32, "GPIO32");
-	gpio_direction_input(32);
-	davinci_cfg_reg(DM365_GPIO32);
-//
-	gpio_request(33, "GPIO33");
-	gpio_direction_input(33);
-	davinci_cfg_reg(DM365_GPIO33);
-//
-	gpio_request(34, "GPIO34");
-	gpio_direction_input(34);
-	davinci_cfg_reg(DM365_GPIO34);
-//
-	gpio_request(35, "GPIO35");
-	gpio_direction_input(35);
-	davinci_cfg_reg(DM365_GPIO35);
-//
-	gpio_request(44, "GPIO44");
-	gpio_direction_input(44);
-	davinci_cfg_reg(DM365_GPIO44);
-//
-	gpio_request(45, "GPIO45");
-	gpio_direction_input(45);
-	davinci_cfg_reg(DM365_GPIO45);
-//
-	gpio_request(46, "GPIO46");
-	gpio_direction_input(46);
-	davinci_cfg_reg(DM365_GPIO46);
-//
-	gpio_request(47, "GPIO47");
-	gpio_direction_input(47);
-	davinci_cfg_reg(DM365_GPIO47);
-//
-	gpio_request(48, "GPIO48");
-	gpio_direction_input(48);
-	davinci_cfg_reg(DM365_GPIO48);
-//
-	gpio_request(49, "GPIO49");
-	gpio_direction_input(49);
-	davinci_cfg_reg(DM365_GPIO49);
-//
-	gpio_request(50, "GPIO50");
-	gpio_direction_input(50);
-	davinci_cfg_reg(DM365_GPIO50);
-//
-	gpio_request(51, "GPIO51");
-	gpio_direction_input(51);
-	davinci_cfg_reg(DM365_GPIO51);
-//
-	gpio_request(67, "GPIO67");
-	gpio_direction_input(67);
-	davinci_cfg_reg(DM365_GPIO67);
-//
-	gpio_request(79, "GPIO79");
-	gpio_direction_input(79);
-	davinci_cfg_reg(DM365_GPIO79);
-//
-	gpio_request(80, "GPIO80");
-	gpio_direction_input(80);
-	davinci_cfg_reg(DM365_GPIO80);
-//
-	gpio_request(81, "GPIO81");
-	gpio_direction_input(81);
-	davinci_cfg_reg(DM365_GPIO81);
-//
-	gpio_request(82, "GPIO82");
-	gpio_direction_input(82);
-	davinci_cfg_reg(DM365_GPIO82);
-//
-	gpio_request(83, "GPIO83");
-	gpio_direction_input(83);
-	davinci_cfg_reg(DM365_GPIO83);
-//
-	gpio_request(84, "GPIO84");
-	gpio_direction_input(84);
-	davinci_cfg_reg(DM365_GPIO84);
-//
-	gpio_request(85, "GPIO85");
-	gpio_direction_input(85);
-	davinci_cfg_reg(DM365_GPIO85);
-//
-	gpio_request(86, "GPIO86");
-	gpio_direction_input(86);
-	davinci_cfg_reg(DM365_GPIO86);
-//
-	gpio_request(87, "GPIO87");
-	gpio_direction_input(87);
-	davinci_cfg_reg(DM365_GPIO87);
-//
-	gpio_request(88, "GPIO88");
-	gpio_direction_input(88);
-	davinci_cfg_reg(DM365_GPIO88);
-//
-	gpio_request(89, "GPIO89");
-	gpio_direction_input(89);
-	davinci_cfg_reg(DM365_GPIO89);
-//
-	gpio_request(90, "GPIO90");
-	gpio_direction_input(90);
-	davinci_cfg_reg(DM365_GPIO90);
-//
-	gpio_request(91, "GPIO91");
-	gpio_direction_input(91);
-	davinci_cfg_reg(DM365_GPIO91);
-//
-	gpio_request(92, "GPIO92");
-	gpio_direction_input(92);
-	davinci_cfg_reg(DM365_GPIO92);
-//
-	gpio_request(100, "GPIO100");
-	gpio_direction_input(100);
-	davinci_cfg_reg(DM365_GPIO100);
-//
-	gpio_request(101, "GPIO101");
-	gpio_direction_input(101);
-	davinci_cfg_reg(DM365_GPIO101);
-//
-	gpio_request(102, "GPIO102");
-	gpio_direction_input(102);
-	davinci_cfg_reg(DM365_GPIO102);
-//
-	gpio_request(103, "GPIO103");
-	gpio_direction_input(103);
-	davinci_cfg_reg(DM365_GPIO103);
+
+	// example to init gpio in boot proccess
+
+	// gpio_request(103, "GPIO103");
+	// gpio_direction_input(103);
+	// davinci_cfg_reg(DM365_GPIO103);
 }
-
-
 
 static void __init evm_init_i2c(void)
 {
@@ -487,7 +332,6 @@ static void __init dm365_evm_map_io(void)
 	dm365_set_vpfe_config(&vpfe_cfg);
 	dm365_init();
 }
-
 
 static struct davinci_spi_config ksz8851_mcspi_config = {
 		.io_type = SPI_IO_TYPE_DMA,
@@ -523,6 +367,88 @@ static struct davinci_spi_unit_desc dm365_evm_spi_udesc_KSZ8851 = {
 	}
 };
 
+
+/* 1-wire init block */
+
+static struct w1_gpio_platform_data w1_gpio_pdata = {
+	.pin		= 22,
+	.is_open_drain	= 0,
+	.enable_external_pullup	= w1_enable_external_pullup,
+	.ext_pullup_enable_pin	= 23
+};
+
+static struct platform_device w1_device = {
+	.name			= "w1-gpio",
+	.id			= -1,
+	.dev.platform_data	= &w1_gpio_pdata,
+};
+
+static void w1_enable_external_pullup(int enable) {
+	gpio_set_value(w1_gpio_pdata.ext_pullup_enable_pin, enable);
+}
+
+static void w1_gpio_init() {
+	int err;
+	err = platform_device_register(&w1_device);
+	if (err)
+		printk(KERN_INFO "Failed to register w1-gpio\n");
+	else
+		printk(KERN_INFO "w1-gpio conected to GPIO22\n");
+}
+
+
+/* end 1-wire init block */
+
+
+/* LED triggers block */
+
+#if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
+
+static struct gpio_led v2r_led[] = {
+    {
+	.name = "v2r:red:user",
+	.default_trigger = "none",
+	.gpio = 74,
+	.active_low = 0,
+    },
+    {
+	.name = "v2r:green:user",
+	.default_trigger = "none",
+	.gpio = 73,
+	.active_low = 0,
+    },
+};
+
+static struct gpio_led_platform_data v2r_led_data = {
+    .num_leds = ARRAY_SIZE(v2r_led),
+    .leds = v2r_led
+};
+
+static struct platform_device v2r_led_dev = {
+    .name = "leds-gpio",
+    .id	 = -1,
+    .dev = {
+        .platform_data	= &v2r_led_data,
+    },
+};
+
+static void led_init() {
+	int err;
+	err = platform_device_register(&v2r_led_dev);
+	if (err)
+		printk(KERN_INFO "Failed to register LED triggers\n");
+	else
+		printk(KERN_INFO "LED triggers init success\n");
+}
+
+#endif /* CONFIG_LEDS_GPIO */
+
+/* end LED triggers block */
+
+
+
+
+
 static __init void dm365_evm_init(void)
 {
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
@@ -543,6 +469,12 @@ static __init void dm365_evm_init(void)
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	//printk (KERN_INFO "Parse cmdline: %s\n", saved_command_line);
 	v2r_parse_cmdline(saved_command_line);
+
+	#if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
+	led_init();
+	#endif
+
+	if (w1_run) w1_gpio_init(); // run 1-wire master
 #endif
 
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
@@ -552,6 +484,7 @@ static __init void dm365_evm_init(void)
 	dm365_usb_configure();
 	dm365_ks8851_init();
 	davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info),	ksz8851_snl_info);
+
 	return;
 }
 
@@ -590,13 +523,23 @@ static void v2r_parse_cmdline(char * string)
 	    if (!strcmp(param_name, "pwrled")) {
 		if (!strcmp(param_value, "on")) {
 		    printk(KERN_INFO "Power LED set ON\n");
-		    gpio_direction_output(74, 1);
-		}
-		if (!strcmp(param_value, "off")) {
-		    printk(KERN_INFO "Power LED set OFF\n");
-		    gpio_direction_output(74, 0);
+		    // turn on blue led
+		    u8 result = 0;
+		    result = davinci_rtcss_read(0x00);
+		    result |= (1<<3);
+		    davinci_rtcss_write(result, 0x00);
 		}
 	    }
+
+	    #if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
+	    if (!strcmp(param_name, "redled")) {
+		v2r_led[0].default_trigger = param_value;
+	    }
+
+	    if (!strcmp(param_name, "greenled")) {
+		v2r_led[1].default_trigger = param_value;
+	    }
+	    #endif
 
 	    if (!strcmp(param_name, "wifi")) {
 		if (!strcmp(param_value, "on")) {
@@ -605,6 +548,22 @@ static void v2r_parse_cmdline(char * string)
 		    /* maybe setup mmc1/etc ... _after_ mmc0 */
 		    dm365_wifi_configure();
 		}
+	    }
+
+	    if (!strcmp(param_name, "1wire")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		w1_gpio_pdata.pin = temp;
+		printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp);
+		w1_run = 1;
+		
+	    }
+
+	    if (!strcmp(param_name, "1wirepullup")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		w1_gpio_pdata.ext_pullup_enable_pin = temp;
+		printk(KERN_INFO "Use 1-wire pullup resistor on GPIO%d\n", temp);
 	    }
 
 	    if (!strcmp(param_name, "camera")) {
