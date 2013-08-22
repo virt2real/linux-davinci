@@ -194,8 +194,8 @@ struct davinci_spi_pins {
 static const struct davinci_spi_pins davinci_spi_pinmap[] __initconst = {
 	{
 		.sclk	= DM365_SPI0_SCLK,
-		.sdi	= DM365_SPI0_SDI,
-		.sdo	= DM365_SPI0_SDO,
+		.sdi	= DM365_SPI0_SDO,//DM365_SPI0_SDI,//Only for transfer
+		.sdo	= DM365_SPI0_SDO,//SDI is not used so configure SDO twice
 		.sdena0	= DM365_SPI0_SDENA0,
 		.sdena1	= DM365_SPI0_SDENA1
 	},
