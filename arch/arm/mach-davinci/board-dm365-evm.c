@@ -370,7 +370,7 @@ static struct davinci_spi_unit_desc dm365_evm_spi_udesc_KSZ8851 = {
 /////////////////////////////////////////////////////////////////////////
 
 static struct davinci_spi_config v2rdac_config = {
-		.io_type = SPI_IO_TYPE_INTR,
+		.io_type = SPI_IO_TYPE_DMA,
 		.c2tdelay = 0,
 		.t2cdelay = 0
 };
@@ -391,8 +391,8 @@ static struct davinci_spi_unit_desc v2rdac_spi_udesc = {
 	.spi_hwunit	= 0,
 	.chipsel	= BIT(1),
 	.irq		= IRQ_DM365_SPIINT0_0,
-	.dma_tx_chan	= 17,
-	.dma_rx_chan	= 16,
+	.dma_tx_chan	= 16,
+	.dma_rx_chan	= 17,
 	.dma_evtq	= EVENTQ_3,
 	.pdata		= {
 		.version 	= SPI_VERSION_1,
