@@ -50,7 +50,7 @@
 #include "board-virt2real-dm365.h"
 
 #ifdef CONFIG_V2R_PARSE_CMDLINE
-static void v2r_parse_cmdline(char * string);
+static __init void v2r_parse_cmdline(char * string);
 #endif
 
 static void w1_enable_external_pullup(int enable);
@@ -367,7 +367,41 @@ static struct davinci_spi_unit_desc dm365_evm_spi_udesc_KSZ8851 = {
 	}
 };
 
+/////////////////////////////////////////////////////////////////////////
 
+static struct davinci_spi_config v2rdac_config = {
+		.io_type = SPI_IO_TYPE_DMA,
+		.c2tdelay = 0,
+		.t2cdelay = 0
+};
+
+static struct spi_board_info v2rdac_info[] __initdata = {
+	{
+		.modalias	= "spidev",
+		.bus_num	= 0,
+		.chip_select	= 1,
+		.max_speed_hz	= 10000000,
+		.controller_data = &v2rdac_config
+     }
+};
+
+
+static struct davinci_spi_unit_desc v2rdac_spi_udesc = {
+	.spi_hwunit	= 0,
+	.chipsel	= BIT(1),
+	.irq		= IRQ_DM365_SPIINT0_0,
+	.dma_tx_chan	= 17,
+	.dma_rx_chan	= 16,
+	.dma_evtq	= EVENTQ_3,
+	.pdata		= {
+		.version 	= SPI_VERSION_1,
+		.num_chipselect = 2,
+		.intr_line = 0,
+		.chip_sel = 0,
+		.cshold_bug = 0,
+		.dma_event_q	= EVENTQ_3,
+	}
+};
 /* 1-wire init block */
 
 static struct w1_gpio_platform_data w1_gpio_pdata = {
@@ -387,7 +421,7 @@ static void w1_enable_external_pullup(int enable) {
 	gpio_set_value(w1_gpio_pdata.ext_pullup_enable_pin, enable);
 }
 
-static void w1_gpio_init() {
+static void w1_gpio_init(void) {
 	int err;
 	err = platform_device_register(&w1_device);
 	if (err)
@@ -432,7 +466,7 @@ static struct platform_device v2r_led_dev = {
     },
 };
 
-static void led_init() {
+static void led_init(void) {
 	int err;
 	err = platform_device_register(&v2r_led_dev);
 	if (err)
@@ -484,24 +518,21 @@ static __init void dm365_evm_init(void)
 	dm365_usb_configure();
 	dm365_ks8851_init();
 	davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info),	ksz8851_snl_info);
-
+	davinci_init_spi(&v2rdac_spi_udesc, ARRAY_SIZE(v2rdac_info),	v2rdac_info);
 	return;
 }
 
 
 /* Virt2real board devices init functions */
 #ifdef CONFIG_V2R_PARSE_CMDLINE
-static void v2r_parse_cmdline(char * string)
+static __init  void v2r_parse_cmdline(char * string)
 {
-
-    printk(KERN_INFO "Parse kernel cmdline:\n");
-
     char *p;
     char *temp_string;
     char *temp_param;
     char *param_name;
     char *param_value;
-    
+    printk(KERN_INFO "Parse kernel cmdline:\n");
     temp_string = kstrdup(string, GFP_KERNEL);
 
     do
@@ -522,9 +553,9 @@ static void v2r_parse_cmdline(char * string)
 	    
 	    if (!strcmp(param_name, "pwrled")) {
 		if (!strcmp(param_value, "on")) {
-		    printk(KERN_INFO "Power LED set ON\n");
 		    // turn on blue led
 		    u8 result = 0;
+		    printk(KERN_INFO "Power LED set ON\n");
 		    result = davinci_rtcss_read(0x00);
 		    result |= (1<<3);
 		    davinci_rtcss_write(result, 0x00);
