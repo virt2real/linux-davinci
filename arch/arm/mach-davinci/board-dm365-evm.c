@@ -380,8 +380,9 @@ static struct spi_board_info v2rdac_info[] __initdata = {
 		.modalias	= "spidev",
 		.bus_num	= 0,
 		.chip_select	= 1,
-		.max_speed_hz	= 10000000,
-		.controller_data = &v2rdac_config
+		.max_speed_hz	= 1000000,
+		.controller_data = &v2rdac_config,
+		.mode = SPI_MODE_1
      }
 };
 
