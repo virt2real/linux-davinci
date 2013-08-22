@@ -13,10 +13,12 @@
 #ifndef VPBE_DISPLAY_H
 #define VPBE_DISPLAY_H
 
+#ifdef __KERNEL__
+
 /* Header files */
 #include <linux/videodev2.h>
 #include <media/v4l2-common.h>
-#include <media/videobuf2-dma-contig.h>
+#include <media/videobuf-dma-contig.h>
 #include <media/davinci/vpbe_types.h>
 #include <media/davinci/vpbe_osd.h>
 #include <media/davinci/vpbe.h>
@@ -41,14 +43,14 @@ enum vpbe_display_device_id {
 	 (V4L2_FIELD_ANY == field) || (V4L2_FIELD_INTERLACED == field))
 
 /* Exp ratio numerator and denominator constants */
-#define VPBE_DISPLAY_H_EXP_RATIO_N	9
-#define VPBE_DISPLAY_H_EXP_RATIO_D	8
-#define VPBE_DISPLAY_V_EXP_RATIO_N	6
-#define VPBE_DISPLAY_V_EXP_RATIO_D	5
+#define VPBE_DISPLAY_H_EXP_RATIO_N   (9)
+#define VPBE_DISPLAY_H_EXP_RATIO_D   (8)
+#define VPBE_DISPLAY_V_EXP_RATIO_N   (6)
+#define VPBE_DISPLAY_V_EXP_RATIO_D   (5)
 
 /* Zoom multiplication factor */
-#define VPBE_DISPLAY_ZOOM_4X	4
-#define VPBE_DISPLAY_ZOOM_2X	2
+#define VPBE_DISPLAY_ZOOM_4X (4)
+#define VPBE_DISPLAY_ZOOM_2X (2)
 
 /* Structures */
 struct display_layer_info {
@@ -62,34 +64,25 @@ struct display_layer_info {
 	enum osd_v_exp_ratio v_exp;
 };
 
-struct vpbe_disp_buffer {
-	struct vb2_buffer vb;
-	struct list_head list;
-};
-
 /* vpbe display object structure */
-struct vpbe_layer {
+struct vpbe_display_obj {
 	/* number of buffers in fbuffers */
 	unsigned int numbuffers;
-	/* Pointer to the vpbe_display */
-	struct vpbe_display *disp_dev;
 	/* Pointer pointing to current v4l2_buffer */
-	struct vpbe_disp_buffer *cur_frm;
+	struct videobuf_buffer *cur_frm;
 	/* Pointer pointing to next v4l2_buffer */
-	struct vpbe_disp_buffer *next_frm;
+	struct videobuf_buffer *next_frm;
 	/* videobuf specific parameters
 	 * Buffer queue used in video-buf
 	 */
-	struct vb2_queue buffer_queue;
-	/* allocator-specific contexts for each plane */
-	struct vb2_alloc_ctx *alloc_ctx;
+	struct videobuf_queue buffer_queue;
 	/* Queue of filled frames */
 	struct list_head dma_queue;
 	/* Used in video-buf */
 	spinlock_t irqlock;
 	/* V4l2 specific parameters */
 	/* Identifies video device for this layer */
-	struct video_device video_dev;
+	struct video_device *video_dev;
 	/* This field keeps track of type of buffer exchange mechanism user
 	 * has selected
 	 */
@@ -117,7 +110,6 @@ struct vpbe_layer {
 	enum vpbe_display_device_id device_id;
 	/* facilitation of ioctl ops lock by v4l2*/
 	struct mutex opslock;
-	u8 layer_first_int;
 };
 
 /* vpbe device structure */
@@ -127,9 +119,7 @@ struct vpbe_display {
 	spinlock_t dma_queue_lock;
 	/* C-Plane offset from start of y-plane */
 	unsigned int cbcr_ofst;
-	struct vpbe_layer *dev[VPBE_DISPLAY_MAX_DEVICES];
-	struct vpbe_device *vpbe_dev;
-	struct osd_state *osd_device;
+	struct vpbe_display_obj *dev[VPBE_DISPLAY_MAX_DEVICES];
 };
 
 /* File handle structure */
@@ -137,7 +127,7 @@ struct vpbe_fh {
 	/* vpbe device structure */
 	struct vpbe_display *disp_dev;
 	/* pointer to layer object for opened device */
-	struct vpbe_layer *layer;
+	struct vpbe_display_obj *layer;
 	/* Indicates whether this file handle is doing IO */
 	unsigned char io_allowed;
 	/* Used to keep track priority of this instance */
@@ -149,6 +139,9 @@ struct buf_config_params {
 	unsigned char numbuffers[VPBE_DISPLAY_MAX_DEVICES];
 	unsigned int min_bufsize[VPBE_DISPLAY_MAX_DEVICES];
 	unsigned int layer_bufsize[VPBE_DISPLAY_MAX_DEVICES];
+	unsigned int video_limit[VPBE_DISPLAY_MAX_DEVICES];
 };
 
+static int venc_is_second_field(void);
+#endif	/* end of __KERNEL__ */
 #endif	/* VPBE_DISPLAY_H */

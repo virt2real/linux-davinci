@@ -57,7 +57,7 @@ struct ccdc_hw_ops {
 	 */
 	int (*get_params) (void *params);
 	/* Pointer to function to configure ccdc */
-	int (*configure) (void);
+	int (*configure) (int mode);
 
 	/* Pointer to function to set buffer type */
 	int (*set_buftype) (enum ccdc_buftype buf_type);

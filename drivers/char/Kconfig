@@ -585,6 +585,16 @@ config DEVPORT
 	default y
 
 source "drivers/s390/char/Kconfig"
+config RESIZER
+	tristate "DaVinci Resizer Driver"
+	default n
+	depends on ARCH_DAVINCI_DM365
+	help
+	  Resizer Driver for dm644x.
+
+	  This driver helps user configure Resizer in a single shot mode
+	  only for dm644x. Various private ioctls help user to configure
+	  resizer, allocate memory for buffers etc.
 
 config MSM_SMD_PKT
 	bool "Enable device interface for some SMD packet ports"
@@ -604,6 +614,7 @@ config TILE_SROM
 	  in /dev/srom/.  The Tilera hypervisor makes the flash
 	  device appear much like a simple EEPROM, and knows
 	  how to partition a single ROM for multiple purposes.
+
 
 endmenu
 

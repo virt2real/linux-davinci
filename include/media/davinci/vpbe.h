@@ -35,7 +35,7 @@ struct osd_config_info {
 struct vpbe_output {
 	struct v4l2_output output;
 	/*
-	 * If output capabilities include dv_timings, list supported timings
+	 * If output capabilities include dv_preset, list supported presets
 	 * below
 	 */
 	char *subdev_name;
@@ -85,7 +85,7 @@ struct amp_config_info {
 };
 
 /* structure for defining vpbe display subsystem components */
-struct vpbe_config {
+struct vpbe_display_config {
 	char module_name[32];
 	/* i2c bus adapter no */
 	int i2c_adapter_id;
@@ -120,16 +120,16 @@ struct vpbe_device_ops {
 	unsigned int (*get_output)(struct vpbe_device *vpbe_dev);
 
 	/* Set DV preset at current output */
-	int (*s_dv_timings)(struct vpbe_device *vpbe_dev,
-			   struct v4l2_dv_timings *dv_timings);
+	int (*s_dv_preset)(struct vpbe_device *vpbe_dev,
+			   struct v4l2_dv_preset *dv_preset);
 
 	/* Get DV presets supported at the output */
-	int (*g_dv_timings)(struct vpbe_device *vpbe_dev,
-			   struct v4l2_dv_timings *dv_timings);
+	int (*g_dv_preset)(struct vpbe_device *vpbe_dev,
+			   struct v4l2_dv_preset *dv_preset);
 
 	/* Enumerate the DV Presets supported at the output */
-	int (*enum_dv_timings)(struct vpbe_device *vpbe_dev,
-			       struct v4l2_enum_dv_timings *timings_info);
+	int (*enum_dv_presets)(struct vpbe_device *vpbe_dev,
+			       struct v4l2_dv_enum_preset *preset_info);
 
 	/* Set std at the output */
 	int (*s_std)(struct vpbe_device *vpbe_dev, v4l2_std_id *std_id);
@@ -163,7 +163,7 @@ struct vpbe_device {
 	/* V4l2 device */
 	struct v4l2_device v4l2_dev;
 	/* vpbe dispay controller cfg */
-	struct vpbe_config *cfg;
+	struct vpbe_display_config *cfg;
 	/* parent device */
 	struct device *pdev;
 	/* external encoder v4l2 sub devices */
@@ -177,10 +177,7 @@ struct vpbe_device {
 	int initialized;
 	/* vpbe dac clock */
 	struct clk *dac_clk;
-	/* osd_device pointer */
-	struct osd_state *osd_device;
-	/* venc device pointer */
-	struct venc_platform_data *venc_device;
+
 	/*
 	 * fields below are accessed by users of vpbe_device. Not the
 	 * ones above
@@ -197,4 +194,7 @@ struct vpbe_device {
 	struct vpbe_device_ops ops;
 };
 
+/* exported functions */
+struct v4l2_subdev *venc_sub_dev_init(struct v4l2_device *v4l2_dev,
+		const char *venc_name);
 #endif

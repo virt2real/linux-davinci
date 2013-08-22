@@ -1449,9 +1449,9 @@ static int davincifb_remove(struct platform_device *pdev)
 static int davincifb_probe(struct platform_device *pdev)
 {
 	struct fb_info *info;
-
-	if (dmparams.windows == 0)
-		return 0;	/* user disabled all windows through bootargs */
+    printk("DAVFB 1\r\n");
+	if (dmparams.windows == 0)	return 0;	/* user disabled all windows through bootargs */
+    printk("DAVFB 2\r\n");
 	dm->dev = &pdev->dev;
 	dm->mmio_base_phys = OSD_REG_BASE;
 	dm->mmio_size = OSD_REG_SIZE;
@@ -1461,7 +1461,7 @@ static int davincifb_probe(struct platform_device *pdev)
 		dev_err(dm->dev, ": cannot reserve MMIO region\n");
 		return (-ENODEV);
 	}
-
+    printk("DAVFB 3\r\n");
 	/* map the regions */
 	dm->mmio_base =
 	    (unsigned long)ioremap(dm->mmio_base_phys, dm->mmio_size);
@@ -1469,7 +1469,7 @@ static int davincifb_probe(struct platform_device *pdev)
 		dev_err(dm->dev, ": cannot map MMIO\n");
 		goto release_mmio;
 	}
-
+    printk("DAVFB 4\r\n");
 	/* initialize the vsync wait queue */
 	init_waitqueue_head(&dm->vsync_wait);
 	dm->timeout = HZ / 5;
@@ -1491,7 +1491,7 @@ static int davincifb_probe(struct platform_device *pdev)
 		printk(KERN_WARNING "Unsupported output device!\n");
 		dm->output_device_config = NULL;
 	}
-
+    printk("DAVFB 5\r\n");
 	printk("Setting Up Clocks for DM420 OSD\n");
 
 	/* Initialize the VPSS Clock Control register */
@@ -1532,7 +1532,7 @@ static int davincifb_probe(struct platform_device *pdev)
 		memset((void *)dm->vid0->fb_base, 0x88, dm->vid0->fb_size);
 	} else
 		goto exit;
-
+    printk("DAVFB 6\r\n");
 	/* Setup OSD0 framebuffer */
 	if ((dmparams.windows & (1 << OSD0)) &&
 	    (!mem_alloc(&dm->osd0, OSD0_FB_PHY, OSD0_FB_SIZE, OSD0_FBNAME))) {
@@ -1548,7 +1548,7 @@ static int davincifb_probe(struct platform_device *pdev)
 		} else
 			memset((void *)dm->osd0->fb_base, 0, dm->osd0->fb_size);
 	}
-
+    printk("DAVFB 7\r\n");
 	/* Setup OSD1 framebuffer */
 	if ((dmparams.windows & (1 << OSD1)) &&
 	    (!mem_alloc(&dm->osd1, OSD1_FB_PHY, OSD1_FB_SIZE, OSD1_FBNAME))) {
@@ -1566,7 +1566,7 @@ static int davincifb_probe(struct platform_device *pdev)
 			memset((void *)dm->osd1->fb_base, 0xff,
 			       dm->osd1->fb_size);
 	}
-
+    printk("DAVFB 8\r\n");
 	/* Setup VID1 framebuffer */
 	if ((dmparams.windows & (1 << VID1)) &&
 	    (!mem_alloc(&dm->vid1, VID1_FB_PHY, VID1_FB_SIZE, VID1_FBNAME))) {
@@ -1584,7 +1584,7 @@ static int davincifb_probe(struct platform_device *pdev)
 			memset((void *)dm->vid1->fb_base, 0x88,
 			       dm->vid1->fb_size);
 	}
-
+    printk("DAVFB 9\r\n");
 	/* Register OSD0 framebuffer */
 	if (dm->osd0) {
 		info = &dm->osd0->info;
@@ -1610,7 +1610,7 @@ static int davincifb_probe(struct platform_device *pdev)
 		       info->node, info->fix.id);
 		davincifb_set_par(info);
 	}
-
+    printk("DAVFB 10\r\n");
 	/* Register OSD1 framebuffer */
 	if (dm->osd1) {
 		info = &dm->osd1->info;
@@ -1624,7 +1624,7 @@ static int davincifb_probe(struct platform_device *pdev)
 			davincifb_set_par(info);
 		}
 	}
-
+    printk("DAVFB 11\r\n");
 	/* Register VID1 framebuffer */
 	if (dm->vid1) {
 		info = &dm->vid1->info;
@@ -1650,13 +1650,15 @@ static int davincifb_probe(struct platform_device *pdev)
 
 	/* Turn ON the output device */
 	dm->output_device_config(1);
-
+    printk("DAVFB 12\r\n");
 	return (0);
 
       exit:
+    printk("DAVFB 13\r\n");
 	davincifb_remove(pdev);
 	iounmap((void *)dm->mmio_base);
       release_mmio:
+    printk("DAVFB 14\r\n");
 	release_mem_region(dm->mmio_base_phys, dm->mmio_size);
 	return (-ENODEV);
 }
@@ -1699,7 +1701,7 @@ int __init davincifb_init(void)
 	char *option;
 	char *names[] = { "davincifb", "dm64xxfb" };
 	int i, num_names = 2, done = 0;
-
+	printk("Davinci FB init\r\n");
 	for (i = 0; i < num_names && !done; i++) {
 		if (fb_get_options(names[i], &option)) {
 			printk(MODULE_NAME
@@ -1711,7 +1713,7 @@ int __init davincifb_init(void)
 		}
 	}
 #endif
-
+    printk("Davinci FB init\r\n");
 	/* Register the driver with LDM */
 	if (platform_driver_register(&davincifb_driver)) {
 		pr_debug("failed to register omapfb driver\n");

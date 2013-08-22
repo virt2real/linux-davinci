@@ -74,6 +74,9 @@ static const struct std_descr standards[] = {
 	{ 0, 			"Unknown"   }
 };
 
+#define VIDIOC_SUBDEV_G_EDID	_IOWR('V', 40, struct v4l2_subdev_edid)
+#define VIDIOC_SUBDEV_S_EDID	_IOWR('V', 41, struct v4l2_subdev_edid)
+
 /* video4linux standard ID conversion to standard name
  */
 const char *v4l2_norm_to_name(v4l2_std_id id)

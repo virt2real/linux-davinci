@@ -24,11 +24,7 @@
 #ifndef _OSD_H
 #define _OSD_H
 
-#include <media/davinci/vpbe_types.h>
-
-#define DM644X_VPBE_OSD_SUBDEV_NAME	"dm644x,vpbe-osd"
-#define DM365_VPBE_OSD_SUBDEV_NAME	"dm365,vpbe-osd"
-#define DM355_VPBE_OSD_SUBDEV_NAME	"dm355,vpbe-osd"
+#define VPBE_OSD_SUBDEV_NAME "vpbe-osd"
 
 /**
  * enum osd_layer
@@ -297,6 +293,11 @@ struct osd_layer_config {
 	int interlaced;
 };
 
+/* OSD events. Should match with that in vpbe_venc.h */
+#define OSD_END_OF_FRAME	BIT(0)
+#define OSD_FIRST_FIELD		BIT(1)
+#define OSD_SECOND_FIELD	BIT(2)
+
 /* parameters that apply on a per-window (OSD or video) basis */
 struct osd_window_state {
 	int is_allocated;
@@ -327,22 +328,74 @@ struct osd_cursor_state {
 struct osd_state;
 
 struct vpbe_osd_ops {
+	void (*set_clut_ycbcr)(struct osd_state *sd,
+			       unsigned char clut_index, unsigned char y,
+			       unsigned char cb, unsigned char cr);
+	void (*set_clut_rgb)(struct osd_state *sd, unsigned char clut_index,
+			     unsigned char r, unsigned char g,
+			     unsigned char b);
+	void (*set_osd_clut)(struct osd_state *sd, enum osd_win_layer osdwin,
+			     enum osd_clut clut);
+	enum osd_clut (*get_osd_clut)(struct osd_state *sd,
+				      enum osd_win_layer osdwin);
+	void (*enable_color_key)(struct osd_state *sd,
+				 enum osd_win_layer osdwin, unsigned colorkey);
+	void (*disable_color_key)(struct osd_state *sd,
+				  enum osd_win_layer osdwin);
+	void (*set_blending_factor)(struct osd_state *sd,
+				    enum osd_win_layer osdwin,
+				    enum osd_blending_factor blend);
+	enum osd_blending_factor (*get_blending_factor)(struct osd_state *sd,
+				  enum osd_win_layer osdwin);
+	void (*set_rec601_attenuation)(struct osd_state *sd,
+				  enum osd_win_layer osdwin, int enable);
+	int (*get_rec601_attenuation)(struct osd_state *sd,
+				  enum osd_win_layer osdwin);
+	void (*set_palette_map)(struct osd_state *sd,
+				enum osd_win_layer osdwin,
+				unsigned char pixel_value,
+				unsigned char clut_index);
+	unsigned char (*get_palette_map)(struct osd_state *sd,
+			enum osd_win_layer osdwin, unsigned char pixel_value);
+	void (*set_blink_attribute)(struct osd_state *sd, int enable,
+				    enum osd_blink_interval blink);
+	void (*get_blink_attribute)(struct osd_state *sd, int *enable,
+				    enum osd_blink_interval *blink);
+	void (*cursor_enable)(struct osd_state *sd);
+	void (*cursor_disable)(struct osd_state *sd);
+	int (*cursor_is_enabled)(struct osd_state *sd);
+	void (*set_cursor_config)(struct osd_state *sd,
+				  struct osd_cursor_config *cursor);
+	void (*get_cursor_config)(struct osd_state *sd,
+				  struct osd_cursor_config *cursor);
+	void (*set_field_inversion)(struct osd_state *sd, int enable);
+	int (*get_field_inversion)(struct osd_state *sd);
 	int (*initialize)(struct osd_state *sd);
 	int (*request_layer)(struct osd_state *sd, enum osd_layer layer);
 	void (*release_layer)(struct osd_state *sd, enum osd_layer layer);
 	int (*enable_layer)(struct osd_state *sd, enum osd_layer layer,
 			    int otherwin);
 	void (*disable_layer)(struct osd_state *sd, enum osd_layer layer);
+	int (*layer_is_enabled)(struct osd_state *sd, enum osd_layer layer);
 	int (*set_layer_config)(struct osd_state *sd, enum osd_layer layer,
+				struct osd_layer_config *lconfig);
+	int (*try_layer_config)(struct osd_state *sd, enum osd_layer layer,
 				struct osd_layer_config *lconfig);
 	void (*get_layer_config)(struct osd_state *sd, enum osd_layer layer,
 				 struct osd_layer_config *lconfig);
 	void (*start_layer)(struct osd_state *sd, enum osd_layer layer,
 			    unsigned long fb_base_phys,
 			    unsigned long cbcr_ofst);
+	void (*set_interpolation_filter)(struct osd_state *sd, int filter);
+	int (*get_interpolation_filter)(struct osd_state *sd);
+	int (*set_osd_expansion)(struct osd_state *sd,
+				 enum osd_h_exp_ratio h_exp,
+				 enum osd_v_exp_ratio v_exp);
+	void (*get_osd_expansion)(struct osd_state *sd,
+				  enum osd_h_exp_ratio *h_exp,
+				  enum osd_v_exp_ratio *v_exp);
 	void (*set_left_margin)(struct osd_state *sd, u32 val);
 	void (*set_top_margin)(struct osd_state *sd, u32 val);
-	void (*set_interpolation_filter)(struct osd_state *sd, int filter);
 	int (*set_vid_expansion)(struct osd_state *sd,
 					enum osd_h_exp_ratio h_exp,
 					enum osd_v_exp_ratio v_exp);
@@ -352,10 +405,20 @@ struct vpbe_osd_ops {
 	void (*set_zoom)(struct osd_state *sd, enum osd_layer layer,
 				enum osd_zoom_factor h_zoom,
 				enum osd_zoom_factor v_zoom);
+	void (*get_zoom)(struct osd_state *sd, enum osd_layer layer,
+			 enum osd_zoom_factor *h_zoom,
+			 enum osd_zoom_factor *v_zoom);
+	void (*set_background)(struct osd_state *sd, enum osd_clut clut,
+			       unsigned char clut_index);
+	void (*get_background)(struct osd_state *sd, enum osd_clut *clut,
+			      unsigned char *clut_index);
+	void (*set_rom_clut)(struct osd_state *sd,
+			     enum osd_rom_clut rom_clut);
+	enum osd_rom_clut (*get_rom_clut)(struct osd_state *sd);
 };
 
 struct osd_state {
-	enum vpbe_version vpbe_type;
+	enum vpbe_types vpbe_type;
 	spinlock_t lock;
 	struct device *dev;
 	dma_addr_t osd_base_phys;
@@ -389,6 +452,7 @@ struct osd_state {
 };
 
 struct osd_platform_data {
+	enum vpbe_types vpbe_type;
 	int  field_inv_wa_enable;
 };
 

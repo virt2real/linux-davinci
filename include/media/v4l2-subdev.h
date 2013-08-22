@@ -176,10 +176,16 @@ struct v4l2_subdev_core_ops {
 				 struct v4l2_event_subscription *sub);
 };
 
-/* s_radio: v4l device was opened in radio mode.
+/* open: called when the subdev device node is opened by an application.
 
-   g_frequency: freq->type must be filled in. Normally done by video_ioctl2
-	or the bridge driver.
+   close: called when the subdev device node is close.
+ */
+struct v4l2_subdev_file_ops {
+	int (*open)(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh);
+	int (*close)(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh);
+};
+
+/* s_mode: switch the tuner to a specific tuner mode. Replacement of s_radio.
 
    g_tuner:
    s_tuner: vt->type must be filled in. Normally done by video_ioctl2 or the
@@ -492,7 +498,22 @@ struct v4l2_subdev_ir_ops {
 	int (*tx_s_parameters)(struct v4l2_subdev *sd,
 				struct v4l2_subdev_ir_parameters *params);
 };
+struct v4l2_subdev_selection {
+	__u32 which;
+	__u32 pad;
+	__u32 target;
+	__u32 flags;
+	struct v4l2_rect r;
+	__u32 reserved[8];
+};
 
+struct v4l2_subdev_edid {
+	__u32 pad;
+	__u32 start_block;
+	__u32 blocks;
+	__u32 reserved[5];
+	__u8 __user *edid;
+};
 /**
  * struct v4l2_subdev_pad_ops - v4l2-subdev pad level operations
  * @get_frame_desc: get the current low level media bus frame parameters.
@@ -535,6 +556,7 @@ struct v4l2_subdev_pad_ops {
 
 struct v4l2_subdev_ops {
 	const struct v4l2_subdev_core_ops	*core;
+	const struct v4l2_subdev_file_ops	*file;
 	const struct v4l2_subdev_tuner_ops	*tuner;
 	const struct v4l2_subdev_audio_ops	*audio;
 	const struct v4l2_subdev_video_ops	*video;
@@ -601,6 +623,9 @@ struct v4l2_subdev {
 	void *host_priv;
 	/* subdev device node */
 	struct video_device *devnode;
+	unsigned int initialized;
+	/* number of events to be allocated on open */
+	unsigned int nevents;
 };
 
 #define media_entity_to_v4l2_subdev(ent) \

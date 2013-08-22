@@ -121,7 +121,7 @@ static struct isif_oper_config {
 			.b_mg = {1, 0},
 		},
 		.cfa_pat = ISIF_CFA_PAT_MOSAIC,
-		.data_msb = ISIF_BIT_MSB_11,
+		.data_msb = ISIF_BIT_MSB_9,
 		.config_params = {
 			.data_shift = ISIF_NO_SHIFT,
 			.col_pat_field0 = {
