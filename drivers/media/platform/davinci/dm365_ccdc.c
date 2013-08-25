@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/videodev2.h>
+#include <linux/davinci_user.h>
 #include <mach/mux.h>
 #include <media/davinci/dm365_ccdc.h>
 #include <media/davinci/vpss.h>
