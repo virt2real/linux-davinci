@@ -498,28 +498,7 @@ struct v4l2_subdev_ir_ops {
 	int (*tx_s_parameters)(struct v4l2_subdev *sd,
 				struct v4l2_subdev_ir_parameters *params);
 };
-struct v4l2_subdev_selection {
-	__u32 which;
-	__u32 pad;
-	__u32 target;
-	__u32 flags;
-	struct v4l2_rect r;
-	__u32 reserved[8];
-};
 
-struct v4l2_subdev_edid {
-	__u32 pad;
-	__u32 start_block;
-	__u32 blocks;
-	__u32 reserved[5];
-	__u8 __user *edid;
-};
-/**
- * struct v4l2_subdev_pad_ops - v4l2-subdev pad level operations
- * @get_frame_desc: get the current low level media bus frame parameters.
- * @get_frame_desc: set the low level media bus frame parameters, @fd array
- *                  may be adjusted by the subdev driver to device capabilities.
- */
 struct v4l2_subdev_pad_ops {
 	int (*enum_mbus_code)(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh,
 			      struct v4l2_subdev_mbus_code_enum *code);
