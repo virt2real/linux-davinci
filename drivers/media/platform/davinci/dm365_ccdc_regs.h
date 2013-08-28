@@ -38,7 +38,7 @@
 #define LINCFG0					0x44
 #define LINCFG1					0x48
 #define CCOLP					0x4c
-#define CRGAIN					0x50
+#define CRGAIN 					0x50
 #define CGRGAIN					0x54
 #define CGBGAIN					0x58
 #define CBGAIN					0x5c
@@ -49,7 +49,7 @@
 #define VDINT0					0x70
 #define VDINT1					0x74
 #define VDINT2					0x78
-#define MISC					0x7c
+#define MISC 					0x7c
 #define CGAMMAWD				0x80
 #define REC656IF				0x84
 #define CCDCFG					0x88
@@ -162,7 +162,7 @@
 #define GAIN_INTEGER_MASK			(0x7)
 #define GAIN_INTEGER_SHIFT			(0x9)
 #define GAIN_DECIMAL_MASK			(0x1FF)
-#define OFFSET_MASK				(0xFFF)
+#define OFFSET_MASK			  	(0xFFF)
 #define GAIN_SDRAM_EN_SHIFT			(12)
 #define GAIN_IPIPE_EN_SHIFT			(13)
 #define GAIN_H3A_EN_SHIFT			(14)
@@ -205,7 +205,7 @@
 #define CCDC_DATAPOL_NORMAL			(0x00)
 #define CCDC_DATAPOL_MASK			(0x01)
 #define CCDC_DATAPOL_SHIFT			(6)
-#define CCDC_EXWEN_DISABLE			(0x00)
+#define CCDC_EXWEN_DISABLE 			(0x00)
 #define CCDC_EXWEN_MASK				(0x01)
 #define CCDC_EXWEN_SHIFT			(5)
 #define CCDC_FRM_FMT_MASK			(0x01)
@@ -231,7 +231,7 @@
 #define CCDC_DPCM_EN_SHIFT			(12)
 #define CCDC_DPCM_EN_MASK			(1)
 #define CCDC_DPCM_PREDICTOR_SHIFT		(13)
-#define CCDC_DPCM_PREDICTOR_MASK		(1)
+#define CCDC_DPCM_PREDICTOR_MASK 		(1)
 
 /* Black clamp related */
 #define CCDC_BC_DCOFFSET_MASK			(0x1FFF)
