@@ -415,6 +415,8 @@ enum davinci_dm365_index {
 	DM365_VIN_CAM_HD,
 	DM365_VIN_YIN4_7_EN,
 	DM365_VIN_YIN0_3_EN,
+	DM365_CAM_RESET,
+	DM365_CAM_OFF,
 
 	/* IRQ muxing */
 	DM365_INT_EDMA_CC,

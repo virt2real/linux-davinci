@@ -431,7 +431,7 @@ static void ks8851_init_mac(struct ks8851_net *ks)
 	if (ks->rc_ccr & CCR_EEPROM) {
 	    printk("EEPROM PRESENT\r\n");
 		ks8851_read_mac_addr(dev);
-	    printk("EEPROM PRESENT %x\r\n", dev->dev_addr);
+	    printk("EEPROM PRESENT %s\r\n", dev->dev_addr);
 		if (is_valid_ether_addr(dev->dev_addr))
 			return;
 
@@ -602,7 +602,7 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	 * the receive problem under heavy TCP traffic while transmit done
 	 * is enabled.
 	*/
-	//ks8851_wrreg16(ks, KS_IER, 0);
+	ks8851_wrreg16(ks, KS_IER, 0);
 	//
 	status = ks8851_rdreg16(ks, KS_ISR);
 
@@ -672,7 +672,7 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	}
 
 	/* Re-enable hardware interrupt. */
-	//ks8851_wrreg16(ks, KS_IER, ks->rc_ier);
+	ks8851_wrreg16(ks, KS_IER, ks->rc_ier);
 
 	mutex_unlock(&ks->lock);
 

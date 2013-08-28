@@ -29,29 +29,24 @@
 #include <mach/time.h>
 #include <mach/serial.h>
 #include <mach/common.h>
-
-
-
 #include <linux/platform_data/keyscan-davinci.h>
 #include <linux/platform_data/spi-davinci.h>
 #include <mach/gpio-davinci.h>
-
 #include "davinci.h"
+
+
 #include "clock.h"
 #include "mux.h"
 #include "asp.h"
 
 #define DM365_REF_FREQ		24000000	/* 24 MHz on the DM365 EVM */
-
-/* Base of key scan register bank */
-#define DM365_KEYSCAN_BASE		0x01c69400
-
 #define DM365_RTC_BASE			0x01c69000
-
+#define DM365_KEYSCAN_BASE		0x01c69400
+#define DM365_OSD_BASE			0x01c71c00
+#define DM365_VENC_BASE			0x01c71e00
 #define DAVINCI_DM365_VC_BASE		0x01d0c000
 #define DAVINCI_DMA_VC_TX		2
 #define DAVINCI_DMA_VC_RX		3
-
 #define DM365_EMAC_BASE			0x01d07000
 #define DM365_EMAC_MDIO_BASE		(DM365_EMAC_BASE + 0x4000)
 #define DM365_EMAC_CNTRL_OFFSET		0x0000
@@ -251,6 +246,7 @@ static struct clk vpss_dac_clk = {
 	.name		= "vpss_dac",
 	.parent		= &pll1_sysclk3,
 	.lpsc		= DM365_LPSC_DAC_CLK,
+	.flags		= ALWAYS_ENABLED,
 };
 
 static struct clk vpss_master_clk = {
@@ -259,6 +255,12 @@ static struct clk vpss_master_clk = {
 	.lpsc		= DM365_LPSC_VPSSMSTR,
 	.flags		= CLK_PSC,
 };
+
+/*static struct clk vpss_slave_clk = {
+	.name		= "vpss_slave",
+	.parent		= &pll1_sysclk5,
+	.lpsc		= DAVINCI_LPSC_VPSSSLV,
+};*/
 
 static struct clk arm_clk = {
 	.name		= "arm_clk",
@@ -485,6 +487,11 @@ static struct clk_lookup dm365_clks[] = {
 
 /*----------------------------------------------------------------------*/
 
+#define PINMUX0		0x00
+#define PINMUX1		0x04
+#define PINMUX2		0x08
+#define PINMUX3		0x0c
+#define PINMUX4		0x10
 #define INTMUX		0x18
 #define EVTMUX		0x1c
 
@@ -576,6 +583,7 @@ MUX_CFG(DM365,	SPI4_SDENA0,	4,   20,    3,    0,	 false)
 MUX_CFG(DM365,	SPI4_SDENA1,	4,   16,    3,    2,	 false)
 
 MUX_CFG(DM365,	CLKOUT0,	4,   20,    3,    3,     false)
+MUX_CFG(DM365,	GPIO37,	    4,   20,    0,    0,	 false)
 MUX_CFG(DM365,	CLKOUT1,	4,   16,    3,    3,     false)
 MUX_CFG(DM365,	CLKOUT2,	4,   8,     3,    3,     false)
 
@@ -700,7 +708,9 @@ MUX_CFG(DM365,	GPIO103,	0,    0,    3,    1,	 false)
 
 MUX_CFG(DM365,	VIN_CAM_VD,	0,   13,    1,	  0,	 false)
 MUX_CFG(DM365,	VIN_CAM_HD,	0,   12,    1,	  0,	 false)
-MUX_CFG(DM365,  EXTCLK,         0,   14,    0x03, 2,     false)
+MUX_CFG(DM365,  EXTCLK,         0,   14,    0x03, 2,     false)//GPIO93 - CAMERA CLK
+MUX_CFG(DM365,	CAM_OFF,	0,   9,    1,	  1,	 false)
+MUX_CFG(DM365,	CAM_RESET,	0,   8,    1,	  1,	 false)
 
 INT_CFG(DM365,  INT_EDMA_CC,         2,     1,    1,     false)
 INT_CFG(DM365,  INT_EDMA_TC0_ERR,    3,     1,    1,     false)
@@ -733,6 +743,8 @@ EVT_CFG(DM365,	EVT19_SPI3_RX, 4,     1,    1,     false)
 
 
 
+
+
 /* IPIPEIF device configuration */
 static u64 dm365_ipipeif_dma_mask = DMA_BIT_MASK(32);
 static struct resource dm365_ipipeif_resources[] = {
@@ -756,65 +768,60 @@ static struct platform_device dm365_ipipeif_dev = {
 	},
 };
 
-static struct emac_platform_data dm365_emac_pdata = {
-	.ctrl_reg_offset	= DM365_EMAC_CNTRL_OFFSET,
-	.ctrl_mod_reg_offset	= DM365_EMAC_CNTRL_MOD_OFFSET,
-	.ctrl_ram_offset	= DM365_EMAC_CNTRL_RAM_OFFSET,
-	.ctrl_ram_size		= DM365_EMAC_CNTRL_RAM_SIZE,
-	.version		= EMAC_VERSION_2,
+static u64 dm365_osd_dma_mask = DMA_BIT_MASK(32);
+
+static struct davinci_osd_platform_data dm365_osd_pdata = {
+	.invert_field = false,
 };
 
-static struct resource dm365_emac_resources[] = {
+static struct resource dm365_osd_resources[] = {
 	{
-		.start	= DM365_EMAC_BASE,
-		.end	= DM365_EMAC_BASE + SZ_16K - 1,
-		.flags	= IORESOURCE_MEM,
+		.start          = IRQ_VENCINT,
+		.end            = IRQ_VENCINT,
+		.flags          = IORESOURCE_IRQ,
 	},
 	{
-		.start	= IRQ_DM365_EMAC_RXTHRESH,
-		.end	= IRQ_DM365_EMAC_RXTHRESH,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= IRQ_DM365_EMAC_RXPULSE,
-		.end	= IRQ_DM365_EMAC_RXPULSE,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= IRQ_DM365_EMAC_TXPULSE,
-		.end	= IRQ_DM365_EMAC_TXPULSE,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= IRQ_DM365_EMAC_MISCPULSE,
-		.end	= IRQ_DM365_EMAC_MISCPULSE,
-		.flags	= IORESOURCE_IRQ,
+		.start          = DM365_OSD_REG_BASE,
+		.end            = DM365_OSD_REG_BASE + OSD_REG_SIZE,
+		.flags          = IORESOURCE_MEM,
 	},
 };
 
-static struct platform_device dm365_emac_device = {
-	.name		= "davinci_emac",
-	.id		= 1,
+static struct platform_device dm365_osd_dev = {
+	.name		= "davinci_osd",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(dm365_osd_resources),
+	.resource	= dm365_osd_resources,
 	.dev = {
-		.platform_data	= &dm365_emac_pdata,
+		.dma_mask		= &dm365_osd_dma_mask,
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+		.platform_data		= &dm365_osd_pdata,
 	},
-	.num_resources	= ARRAY_SIZE(dm365_emac_resources),
-	.resource	= dm365_emac_resources,
 };
 
-static struct resource dm365_mdio_resources[] = {
+static u64 dm365_venc_dma_mask = DMA_BIT_MASK(32);
+
+
+static struct davinci_venc_platform_data dm365_venc_pdata = {
+	.invert_field = false,
+};
+static struct resource dm365_venc_resources[] = {
 	{
-		.start	= DM365_EMAC_MDIO_BASE,
-		.end	= DM365_EMAC_MDIO_BASE + SZ_4K - 1,
-		.flags	= IORESOURCE_MEM,
+		.start          = DM365_VENC_REG_BASE,
+		.end            = DM365_VENC_REG_BASE + 0x180,
+		.flags          = IORESOURCE_MEM,
 	},
 };
-
-static struct platform_device dm365_mdio_device = {
-	.name		= "davinci_mdio",
-	.id		= 0,
-	.num_resources	= ARRAY_SIZE(dm365_mdio_resources),
-	.resource	= dm365_mdio_resources,
+static struct platform_device dm365_venc_dev = {
+	.name		= "davinci_venc",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(dm365_venc_resources),
+	.resource	= dm365_venc_resources,
+	.dev = {
+		.dma_mask		= &dm365_venc_dma_mask,
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+		.platform_data		= &dm365_venc_pdata,
+	},
 };
 
 static u8 dm365_default_priorities[DAVINCI_N_AINTC_IRQ] = {
@@ -1048,6 +1055,12 @@ static struct map_desc dm365_io_desc[] = {
 		.length		= IO_SIZE,
 		.type		= MT_DEVICE
 	},
+	{
+		.virtual	= SRAM_VIRT,
+		.pfn		= __phys_to_pfn(0x00010000),
+		.length		= SZ_32K,
+		.type		= MT_MEMORY_NONCACHED,
+	},
 };
 
 static struct resource dm365_ks_resources[] = {
@@ -1086,7 +1099,7 @@ static struct davinci_id dm365_ids[] = {
 		.part_no	= 0xb83e,
 		.manufacturer	= 0x017,
 		.cpu_id		= DAVINCI_CPU_ID_DM365,
-		.name		= "dm365_rev1.2",
+		.name		= "dm36x_rev1.2",
 	},
 };
 
@@ -1153,9 +1166,10 @@ static struct davinci_soc_info davinci_soc_info_dm365 = {
 	.gpio_irq		= IRQ_DM365_GPIO0,
 	.gpio_unbanked		= 8,	/* really 16 ... skip muxed GPIOs */
 	.serial_dev		= &dm365_serial_device,
-	.emac_pdata		= &dm365_emac_pdata,
+	//.emac_pdata		= &dm365_emac_pdata,
 	.sram_dma		= 0x00010000,
 	.sram_len		= SZ_32K,
+	//.reset_device		= &davinci_wdt_device,
 };
 
 void __init dm365_init_asp(struct snd_platform_data *pdata)
@@ -1558,10 +1572,12 @@ void __init dm365_init(void)
 	davinci_map_sysmod();
 }
 
+#define DM365_ISP5_REG_BASE		0x01C70000
+
 static struct resource dm365_vpss_resources[] = {
 	{
 		/* VPSS ISP5 Base address */
-		.name           = "isp5",
+		.name           = "vpss",
 		.start          = 0x01c70000,
 		.end            = 0x01c70000 + 0xff,
 		.flags          = IORESOURCE_MEM,
@@ -1576,11 +1592,11 @@ static struct resource dm365_vpss_resources[] = {
 };
 
 static struct platform_device dm365_vpss_device = {
-       .name                   = "vpss",
-       .id                     = -1,
-       .dev.platform_data      = "dm365_vpss",
-       .num_resources          = ARRAY_SIZE(dm365_vpss_resources),
-       .resource               = dm365_vpss_resources,
+	.name			= "vpss",
+	.id			= -1,
+	.dev.platform_data	= "dm365_vpss",
+	.num_resources		= ARRAY_SIZE(dm365_vpss_resources),
+	.resource		= dm365_vpss_resources,
 };
 
 static struct resource vpfe_resources[] = {
@@ -1608,15 +1624,6 @@ static struct platform_device vpfe_capture_dev = {
 	},
 };
 
-static void dm365_isif_setup_pinmux(void)
-{
-	davinci_cfg_reg(DM365_VIN_CAM_WEN);
-	davinci_cfg_reg(DM365_VIN_CAM_VD);
-	davinci_cfg_reg(DM365_VIN_CAM_HD);
-	davinci_cfg_reg(DM365_VIN_YIN4_7_EN);
-	davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
-}
-
 static struct resource isif_resource[] = {
 	/* ISIF Base address */
 	{
@@ -1638,14 +1645,13 @@ static struct resource isif_resource[] = {
 	},
 };
 static struct platform_device dm365_isif_dev = {
-	.name           = "isif",
+	.name           = "dm365_isif",
 	.id             = -1,
 	.num_resources  = ARRAY_SIZE(isif_resource),
 	.resource       = isif_resource,
 	.dev = {
 		.dma_mask               = &vpfe_capture_dma_mask,
 		.coherent_dma_mask      = DMA_BIT_MASK(32),
-		.platform_data		= dm365_isif_setup_pinmux,
 	},
 };
 
@@ -1657,18 +1663,20 @@ static int __init dm365_init_devices(void)
 	davinci_cfg_reg(DM365_INT_EDMA_CC);
 	platform_device_register(&dm365_edma_device);
 
-	platform_device_register(&dm365_mdio_device);
-	platform_device_register(&dm365_emac_device);
-	clk_add_alias(NULL, dev_name(&dm365_mdio_device.dev),
-		      NULL, &dm365_emac_device.dev);
-
-	/* Add isif clock alias */
-	clk_add_alias("master", dm365_isif_dev.name, "vpss_master", NULL);
+	/*
+	* setup Mux configuration for vpfe input and register
+	* vpfe capture platform device
+	*/
 	platform_device_register(&dm365_vpss_device);
 	platform_device_register(&dm365_ipipeif_dev);
 	platform_device_register(&dm365_isif_dev);
 	platform_device_register(&vpfe_capture_dev);
 
+	/* Register OSD device */
+	platform_device_register(&dm365_osd_dev);
+
+	/* Register VENC device */
+	platform_device_register(&dm365_venc_dev);
 
 	return 0;
 }
