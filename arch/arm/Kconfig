@@ -1504,8 +1504,8 @@ endchoice
 config PAGE_OFFSET
 	hex
 	default 0x40000000 if VMSPLIT_1G
-	default 0x80000000 if VMSPLIT_2G
-	default 0x80000000
+	default 0xc0000000 if VMSPLIT_2G
+	default 0xc0000000
 
 config NR_CPUS
 	int "Maximum number of CPUs (2-32)"

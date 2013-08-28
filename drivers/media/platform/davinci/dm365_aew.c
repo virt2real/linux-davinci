@@ -29,16 +29,20 @@
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
 #include <linux/major.h>
+#include <linux/sched.h>
 #include <media/v4l2-device.h>
 #include <media/davinci/dm365_a3_hw.h>
 #include <media/davinci/vpss.h>
-#include <media/davinci/vpfe_aew.h>
-
-#define DRIVERNAME  "DM365AEW"
 
 /* Global structure */
-static struct aew_device *aew_dev_configptr;
-static struct device *aewdev;
+static struct class *aew_class;
+struct aew_device *aew_dev_configptr;
+struct device *aewdev;
+/* device structure to make entry in device*/
+static dev_t dev;
+
+/* For registeration of charatcer device*/
+static struct cdev c_dev;
 
 int aew_validate_parameters(void)
 {
@@ -68,8 +72,8 @@ int aew_validate_parameters(void)
 		AEW_HZ_LINEINCR_MIN)
 	    || (aew_dev_configptr->config->window_config.hz_line_incr >
 		AEW_HZ_LINEINCR_MAX)) {
-		dev_err(aewdev, "\nInvalid Parameters");
-		dev_err(aewdev, "\nHorizontal Line Increment is incorrect");
+		dev_err(aewdev, "\n Invalid Parameters");
+		dev_err(aewdev, "\n Horizontal Line Increment is incorrect");
 		result = -EINVAL;
 	}
 	/* Check line increment */
@@ -190,24 +194,22 @@ int aew_hardware_setup(void)
 	unsigned long adr;
 	unsigned long size;
 	unsigned int busyaew;
-
+	int window_count;
 	/* Get the value of PCR register */
 	busyaew = aew_get_hw_state();
 
 	/* If H3A Engine is busy then return */
 	if (busyaew == 1) {
-		dev_err(aewdev, "\nError : AEW Engine is busy");
+		dev_err(aewdev, "\n Error : AEW Engine is busy");
 		return -EBUSY;
 	}
-
 
 	result = aew_validate_parameters();
 	dev_dbg(aewdev, "Result =  %d\n", result);
 	if (result < 0) {
-		dev_err(aewdev, "Error : Parameters are incorrect\n");
+		dev_err(aewdev, "Error : Parameters are incorrect \n");
 		return result;
 	}
-
 
 	/* Deallocate the previously allocated buffers */
 	if (aew_dev_configptr->buff_old)
@@ -226,7 +228,7 @@ int aew_hardware_setup(void)
 	 * Allocat the buffers as per the new buffer size
 	 * Allocate memory for old buffer
 	 */
-	if (aew_dev_configptr->config->out_format == AEW_OUT_SUM_ONLY)
+	/*if (aew_dev_configptr->config->out_format == AEW_OUT_SUM_ONLY)
 		buff_size = (aew_dev_configptr->config->window_config.hz_cnt) *
 			    (aew_dev_configptr->config->window_config.vt_cnt) *
 				AEW_WINDOW_SIZE_SUM_ONLY;
@@ -234,6 +236,40 @@ int aew_hardware_setup(void)
 		buff_size = (aew_dev_configptr->config->window_config.hz_cnt) *
 			    (aew_dev_configptr->config->window_config.vt_cnt) *
 				AEW_WINDOW_SIZE;
+	*/
+
+	window_count= (aew_dev_configptr->config->window_config.hz_cnt) *
+				  (aew_dev_configptr->config->window_config.vt_cnt + 1);
+	if (aew_dev_configptr->config->out_format == AEW_OUT_SUM_ONLY){
+		int w=0, cb=0, ec=0, ext=0, win8=0, hor_cont=0;
+		while (w < (window_count)) {
+			if (win8 == 8){
+				cb++;
+				win8 = 0;
+				ext++;
+			} else {
+				if (hor_cont == aew_dev_configptr->config->window_config.hz_cnt){
+					if (((ext) % 2) != 0){
+						ec++;
+					}
+					ext=0;
+					hor_cont=0;
+				} else{
+					w++;
+					win8++;
+					hor_cont++;
+					ext++;
+				}
+			}
+		}
+		buff_size = (cb + 1 + ec + window_count)* AEW_WINDOW_SIZE_SUM_ONLY;
+
+	}else
+		buff_size = ((aew_dev_configptr->config->window_config.hz_cnt) *
+			    (aew_dev_configptr->config->window_config.vt_cnt + 1) +
+				(aew_dev_configptr->config->window_config.hz_cnt) *
+			    (aew_dev_configptr->config->window_config.vt_cnt + 1) *
+				1/8 )*AEW_WINDOW_SIZE;
 
 	aew_dev_configptr->buff_old =
 	    (void *)__get_free_pages(GFP_KERNEL | GFP_DMA,
@@ -241,7 +277,6 @@ int aew_hardware_setup(void)
 
 	if (aew_dev_configptr->buff_old == NULL)
 		return -ENOMEM;
-
 
 	/* Make pges reserved so that they will be swapped out */
 	adr = (unsigned long)aew_dev_configptr->buff_old;
@@ -299,7 +334,6 @@ int aew_hardware_setup(void)
 		return -ENOMEM;
 	}
 
-
 	/* Make pages reserved so that they will be swapped out */
 	adr = (unsigned long)aew_dev_configptr->buff_app;
 	size = PAGE_SIZE << (get_order(buff_size));
@@ -321,7 +355,8 @@ int aew_hardware_setup(void)
 	return 0;
 }
 
-int dm365_aew_open(void)
+/* This Function is called when driver is opened */
+static int aew_open(struct inode *inode, struct file *filp)
 {
 	/* Return if Device is in use (Single Channel Support is provided) */
 	if (aew_dev_configptr->in_use == AEW_IN_USE)
@@ -332,12 +367,15 @@ int dm365_aew_open(void)
 
 	/* Allocate memory for configuration  structure of this channel */
 	aew_dev_configptr->config = (struct aew_configuration *)
-	kmalloc(sizeof(struct aew_configuration), GFP_KERNEL);
+	    kmalloc(sizeof(struct aew_configuration), GFP_KERNEL);
 
 	if (aew_dev_configptr->config == NULL) {
 		dev_err(aewdev, "Error : Kmalloc fail\n");
 		return -ENOMEM;
 	}
+
+	/* Initiaze the wait queue */
+	init_waitqueue_head(&(aew_dev_configptr->aew_wait_queue));
 
 	/* Device is in use */
 	aew_dev_configptr->in_use = AEW_IN_USE;
@@ -351,11 +389,30 @@ int dm365_aew_open(void)
 	/* Set Window Size to 0 */
 	aew_dev_configptr->size_window = 0;
 
+	/* Initialize the mutex */
+	mutex_init(&(aew_dev_configptr->read_blocked));
+
 	return 0;
 }
-EXPORT_SYMBOL(dm365_aew_open);
 
-int dm365_aew_release(void)
+static void aew_platform_release(struct device *device)
+{
+	/* This is called when the reference count goes to zero */
+}
+
+static int aew_probe(struct device *device)
+{
+	aewdev = device;
+	return 0;
+}
+
+static int aew_remove(struct device *device)
+{
+	return 0;
+}
+
+/* This Function is called when driver is closed */
+static int aew_release(struct inode *inode, struct file *filp)
 {
 	aew_engine_setup(aewdev, 0);
 	/* The Application has closed device so device is not in use */
@@ -386,19 +443,53 @@ int dm365_aew_release(void)
 
 	return 0;
 }
-EXPORT_SYMBOL(dm365_aew_release);
 
 /*
  * This function will process IOCTL commands sent by the application and
  * control the devices IO operations.
  */
-int dm365_aew_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+static long aew_ioctl(struct file *filep,
+		     unsigned int cmd, unsigned long arg)
 {
 	/* Stores Previous Configurations */
 	struct aew_configuration aewconfig = *(aew_dev_configptr->config);
-	struct aew_statdata *stat_data = (struct aew_statdata *)arg;
-	void *buffer_temp;
 	int result = 0;
+
+	/* Decrement the semaphore */
+	result = mutex_lock_interruptible(&aew_dev_configptr->read_blocked);
+	if (result)
+		return result;
+
+	/*
+	 * Extract the type and number bitfields, and don't decode wrong cmds:
+	 * verify the magic number
+	 */
+	if (_IOC_TYPE(cmd) != AEW_MAGIC_NO) {
+		mutex_unlock(&aew_dev_configptr->read_blocked);
+		return -ENOTTY;
+	}
+
+	/* verify the command number */
+	if (_IOC_NR(cmd) > AEW_IOC_MAXNR) {
+		/* Release mutex in case of fault */
+		mutex_unlock(&aew_dev_configptr->read_blocked);
+		return -ENOTTY;
+	}
+
+	/* check for the permission of the operation */
+	if (_IOC_DIR(cmd) & _IOC_READ)
+		result =
+		    !access_ok(VERIFY_WRITE, (void __user *)arg,
+			       _IOC_SIZE(cmd));
+	else if (_IOC_DIR(cmd) & _IOC_WRITE)
+		result =
+		    !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+
+	if (result) {
+		/* Release mutex in case of fault */
+		mutex_unlock(&aew_dev_configptr->read_blocked);
+		return -EFAULT;
+	}
 
 	/* Switch according to IOCTL command */
 	switch (cmd) {
@@ -408,10 +499,13 @@ int dm365_aew_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 		 */
 	case AEW_S_PARAM:
 		/* Copy config structure passed by user */
-		memcpy(aew_dev_configptr->config,
+		if (copy_from_user(aew_dev_configptr->config,
 				   (struct aew_configuration *)arg,
-				   sizeof(struct aew_configuration));
-
+				   sizeof(struct aew_configuration))) {
+			*(aew_dev_configptr->config) = aewconfig;
+			mutex_unlock(&aew_dev_configptr->read_blocked);
+			return -EFAULT;
+		}
 		/* Call aew_hardware_setup to perform register configuration */
 		result = aew_hardware_setup();
 		if (!result) {
@@ -430,28 +524,98 @@ int dm365_aew_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 		/* This ioctl is used to return parameters in user space */
 	case AEW_G_PARAM:
 		if (aew_dev_configptr->aew_config == H3A_AEW_CONFIG) {
-			memcpy((struct aew_configuration *)arg,
+			if (copy_to_user
+			    ((struct aew_configuration *)arg,
 			     aew_dev_configptr->config,
-			     sizeof(struct aew_configuration));
-			result = aew_dev_configptr->size_window;
+			     sizeof(struct aew_configuration))) {
+				mutex_unlock(&aew_dev_configptr->read_blocked);
+				return -EFAULT;
+			} else
+				result = aew_dev_configptr->size_window;
 		} else {
 			dev_err(aewdev,
 				"Error : AEW Hardware is not configured.\n");
 			result = -EINVAL;
 		}
 		break;
-	case AEW_GET_STAT:
-		/* Implement the read  functionality */
-		if (aew_dev_configptr->buffer_filled != 1)
-			return -EINVAL;
 
-		if (stat_data->buf_length < aew_dev_configptr->size_window)
-			return -EINVAL;
+		/* This ioctl is used to enable AEW Engine */
+	case AEW_ENABLE:
+		/* Enable AEW Engine if Hardware set up is done */
+		if (aew_dev_configptr->aew_config == H3A_AEW_CONFIG_NOT_DONE) {
+			dev_err(aewdev,
+				"Error : AEW Hardware is not configured.\n");
+			result = -EINVAL;
+		} else{
+			/* Enable AF Engine */
+			aew_engine_setup(aewdev, 1);
+		}break;
 
+		/* This ioctl is used to disable AEW Engine */
+	case AEW_DISABLE:
+		/* Disable AEW Engine */
+		aew_engine_setup(aewdev, 0);
+		break;
+
+		/* Invalid Command */
+	default:
+		dev_err(aewdev, "Error: It should not come here!!\n");
+		result = -ENOTTY;
+		break;
+	}
+
+	/* Release the mutex */
+	mutex_unlock(&aew_dev_configptr->read_blocked);
+
+	return result;
+}
+
+/* This function will return statistics to user */
+static ssize_t aew_read(struct file *filep, char *kbuff,
+			size_t size, loff_t *offset)
+{
+	void *buffer_temp;
+	int result = 0;
+	int ret;
+
+	/* Semaphore will return immediately if read call is busy */
+	ret = mutex_trylock(&(aew_dev_configptr->read_blocked));
+	if (!ret) {
+		dev_dbg(aewdev, "Read Call : busy  : %d\n", ret);
+		return -EBUSY;
+	}
+	/* First Check the size given by user */
+	if (size < aew_dev_configptr->size_window) {
+		/*
+		 * Return Failure to applicaiton
+		 * if size is less than required size
+		 */
+		dev_dbg(aewdev, "Error : Invalid size of buffer\n");
+		mutex_unlock(&(aew_dev_configptr->read_blocked));
+		return -EINVAL;
+	}
+
+	/*
+	 * The value of buffer_filled flag determines
+	 * the status of statistics
+	 */
+	if (aew_dev_configptr->buffer_filled == 0) {
+		/* Decrement the semaphore */
+		dev_dbg(aewdev, "READ CALL IS BLOCKED............\n");
+		/* Block the read call */
+		wait_event_interruptible_timeout(aew_dev_configptr->
+						 aew_wait_queue,
+						 aew_dev_configptr->
+						 buffer_filled, AEW_TIMEOUT);
+		dev_dbg(aewdev, "Read Call is unbloked and waking up.......\n");
+		dev_dbg(aewdev, "Buffer Filled.... %d\n",
+			aew_dev_configptr->buffer_filled);
+	}
+
+	if (aew_dev_configptr->buffer_filled == 1) {
 		/* Disable the interrupts and then swap the buffers */
 		dev_dbg(aewdev, "READING............\n");
 		disable_irq(6);
-
 		/* New Statistics are availaible */
 		aew_dev_configptr->buffer_filled = 0;
 
@@ -462,38 +626,37 @@ int dm365_aew_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 
 		/* Interrupts are enabled */
 		enable_irq(6);
-
 		/*
-		* Copy the entire statistics located in application
-		* buffer to user space
-		*/
-		memcpy(stat_data->buffer, aew_dev_configptr->buff_app,
-				aew_dev_configptr->size_window);
-
-		result = aew_dev_configptr->size_window;
-
+		 * Copy the entire statistics located in application
+		 * buffer to user space
+		 */
+		if (copy_to_user(kbuff, aew_dev_configptr->buff_app,
+				 aew_dev_configptr->size_window)) {
+			dev_err(aewdev, "Error : Read Fault\n");
+			mutex_unlock(&(aew_dev_configptr->read_blocked));
+			return -EFAULT;
+		} else{
+			result = aew_dev_configptr->size_window;
+		}
 		dev_dbg(aewdev, "Reading Done........................\n");
-
-		break;
-	default:
-		dev_err(aewdev, "Error: It should not come here!!\n");
-		result = -ENOTTY;
-		break;
 	}
+
+	dev_dbg(aewdev, "APP BUFF VALUE %x\n",
+		(*((unsigned int *)(aew_dev_configptr->buff_app))));
+
+	/* release the mutex */
+	mutex_unlock(&(aew_dev_configptr->read_blocked));
+
 	return result;
 }
-EXPORT_SYMBOL(dm365_aew_ioctl);
 
 /* This function will handle interrupt generated by H3A Engine. */
 static irqreturn_t aew_isr(int irq, void *dev_id)
 {
-	struct v4l2_subdev *sd = dev_id;
-
 	/* EN AF Bit */
 	unsigned int enaew;
 	/* Temporary Buffer for Swapping */
 	void *buffer_temp;
-
 
 	/* Get the value of PCR register */
 	enaew = aew_get_enable();
@@ -520,53 +683,119 @@ static irqreturn_t aew_isr(int irq, void *dev_id)
 		 */
 		aew_dev_configptr->buffer_filled = 1;
 
-		/* queue the event with v4l2 */
-		aew_queue_event(sd);
+		/* new statistics are available. Wake up the read call */
+		wake_up(&(aew_dev_configptr->aew_wait_queue));
 
 		return IRQ_RETVAL(IRQ_HANDLED);
 	}
 	return IRQ_RETVAL(IRQ_NONE);
 }
 
-int dm365_aew_set_stream(struct v4l2_subdev *sd, int enable)
+/* file Operation Structure*/
+static const struct file_operations aew_fops = {
+	.owner = THIS_MODULE,
+	.open = aew_open,
+	.read = aew_read,
+	.unlocked_ioctl = aew_ioctl,
+	.release = aew_release,
+};
+static struct platform_device aewdevice = {
+	.name = "dm365_aew",
+	.id = 2,
+	.dev = {
+		.release = aew_platform_release,
+		}
+};
+
+static struct device_driver aew_driver = {
+	.name = "dm365_aew",
+	.bus = &platform_bus_type,
+	.probe = aew_probe,
+	.remove = aew_remove,
+};
+
+#define DRIVERNAME  "DM365AEW"
+/* Function to register the AF character device driver. */
+int __init aew_init(void)
 {
+	int err;
 	int result = 0;
 
-	if (enable) {
-		/* start capture */
-		/* Enable AEW Engine if Hardware set up is done */
-		if (aew_dev_configptr->aew_config == H3A_AEW_CONFIG_NOT_DONE) {
-			dev_err(aewdev,
-				"Error : AEW Hardware is not configured.\n");
-			result = -EINVAL;
-		} else {
-			result = request_irq(6, aew_isr, IRQF_SHARED,
-					     "dm365_h3a_aew",
-				(void *)sd);
-			if (result != 0)
-				return result;
+	/*
+	 * Register the driver in the kernel
+	 * dynmically get the major number for the driver using
+	 * alloc_chrdev_region function
+	 */
+	result = alloc_chrdev_region(&dev, 0, 1, DRIVERNAME);
 
-			/* Enable AF Engine */
-			aew_engine_setup(aewdev, 1);
-		}
-	} else {
-		/* stop capture */
-		free_irq(6, sd);
-		/* Disable AEW Engine */
-		aew_engine_setup(aewdev, 0);
+	if (result < 0) {
+		printk(KERN_ERR "Error :  Could not register character device");
+		return -ENODEV;
 	}
-
-	return result;
-}
-EXPORT_SYMBOL(dm365_aew_set_stream);
-
-int dm365_aew_init(struct platform_device *pdev)
-{
+	printk(KERN_INFO "aew major#: %d, minor# %d\n", MAJOR(dev), MINOR(dev));
+	/* allocate memory for device structure and initialize it with 0 */
 	aew_dev_configptr =
 	    kmalloc(sizeof(struct aew_device), GFP_KERNEL);
 	if (!aew_dev_configptr) {
 		printk(KERN_ERR "Error : kmalloc fail");
+		unregister_chrdev_region(dev, AEW_NR_DEVS);
 		return -ENOMEM;
+
+	}
+
+	/* Initialize character device */
+	cdev_init(&c_dev, &aew_fops);
+	c_dev.owner = THIS_MODULE;
+	c_dev.ops = &aew_fops;
+	err = cdev_add(&c_dev, dev, 1);
+	if (err) {
+		printk(KERN_ERR "Error : Error in  Adding Davinci AEW");
+		unregister_chrdev_region(dev, AEW_NR_DEVS);
+		kfree(aew_dev_configptr);
+		return -err;
+	}
+	/* register driver as a platform driver */
+	if (driver_register(&aew_driver) != 0) {
+		unregister_chrdev_region(dev, 1);
+		cdev_del(&c_dev);
+		return -EINVAL;
+	}
+
+	/* Register the drive as a platform device */
+	if (platform_device_register(&aewdevice) != 0) {
+		driver_unregister(&aew_driver);
+		unregister_chrdev_region(dev, 1);
+		cdev_del(&c_dev);
+		return -EINVAL;
+	}
+
+	aew_class = class_create(THIS_MODULE, "dm365_aew");
+	if (!aew_class) {
+		printk(KERN_ERR "aew_init: error in creating device class\n");
+		driver_unregister(&aew_driver);
+		platform_device_unregister(&aewdevice);
+		unregister_chrdev_region(dev, 1);
+		unregister_chrdev(MAJOR(dev), DRIVERNAME);
+		cdev_del(&c_dev);
+		return -EINVAL;
+	}
+
+	device_create(aew_class, NULL, dev, NULL, "dm365_aew");
+
+	/* Set up the Interrupt handler for H3AINT interrupt */
+	result = request_irq(6, aew_isr, IRQF_SHARED, "dm365_h3a_aew",
+			     (void *)aew_dev_configptr);
+
+	if (result != 0) {
+		printk(KERN_ERR "Error : Request IRQ Failed");
+		unregister_chrdev_region(dev, AEW_NR_DEVS);
+		device_destroy(aew_class, dev);
+		class_destroy(aew_class);
+		kfree(aew_dev_configptr);
+		driver_unregister(&aew_driver);
+		platform_device_unregister(&aewdevice);
+		cdev_del(&c_dev);
+		return result;
 	}
 
 	/* Initialize device structure */
@@ -575,24 +804,41 @@ int dm365_aew_init(struct platform_device *pdev)
 	aew_dev_configptr->in_use = AEW_NOT_IN_USE;
 	aew_dev_configptr->buffer_filled = 0;
 	printk(KERN_NOTICE "AEW Driver initialized\n");
-
-	aewdev = &pdev->dev;
-
 	return 0;
-
 }
-EXPORT_SYMBOL(dm365_aew_init);
 
-void dm365_aew_cleanup(void)
+/*
+ * This Function is called by the kernel while unloading the driver
+ * This will unregister the Character Device Driver
+ */
+void __exit aew_cleanup(void)
 {
-	/* in use */
+	/* Device is in use */
 	if (aew_dev_configptr->in_use == AEW_IN_USE) {
-		printk(KERN_ERR "Error : dm365_aew in use");
+		printk(KERN_ERR "Error : Driver in use");
 		return;
 	}
 
+	free_irq(6, aew_dev_configptr);
 	/* Free device structure */
 	kfree(aew_dev_configptr);
 	aew_dev_configptr = NULL;
+	unregister_chrdev_region(dev, AEW_NR_DEVS);
+
+	driver_unregister(&aew_driver);
+
+	device_destroy(aew_class, dev);
+
+	class_destroy(aew_class);
+
+	platform_device_unregister(&aewdevice);
+
+	cdev_del(&c_dev);
+
+	/* unregistering the driver from the kernel */
+	unregister_chrdev(MAJOR(dev), DRIVERNAME);
 }
-EXPORT_SYMBOL(dm365_aew_cleanup);
+
+module_init(aew_init)
+module_exit(aew_cleanup)
+MODULE_LICENSE("GPL");

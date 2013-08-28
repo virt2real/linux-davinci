@@ -89,63 +89,63 @@ static struct davinci_osd_state *osd = &osd_state;
 /* register access routines */
 static __inline__ u32 osd_read(u32 offset)
 {
-	return __raw_readl(osd->osd_base + offset);
+	return __raw_readl((volatile void *)(osd->osd_base + offset));
 }
 
 static __inline__ u32 osd_write(u32 val, u32 offset)
 {
-	__raw_writel(val, osd->osd_base + offset);
+	__raw_writel(val, (volatile void *)(osd->osd_base + offset));
 	return val;
 }
 
 static __inline__ u32 osd_set(u32 mask, u32 offset)
 {
 	u32 addr = osd->osd_base + offset;
-	u32 val = __raw_readl(addr) | mask;
+	u32 val = __raw_readl((volatile void *)addr) | mask;
 
-	__raw_writel(val, addr);
+	__raw_writel(val, (volatile void *)addr);
 	return val;
 }
 
 static __inline__ u32 osd_clear(u32 mask, u32 offset)
 {
 	u32 addr = osd->osd_base + offset;
-	u32 val = __raw_readl(addr) & ~mask;
+	u32 val = __raw_readl((volatile void *)addr) & ~mask;
 
-	__raw_writel(val, addr);
+	__raw_writel(val, (volatile void *) addr);
 	return val;
 }
 
 static __inline__ u32 osd_merge(u32 mask, u32 val, u32 offset)
 {
 	u32 addr = osd->osd_base + offset;
-	u32 new_val = (__raw_readl(addr) & ~mask) | (val & mask);
+	u32 new_val = (__raw_readl((volatile void *)addr) & ~mask) | (val & mask);
 
-	__raw_writel(new_val, addr);
+	__raw_writel(new_val, (volatile void *)addr);
 	return new_val;
 }
 
 void osd_write_left_margin(u32 val)
 {
-	__raw_writel(val, osd->osd_base + OSD_BASEPX);
+	__raw_writel(val, (volatile void *)(osd->osd_base + OSD_BASEPX));
 }
 EXPORT_SYMBOL(osd_write_left_margin);
 
 void osd_write_upper_margin(u32 val)
 {
-	__raw_writel(val, osd->osd_base + OSD_BASEPY);
+	__raw_writel(val, (volatile void *)(osd->osd_base + OSD_BASEPY));
 }
 EXPORT_SYMBOL(osd_write_upper_margin);
 
 u32 osd_read_left_margin(void)
 {
-	return __raw_readl(osd->osd_base + OSD_BASEPX);
+	return __raw_readl((volatile void *)(osd->osd_base + OSD_BASEPX));
 }
 EXPORT_SYMBOL(osd_read_left_margin);
 
 u32 osd_read_upper_margin(void)
 {
-	return __raw_readl(osd->osd_base + OSD_BASEPY);
+	return __raw_readl((volatile void *)(osd->osd_base + OSD_BASEPY));
 }
 EXPORT_SYMBOL(osd_read_upper_margin);
 	

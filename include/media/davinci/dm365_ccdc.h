@@ -715,8 +715,6 @@ enum ccdc_data_pack {
 	CCDC_PACK_8BIT
 };
 
-struct ccdc_hw_device *get_ccdc_dev(void);
-
 #define CCDC_WIN_NTSC				{0, 0, 720, 480}
 #define CCDC_WIN_VGA				{0, 0, 640, 480}
 #define ISP5_CCDCMUX				0x20

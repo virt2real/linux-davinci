@@ -48,7 +48,7 @@ module_param(ch0_mode, charp, S_IRUGO);
 module_param(ch1_mode, charp, S_IRUGO);
 
 #include <linux/stat.h>
-#define DAVINCI_ENC_MAX_CHANNELS 1
+//#define DAVINCI_ENC_MAX_CHANNELS 1
 
 struct vid_enc_device_mgr enc_dev[DAVINCI_ENC_MAX_CHANNELS];
 

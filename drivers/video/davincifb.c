@@ -1,18 +1,22 @@
 /*
- * drivers/video/davincifb.c
+ * Copyright (C) 2007 MontaVista Software Inc.
+ * Copyright (C) 2006 Texas Instruments Inc
  *
- * Framebuffer driver for Texas Instruments DaVinci display controller.
+ * Andy Lowe (alowe@mvista.com), MontaVista Software
  *
- * Copyright (C) 2006 Texas Instruments, Inc.
- * Rishi Bhattacharya <support@ti.com>
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option)any later version.
  *
- * Leveraged from the framebuffer driver for OMAP24xx
- * written by Andy Lowe (source@mvista.com)
- * Copyright (C) 2004 MontaVista Software, Inc.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  *
- * This file is licensed under the terms of the GNU General Public License
- * version 2. This program is licensed "as is" without any warranty of any
- * kind, whether express or implied.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include <linux/module.h>
@@ -26,754 +30,1357 @@
 #include <linux/fb.h>
 #include <linux/init.h>
 #include <linux/dma-mapping.h>
-#include <linux/interrupt.h>
-#include <linux/platform_device.h>
-
-#include <asm/irq.h>
 #include <asm/uaccess.h>
-
-#include <video/davincifb.h>
+#include <linux/moduleparam.h>	/* for module_param() */
+#include <linux/platform_device.h>
 #include <asm/system.h>
+#include <video/davinci_vpbe.h>
+#include <video/davinci_osd.h>
+#include <media/davinci/vid_encoder_types.h>
+#include <media/davinci/davinci_enc.h>
+#include <video/davincifb.h>
+#include <video/davincifb_ioctl.h>
+#include <mach/cputype.h>
 
-#define MODULE_NAME "davincifb"
+struct davincifb_state {
+	bool invert_field;
+};
 
-/* Output Format Selection  */
-#define MULTIPLE_BUFFERING	1
+static struct davincifb_state fb_state;
+static struct davincifb_state *fb = &fb_state;
 
-#ifdef MULTIPLE_BUFFERING
-#define DOUBLE_BUF	2
-#define TRIPLE_BUF	3
-#else
-#define DOUBLE_BUF	1
-#define TRIPLE_BUF	1
-#endif
+static struct davincifb_platform_data davincifb_pdata_default = {
+	.invert_field = false,
+};
+
+/* return non-zero if the info structure corresponds to OSD0 or OSD1 */
+static int is_osd_win(const struct fb_info *info)
+{
+	const struct vpbe_dm_win_info *win = info->par;
+
+	if (win->layer == WIN_OSD0 || win->layer == WIN_OSD1)
+		return 1;
+	else
+		return 0;
+}
+
+/* return non-zero if the info structure corresponds to VID0 or VID1 */
+#define is_vid_win(info) (!is_osd_win(info))
 
 /*
- * display controller register I/O routines
+ * Convert a framebuffer info pointer to a davinci_osd_layer enumeration.
+ * It is up to the caller to verify that the info structure corresponds to
+ * either OSD0 or OSD1.
  */
-static __inline__ u32 dispc_reg_in(u32 reg)
+static enum davinci_osd_layer fb_info_to_osd_enum(const struct fb_info *info)
 {
-	return ioread32(IO_ADDRESS(reg));
-}
-static __inline__ u32 dispc_reg_out(u32 reg, u32 val)
-{
-	iowrite32(val, IO_ADDRESS(reg));
-	return (val);
-}
-static __inline__ u32 dispc_reg_merge(u32 reg, u32 val, u32 mask)
-{
-	u32 new_val = (ioread32(IO_ADDRESS(reg)) & ~mask) | (val & mask);
+	const struct vpbe_dm_win_info *win = info->par;
 
-	iowrite32(new_val, IO_ADDRESS(reg));
-	return (new_val);
+	if (win->layer == WIN_OSD1)
+		return OSDWIN_OSD1;
+	else
+		return OSDWIN_OSD0;
 }
 
-/* There are 4 framebuffers, each represented by an fb_info and
- * a dm_win_info structure */
-#define OSD0_FBNAME	"dm_osd0_fb"
-#define OSD1_FBNAME	"dm_osd1_fb"
-#define VID0_FBNAME	"dm_vid0_fb"
-#define VID1_FBNAME	"dm_vid1_fb"
+/* macros for testing fb_var_screeninfo attributes */
+#define is_attribute_mode(var) (((var)->bits_per_pixel == 4) && \
+	((var)->nonstd != 0))
+#define is_yuv(var) ((((var)->bits_per_pixel == 16) || \
+  ((var)->bits_per_pixel == 8)) \
+  && ((var)->nonstd != 0))
+#define is_window_interlaced(var) (((var)->vmode & FB_VMODE_INTERLACED) \
+	== FB_VMODE_INTERLACED)
 
-/* usage:	if (is_win(info->fix.id, OSD0)) ... */
-#define is_win(name, x) ((strcmp(name, x ## _FBNAME) == 0) ? 1 : 0)
+/* macros for testing fb_videomode attributes */
+#define is_display_interlaced(mode) (((mode)->vmode & FB_VMODE_INTERLACED) \
+	== FB_VMODE_INTERLACED)
 
-struct dm_win_info {
-	struct fb_info info;
-
-	/* X and Y position */
-	unsigned int x, y;
-
-	/* framebuffer area */
-	dma_addr_t fb_base_phys;
-	unsigned long fb_base;
-	unsigned long fb_size;
-
-	u32 pseudo_palette[17];
-
-	/* flag to identify if framebuffer area is fixed already or not */
-	int alloc_fb_mem;
-	unsigned long sdram_address;
-	struct dm_info *dm;
-};
-
-static struct dm_info {
-	struct dm_win_info *osd0;
-	struct dm_win_info *osd1;
-	struct dm_win_info *vid0;
-	struct dm_win_info *vid1;
-
-	/* to map the registers */
-	dma_addr_t mmio_base_phys;
-	unsigned long mmio_base;
-	unsigned long mmio_size;
-
-	wait_queue_head_t vsync_wait;
-	unsigned long vsync_cnt;
-	int timeout;
-
-	/* this is the function that configures the output device (NTSC/PAL/LCD)
-	 * for the required output format (composite/s-video/component/rgb)
-	 */
-	void (*output_device_config) (int on);
-
-	struct device *dev;
-} dm_static;
-static struct dm_info *dm = &dm_static;
-
-static struct fb_ops davincifb_ops;
-
-#define BASEX		0x80
-#define BASEY		0x12
-
-#define DISP_XRES	720
-#define DISP_YRES	480
-#define DISP_MEMY	576
-
-/* Random value chosen for now. Should be within the panel's supported range */
-#define LCD_PANEL_CLOCK	180000
-
-/* All window widths have to be rounded up to a multiple of 32 bytes */
-
-/* The OSD0 window has to be always within VID0. Plus, since it is in RGB565
- * mode, it _cannot_ overlap with VID1.
- * For defaults, we are setting the OSD0 window to be displayed in the top
- * left quadrant of the screen, and the VID1 in the bottom right quadrant.
- * So the default 'xres' and 'yres' are set to  half of the screen width and
- * height respectively. Note however that the framebuffer size is allocated
- * for the full screen size so the user can change the 'xres' and 'yres' by
- * using the FBIOPUT_VSCREENINFO ioctl within the limits of the screen size.
+/*
+ * Convert an fb_var_screeninfo struct to a Davinci display layer configuration.
+ * lconfig->xpos, lconfig->ypos, and lconfig->line_length are not modified
+ * because no information about them is contained in var.
+ * The value of the yc_pixfmt argument is returned in lconfig->pixfmt if a
+ * the var specifies a YC pixel format.  The value of yc_pixfmt must be either
+ * PIXFMT_YCbCrI or PIXFMT_YCrCbI.
  */
-#define round_32(width)	((((width) + 31) / 32) * 32 )
-
-#define OSD0_XRES	round_32((DISP_XRES)*16/8) * 8/16	/* pixels */
-#define OSD0_YRES	DISP_YRES
-#define OSD0_FB_PHY	0
-#define OSD0_FB_SIZE	(round_32((DISP_XRES)*16/8) * DISP_MEMY * DOUBLE_BUF)
-
-			/* 16 bpp, Double buffered */
-static struct fb_var_screeninfo osd0_default_var = {
-	.xres = OSD0_XRES,
-	.yres = OSD0_YRES,
-	.xres_virtual = OSD0_XRES,
-	.yres_virtual = OSD0_YRES * DOUBLE_BUF,
-	.xoffset = 0,
-	.yoffset = 0,
-	.bits_per_pixel = 16,
-	.grayscale = 0,
-	.red = {11, 5, 0},
-	.green = {5, 6, 0},
-	.blue = {0, 5, 0},
-	.transp = {0, 0, 0},
-	.nonstd = 0,
-	.activate = FB_ACTIVATE_NOW,
-	.height = -1,
-	.width = -1,
-	.accel_flags = 0,
-	.pixclock = LCD_PANEL_CLOCK,	/* picoseconds */
-	.left_margin = 40,	/* pixclocks */
-	.right_margin = 4,	/* pixclocks */
-	.upper_margin = 8,	/* line clocks */
-	.lower_margin = 2,	/* line clocks */
-	.hsync_len = 4,		/* pixclocks */
-	.vsync_len = 2,		/* line clocks */
-	.sync = 0,
-	.vmode = FB_VMODE_INTERLACED,
-};
-
-/* Using the full screen for OSD1 by default */
-#define OSD1_XRES	round_32(DISP_XRES*4/8) * 8/4	/* pixels */
-#define OSD1_YRES	DISP_YRES
-#define OSD1_FB_PHY	0
-#define OSD1_FB_SIZE	(round_32(DISP_XRES*4/8) * DISP_MEMY * DOUBLE_BUF)
-
-static struct fb_var_screeninfo osd1_default_var = {
-	.xres = DISP_XRES,
-	.yres = OSD1_YRES,
-	.xres_virtual = OSD1_XRES,
-	.yres_virtual = OSD1_YRES * DOUBLE_BUF,
-	.xoffset = 0,
-	.yoffset = 0,
-	.bits_per_pixel = 4,
-	.activate = FB_ACTIVATE_NOW,
-	.accel_flags = 0,
-	.pixclock = LCD_PANEL_CLOCK,	/* picoseconds */
-	.vmode = FB_VMODE_INTERLACED,
-};
-
-/* Using the full screen for OSD0 by default */
-#define VID0_XRES	round_32(DISP_XRES*16/8) * 8/16	/* pixels */
-#define VID0_YRES	DISP_YRES
-#define VID0_FB_PHY	0
-#define VID0_FB_SIZE	(round_32(DISP_XRES*16/8) * DISP_MEMY * TRIPLE_BUF)
-static struct fb_var_screeninfo vid0_default_var = {
-	.xres = VID0_XRES,
-	.yres = VID0_YRES,
-	.xres_virtual = VID0_XRES,
-	.yres_virtual = VID0_YRES * TRIPLE_BUF,
-	.xoffset = 0,
-	.yoffset = 0,
-	.bits_per_pixel = 16,
-	.activate = FB_ACTIVATE_NOW,
-	.accel_flags = 0,
-	.pixclock = LCD_PANEL_CLOCK,	/* picoseconds */
-	.vmode = FB_VMODE_INTERLACED,
-};
-
-/* Using the bottom right quadrant of the screen screen for VID1 by default,
- * but keeping the framebuffer allocated for the full screen, so the user can
- * change the 'xres' and 'yres' later using the FBIOPUT_VSCREENINFO ioctl.
- */
-#define VID1_BPP	16	/* Video1 can be in YUV or RGB888 format */
-#define VID1_XRES round_32(DISP_XRES*16/8) * 8/16	/* pixels */
-#define VID1_YRES DISP_YRES
-#define VID1_FB_PHY	0
-#define VID1_FB_SIZE (round_32(DISP_XRES*16/8) * DISP_MEMY * TRIPLE_BUF)
-static struct fb_var_screeninfo vid1_default_var = {
-	.xres = VID1_XRES,
-	.yres = VID1_YRES,
-	.xres_virtual = VID1_XRES,
-	.yres_virtual = VID1_YRES * TRIPLE_BUF,
-	.xoffset = 0,
-	.yoffset = 0,
-	.bits_per_pixel = VID1_BPP,
-	.activate = FB_ACTIVATE_NOW,
-	.accel_flags = 0,
-	.pixclock = LCD_PANEL_CLOCK,	/* picoseconds */
-	.vmode = FB_VMODE_INTERLACED,
-};
-
-#define	x_pos(w)	((w)->x)
-#define	y_pos(w)	((w)->y)
-
-static struct dmparams_t {
-	u8 output;
-	u8 format;
-	u8 windows;		/* bitmap flag based on VID0, VID1, OSD0, OSD1
-				 * definitions in header file */
-	u32 vid0_xres;
-	u32 vid0_yres;
-	u32 vid0_xpos;
-	u32 vid0_ypos;
-
-	u32 vid1_xres;
-	u32 vid1_yres;
-	u32 vid1_xpos;
-	u32 vid1_ypos;
-
-	u32 osd0_xres;
-	u32 osd0_yres;
-	u32 osd0_xpos;
-	u32 osd0_ypos;
-
-	u32 osd1_xres;
-	u32 osd1_yres;
-	u32 osd1_xpos;
-	u32 osd1_ypos;
-} dmparams = {
-	NTSC,		/* output */
-	    COMPOSITE,		/* format */
-	    (1 << VID0) | (1 << VID1) | (1 << OSD0) | (1 << OSD1),
-	    /* windows registered */
-	    720, 480, 0, 0,	/* vid0 size and position */
-	    720, 480, 0, 0,	/* vid1 size and position */
-	    720, 480, 0, 0,	/* osd0 size and position */
-	    720, 480, 0, 0,	/* osd1 size and position */
-};
-
-/* Must do checks against the limits of the output device */
-static int davincifb_venc_check_mode(const struct dm_win_info *w,
-				     const struct fb_var_screeninfo *var)
+static void convert_fb_var_to_osd(const struct fb_var_screeninfo *var,
+				  struct davinci_layer_config *lconfig,
+				  enum davinci_pix_format yc_pixfmt)
 {
-	return 0;
+	lconfig->xsize = var->xres;
+	lconfig->ysize = var->yres;
+	lconfig->interlaced = is_window_interlaced(var);
+
+	switch (var->bits_per_pixel) {
+	case 1:
+		lconfig->pixfmt = PIXFMT_1BPP;
+		break;
+	case 2:
+		lconfig->pixfmt = PIXFMT_2BPP;
+		break;
+	case 4:
+		if (is_attribute_mode(var))
+			lconfig->pixfmt = PIXFMT_OSD_ATTR;
+		else
+			lconfig->pixfmt = PIXFMT_4BPP;
+		break;
+	case 8:
+		if (is_yuv(var))
+			lconfig->pixfmt = PIXFMT_NV12;
+		else
+			lconfig->pixfmt = PIXFMT_8BPP;
+		break;
+	case 16:
+	default:
+		if (is_yuv(var))
+			lconfig->pixfmt = yc_pixfmt;
+		else
+			lconfig->pixfmt = PIXFMT_RGB565;
+		break;
+	case 24:
+	case 32:
+		lconfig->pixfmt = PIXFMT_RGB888;
+		break;
+	}
 }
 
-static void set_sdram_params(char *id, u32 addr, u32 line_length);
-static irqreturn_t davincifb_isr(int irq, void *arg)
+/*
+ * Convert an fb_info struct to a Davinci display layer configuration.
+ */
+static void convert_fb_info_to_osd(const struct fb_info *info,
+				   struct davinci_layer_config *lconfig)
 {
-	struct dm_info *dm = (struct dm_info *)arg;
-	unsigned long addr=0;
+	const struct vpbe_dm_win_info *win = info->par;
 
-	if ((dispc_reg_in(VENC_VSTAT) & 0x00000010) == 0x10) {
-		xchg(&addr, dm->osd0->sdram_address);
-		if (addr) {
-			set_sdram_params(dm->osd0->info.fix.id,
-					 dm->osd0->sdram_address,
-					 dm->osd0->info.fix.line_length);
-			dm->osd0->sdram_address = 0;
+	lconfig->line_length = info->fix.line_length;
+	lconfig->xpos = win->xpos;
+	lconfig->ypos = win->ypos;
+	convert_fb_var_to_osd(&info->var, lconfig, win->dm->yc_pixfmt);
+}
+
+/*
+ * Convert a Davinci display layer configuration to var info.
+ * The following members of var are not modified:
+ *	var->xres_virtual
+ *	var->yres_virtual
+ *	var->xoffset
+ *	var->yoffset
+ *	var->pixclock
+ *	var->left_margin
+ *	var->right_margin
+ *	var->upper_margin
+ *	var->lower_margin
+ *	var->hsync_len
+ *	var->vsync_len
+ *	var->sync
+ * Only bit 0 of var->vmode (FB_VMODE_INTERLACED) is modified.  All other bits
+ * of var->vmode are retained.
+ */
+static void convert_osd_to_fb_var(const struct davinci_layer_config *lconfig,
+				  struct fb_var_screeninfo *var)
+{
+	var->xres = lconfig->xsize;
+	var->yres = lconfig->ysize;
+	if (lconfig->interlaced)
+		var->vmode |= FB_VMODE_INTERLACED;
+	else
+		var->vmode &= ~FB_VMODE_INTERLACED;
+
+	var->red.offset = var->green.offset = var->blue.offset = 0;
+	var->red.msb_right = var->green.msb_right = var->blue.msb_right = 0;
+	var->transp.offset = var->transp.length = var->transp.msb_right = 0;
+	var->nonstd = 0;
+
+	switch (lconfig->pixfmt) {
+	case PIXFMT_1BPP:
+		var->bits_per_pixel = 1;
+		var->red.length = var->green.length = var->blue.length =
+		    var->bits_per_pixel;
+		break;
+	case PIXFMT_2BPP:
+		var->bits_per_pixel = 2;
+		var->red.length = var->green.length = var->blue.length =
+		    var->bits_per_pixel;
+		break;
+	case PIXFMT_4BPP:
+		var->bits_per_pixel = 4;
+		var->red.length = var->green.length = var->blue.length =
+		    var->bits_per_pixel;
+		break;
+	case PIXFMT_8BPP:
+		var->bits_per_pixel = 8;
+		var->red.length = var->green.length = var->blue.length =
+		    var->bits_per_pixel;
+		break;
+	case PIXFMT_RGB565:
+		var->bits_per_pixel = 16;
+		var->red.offset = 11;
+		var->red.length = 5;
+		var->green.offset = 5;
+		var->green.length = 6;
+		var->blue.offset = 0;
+		var->blue.length = 5;
+		break;
+	case PIXFMT_YCbCrI:
+	case PIXFMT_YCrCbI:
+		var->bits_per_pixel = 16;
+		var->red.length = var->green.length = var->blue.length = 0;
+		var->nonstd = 1;
+		break;
+	case PIXFMT_NV12:
+		if (cpu_is_davinci_dm365()) {
+			var->bits_per_pixel = 8;
+			var->red.length = var->green.length = var->blue.length =
+			    0;
+			var->nonstd = 1;
 		}
-		addr = 0;
-		xchg(&addr, dm->osd1->sdram_address);
-		if (addr) {
-			set_sdram_params(dm->osd1->info.fix.id,
-					 dm->osd1->sdram_address,
-					 dm->osd1->info.fix.line_length);
-			dm->osd1->sdram_address = 0;
+	case PIXFMT_RGB888:
+		if (cpu_is_davinci_dm644x()) {
+			var->bits_per_pixel = 24;
+			var->red.offset = 0;
+			var->red.length = 8;
+			var->green.offset = 8;
+			var->green.length = 8;
+			var->blue.offset = 16;
+			var->blue.length = 8;
+		} else {
+			var->bits_per_pixel = 32;
+			var->red.offset = 16;
+			var->red.length = 8;
+			var->green.offset = 8;
+			var->green.length = 8;
+			var->blue.offset = 0;
+			var->blue.length = 8;
+			var->transp.offset = 24;
+			var->transp.length = 3;
 		}
-		addr = 0;
-		xchg(&addr, dm->vid0->sdram_address);
-		if (addr) {
-			set_sdram_params(dm->vid0->info.fix.id,
-					 dm->vid0->sdram_address,
-					 dm->vid0->info.fix.line_length);
-			dm->vid0->sdram_address = 0;
-		}
-		addr = 0;
-		xchg(&addr, dm->vid1->sdram_address);
-		if (addr) {
-			set_sdram_params(dm->vid1->info.fix.id,
-					 dm->vid1->sdram_address,
-					 dm->vid1->info.fix.line_length);
-			dm->vid1->sdram_address = 0;
-		}
-		return IRQ_HANDLED;
-	} else {
-		++dm->vsync_cnt;
-		wake_up_interruptible(&dm->vsync_wait);
-		return IRQ_HANDLED;
+		break;
+	case PIXFMT_OSD_ATTR:
+		var->bits_per_pixel = 4;
+		var->red.length = var->green.length = var->blue.length = 0;
+		var->nonstd = 1;
+		break;
 	}
 
-	return IRQ_HANDLED;
+	var->grayscale = 0;
+	var->activate = FB_ACTIVATE_NOW;
+	var->height = 0;
+	var->width = 0;
+	var->accel_flags = 0;
+	var->rotate = 0;
 }
 
-/* Wait for a vsync interrupt.  This routine sleeps so it can only be called
- * from process context.
+/*
+ * Get the video mode from the encoder manager.
  */
-static int davincifb_wait_for_vsync(struct dm_win_info *w)
+static int get_video_mode(struct fb_videomode *mode)
 {
-	struct dm_info *dm = w->dm;
+	struct vid_enc_mode_info mode_info;
+	int ret;
+
+	memset(&mode_info, 0, sizeof(mode_info));
+	memset(mode, 0, sizeof(*mode));
+
+	ret = davinci_enc_get_mode(0, &mode_info);
+
+	mode->name = mode_info.name;
+	if (mode_info.fps.denominator) {
+		unsigned fps_1000;	/* frames per 1000 seconds */
+		unsigned lps;	/* lines per second */
+		unsigned pps;	/* pixels per second */
+		unsigned vtotal;	/* total lines per frame */
+		unsigned htotal;	/* total pixels per line */
+		unsigned interlace = (mode_info.interlaced) ? 2 : 1;
+
+		fps_1000 =
+		    (1000 * mode_info.fps.numerator +
+		     mode_info.fps.denominator / 2) / mode_info.fps.denominator;
+		mode->refresh = (interlace * fps_1000 + 1000 / 2) / 1000;
+
+		vtotal =
+		    mode_info.yres + mode_info.lower_margin +
+		    mode_info.vsync_len + mode_info.upper_margin;
+		lps = (fps_1000 * vtotal + 1000 / 2) / 1000;
+
+		htotal =
+		    mode_info.xres + mode_info.right_margin +
+		    mode_info.hsync_len + mode_info.left_margin;
+		pps = lps * htotal;
+
+		if (pps)
+			mode->pixclock =
+			    ((1000000000UL + pps / 2) / pps) * 1000;
+	}
+	mode->xres = mode_info.xres;
+	mode->yres = mode_info.yres;
+	mode->left_margin = mode_info.left_margin;
+	mode->right_margin = mode_info.right_margin;
+	mode->upper_margin = mode_info.upper_margin;
+	mode->lower_margin = mode_info.lower_margin;
+	mode->hsync_len = mode_info.hsync_len;
+	mode->vsync_len = mode_info.vsync_len;
+	if (mode_info.flags & (1 << 0))
+		mode->sync |= FB_SYNC_HOR_HIGH_ACT;
+	if (mode_info.flags & (1 << 1))
+		mode->sync |= FB_SYNC_VERT_HIGH_ACT;
+	if (mode_info.std)
+		mode->sync |= FB_SYNC_BROADCAST;
+	if (mode_info.interlaced)
+		mode->vmode |= FB_VMODE_INTERLACED;
+
+	return ret;
+}
+
+/*
+ * Set a video mode with the encoder manager.
+ */
+static int set_video_mode(struct fb_videomode *mode)
+{
+	struct vid_enc_mode_info mode_info;
+	int ret;
+
+	davinci_enc_get_mode(0, &mode_info);
+
+	mode_info.name = (unsigned char *)mode->name;
+	mode_info.fps.numerator = 0;
+	mode_info.fps.denominator = 0;
+	if (mode->pixclock && mode->xres && mode->yres) {
+		unsigned fps_1000;	/* frames per 1000 seconds */
+		unsigned lps;	/* lines per second */
+		unsigned pps;	/* pixels per second */
+		unsigned vtotal;	/* total lines per frame */
+		unsigned htotal;	/* total pixels per line */
+
+		pps =
+		    ((1000000000UL +
+		      mode->pixclock / 2) / mode->pixclock) * 1000;
+
+		htotal =
+		    mode->xres + mode->right_margin + mode->hsync_len +
+		    mode->left_margin;
+		lps = (pps + htotal / 2) / htotal;
+
+		vtotal =
+		    mode->yres + mode->lower_margin + mode->vsync_len +
+		    mode->upper_margin;
+		fps_1000 = (lps * 1000 + vtotal / 2) / vtotal;
+
+		mode_info.fps.numerator = fps_1000;
+		mode_info.fps.denominator = 1000;
+
+		/*
+		 * 1000 == 2*2*2*5*5*5, so factor out any common multiples of 2
+		 * or 5
+		 */
+		while ((((mode_info.fps.numerator / 2) * 2) ==
+			mode_info.fps.numerator)
+		       && (((mode_info.fps.denominator / 2) * 2) ==
+			   mode_info.fps.denominator)) {
+			mode_info.fps.numerator = mode_info.fps.numerator / 2;
+			mode_info.fps.denominator =
+			    mode_info.fps.denominator / 2;
+		}
+		while ((((mode_info.fps.numerator / 5) * 5) ==
+			mode_info.fps.numerator)
+		       && (((mode_info.fps.denominator / 5) * 5) ==
+			   mode_info.fps.denominator)) {
+			mode_info.fps.numerator = mode_info.fps.numerator / 5;
+			mode_info.fps.denominator =
+			    mode_info.fps.denominator / 5;
+		}
+	}
+	mode_info.xres = mode->xres;
+	mode_info.yres = mode->yres;
+	mode_info.left_margin = mode->left_margin;
+	mode_info.right_margin = mode->right_margin;
+	mode_info.upper_margin = mode->upper_margin;
+	mode_info.lower_margin = mode->lower_margin;
+	mode_info.hsync_len = mode->hsync_len;
+	mode_info.vsync_len = mode->vsync_len;
+	if (mode->sync & FB_SYNC_HOR_HIGH_ACT)
+		mode_info.flags |= (1 << 0);
+	else
+		mode_info.flags &= ~(1 << 0);
+	if (mode->sync & FB_SYNC_VERT_HIGH_ACT)
+		mode_info.flags |= (1 << 1);
+	else
+		mode_info.flags &= ~(1 << 1);
+	if (mode->sync & FB_SYNC_BROADCAST)
+		mode_info.std = 1;
+	else
+		mode_info.std = 0;
+	if (mode->vmode & FB_VMODE_INTERLACED)
+		mode_info.interlaced = 1;
+	else
+		mode_info.interlaced = 0;
+
+	ret = davinci_enc_set_mode(0, &mode_info);
+
+	return ret;
+}
+
+/*
+ * Construct an fb_var_screeninfo structure from an fb_videomode structure
+ * describing the display and a davinci_layer_config structure describing a window.
+ * The following members of var not modified:
+ *	var->xoffset
+ *	var->yoffset
+ *	var->xres_virtual
+ *	var->yres_virtual
+ * The following members of var are loaded with values derived from mode:
+ *	var->pixclock
+ *	var->left_margin
+ *	var->hsync_len
+ *	var->vsync_len
+ *	var->right_margin
+ *	var->upper_margin
+ *	var->lower_margin
+ *	var->sync
+ *	var->vmode (all bits except bit 0: FB_VMODE_INTERLACED)
+ * The following members of var are loaded with values derived from lconfig:
+ *	var->xres
+ *	var->yres
+ *	var->bits_per_pixel
+ *	var->red
+ *	var->green
+ *	var->blue
+ *	var->transp
+ *	var->nonstd
+ *	var->grayscale
+ *	var->activate
+ *	var->height
+ *	var->width
+ *	var->accel_flags
+ *	var->rotate
+ *	var->vmode (only bit 0: FB_VMODE_INTERLACED)
+ *
+ * If the display resolution (xres and yres) specified in mode matches the
+ * window resolution specified in lconfig, then the display timing info returned
+ * in var is valid and var->pixclock will be the value derived from mode.
+ * If the display resolution does not match the window resolution, then
+ * var->pixclock will be set to 0 to indicate that the display timing info
+ * returned in var is not valid.
+ *
+ * mode and lconfig are not modified.
+ */
+static void construct_fb_var(struct fb_var_screeninfo *var,
+			     struct fb_videomode *mode,
+			     struct davinci_layer_config *lconfig)
+{
+	fb_videomode_to_var(var, mode);
+	convert_osd_to_fb_var(lconfig, var);
+	if (lconfig->xsize != mode->xres || lconfig->ysize != mode->yres)
+		var->pixclock = 0;
+}
+
+/*
+ * Update the values in an fb_fix_screeninfo structure based on the values in an
+ * fb_var_screeninfo structure.
+ * The following members of fix are updated:
+ *	fix->visual
+ *	fix->xpanstep
+ *	fix->ypanstep
+ *	fix->ywrapstep
+ *	fix->line_length
+ * All other members of fix are unmodified.
+ */
+static void update_fix_info(const struct fb_var_screeninfo *var,
+			    struct fb_fix_screeninfo *fix)
+{
+	fix->visual =
+	    (var->bits_per_pixel >
+	     8) ? FB_VISUAL_TRUECOLOR : FB_VISUAL_PSEUDOCOLOR;
+	/*
+	 * xpanstep must correspond to a multiple of the 32-byte cache line size
+	 */
+	switch (var->bits_per_pixel) {
+	case 1:
+	case 2:
+	case 4:
+	case 8:
+	case 12:
+	case 16:
+	case 32:
+		fix->xpanstep = (8 * 32) / var->bits_per_pixel;
+		break;
+	case 24:
+		fix->xpanstep = 32;	/* 32 pixels = 3 cache lines */
+		break;
+	default:
+		fix->xpanstep = 0;
+		break;
+	}
+	fix->ypanstep = 1;
+	fix->ywrapstep = 0;
+	fix->line_length = (var->xres_virtual * var->bits_per_pixel + 7) / 8;
+	/* line_length must be a multiple of the 32-byte cache line size */
+	fix->line_length = ((fix->line_length + 31) / 32) * 32;
+}
+
+/*
+ * Determine if the window configuration specified by var will fit in a
+ * framebuffer of size fb_size.
+ * Returns 1 if the window will fit in the framebuffer, or 0 otherwise.
+ */
+static int window_will_fit_framebuffer(const struct fb_var_screeninfo *var,
+				       unsigned fb_size)
+{
+	unsigned line_length;
+
+	line_length = (var->bits_per_pixel * var->xres_virtual + 7) / 8;
+	/* line length must be a multiple of the cache line size (32) */
+	line_length = ((line_length + 31) / 32) * 32;
+
+	if (var->yres_virtual * line_length <= fb_size)
+		return 1;
+	else
+		return 0;
+}
+
+/*
+ * FBIO_WAITFORVSYNC handler
+ */
+static int davincifb_wait_for_vsync(struct fb_info *info)
+{
+	struct vpbe_dm_win_info *win = info->par;
 	wait_queue_t wq;
 	unsigned long cnt;
 	int ret;
 
 	init_waitqueue_entry(&wq, current);
 
-	cnt = dm->vsync_cnt;
-	ret = wait_event_interruptible_timeout(dm->vsync_wait,
-					       cnt != dm->vsync_cnt,
-					       dm->timeout);
+	cnt = win->dm->vsync_cnt;
+	ret = wait_event_interruptible_timeout(win->dm->vsync_wait,
+					       cnt != win->dm->vsync_cnt,
+					       win->dm->timeout);
 	if (ret < 0)
-		return (ret);
+		return ret;
 	if (ret == 0)
-		return (-ETIMEDOUT);
+		return -ETIMEDOUT;
 
-	return (0);
+	return 0;
 }
 
-/* Sets a uniform attribute value over a rectangular area on the attribute
- * window. The attribute value (0 to 7) is passed through the fb_fillrect's
- * color parameter.
- */
-static int davincifb_set_attr_blend(struct fb_fillrect *r)
+static void davincifb_vsync_callback(unsigned event, void *arg)
 {
-	struct fb_info *info = &dm->osd1->info;
-	struct fb_var_screeninfo *var = &dm->osd1->info.var;
-	unsigned long start = 0;
+	struct vpbe_dm_info *dm = (struct vpbe_dm_info *)arg;
+	unsigned long addr = 0;
+	static unsigned last_event;
+
+	event &= ~DAVINCI_DISP_END_OF_FRAME;
+	if (event == last_event) {
+		/* progressive */
+		xchg(&addr, dm->win[WIN_OSD0].sdram_address);
+		if (addr) {
+			davinci_disp_start_layer(dm->win[WIN_OSD0].layer,
+						 dm->win[WIN_OSD0].
+						 sdram_address,
+						 NULL);
+			dm->win[WIN_OSD0].sdram_address = 0;
+		}
+		addr = 0;
+		xchg(&addr, dm->win[WIN_OSD1].sdram_address);
+		if (addr) {
+			davinci_disp_start_layer(dm->win[WIN_OSD1].layer,
+						 dm->win[WIN_OSD1].
+						 sdram_address,
+						 NULL);
+			dm->win[WIN_OSD1].sdram_address = 0;
+		}
+		addr = 0;
+		xchg(&addr, dm->win[WIN_VID0].sdram_address);
+		if (addr) {
+			davinci_disp_start_layer(dm->win[WIN_VID0].layer,
+						 dm->win[WIN_VID0].
+						 sdram_address,
+						 NULL);
+			dm->win[WIN_VID0].sdram_address = 0;
+		}
+		addr = 0;
+		xchg(&addr, dm->win[WIN_VID1].sdram_address);
+		if (addr) {
+			davinci_disp_start_layer(dm->win[WIN_VID1].layer,
+						 dm->win[WIN_VID1].
+						 sdram_address,
+						 NULL);
+			dm->win[WIN_VID1].sdram_address = 0;
+		}
+		++dm->vsync_cnt;
+		wake_up_interruptible(&dm->vsync_wait);
+	} else {
+		/* interlaced */
+		if (event & DAVINCI_DISP_SECOND_FIELD) {
+			xchg(&addr, dm->win[WIN_OSD0].sdram_address);
+			if (addr) {
+				davinci_disp_start_layer(dm->win[WIN_OSD0].
+							 layer,
+							 dm->win[WIN_OSD0].
+							 sdram_address,
+							 NULL);
+				dm->win[WIN_OSD0].sdram_address = 0;
+			}
+			addr = 0;
+			xchg(&addr, dm->win[WIN_OSD1].sdram_address);
+			if (addr) {
+				davinci_disp_start_layer(dm->win[WIN_OSD1].
+							 layer,
+							 dm->win[WIN_OSD1].
+							 sdram_address,
+							 NULL);
+				dm->win[WIN_OSD1].sdram_address = 0;
+			}
+			addr = 0;
+			xchg(&addr, dm->win[WIN_VID0].sdram_address);
+			if (addr) {
+				davinci_disp_start_layer(dm->win[WIN_VID0].
+							 layer,
+							 dm->win[WIN_VID0].
+							 sdram_address,
+							 NULL);
+				dm->win[WIN_VID0].sdram_address = 0;
+			}
+			addr = 0;
+			xchg(&addr, dm->win[WIN_VID1].sdram_address);
+			if (addr) {
+				davinci_disp_start_layer(dm->win[WIN_VID1].
+							 layer,
+							 dm->win[WIN_VID1].
+							 sdram_address,
+							 NULL);
+				dm->win[WIN_VID1].sdram_address = 0;
+			}
+		} else {
+			++dm->vsync_cnt;
+			wake_up_interruptible(&dm->vsync_wait);
+		}
+	}
+	last_event = event;
+}
+
+/*
+ * FBIO_SETATTRIBUTE handler
+ *
+ * This ioctl is deprecated.  The user can write the attribute values directly
+ * to the OSD1 framebuffer.
+ *
+ * Set a uniform attribute value over a rectangular area on the attribute
+ * window. The attribute value (0 to 15) is passed through the fb_fillrect's
+ * color parameter.  r->dx and r->width must both be even.  If not, they are
+ * rounded down.
+ */
+static int vpbe_set_attr_blend(struct fb_info *info, struct fb_fillrect *r)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	struct fb_var_screeninfo *var = &info->var;
+	char __iomem *start;
 	u8 blend;
 	u32 width_bytes;
+
+	if (win->layer != WIN_OSD1)
+		return -EINVAL;
+
+	if (!is_attribute_mode(var))
+		return -EINVAL;
 
 	if (r->dx + r->width > var->xres_virtual)
 		return -EINVAL;
 	if (r->dy + r->height > var->yres_virtual)
 		return -EINVAL;
-	if (r->color < 0 || r->color > 7)
+	if (r->color > 15)
 		return -EINVAL;
 
-	/* since bits_per_pixel = 4, this will truncate the width if it is
-	 * not even. Similarly r->dx will be rounded down to an even pixel.
-	 * ... Do we want to return an error otherwise?
-	 */
-	width_bytes = r->width * var->bits_per_pixel / 8;
-	start = dm->osd1->fb_base + r->dy * info->fix.line_length
-	    + r->dx * var->bits_per_pixel / 8;
+	width_bytes = (r->width * var->bits_per_pixel) / 8;
+	start =
+	    info->screen_base + r->dy * info->fix.line_length +
+	    (r->dx * var->bits_per_pixel) / 8;
 
 	blend = (((u8) r->color & 0xf) << 4) | ((u8) r->color);
 	while (r->height--) {
+		memset(start, blend, width_bytes);
 		start += info->fix.line_length;
-		memset((void *)start, blend, width_bytes);
 	}
 
 	return 0;
 }
 
-/* These position parameters are given through fb_var_screeninfo.
- * xp = var.reserved[0], yp = var.reserved[1],
- * xl = var.xres, yl = var.yres
+/*
+ * FBIO_SETPOSX handler
  */
-static void set_win_position(char *id, u32 xp, u32 yp, u32 xl, u32 yl)
+static int vpbe_setposx(struct fb_info *info, unsigned xpos)
 {
-	int i = 0;
-
-	if (is_win(id, VID0)) {
-		i = 0;
-	} else if (is_win(id, VID1)) {
-		i = 1;
-	} else if (is_win(id, OSD0)) {
-		i = 2;
-	} else if (is_win(id, OSD1)) {
-		i = 3;
-	}
-
-	dispc_reg_out(OSD_WINXP(i), xp);
-	dispc_reg_out(OSD_WINYP(i), yp);
-	dispc_reg_out(OSD_WINXL(i), xl);
-	dispc_reg_out(OSD_WINYL(i), yl);
-}
-
-static inline void get_win_position(struct dm_win_info *w,
-				    u32 * xp, u32 * yp, u32 * xl, u32 * yl)
-{
-	struct fb_var_screeninfo *v = &w->info.var;
-
-	*xp = x_pos(w);
-	*yp = y_pos(w);
-	*xl = v->xres;
-	*yl = v->yres;
-}
-
-/* Returns 1 if the windows overlap, 0 otherwise */
-static int window_overlap(struct dm_win_info *w, u32 xp, u32 yp, u32 xl, u32 yl)
-{
-	u32 _xp = 0, _yp = 0, _xl = 0, _yl = 0;
-
-#define OVERLAP(x1, y1, x2, y2, x3, y3, x4, y4)		\
-(!(	((x1)<(x3) && (x2)<(x3)) || ((x1)>(x4) && (x2)>(x4)) ||	\
-	((y1)<(y3) && (y2)<(y3)) || ((y1)>(y4) && (y2)>(y4)) )	\
-)
-
-	if (!w)
-		return (0);
-
-	get_win_position(w, &_xp, &_yp, &_xl, &_yl);
-
-	return (OVERLAP(xp, yp, xp + xl, yp + yl,
-		       _xp, _yp, _xp + _xl, _yp + _yl));
-#undef OVERLAP
-}
-
-/* Returns 1 if the window parameters are within VID0, 0 otherwise */
-static int within_vid0_limits(u32 xp, u32 yp, u32 xl, u32 yl)
-{
-	u32 vid0_xp = 0, vid0_yp = 0, vid0_xl = 0, vid0_yl = 0;
-
-	if (!dm->vid0)
-		return (1);
-	get_win_position(dm->vid0, &vid0_xp, &vid0_yp, &vid0_xl, &vid0_yl);
-	if ((xp >= vid0_xp) && (yp >= vid0_yp) &&
-	    (xp + xl <= vid0_xp + vid0_xl) && (yp + yl <= vid0_yp + vid0_yl))
-		return (1);
-	return (0);
-}
-
-/* VID0 must be large enough to hold all other windows */
-static int check_new_vid0_size(u32 xp0, u32 yp0, u32 xl0, u32 yl0)
-{
-	u32 _xp = 0, _yp = 0, _xl = 0, _yl = 0;
-#define WITHIN_LIMITS 				\
-	((_xp >= xp0) && (_yp >= yp0) &&	\
-	(_xp + _xl <= xp0 + xl0) && (_yp + _yl <= yp0 + yl0))
-
-	if (dm->osd0) {
-		get_win_position(dm->osd0, &_xp, &_yp, &_xl, &_yl);
-		if (!WITHIN_LIMITS)
-			return (-EINVAL);
-	}
-	if (dm->osd1) {
-		get_win_position(dm->osd1, &_xp, &_yp, &_xl, &_yl);
-		if (!WITHIN_LIMITS)
-			return (-EINVAL);
-	}
-	if (dm->vid1) {
-		get_win_position(dm->vid1, &_xp, &_yp, &_xl, &_yl);
-		if (!WITHIN_LIMITS)
-			return (-EINVAL);
-	}
-	return (0);
-
-#undef WITHIN_LIMITS
-}
-
-/**
- *      davincifb_check_var - Validates a var passed in.
- *      @var: frame buffer variable screen structure
- *      @info: frame buffer structure that represents a single frame buffer
- *
- *	Checks to see if the hardware supports the state requested by
- *	var passed in. This function does not alter the hardware state!!!
- *	This means the data stored in struct fb_info and struct xxx_par do
- *      not change. This includes the var inside of struct fb_info.
- *	Do NOT change these. This function can be called on its own if we
- *	intent to only test a mode and not actually set it.
- *	If the var passed in is slightly off by what the hardware can support
- *	then we alter the var PASSED in to what we can do.
- *
- *	Returns negative errno on error, or zero on success.
- */
-static int davincifb_check_var(struct fb_var_screeninfo *var,
-			       struct fb_info *info)
-{
-	const struct dm_win_info *w = (const struct dm_win_info *)info->par;
+	struct vpbe_dm_win_info *win = info->par;
+	struct fb_var_screeninfo *var = &info->var;
 	struct fb_var_screeninfo v;
+	unsigned old_xpos = win->xpos;
+	int retval;
 
-/* Rules:
- * 1) Vid1, OSD0, OSD1 and Cursor must be fully contained inside of Vid0.
- * 2) Vid0 and Vid1 are both set to accept YUV 4:2:2 (for now).
- * 3) OSD window data is always packed into 32-bit words and left justified.
- * 4) Each horizontal line of window data must be a multiple of 32 bytes.
- *    32 bytes = 32 bytes / 2 bytes per pixel = 16 pixels.
- *    This implies that 'xres' must be a multiple of 32 bytes.
- * 5) The offset registers hold the distance between the start of one line and
- *    the start of the next. This offset value must be a multiple of 32 bytes.
- *    This implies that 'xres_virtual' is also a multiple of 32 bytes. Note
- *    that 'xoffset' needn't be a multiple of 32 bytes.
- * 6) OSD0 is set to accept RGB565.
- * 	dispc_reg_merge(OSD_OSDWIN0ND, OSD_OSDWIN0ND_RGB0E, OSD_OSDWIN0ND_RGB0E)
- * 7) OSD1 is set to be the attribute window.
- * 8) Vid1 startX = Vid0 startX + N * 16 pixels (32 bytes)
- * 9) Vid1 width = (16*N - 8) pixels
- * 10) When one of the OSD windows is in RGB565, it cannot overlap with Vid1.
- * 11) Vid1 start X position must be offset a multiple of 16 pixels from the
- * left edge of Vid0.
- */
+	if (!win->own_window)
+		return -ENODEV;
 
 	memcpy(&v, var, sizeof(v));
-	return (0);
-
-	/* do board-specific checks on the var */
-	if (davincifb_venc_check_mode(w, &v))
-		return (-EINVAL);
-
-	if (v.xres_virtual < v.xres || v.yres_virtual < v.yres)
-		return (-EINVAL);
-	if (v.xoffset > v.xres_virtual - v.xres)
-		return (-EINVAL);
-	if (v.yoffset > v.yres_virtual - v.yres)
-		return (-EINVAL);
-	if ((v.xres * v.bits_per_pixel / 8) % 32 || (v.xres_virtual * v.bits_per_pixel / 8) % 32)	/* Rules 4, 5 */
-		return (-EINVAL);
-	if (v.xres_virtual * v.yres_virtual * v.bits_per_pixel / 8 > w->fb_size)
-		return (-EINVAL);
-
-	if (!is_win(info->fix.id, VID0)) {
-		/* Rule 1 */
-		if (!within_vid0_limits(x_pos(w), y_pos(w), v.xres, v.yres))
-			return (-EINVAL);
+	win->xpos = xpos;
+	retval = info->fbops->fb_check_var(&v, info);
+	if (retval) {
+		win->xpos = old_xpos;
+		return retval;
 	}
-	if (is_win(info->fix.id, OSD0)) {
-		/* Rule 10 */
-		if (window_overlap(w->dm->vid1,
-				   x_pos(w), y_pos(w), v.xres, v.yres))
-			return (-EINVAL);
-		/* Rule 5 */
-		v.bits_per_pixel = 16;
-		v.red.offset = 11;
-		v.green.offset = 5;
-		v.blue.offset = 0;
-		v.red.length = 5;
-		v.green.length = 6;
-		v.blue.length = 5;
-		v.transp.offset = v.transp.length = 0;
-		v.red.msb_right = v.green.msb_right = v.blue.msb_right
-		    = v.transp.msb_right = 0;
-		v.nonstd = 0;
-		v.accel_flags = 0;
-	} else if (is_win(info->fix.id, OSD1)) {
-		v.bits_per_pixel = 4;
-	} else if (is_win(info->fix.id, VID0)) {
-		if (check_new_vid0_size(x_pos(w), y_pos(w), v.xres, v.yres))
-			return (-EINVAL);
-		v.bits_per_pixel = 16;
-	} else if (is_win(info->fix.id, VID1)) {
-		/* Rule 11 */
-		if ((x_pos(w->dm->vid0) - x_pos(w)) % 16)
-			return (-EINVAL);
-		/* Video1 may be in YUV or RGB888 format */
-		if ((v.bits_per_pixel != 16) && (v.bits_per_pixel != 32))
-			return (-EINVAL);
-	} else
-		return (-EINVAL);
 
+	/* update the window position */
 	memcpy(var, &v, sizeof(v));
-	return (0);
+	retval = info->fbops->fb_set_par(info);
+
+	return retval;
 }
 
-/* Interlaced = Frame mode, Non-interlaced = Field mode */
-static void set_interlaced(char *id, unsigned int on)
-{
-	on = (on == 0) ? 0 : ~0;
-
-	if (is_win(id, VID0))
-		dispc_reg_merge(OSD_VIDWINMD, on, OSD_VIDWINMD_VFF0);
-	else if (is_win(id, VID1))
-		dispc_reg_merge(OSD_VIDWINMD, on, OSD_VIDWINMD_VFF1);
-	else if (is_win(id, OSD0))
-		dispc_reg_merge(OSD_OSDWIN0MD, on, OSD_OSDWIN0MD_OFF0);
-	else if (is_win(id, OSD1))
-		dispc_reg_merge(OSD_OSDWIN1MD, on, OSD_OSDWIN1MD_OFF1);
-}
-
-/* For zooming, we just have to set the start of framebuffer, the zoom factors
- * and the display size. The hardware will then read only
- * (display size / zoom factor) area of the framebuffer and  zoom and
- * display it. In the following function, we assume that the start of
- * framebuffer and the display size parameters are set already.
+/*
+ * FBIO_SETPOSY handler
  */
-static void set_zoom(int WinID, int h_factor, int v_factor)
+static int vpbe_setposy(struct fb_info *info, unsigned ypos)
 {
-	switch (WinID) {
-	case 0:		//VID0
-		dispc_reg_merge(OSD_VIDWINMD,
-				h_factor << OSD_VIDWINMD_VHZ0_SHIFT,
-				OSD_VIDWINMD_VHZ0);
-		dispc_reg_merge(OSD_VIDWINMD,
-				v_factor << OSD_VIDWINMD_VVZ0_SHIFT,
-				OSD_VIDWINMD_VVZ0);
-		break;
-	case 1:		//VID1
-		dispc_reg_merge(OSD_VIDWINMD,
-				h_factor << OSD_VIDWINMD_VHZ1_SHIFT,
-				OSD_VIDWINMD_VHZ1);
-		dispc_reg_merge(OSD_VIDWINMD,
-				v_factor << OSD_VIDWINMD_VVZ1_SHIFT,
-				OSD_VIDWINMD_VVZ1);
-		break;
-	case 2:		//OSD0
-		dispc_reg_merge(OSD_OSDWIN0MD,
-				h_factor << OSD_OSDWIN0MD_OHZ0_SHIFT,
-				OSD_OSDWIN0MD_OHZ0);
-		dispc_reg_merge(OSD_OSDWIN0MD,
-				v_factor << OSD_OSDWIN0MD_OVZ0_SHIFT,
-				OSD_OSDWIN0MD_OVZ0);
-		break;
-	case 3:
-		dispc_reg_merge(OSD_OSDWIN1MD,
-				h_factor << OSD_OSDWIN1MD_OHZ1_SHIFT,
-				OSD_OSDWIN1MD_OHZ1);
-		dispc_reg_merge(OSD_OSDWIN1MD,
-				v_factor << OSD_OSDWIN1MD_OVZ1_SHIFT,
-				OSD_OSDWIN1MD_OVZ1);
-		break;
+	struct vpbe_dm_win_info *win = info->par;
+	struct fb_var_screeninfo *var = &info->var;
+	struct fb_var_screeninfo v;
+	unsigned old_ypos = win->ypos;
+	int retval;
+
+	if (!win->own_window)
+		return -ENODEV;
+
+	memcpy(&v, var, sizeof(v));
+	win->ypos = ypos;
+	retval = info->fbops->fb_check_var(&v, info);
+	if (retval) {
+		win->ypos = old_ypos;
+		return retval;
 	}
+
+	/* update the window position */
+	memcpy(var, &v, sizeof(v));
+	retval = info->fbops->fb_set_par(info);
+
+	return retval;
 }
 
-/* Chooses the ROM CLUT for now. Can be extended later. */
-static void set_bg_color(u8 clut, u8 color_offset)
+/*
+ * FBIO_SETZOOM handler
+ */
+static int vpbe_set_zoom(struct fb_info *info, struct zoom_params *zoom)
 {
-	clut = 0;		/* 0 = ROM, 1 = RAM */
+	struct vpbe_dm_win_info *win = info->par;
+	enum davinci_zoom_factor h_zoom, v_zoom;
 
-	dispc_reg_merge(OSD_MODE, OSD_MODE_BCLUT & clut, OSD_MODE_BCLUT);
-	dispc_reg_merge(OSD_MODE, color_offset << OSD_MODE_CABG_SHIFT,
-			OSD_MODE_CABG);
-}
+	if (!win->own_window)
+		return -ENODEV;
 
-static void set_sdram_params(char *id, u32 addr, u32 line_length)
-{
-	/* The parameters to be written to the registers should be in
-	 * multiple of 32 bytes
-	 */
-	addr = addr;		/* div by 32 */
-	line_length = line_length / 32;
-
-	if (is_win(id, VID0)) {
-		dispc_reg_out(OSD_VIDWIN0ADR, addr);
-		dispc_reg_out(OSD_VIDWIN0OFST, line_length);
-	} else if (is_win(id, VID1)) {
-		dispc_reg_out(OSD_VIDWIN1ADR, addr);
-		dispc_reg_out(OSD_VIDWIN1OFST, line_length);
-	} else if (is_win(id, OSD0)) {
-		dispc_reg_out(OSD_OSDWIN0ADR, addr);
-		dispc_reg_out(OSD_OSDWIN0OFST, line_length);
-	} else if (is_win(id, OSD1)) {
-		dispc_reg_out(OSD_OSDWIN1ADR, addr);
-		dispc_reg_out(OSD_OSDWIN1OFST, line_length);
+	switch (zoom->zoom_h) {
+	case 0:
+		h_zoom = ZOOM_X1;
+		break;
+	case 1:
+		h_zoom = ZOOM_X2;
+		break;
+	case 2:
+		h_zoom = ZOOM_X4;
+		break;
+	default:
+		return -EINVAL;
 	}
+
+	switch (zoom->zoom_v) {
+	case 0:
+		v_zoom = ZOOM_X1;
+		break;
+	case 1:
+		v_zoom = ZOOM_X2;
+		break;
+	case 2:
+		v_zoom = ZOOM_X4;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	davinci_disp_set_zoom(win->layer, h_zoom, v_zoom);
+
+	return 0;
 }
 
-static void set_win_enable(char *id, unsigned int on)
+/*
+ * FBIO_ENABLE_DISABLE_WIN handler
+ *
+ * This ioctl is deprecated.  Use the standard FBIOBLANK ioctl instead.
+ */
+static int vpbe_enable_disable_win(struct fb_info *info, int enable)
 {
-	on = (on == 0) ? 0 : ~0;
+	struct vpbe_dm_win_info *win = info->par;
+	int retval = 0;
 
-	if (is_win(id, VID0))
-		/* Turning off VID0 use due to field inversion issue */
-		dispc_reg_merge(OSD_VIDWINMD, 0, OSD_VIDWINMD_ACT0);
-	else if (is_win(id, VID1))
-		dispc_reg_merge(OSD_VIDWINMD, on, OSD_VIDWINMD_ACT1);
-	else if (is_win(id, OSD0))
-		dispc_reg_merge(OSD_OSDWIN0MD, on, OSD_OSDWIN0MD_OACT0);
-	else if (is_win(id, OSD1)) {
-		/* The OACT1 bit is applicable only if OSD1 is not used as
-		 * the attribute window
+	if (!win->own_window)
+		return -ENODEV;
+
+	if (enable) {
+		win->display_window = 1;
+		retval = info->fbops->fb_check_var(&info->var, info);
+		if (retval)
+			return retval;
+		retval = info->fbops->fb_set_par(info);
+	} else {
+		win->display_window = 0;
+		davinci_disp_disable_layer(win->layer);
+	}
+
+	return retval;
+}
+
+/*
+ * FBIO_SET_BITMAP_BLEND_FACTOR handler
+ */
+static int vpbe_bitmap_set_blend_factor(struct fb_info *info, struct vpbe_bitmap_blend_params
+					*blend_para)
+{
+	enum davinci_osd_layer osdwin = fb_info_to_osd_enum(info);
+
+	if (!is_osd_win(info))
+		return -EINVAL;
+
+	if (blend_para->bf > OSD_8_VID_0)
+		return -EINVAL;
+
+	davinci_disp_set_blending_factor(osdwin, blend_para->bf);
+	if (blend_para->enable_colorkeying)
+		davinci_disp_enable_color_key(osdwin, blend_para->colorkey);
+	else
+		davinci_disp_disable_color_key(osdwin);
+
+	return 0;
+}
+
+/*
+ * FBIO_SET_BITMAP_WIN_RAM_CLUT handler
+ *
+ * This ioctl is deprecated.  Use the standard framebuffer ioctl FBIOPUTCMAP
+ * instead.  Note that FBIOPUTCMAP colors are expressed in RGB space instead of
+ * YCbCr space.
+ */
+static int vpbe_bitmap_set_ram_clut(struct fb_info *info,
+				    unsigned char ram_clut[256][3])
+{
+	int i;
+
+	if (!is_osd_win(info))
+		return -EINVAL;
+
+	for (i = 0; i < 256; i++) {
+		davinci_disp_set_clut_ycbcr(i, ram_clut[i][0], ram_clut[i][1],
+					    ram_clut[i][2]);
+	}
+	return 0;
+}
+
+/*
+ * FBIO_ENABLE_DISABLE_ATTRIBUTE_WIN handler
+ *
+ * This ioctl is deprecated.  Attribute mode can be enabled via the standard
+ * framebuffer ioctl FBIOPUT_VSCREENINFO by setting var->bits_per_pixel to 4
+ * and var->nonstd to a non-zero value.  Attribute mode can be disabled by using
+ * FBIOPUT_VSCREENINFO to set a standard pixel format.
+ *
+ * The enabled/disabled status of OSD1 is unchanged by this ioctl.  To avoid
+ * display glitches, you should disable OSD1 prior to calling this ioctl.
+ *
+ * When enabling attribute mode, var->bits_per_pixel is set to 4.  var->xres,
+ * var->yres, var->xres_virtual, var->yres_virtual, win->xpos, and win->ypos are
+ * all copied from OSD0.  var->xoffset and var->yoffset are set to 0.
+ * fix->line_length is updated to be consistent with 4 bits per pixel.  No
+ * changes are made to the OSD1 configuration if OSD1 is already in attribute
+ * mode.
+ *
+ * When disabling attribute mode, the window geometry is unchanged.
+ * var->bits_per_pixel remains set to 4.  No changes are made to the OSD1
+ * configuration if OSD1 is not in attribute mode.
+ */
+static int vpbe_enable_disable_attribute_window(struct fb_info *info, u32 flag)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	struct fb_var_screeninfo *var = &info->var;
+	struct fb_var_screeninfo v;
+	struct davinci_layer_config lconfig;
+	int retval;
+
+	if (win->layer != WIN_OSD1)
+		return -EINVAL;
+
+	/* return with no error if there is nothing to do */
+	if ((is_attribute_mode(var) && flag)
+	    || (!is_attribute_mode(var) && !flag))
+		return 0;
+
+	/* start with the current OSD1 var */
+	memcpy(&v, var, sizeof(v));
+
+	if (flag) {		/* enable attribute mode */
+		const struct vpbe_dm_win_info *osd0 = &win->dm->win[WIN_OSD0];
+		const struct fb_var_screeninfo *osd0_var = &osd0->info->var;
+		unsigned old_xpos = win->xpos;
+		unsigned old_ypos = win->ypos;
+		/* get the OSD0 window configuration */
+		convert_fb_var_to_osd(osd0_var, &lconfig, win->dm->yc_pixfmt);
+		/* change the pixfmt to attribute mode */
+		lconfig.pixfmt = PIXFMT_OSD_ATTR;
+		/* update the var for OSD1 */
+		convert_osd_to_fb_var(&lconfig, &v);
+		/* copy xres_virtual and yres_virtual from OSD0 */
+		v.xres_virtual = osd0_var->xres_virtual;
+		v.yres_virtual = osd0_var->yres_virtual;
+		/* zero xoffset and yoffset */
+		v.xoffset = 0;
+		v.yoffset = 0;
+		/* copy xpos and ypos from OSD0 */
+		win->xpos = osd0->xpos;
+		win->ypos = osd0->ypos;
+
+		retval = info->fbops->fb_check_var(&v, info);
+		if (retval) {
+			win->xpos = old_xpos;
+			win->ypos = old_ypos;
+			return retval;
+		}
+
+		/*
+		 * Enable attribute mode by replacing info->var and calling
+		 * the fb_set_par method to activate it.
 		 */
-		if (!(dispc_reg_in(OSD_OSDWIN1MD) & OSD_OSDWIN1MD_OASW))
-			dispc_reg_merge(OSD_OSDWIN1MD, on, OSD_OSDWIN1MD_OACT1);
+		memcpy(var, &v, sizeof(v));
+		retval = info->fbops->fb_set_par(info);
+	} else {		/* disable attribute mode */
+		/* get the current OSD1 window configuration */
+		convert_fb_var_to_osd(var, &lconfig, win->dm->yc_pixfmt);
+		/* change the pixfmt to 4-bits-per-pixel bitmap */
+		lconfig.pixfmt = PIXFMT_4BPP;
+		/* update the var for OSD1 */
+		convert_osd_to_fb_var(&lconfig, &v);
+
+		retval = info->fbops->fb_check_var(&v, info);
+		if (retval)
+			return retval;
+
+		/*
+		 * Disable attribute mode by replacing info->var and calling
+		 * the fb_set_par method to activate it.
+		 */
+		memcpy(var, &v, sizeof(v));
+		retval = info->fbops->fb_set_par(info);
 	}
+
+	return retval;
 }
 
-static void set_win_mode(char *id)
+/*
+ * FBIO_GET_BLINK_INTERVAL handler
+ */
+static int vpbe_get_blinking(struct fb_info *info,
+			     struct vpbe_blink_option *blink_option)
 {
-	if (is_win(id, VID0)) ;
-	else if (is_win(id, VID1)) {
-		if (dm->vid1->info.var.bits_per_pixel == 32)
-			dispc_reg_merge(OSD_MISCCT, ~0,
-					OSD_MISCCT_RGBWIN | OSD_MISCCT_RGBEN);
-	} else if (is_win(id, OSD0))
-		/* Set RGB565 mode */
-		dispc_reg_merge(OSD_OSDWIN0MD, OSD_OSDWIN0MD_RGB0E,
-				OSD_OSDWIN0MD_RGB0E);
-	else if (is_win(id, OSD1)) {
-		/* Set as attribute window */
-		dispc_reg_merge(OSD_OSDWIN1MD, OSD_OSDWIN1MD_OASW,
-				OSD_OSDWIN1MD_OASW);
+	struct vpbe_dm_win_info *win = info->par;
+	enum davinci_blink_interval blink;
+	int enabled;
+
+	if (win->layer != WIN_OSD1)
+		return -EINVAL;
+
+	davinci_disp_get_blink_attribute(&enabled, &blink);
+	blink_option->blinking = enabled;
+	blink_option->interval = blink;
+
+	return 0;
+}
+
+/*
+ * FBIO_SET_BLINK_INTERVAL handler
+ */
+static int vpbe_set_blinking(struct fb_info *info,
+			     struct vpbe_blink_option *blink_option)
+{
+	struct vpbe_dm_win_info *win = info->par;
+
+	if (win->layer != WIN_OSD1)
+		return -EINVAL;
+
+	if (blink_option->interval > BLINK_X4)
+		return -EINVAL;
+
+	davinci_disp_set_blink_attribute(blink_option->blinking,
+					 blink_option->interval);
+
+	return 0;
+}
+
+/*
+ * FBIO_GET_VIDEO_CONFIG_PARAMS handler
+ *
+ * Despite the name, this ioctl can be used on both video windows and OSD
+ * (bitmap) windows.
+ */
+static int vpbe_get_vid_params(struct fb_info *info,
+			       struct vpbe_video_config_params *vid_conf_params)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	enum davinci_h_exp_ratio h_exp;
+	enum davinci_v_exp_ratio v_exp;
+
+	if (!win->own_window)
+		return -ENODEV;
+
+	if (is_vid_win(info))
+		davinci_disp_get_vid_expansion(&h_exp, &v_exp);
+	else
+		davinci_disp_get_osd_expansion(&h_exp, &v_exp);
+
+	vid_conf_params->cb_cr_order =
+	    (win->dm->yc_pixfmt == PIXFMT_YCbCrI) ? 0 : 1;
+	vid_conf_params->exp_info.horizontal = h_exp;
+	vid_conf_params->exp_info.vertical = v_exp;
+
+	return 0;
+}
+
+/*
+ * FBIO_SET_VIDEO_CONFIG_PARAMS handler
+ *
+ * Despite the name, this ioctl can be used on both video windows and OSD
+ * (bitmap) windows.
+ *
+ * NOTE: If the cb_cr_order is changed, it won't take effect until an
+ * FBIOPUT_VSCREENINFO ioctl is executed on a window with a YC pixel format.
+ */
+static int vpbe_set_vid_params(struct fb_info *info,
+			       struct vpbe_video_config_params *vid_conf_params)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	enum davinci_h_exp_ratio h_exp;
+	enum davinci_v_exp_ratio v_exp;
+
+	if (!win->own_window)
+		return -ENODEV;
+
+	if (vid_conf_params->exp_info.horizontal > H_EXP_3_OVER_2)
+		return -EINVAL;
+
+	if (vid_conf_params->exp_info.vertical > V_EXP_6_OVER_5)
+		return -EINVAL;
+
+	win->dm->yc_pixfmt =
+	    vid_conf_params->cb_cr_order ? PIXFMT_YCrCbI : PIXFMT_YCbCrI;
+
+	h_exp = vid_conf_params->exp_info.horizontal;
+	v_exp = vid_conf_params->exp_info.vertical;
+	if (is_vid_win(info))
+		davinci_disp_set_vid_expansion(h_exp, v_exp);
+	else
+		davinci_disp_set_osd_expansion(h_exp, v_exp);
+
+	return 0;
+}
+
+/*
+ * FBIO_GET_BITMAP_CONFIG_PARAMS handler
+ */
+static int vpbe_bitmap_get_params(struct fb_info *info, struct vpbe_bitmap_config_params
+				  *bitmap_conf_params)
+{
+	enum davinci_osd_layer osdwin = fb_info_to_osd_enum(info);
+	enum davinci_clut clut;
+
+	if (!is_osd_win(info))
+		return -EINVAL;
+
+	clut = davinci_disp_get_osd_clut(osdwin);
+	if (clut == ROM_CLUT)
+		bitmap_conf_params->clut_select = davinci_disp_get_rom_clut();
+	else
+		bitmap_conf_params->clut_select = 2;
+
+	bitmap_conf_params->attenuation_enable =
+	    davinci_disp_get_rec601_attenuation(osdwin);
+
+	memset(&bitmap_conf_params->clut_idx, 0,
+	       sizeof(bitmap_conf_params->clut_idx));
+
+	switch (info->var.bits_per_pixel) {
+	case 1:
+		bitmap_conf_params->clut_idx.for_1bit_bitmap.bitmap_val_0 =
+		    davinci_disp_get_palette_map(osdwin, 0);
+		bitmap_conf_params->clut_idx.for_1bit_bitmap.bitmap_val_1 =
+		    davinci_disp_get_palette_map(osdwin, 1);
+		break;
+	case 2:
+		bitmap_conf_params->clut_idx.for_2bit_bitmap.bitmap_val_0 =
+		    davinci_disp_get_palette_map(osdwin, 0);
+		bitmap_conf_params->clut_idx.for_2bit_bitmap.bitmap_val_1 =
+		    davinci_disp_get_palette_map(osdwin, 1);
+		bitmap_conf_params->clut_idx.for_2bit_bitmap.bitmap_val_2 =
+		    davinci_disp_get_palette_map(osdwin, 2);
+		bitmap_conf_params->clut_idx.for_2bit_bitmap.bitmap_val_3 =
+		    davinci_disp_get_palette_map(osdwin, 3);
+		break;
+	case 4:
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_0 =
+		    davinci_disp_get_palette_map(osdwin, 0);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_1 =
+		    davinci_disp_get_palette_map(osdwin, 1);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_2 =
+		    davinci_disp_get_palette_map(osdwin, 2);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_3 =
+		    davinci_disp_get_palette_map(osdwin, 3);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_4 =
+		    davinci_disp_get_palette_map(osdwin, 4);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_5 =
+		    davinci_disp_get_palette_map(osdwin, 5);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_6 =
+		    davinci_disp_get_palette_map(osdwin, 6);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_7 =
+		    davinci_disp_get_palette_map(osdwin, 7);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_8 =
+		    davinci_disp_get_palette_map(osdwin, 8);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_9 =
+		    davinci_disp_get_palette_map(osdwin, 9);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_10 =
+		    davinci_disp_get_palette_map(osdwin, 10);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_11 =
+		    davinci_disp_get_palette_map(osdwin, 11);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_12 =
+		    davinci_disp_get_palette_map(osdwin, 12);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_13 =
+		    davinci_disp_get_palette_map(osdwin, 13);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_14 =
+		    davinci_disp_get_palette_map(osdwin, 14);
+		bitmap_conf_params->clut_idx.for_4bit_bitmap.bitmap_val_15 =
+		    davinci_disp_get_palette_map(osdwin, 15);
+		break;
+	default:
+		break;
 	}
 
+	return 0;
 }
 
-/**
- *      davincifb_set_par - Optional function. Alters the hardware state.
- *      @info: frame buffer structure that represents a single frame buffer
+/*
+ * FBIO_SET_BITMAP_CONFIG_PARAMS handler
  *
- *	Using the fb_var_screeninfo in fb_info we set the resolution of the
- *	this particular framebuffer. This function alters the par AND the
- *	fb_fix_screeninfo stored in fb_info. It doesn't not alter var in
- *	fb_info since we are using that data. This means we depend on the
- *	data in var inside fb_info to be supported by the hardware.
- *	davincifb_check_var is always called before dmfb_set_par to ensure this.
- *	Again if you can't can't the resolution you don't need this function.
- *
+ * The palette map is ignored unless the color depth is set to 1, 2, or 4 bits
+ * per pixel.  A default palette map is supplied for these color depths where
+ * the clut index is equal to the pixel value.  It is not necessary to change
+ * the default palette map when using the RAM clut, because the RAM clut values
+ * can be changed.  It is only necessary to modify the default palette map when
+ * using a ROM clut.
  */
-static int davincifb_set_par(struct fb_info *info)
+static int vpbe_bitmap_set_params(struct fb_info *info, struct vpbe_bitmap_config_params
+				  *bitmap_conf_params)
 {
-	struct dm_win_info *w = (struct dm_win_info *)info->par;
-	struct fb_var_screeninfo *v = &info->var;
-	u32 start = 0, offset = 0;
+	enum davinci_osd_layer osdwin = fb_info_to_osd_enum(info);
+	enum davinci_clut clut = ROM_CLUT;
 
-	info->fix.line_length = v->xres_virtual * v->bits_per_pixel / 8;
+	if (!is_osd_win(info))
+		return -EINVAL;
 
-	offset = v->yoffset * info->fix.line_length +
-	    v->xoffset * v->bits_per_pixel / 8;
-	start = (u32) w->fb_base_phys + offset;
-	set_sdram_params(info->fix.id, start, info->fix.line_length);
+	if (bitmap_conf_params->clut_select == 0)
+		davinci_disp_set_rom_clut(ROM_CLUT0);
+	else if (bitmap_conf_params->clut_select == 1)
+		davinci_disp_set_rom_clut(ROM_CLUT1);
+	else if (bitmap_conf_params->clut_select == 2)
+		clut = RAM_CLUT;
+	else
+		return -EINVAL;
 
-	set_interlaced(info->fix.id, 1);
-	set_win_position(info->fix.id,
-			 x_pos(w), y_pos(w), v->xres, v->yres / 2);
-	set_win_mode(info->fix.id);
-	set_win_enable(info->fix.id, 1);
+	davinci_disp_set_osd_clut(osdwin, clut);
+	davinci_disp_set_rec601_attenuation(osdwin,
+					    bitmap_conf_params->
+					    attenuation_enable);
 
-	return (0);
+	switch (info->var.bits_per_pixel) {
+	case 1:
+		davinci_disp_set_palette_map(osdwin, 0,
+					     bitmap_conf_params->clut_idx.
+					     for_1bit_bitmap.bitmap_val_0);
+		davinci_disp_set_palette_map(osdwin, 1,
+					     bitmap_conf_params->clut_idx.
+					     for_1bit_bitmap.bitmap_val_1);
+		break;
+	case 2:
+		davinci_disp_set_palette_map(osdwin, 0,
+					     bitmap_conf_params->clut_idx.
+					     for_2bit_bitmap.bitmap_val_0);
+		davinci_disp_set_palette_map(osdwin, 1,
+					     bitmap_conf_params->clut_idx.
+					     for_2bit_bitmap.bitmap_val_1);
+		davinci_disp_set_palette_map(osdwin, 2,
+					     bitmap_conf_params->clut_idx.
+					     for_2bit_bitmap.bitmap_val_2);
+		davinci_disp_set_palette_map(osdwin, 3,
+					     bitmap_conf_params->clut_idx.
+					     for_2bit_bitmap.bitmap_val_3);
+		break;
+	case 4:
+		davinci_disp_set_palette_map(osdwin, 0,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_0);
+		davinci_disp_set_palette_map(osdwin, 1,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_1);
+		davinci_disp_set_palette_map(osdwin, 2,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_2);
+		davinci_disp_set_palette_map(osdwin, 3,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_3);
+		davinci_disp_set_palette_map(osdwin, 4,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_4);
+		davinci_disp_set_palette_map(osdwin, 5,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_5);
+		davinci_disp_set_palette_map(osdwin, 6,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_6);
+		davinci_disp_set_palette_map(osdwin, 7,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_7);
+		davinci_disp_set_palette_map(osdwin, 8,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_8);
+		davinci_disp_set_palette_map(osdwin, 9,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_9);
+		davinci_disp_set_palette_map(osdwin, 10,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_10);
+		davinci_disp_set_palette_map(osdwin, 11,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_11);
+		davinci_disp_set_palette_map(osdwin, 12,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_12);
+		davinci_disp_set_palette_map(osdwin, 13,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_13);
+		davinci_disp_set_palette_map(osdwin, 14,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_14);
+		davinci_disp_set_palette_map(osdwin, 15,
+					     bitmap_conf_params->clut_idx.
+					     for_4bit_bitmap.bitmap_val_15);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
 }
 
-/**
- *	davincifb_ioctl - handler for private ioctls.
+/*
+ * FBIO_SET_BACKG_COLOR handler
  */
-static int davincifb_ioctl(struct fb_info *info, unsigned int cmd,
-			   unsigned long arg)
+static int vpbe_set_backg_color(struct fb_info *info,
+				struct vpbe_backg_color *backg_color)
 {
-	struct dm_win_info *w = (struct dm_win_info *)info->par;
+	enum davinci_clut clut = ROM_CLUT;
+
+	if (backg_color->clut_select == 0)
+		davinci_disp_set_rom_clut(ROM_CLUT0);
+	else if (backg_color->clut_select == 1)
+		davinci_disp_set_rom_clut(ROM_CLUT1);
+	else if (backg_color->clut_select == 2)
+		clut = RAM_CLUT;
+	else
+		return -EINVAL;
+
+	davinci_disp_set_background(clut, backg_color->color_offset);
+
+	return 0;
+}
+
+/*
+ * FBIO_SETPOS handler
+ */
+static int vpbe_setpos(struct fb_info *info,
+		       struct vpbe_window_position *win_pos)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	struct fb_var_screeninfo *var = &info->var;
+	struct fb_var_screeninfo v;
+	unsigned old_xpos = win->xpos;
+	unsigned old_ypos = win->ypos;
+	int retval;
+
+	if (!win->own_window)
+		return -ENODEV;
+
+	memcpy(&v, var, sizeof(v));
+	win->xpos = win_pos->xpos;
+	win->ypos = win_pos->ypos;
+	retval = info->fbops->fb_check_var(&v, info);
+	if (retval) {
+		win->xpos = old_xpos;
+		win->ypos = old_ypos;
+		return retval;
+	}
+
+	/* update the window position */
+	memcpy(var, &v, sizeof(v));
+	retval = info->fbops->fb_set_par(info);
+
+	return retval;
+}
+
+/*
+ * FBIO_SET_CURSOR handler
+ */
+static int vpbe_set_cursor_params(struct fb_info *info,
+				  struct fb_cursor *fbcursor)
+{
+	struct davinci_cursor_config cursor;
+
+	if (!fbcursor->enable) {
+		davinci_disp_cursor_disable();
+		return 0;
+	}
+
+	cursor.xsize = fbcursor->image.width;
+	cursor.ysize = fbcursor->image.height;
+	cursor.xpos = fbcursor->image.dx;
+	cursor.ypos = fbcursor->image.dy;
+	cursor.interlaced = is_window_interlaced(&info->var);
+	cursor.h_width =
+	    (fbcursor->image.depth > 7) ? 7 : fbcursor->image.depth;
+	cursor.v_width = cursor.h_width;
+	cursor.clut = ROM_CLUT;
+	cursor.clut_index = fbcursor->image.fg_color;
+
+	davinci_disp_set_cursor_config(&cursor);
+
+	davinci_disp_cursor_enable();
+
+	return 0;
+}
+
+/*
+ * fb_ioctl method
+ */
+static int
+davincifb_ioctl(struct fb_info *info, unsigned int cmd,	unsigned long arg)
+{
+	struct vpbe_dm_win_info *win = info->par;
 	void __user *argp = (void __user *)arg;
 	struct fb_fillrect rect;
 	struct zoom_params zoom;
-	long std = 0;
+	int retval = 0;
+	struct vpbe_bitmap_blend_params blend_para;
+	struct vpbe_blink_option blink_option;
+	struct vpbe_video_config_params vid_conf_params;
+	struct vpbe_bitmap_config_params bitmap_conf_params;
+	struct vpbe_backg_color backg_color;
+	struct vpbe_window_position win_pos;
+	struct fb_cursor cursor;
 
 	switch (cmd) {
 	case FBIO_WAITFORVSYNC:
@@ -781,893 +1388,458 @@ static int davincifb_ioctl(struct fb_info *info, unsigned int cmd,
 		 * display.  We only support one display, so we will
 		 * simply ignore the argument.
 		 */
-		return (davincifb_wait_for_vsync(w));
-		break;
+		return davincifb_wait_for_vsync(info);
+
 	case FBIO_SETATTRIBUTE:
 		if (copy_from_user(&rect, argp, sizeof(rect)))
 			return -EFAULT;
-		return (davincifb_set_attr_blend(&rect));
-		break;
+		return vpbe_set_attr_blend(info, &rect);
+
 	case FBIO_SETPOSX:
-		if (arg >= 0 && arg <= DISP_XRES) {
-			w->x = arg;
-			davincifb_check_var(&w->info.var, &w->info);
-			davincifb_set_par(&w->info);
-			return 0;
-		} else
-			return -EINVAL;
-		break;
+		return vpbe_setposx(info, arg);
+
 	case FBIO_SETPOSY:
-		if (arg >= 0 && arg <= DISP_YRES) {
-			w->y = arg;
-			davincifb_check_var(&w->info.var, &w->info);
-			davincifb_set_par(&w->info);
-			return 0;
-		} else
-			return -EINVAL;
-		break;
+		return vpbe_setposy(info, arg);
+
 	case FBIO_SETZOOM:
 		if (copy_from_user(&zoom, argp, sizeof(zoom)))
 			return -EFAULT;
-		if ((zoom.zoom_h == 2) || (zoom.zoom_h == 0)
-		    || (zoom.zoom_h == 1) || (zoom.zoom_v == 2)
-		    || (zoom.zoom_v == 0) || (zoom.zoom_v == 1)) {
-			set_zoom(zoom.window_id, zoom.zoom_h, zoom.zoom_v);
-			return 0;
-		} else {
-			return -EINVAL;
-		}
-		break;
-	case FBIO_GETSTD:
-		std = ((dmparams.output << 16) | (dmparams.format));	//(NTSC <<16) | (COPOSITE);
-		if (copy_to_user(argp, &std, sizeof(u_int32_t)))
+		return vpbe_set_zoom(info, &zoom);
+
+	case FBIO_ENABLE_DISABLE_WIN:
+		return vpbe_enable_disable_win(info, arg);
+
+	case FBIO_SET_BITMAP_BLEND_FACTOR:
+		if (copy_from_user(&blend_para, argp, sizeof(blend_para)))
+			return -EFAULT;
+		return vpbe_bitmap_set_blend_factor(info, &blend_para);
+
+	case FBIO_SET_BITMAP_WIN_RAM_CLUT:
+		if (copy_from_user(win->dm->ram_clut[0], argp, RAM_CLUT_SIZE))
+			return -EFAULT;
+		return vpbe_bitmap_set_ram_clut(info, win->dm->ram_clut);
+
+	case FBIO_ENABLE_DISABLE_ATTRIBUTE_WIN:
+		return vpbe_enable_disable_attribute_window(info, arg);
+
+	case FBIO_GET_BLINK_INTERVAL:
+		if ((retval = vpbe_get_blinking(info, &blink_option)) < 0)
+			return retval;
+		if (copy_to_user(argp, &blink_option, sizeof(blink_option)))
 			return -EFAULT;
 		return 0;
-		break;
+
+	case FBIO_SET_BLINK_INTERVAL:
+		if (copy_from_user(&blink_option, argp, sizeof(blink_option)))
+			return -EFAULT;
+		return vpbe_set_blinking(info, &blink_option);
+
+	case FBIO_GET_VIDEO_CONFIG_PARAMS:
+		if ((retval = vpbe_get_vid_params(info, &vid_conf_params)) < 0)
+			return retval;
+		if (copy_to_user
+		    (argp, &vid_conf_params, sizeof(vid_conf_params)))
+			return -EFAULT;
+		return 0;
+
+	case FBIO_SET_VIDEO_CONFIG_PARAMS:
+		if (copy_from_user
+		    (&vid_conf_params, argp, sizeof(vid_conf_params)))
+			return -EFAULT;
+		return vpbe_set_vid_params(info, &vid_conf_params);
+
+	case FBIO_GET_BITMAP_CONFIG_PARAMS:
+		if ((retval =
+		     vpbe_bitmap_get_params(info, &bitmap_conf_params)) < 0)
+			return retval;
+		if (copy_to_user
+		    (argp, &bitmap_conf_params, sizeof(bitmap_conf_params)))
+			return -EFAULT;
+		return 0;
+
+	case FBIO_SET_BITMAP_CONFIG_PARAMS:
+		if (copy_from_user
+		    (&bitmap_conf_params, argp, sizeof(bitmap_conf_params)))
+			return -EFAULT;
+		return vpbe_bitmap_set_params(info, &bitmap_conf_params);
+
+	case FBIO_SET_BACKG_COLOR:
+		if (copy_from_user(&backg_color, argp, sizeof(backg_color)))
+			return -EFAULT;
+		return vpbe_set_backg_color(info, &backg_color);
+
+	case FBIO_SETPOS:
+		if (copy_from_user(&win_pos, argp, sizeof(win_pos)))
+			return -EFAULT;
+		return vpbe_setpos(info, &win_pos);
+
+	case FBIO_SET_CURSOR:
+		if (copy_from_user(&cursor, argp, sizeof(cursor)))
+			return -EFAULT;
+		return vpbe_set_cursor_params(info, &cursor);
+
+	default:
+		return -EINVAL;
 	}
-	return (-EINVAL);
 }
 
-/**
- *  	davincifb_setcolreg - Optional function. Sets a color register.
- *      @regno: Which register in the CLUT we are programming
- *      @red: The red value which can be up to 16 bits wide
- *	@green: The green value which can be up to 16 bits wide
- *	@blue:  The blue value which can be up to 16 bits wide.
- *	@transp: If supported the alpha value which can be up to 16 bits wide.
- *      @info: frame buffer info structure
- *
- *  	Set a single color register. The values supplied have a 16 bit
- *  	magnitude which needs to be scaled in this function for the hardware.
- *	Things to take into consideration are how many color registers, if
- *	any, are supported with the current color visual. With truecolor mode
- *	no color palettes are supported. Here a psuedo palette is created
- *	which we store the value in pseudo_palette in struct fb_info. For
- *	pseudocolor mode we have a limited color palette. To deal with this
- *	we can program what color is displayed for a particular pixel value.
- *	DirectColor is similar in that we can program each color field. If
- *	we have a static colormap we don't need to implement this function.
- *
- *	Returns negative errno on error, or zero on success.
+
+/*
+ * fb_check_var method
+ */
+static int
+davincifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	struct fb_videomode *mode = &win->dm->mode;
+	struct davinci_layer_config lconfig;
+	struct fb_fix_screeninfo fix;
+		
+	/*
+	 * Get an updated copy of the video mode from the encoder manager, just
+	 * in case the display has been switched.
+	 */
+	get_video_mode(mode);
+
+	/*
+	 * xres, yres, xres_virtual, or yres_virtual equal to zero is treated as
+	 * a special case.  It indicates that the window should be disabled.  If
+	 * the window is a video window, it will also be released.
+	 */
+	if (var->xres == 0 || var->yres == 0 || var->xres_virtual == 0
+	    || var->yres_virtual == 0) {
+		var->xres = 0;
+		var->yres = 0;
+		var->xres_virtual = 0;
+		var->yres_virtual = 0;
+		return 0;
+	}
+
+	switch (var->bits_per_pixel) {
+	case 1:
+	case 2:
+	case 4:
+	case 8:
+	case 16:
+		break;
+	case 24:
+		if (cpu_is_davinci_dm355())
+			return -EINVAL;
+		break;
+	case 32:
+		if (cpu_is_davinci_dm644x())
+			return -EINVAL;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (var->xres_virtual < var->xres || var->yres_virtual < var->yres)
+		return -EINVAL;
+	if (var->xoffset > var->xres_virtual - var->xres)
+		return -EINVAL;
+	if (var->yoffset > var->yres_virtual - var->yres)
+		return -EINVAL;
+	if (mode->xres < var->xres || mode->yres < var->yres)
+		return -EINVAL;
+	if (win->xpos > mode->xres - var->xres)
+		return -EINVAL;
+	if (win->ypos > mode->yres - var->yres)
+		return -EINVAL;
+	convert_fb_var_to_osd(var, &lconfig, win->dm->yc_pixfmt);
+
+	update_fix_info(var, &fix);
+	lconfig.line_length = fix.line_length;
+	lconfig.xpos = win->xpos;
+	lconfig.ypos = win->ypos;
+	/* xoffset must be a multiple of xpanstep */
+	if (var->xoffset & ~(fix.xpanstep - 1))
+		return -EINVAL;
+
+	/* check if we have enough video memory to support this mode */
+	if (!window_will_fit_framebuffer(var, info->fix.smem_len))
+		return -EINVAL;
+
+	/* see if the OSD manager approves of this configuration */
+	if (davinci_disp_try_layer_config(win->layer, &lconfig))
+		return -EINVAL;
+	/*
+	 * Reject this var if the OSD manager would have to modify the window
+	 * geometry to make it work.
+	 */
+	if (lconfig.xsize != var->xres || lconfig.ysize != var->yres)
+		return -EINVAL;
+	if (lconfig.xpos != win->xpos || lconfig.ypos != win->ypos)
+		return -EINVAL;
+	
+	/*
+	 * At this point we have accepted the var, so now we convert our layer
+	 * configuration struct back to the var in order to make all of the
+	 * pixel format and geometry values consistent.  The var timing values
+	 * will be unmodified, as we have no way to verify them.
+	 */
+	convert_osd_to_fb_var(&lconfig, var);
+
+	return 0;
+}
+
+/*
+ * fb_set_par method
+ */
+static int davincifb_set_par(struct fb_info *info)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	struct fb_var_screeninfo *var = &info->var;
+	struct davinci_layer_config lconfig;
+	struct fb_videomode mode;
+	unsigned start;
+
+	/* update the fix info to be consistent with the var */
+	update_fix_info(var, &info->fix);
+	convert_fb_info_to_osd(info, &lconfig);
+
+	/* See if we need to pass the timing values to the encoder manager. */
+	memcpy(&mode, &win->dm->mode, sizeof(mode));
+	fb_var_to_videomode(&mode, var);
+	mode.name = win->dm->mode.name;
+	if (mode.xres == win->dm->mode.xres && mode.yres == win->dm->mode.yres
+	    && mode.pixclock != 0) {
+		/*
+		 * If the timing parameters from the var are different than the
+		 * timing parameters from the encoder, try to update the
+		 * timing parameters with the encoder manager.
+		 */
+		if (!fb_mode_is_equal(&mode, &win->dm->mode))
+			set_video_mode(&mode);
+	}
+	/* update our copy of the encoder video mode */
+	get_video_mode(&win->dm->mode);
+
+	/* turn off ping-pong buffer and field inversion to fix
+	   the image shaking problem in 1080I mode. The problem i.d. by the
+	   DM6446 Advisory 1.3.8 is not seen in 1080I mode, but the ping-pong
+	   buffer workaround created a shaking problem. */
+	if (win->layer == WIN_VID0 &&
+			strcmp(mode.name, VID_ENC_STD_1080I_30) == 0 &&
+			fb->invert_field)
+		davinci_disp_set_field_inversion(0);
+
+	/*
+	 * Update the var with the encoder timing info.  The window geometry
+	 * will be preserved.
+	 */
+	construct_fb_var(var, &win->dm->mode, &lconfig);
+
+	/* need to update interlaced since the mode may have changed */
+	lconfig.interlaced = var->vmode = win->dm->mode.vmode;
+	/*
+	 * xres, yres, xres_virtual, or yres_virtual equal to zero is treated as
+	 * a special case.  It indicates that the window should be disabled.  If
+	 * the window is a video window, it will also be released.
+	 * Note that we disable the window, but we do not set the
+	 * win->disable_window flag.  This allows the window to be re-enabled
+	 * simply by using the FBIOPUT_VSCREENINFO ioctl to set a valid
+	 * configuration.
+	 */
+	if (lconfig.xsize == 0 || lconfig.ysize == 0) {
+		if (win->own_window) {
+			davinci_disp_disable_layer(win->layer);
+			if (is_vid_win(info)) {
+				win->own_window = 0;
+				davinci_disp_release_layer(win->layer);
+			}
+		}
+		return 0;
+	}
+
+	/*
+	 * If we don't currently own this window, we must claim it from the OSD
+	 * manager.
+	 */
+	if (!win->own_window) {
+		if (davinci_disp_request_layer(win->layer))
+			return -ENODEV;
+		win->own_window = 1;
+	}
+
+	/* DM365 YUV420 Planar */
+	if (cpu_is_davinci_dm365() &&
+			info->var.bits_per_pixel == 8 &&
+			(win->layer == WIN_VID0 || win->layer == WIN_VID1)
+			) {
+		start =
+			info->fix.smem_start +
+			(var->xoffset * 12) / 8 +
+			var->yoffset * 3 / 2 * info->fix.line_length;
+	} else {
+		start =
+		info->fix.smem_start + (var->xoffset * var->bits_per_pixel) / 8
+		+ var->yoffset * info->fix.line_length;
+	}
+	davinci_disp_set_layer_config(win->layer, &lconfig);
+	davinci_disp_start_layer(win->layer, start, NULL);
+	if (win->display_window)
+		davinci_disp_enable_layer(win->layer, 0);
+
+	return 0;
+}
+
+/*
+ * This macro converts a 16-bit color passed to fb_setcolreg to the width
+ * supported by the pixel format.
+ */
+#define CNVT_TOHW(val,width) ((((val)<<(width))+0x7FFF-(val))>>16)
+
+/*
+ * fb_setcolreg method
  */
 static int davincifb_setcolreg(unsigned regno, unsigned red, unsigned green,
 			       unsigned blue, unsigned transp,
 			       struct fb_info *info)
 {
-	/* only pseudo-palette (16 bpp) allowed */
-	if (regno >= 16)	/* maximum number of palette entries */
-		return (1);
+	unsigned r, g, b, t;
 
-	if (info->var.grayscale) {
-		/* grayscale = 0.30*R + 0.59*G + 0.11*B */
-		red = green = blue = (red * 77 + green * 151 + blue * 28) >> 8;
+	if (regno >= 256)	/* no. of hw registers */
+		return -EINVAL;
+
+	/*
+	 * An RGB color palette isn't applicable to a window with a YUV pixel
+	 * format or to a window in attribute mode.
+	 */
+	if (is_yuv(&info->var) || is_attribute_mode(&info->var))
+		return -EINVAL;
+
+	switch (info->fix.visual) {
+	case FB_VISUAL_TRUECOLOR:
+		r = CNVT_TOHW(red, info->var.red.length);
+		g = CNVT_TOHW(green, info->var.green.length);
+		b = CNVT_TOHW(blue, info->var.blue.length);
+		t = CNVT_TOHW(transp, info->var.transp.length);
+		break;
+	case FB_VISUAL_PSEUDOCOLOR:
+	default:
+		r = CNVT_TOHW(red, 8);
+		g = CNVT_TOHW(green, 8);
+		b = CNVT_TOHW(blue, 8);
+		t = 0;
+		break;
 	}
 
-	/* Truecolor has hardware-independent 16-entry pseudo-palette */
+	/* Truecolor has hardware independent palette */
 	if (info->fix.visual == FB_VISUAL_TRUECOLOR) {
 		u32 v;
 
 		if (regno >= 16)
-			return (1);
+			return -EINVAL;
 
-		red >>= (16 - info->var.red.length);
-		green >>= (16 - info->var.green.length);
-		blue >>= (16 - info->var.blue.length);
-
-		v = (red << info->var.red.offset) |
-		    (green << info->var.green.offset) |
-		    (blue << info->var.blue.offset);
+		v = (r << info->var.red.offset) |
+		    (g << info->var.green.offset) |
+		    (b << info->var.blue.offset) |
+		    (t << info->var.transp.offset);
 
 		switch (info->var.bits_per_pixel) {
 		case 16:
 			((u16 *) (info->pseudo_palette))[regno] = v;
 			break;
-		default:
-			return (1);
+		case 24:
+		case 32:
+			((u32 *) (info->pseudo_palette))[regno] = v;
+			break;
 		}
-		return (0);
-	}
-	return (0);
-}
-
-/**
- *      davincifb_pan_display - NOT a required function. Pans the display.
- *      @var: frame buffer variable screen structure
- *      @info: frame buffer structure that represents a single frame buffer
- *
- *	Pan (or wrap, depending on the `vmode' field) the display using the
- *  	`xoffset' and `yoffset' fields of the `var' structure.
- *  	If the values don't fit, return -EINVAL.
- *
- *      Returns negative errno on error, or zero on success.
- */
-static int davincifb_pan_display(struct fb_var_screeninfo *var,
-				 struct fb_info *info)
-{
-	struct dm_win_info *w = (struct dm_win_info *)info->par;
-	u32 start = 0, offset = 0;
-
-	if (var->xoffset > var->xres_virtual - var->xres)
-		return (-EINVAL);
-	if (var->yoffset > var->yres_virtual - var->yres)
-		return (-EINVAL);
-	if ((var->xres_virtual * var->bits_per_pixel / 8) % 32)
-		return (-EINVAL);
-
-	offset = var->yoffset * info->fix.line_length +
-	    var->xoffset * var->bits_per_pixel / 8;
-	start = (u32) w->fb_base_phys + offset;
-
-	if ((dispc_reg_in(VENC_VSTAT) & 0x00000010)==0x10)
-		set_sdram_params(info->fix.id, start, info->fix.line_length);
-	else
-		w->sdram_address = start;
-
-	return (0);
-}
-
-/**
- *      davincifb_blank - NOT a required function. Blanks the display.
- *      @blank_mode: the blank mode we want.
- *      @info: frame buffer structure that represents a single frame buffer
- *
- *      Blank the screen if blank_mode != 0, else unblank. Return 0 if
- *      blanking succeeded, != 0 if un-/blanking failed due to e.g. a
- *      video mode which doesn't support it. Implements VESA suspend
- *      and powerdown modes on hardware that supports disabling hsync/vsync:
- *      blank_mode == 2: suspend vsync
- *      blank_mode == 3: suspend hsync
- *      blank_mode == 4: powerdown
- *
- *      Returns negative errno on error, or zero on success.
- *
- */
-static int davincifb_blank(int blank_mode, struct fb_info *info)
-{
-	return 0;
-}
-
-static int parse_win_params(char *wp,
-			    int *xres, int *yres, int *xpos, int *ypos)
-{
-	char *s;
-
-	if ((s = strsep(&wp, "x")) == NULL)
-		return -EINVAL;
-	*xres = simple_strtoul(s, NULL, 0);
-
-	if ((s = strsep(&wp, "@")) == NULL)
-		return -EINVAL;
-	*yres = simple_strtoul(s, NULL, 0);
-
-	if ((s = strsep(&wp, ",")) == NULL)
-		return -EINVAL;
-	*xpos = simple_strtoul(s, NULL, 0);
-
-	if ((s = strsep(&wp, ":")) == NULL)
-		return -EINVAL;
-	*ypos = simple_strtoul(s, NULL, 0);
-
-	return 0;
-}
-
-/*
- * Pass boot-time options by adding the following string to the boot params:
- * 	video=davincifb:[option[:option]]
- * Valid options:
- * 	output=[lcd|ntsc|pal]
- * 	format=[composite|s-video|component|rgb]
- * 	vid0=[off|MxN@X,Y]
- * 	vid1=[off|MxN@X,Y]
- * 	osd0=[off|MxN@X,Y]
- * 	osd1=[off|MxN@X,Y]
- * 		MxN specify the window resolution (displayed size)
- * 		X,Y specify the window position
- * 		M, N, X, Y are integers
- * 		M, X should be multiples of 16
- */
-
-#ifndef MODULE
-int __init davincifb_setup(char *options)
-{
-	char *this_opt;
-	u32 xres, yres, xpos, ypos;
-	int format_yres = 480;
-
-	pr_debug("davincifb: Options \"%s\"\n", options);
-
-	if (!options || !*options)
 		return 0;
-
-	while ((this_opt = strsep(&options, ":")) != NULL) {
-
-		if (!*this_opt)
-			continue;
-
-		if (!strncmp(this_opt, "output=", 7)) {
-			if (!strncmp(this_opt + 7, "lcd", 3)) {
-				dmparams.output = LCD;
-				dmparams.format = 0;
-			} else if (!strncmp(this_opt + 7, "ntsc", 4))
-				dmparams.output = NTSC;
-			else if (!strncmp(this_opt + 7, "pal", 3))
-				dmparams.output = PAL;
-		} else if (!strncmp(this_opt, "format=", 7)) {
-			if (dmparams.output == LCD)
-				continue;
-			if (!strncmp(this_opt + 7, "composite", 9))
-				dmparams.format = COMPOSITE;
-			else if (!strncmp(this_opt + 7, "s-video", 7))
-				dmparams.format = SVIDEO;
-			else if (!strncmp(this_opt + 7, "component", 9))
-				dmparams.format = COMPONENT;
-			else if (!strncmp(this_opt + 7, "rgb", 3))
-				dmparams.format = RGB;
-		} else if (!strncmp(this_opt, "vid0=", 5)) {
-			if (!strncmp(this_opt + 5, "off", 3))
-				dmparams.windows &= ~(1 << VID0);
-			else if (!parse_win_params(this_opt + 5,
-						   &xres, &yres, &xpos,
-						   &ypos)) {
-				dmparams.vid0_xres = xres;
-				dmparams.vid0_yres = yres;
-				dmparams.vid0_xpos = xpos;
-				dmparams.vid0_ypos = ypos;
-			}
-		} else if (!strncmp(this_opt, "vid1=", 5)) {
-			if (!strncmp(this_opt + 5, "off", 3))
-				dmparams.windows &= ~(1 << VID1);
-			else if (!parse_win_params(this_opt + 5,
-						   &xres, &yres, &xpos,
-						   &ypos)) {
-				dmparams.vid1_xres = xres;
-				dmparams.vid1_yres = yres;
-				dmparams.vid1_xpos = xpos;
-				dmparams.vid1_ypos = ypos;
-			}
-		} else if (!strncmp(this_opt, "osd0=", 5)) {
-			if (!strncmp(this_opt + 5, "off", 3))
-				dmparams.windows &= ~(1 << OSD0);
-			else if (!parse_win_params(this_opt + 5,
-						   &xres, &yres, &xpos,
-						   &ypos)) {
-				dmparams.osd0_xres = xres;
-				dmparams.osd0_yres = yres;
-				dmparams.osd0_xpos = xpos;
-				dmparams.osd0_ypos = ypos;
-			}
-		} else if (!strncmp(this_opt, "osd1=", 5)) {
-			if (!strncmp(this_opt + 5, "off", 3))
-				dmparams.windows &= ~(1 << OSD1);
-			else if (!parse_win_params(this_opt + 5,
-						   &xres, &yres, &xpos,
-						   &ypos)) {
-				dmparams.osd1_xres = xres;
-				dmparams.osd1_yres = yres;
-				dmparams.osd1_xpos = xpos;
-				dmparams.osd1_ypos = ypos;
-			}
-		}
-	}
-	printk(KERN_INFO "DaVinci: "
-	       "Output on %s%s, Enabled windows: %s %s %s %s\n",
-	       (dmparams.output == LCD) ? "LCD" :
-	       (dmparams.output == NTSC) ? "NTSC" :
-	       (dmparams.output == PAL) ? "PAL" : "unknown device!",
-	       (dmparams.format == 0) ? "" :
-	       (dmparams.format == COMPOSITE) ? " in COMPOSITE format" :
-	       (dmparams.format == SVIDEO) ? " in SVIDEO format" :
-	       (dmparams.format == COMPONENT) ? " in COMPONENT format" :
-	       (dmparams.format == RGB) ? " in RGB format" : "",
-	       (dmparams.windows & (1 << VID0)) ? "Video0" : "",
-	       (dmparams.windows & (1 << VID1)) ? "Video1" : "",
-	       (dmparams.windows & (1 << OSD0)) ? "OSD0" : "",
-	       (dmparams.windows & (1 << OSD1)) ? "OSD1" : "");
-	if (dmparams.output == NTSC) {
-		format_yres = 480;
-	} else if (dmparams.output == PAL) {
-		format_yres = 576;
-	} else {
-		printk(KERN_INFO
-		       "DaVinci:invalid format..defaulting width to 480\n");
-	}
-	dmparams.osd0_yres = osd0_default_var.yres = format_yres;
-	dmparams.osd1_yres = osd1_default_var.yres = format_yres;
-	dmparams.vid0_yres = vid0_default_var.yres = format_yres;
-	dmparams.vid1_yres = vid1_default_var.yres = format_yres;
-
-	osd0_default_var.yres_virtual = format_yres * DOUBLE_BUF;
-	osd1_default_var.yres_virtual = format_yres * DOUBLE_BUF;
-	vid0_default_var.yres_virtual = format_yres * TRIPLE_BUF;
-	vid1_default_var.yres_virtual = format_yres * TRIPLE_BUF;
-
-	if (dmparams.windows & (1 << VID0))
-		printk(KERN_INFO "Setting Video0 size %dx%d, "
-		       "position (%d,%d)\n",
-		       dmparams.vid0_xres, dmparams.vid0_yres,
-		       dmparams.vid0_xpos, dmparams.vid0_ypos);
-	if (dmparams.windows & (1 << VID1))
-		printk(KERN_INFO "Setting Video1 size %dx%d, "
-		       "position (%d,%d)\n",
-		       dmparams.vid1_xres, dmparams.vid1_yres,
-		       dmparams.vid1_xpos, dmparams.vid1_ypos);
-	if (dmparams.windows & (1 << OSD0))
-		printk(KERN_INFO "Setting OSD0 size %dx%d, "
-		       "position (%d,%d)\n",
-		       dmparams.osd0_xres, dmparams.osd0_yres,
-		       dmparams.osd0_xpos, dmparams.osd0_ypos);
-	if (dmparams.windows & (1 << OSD1))
-		printk(KERN_INFO "Setting OSD1 size %dx%d, "
-		       "position (%d,%d)\n",
-		       dmparams.osd1_xres, dmparams.osd1_yres,
-		       dmparams.osd1_xpos, dmparams.osd1_ypos);
-	return (0);
-}
-#endif
-
-static int mem_release(struct dm_win_info *w)
-{
-	if (!w->alloc_fb_mem) {
-		iounmap((void *)w->fb_base);
-		release_mem_region(w->fb_base_phys, w->fb_size);
-	} else
-		dma_free_coherent(NULL, w->fb_size, (void *)w->fb_base,
-				  w->fb_base_phys);
-	kfree(w);
-	return (0);
-}
-
-static int mem_alloc(struct dm_win_info **win, dma_addr_t fb_base_phys,
-		     unsigned long fb_size, char *fbname)
-{
-	struct dm_win_info *w;
-	struct device *dev = dm->dev;
-
-	w = kmalloc(sizeof(struct dm_win_info), GFP_KERNEL);
-	if (!w) {
-		dev_err(dev, "%s: could not allocate memory\n", fbname);
-		return (-ENOMEM);
-	}
-	memset(w, 0, sizeof(struct dm_win_info));
-
-	w->fb_base_phys = fb_base_phys;
-	w->fb_size = fb_size;
-
-	/* A null base address indicates that the framebuffer memory should be
-	 * dynamically allocated.
-	 */
-	if (!w->fb_base_phys)
-		w->alloc_fb_mem = 1;
-
-	if (!w->alloc_fb_mem) {
-		if (!request_mem_region(w->fb_base_phys, w->fb_size, fbname)) {
-			dev_err(dev, "%s: cannot reserve FB region\n", fbname);
-			goto free_par;
-		}
-		w->fb_base =
-		    (unsigned long)ioremap(w->fb_base_phys, w->fb_size);
-		if (!w->fb_base) {
-			dev_err(dev, "%s: cannot map framebuffer\n", fbname);
-			goto release_fb;
-		}
-	} else {
-		/* allocate coherent memory for the framebuffer */
-		w->fb_base = (unsigned long)dma_alloc_coherent(dev,
-							       w->fb_size,
-							       &w->fb_base_phys,
-							       GFP_KERNEL |
-							       GFP_DMA);
-		if (!w->fb_base) {
-			dev_err(dev, "%s: cannot allocate framebuffer\n",
-				fbname);
-			goto free_par;
-		}
-
-		dev_dbg(dev, "Framebuffer allocated at 0x%x "
-			"mapped to 0x%x, size %dk\n",
-			(unsigned)w->fb_base_phys, (unsigned)w->fb_base,
-			(unsigned)w->fb_size / 1024);
 	}
 
-	*win = w;
-	return (0);
+	if (!is_osd_win(info))
+		return -EINVAL;
 
-      release_fb:
-	if (!w->alloc_fb_mem)
-		release_mem_region(w->fb_base_phys, w->fb_size);
-      free_par:
-	kfree(w);
-	return (-ENOMEM);
-}
-
-static struct fb_info *init_fb_info(struct dm_win_info *w,
-				    struct fb_var_screeninfo *var, char *id)
-{
-	struct fb_info *info = &(w->info);
-	struct dm_info *dm = w->dm;
-
-	/* initialize the fb_info structure */
-	info->flags = FBINFO_DEFAULT;
-	info->fbops = &davincifb_ops;
-	info->screen_base = (char *)(w->fb_base);
-	info->pseudo_palette = w->pseudo_palette;
-	info->par = w;
-
-	/* Initialize variable screeninfo.
-	 * The variable screeninfo can be directly specified by the user
-	 * via an ioctl.
-	 */
-	memcpy(&info->var, var, sizeof(info->var));
-	info->var.activate = FB_ACTIVATE_NOW;
-
-	/* Initialize fixed screeninfo.
-	 * The fixed screeninfo cannot be directly specified by the user, but
-	 * it may change to reflect changes to the var info.
-	 */
-	strlcpy(info->fix.id, id, sizeof(info->fix.id));
-	info->fix.smem_start = w->fb_base_phys;
-	info->fix.line_length =
-	    (info->var.xres_virtual * info->var.bits_per_pixel) / 8;
-	info->fix.smem_len = w->fb_size;
-	info->fix.type = FB_TYPE_PACKED_PIXELS;
-	info->fix.visual = (info->var.bits_per_pixel <= 8) ?
-	    FB_VISUAL_PSEUDOCOLOR : FB_VISUAL_TRUECOLOR;
-	info->fix.xpanstep = 0;
-	info->fix.ypanstep = 1;
-	info->fix.ywrapstep = 0;
-	info->fix.type_aux = 0;
-	info->fix.mmio_start = dm->mmio_base_phys;
-	info->fix.mmio_len = dm->mmio_size;
-	info->fix.accel = FB_ACCEL_NONE;
-	w->sdram_address = 0;
-
-	return info;
-}
-
-static void davincifb_ntsc_composite_config(int on)
-{
-	if (on) {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-
-		/* Enable Composite output and start video encoder */
-		dispc_reg_out(VENC_VMOD, (VENC_VMOD_VIE | VENC_VMOD_VENC));
-
-		/* Set REC656 Mode */
-		dispc_reg_out(VENC_YCCCTL, 0x1);
-
-		/* Enable output mode and NTSC  */
-		dispc_reg_out(VENC_VMOD, 0x1003);
-
-		/* Enable all DACs  */
-		dispc_reg_out(VENC_DACTST, 0);
-	} else {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-	}
-}
-
-static void davincifb_ntsc_svideo_config(int on)
-{
-	if (on) {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-
-		/* Enable Composite output and start video encoder */
-		dispc_reg_out(VENC_VMOD, (VENC_VMOD_VIE | VENC_VMOD_VENC));
-
-		/* Set REC656 Mode */
-		dispc_reg_out(VENC_YCCCTL, 0x1);
-
-		/* Enable output mode and NTSC  */
-		dispc_reg_out(VENC_VMOD, 0x1003);
-
-		/* Enable S-Video Output; DAC B: S-Video Y, DAC C: S-Video C  */
-		dispc_reg_out(VENC_DACSEL, 0x210);
-
-		/* Enable all DACs  */
-		dispc_reg_out(VENC_DACTST, 0);
-	} else {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-	}
-}
-
-static void davincifb_ntsc_component_config(int on)
-{
-	if (on) {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-
-		/* Enable Composite output and start video encoder */
-		dispc_reg_out(VENC_VMOD, (VENC_VMOD_VIE | VENC_VMOD_VENC));
-
-		/* Set REC656 Mode */
-		dispc_reg_out(VENC_YCCCTL, 0x1);
-
-		/* Enable output mode and NTSC  */
-		dispc_reg_out(VENC_VMOD, 0x1003);
-
-		/* Enable Component output; DAC A: Y, DAC B: Pb, DAC C: Pr  */
-		dispc_reg_out(VENC_DACSEL, 0x543);
-
-		/* Enable all DACs  */
-		dispc_reg_out(VENC_DACTST, 0);
-	} else {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-	}
-}
-
-static void davincifb_pal_composite_config(int on)
-{
-	if (on) {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-
-		/* Enable Composite output and start video encoder */
-		dispc_reg_out(VENC_VMOD, (VENC_VMOD_VIE | VENC_VMOD_VENC));
-
-		/* Set REC656 Mode */
-		dispc_reg_out(VENC_YCCCTL, 0x1);
-
-		/* Enable output mode and PAL  */
-		dispc_reg_out(VENC_VMOD, 0x1043);
-
-		/* Enable all DACs  */
-		dispc_reg_out(VENC_DACTST, 0);
-	} else {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-	}
-}
-
-static void davincifb_pal_svideo_config(int on)
-{
-	if (on) {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-
-		/* Enable Composite output and start video encoder */
-		dispc_reg_out(VENC_VMOD, (VENC_VMOD_VIE | VENC_VMOD_VENC));
-
-		/* Set REC656 Mode */
-		dispc_reg_out(VENC_YCCCTL, 0x1);
-
-		/* Enable output mode and PAL  */
-		dispc_reg_out(VENC_VMOD, 0x1043);
-
-		/* Enable S-Video Output; DAC B: S-Video Y, DAC C: S-Video C  */
-		dispc_reg_out(VENC_DACSEL, 0x210);
-
-		/* Enable all DACs  */
-		dispc_reg_out(VENC_DACTST, 0);
-	} else {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-	}
-}
-
-static void davincifb_pal_component_config(int on)
-{
-	if (on) {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-
-		/* Enable Composite output and start video encoder */
-		dispc_reg_out(VENC_VMOD, (VENC_VMOD_VIE | VENC_VMOD_VENC));
-
-		/* Set REC656 Mode */
-		dispc_reg_out(VENC_YCCCTL, 0x1);
-
-		/* Enable output mode and PAL  */
-		dispc_reg_out(VENC_VMOD, 0x1043);
-
-		/* Enable Component output; DAC A: Y, DAC B: Pb, DAC C: Pr  */
-		dispc_reg_out(VENC_DACSEL, 0x543);
-
-		/* Enable all DACs  */
-		dispc_reg_out(VENC_DACTST, 0);
-	} else {
-		/* Reset video encoder module */
-		dispc_reg_out(VENC_VMOD, 0);
-	}
-}
-
-static inline void fix_default_var(struct dm_win_info *w,
-				   u32 xres, u32 yres, u32 xpos, u32 ypos,
-				   int n_buf)
-{
-	struct fb_var_screeninfo *v = &w->info.var;
-
-	v->xres = xres;
-	v->yres = yres;
-	v->xres_virtual = v->xres;
-	v->yres_virtual = v->yres * n_buf;
-	x_pos(w) = xpos;
-	y_pos(w) = ypos;
-}
-
-/*
- *  Cleanup
- */
-static int davincifb_remove(struct platform_device *pdev)
-{
-	free_irq(IRQ_VENCINT, &dm);
-
-	/* Cleanup all framebuffers */
-	if (dm->osd0) {
-		unregister_framebuffer(&dm->osd0->info);
-		mem_release(dm->osd0);
-	}
-	if (dm->osd1) {
-		unregister_framebuffer(&dm->osd1->info);
-		mem_release(dm->osd1);
-	}
-	if (dm->vid0) {
-		unregister_framebuffer(&dm->vid0->info);
-		mem_release(dm->vid0);
-	}
-	if (dm->vid1) {
-		unregister_framebuffer(&dm->vid1->info);
-		mem_release(dm->vid1);
-	}
-
-	/* Turn OFF the output device */
-	dm->output_device_config(0);
-
-	if (dm->mmio_base)
-		iounmap((void *)dm->mmio_base);
-	release_mem_region(dm->mmio_base_phys, dm->mmio_size);
+	davinci_disp_set_clut_rgb(regno, r, g, b);
 
 	return 0;
 }
 
 /*
- *  Initialization
+ * fb_pan_display method
+ *
+ * Pan the display using the `xoffset' and `yoffset' fields of the `var'
+ * structure.  We don't support wrapping and ignore the FB_VMODE_YWRAP flag.
  */
-static int davincifb_probe(struct platform_device *pdev)
+static int
+davincifb_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 {
-	struct fb_info *info;
-    printk("DAVFB 1\r\n");
-	if (dmparams.windows == 0)	return 0;	/* user disabled all windows through bootargs */
-    printk("DAVFB 2\r\n");
-	dm->dev = &pdev->dev;
-	dm->mmio_base_phys = OSD_REG_BASE;
-	dm->mmio_size = OSD_REG_SIZE;
+	struct vpbe_dm_win_info *win = info->par;
+	unsigned start;
 
-	if (!request_mem_region
-	    (dm->mmio_base_phys, dm->mmio_size, MODULE_NAME)) {
-		dev_err(dm->dev, ": cannot reserve MMIO region\n");
-		return (-ENODEV);
-	}
-    printk("DAVFB 3\r\n");
-	/* map the regions */
-	dm->mmio_base =
-	    (unsigned long)ioremap(dm->mmio_base_phys, dm->mmio_size);
-	if (!dm->mmio_base) {
-		dev_err(dm->dev, ": cannot map MMIO\n");
-		goto release_mmio;
-	}
-    printk("DAVFB 4\r\n");
-	/* initialize the vsync wait queue */
-	init_waitqueue_head(&dm->vsync_wait);
-	dm->timeout = HZ / 5;
+	if (!win->own_window)
+		return -ENODEV;
 
-	if ((dmparams.output == NTSC) && (dmparams.format == COMPOSITE))
-		dm->output_device_config = davincifb_ntsc_composite_config;
-	else if ((dmparams.output == NTSC) && (dmparams.format == SVIDEO))
-		dm->output_device_config = davincifb_ntsc_svideo_config;
-	else if ((dmparams.output == NTSC) && (dmparams.format == COMPONENT))
-		dm->output_device_config = davincifb_ntsc_component_config;
-	else if ((dmparams.output == PAL) && (dmparams.format == COMPOSITE))
-		dm->output_device_config = davincifb_pal_composite_config;
-	else if ((dmparams.output == PAL) && (dmparams.format == SVIDEO))
-		dm->output_device_config = davincifb_pal_svideo_config;
-	else if ((dmparams.output == PAL) && (dmparams.format == COMPONENT))
-		dm->output_device_config = davincifb_pal_component_config;
-	/* Add support for other displays here */
-	else {
-		printk(KERN_WARNING "Unsupported output device!\n");
-		dm->output_device_config = NULL;
-	}
-    printk("DAVFB 5\r\n");
-	printk("Setting Up Clocks for DM420 OSD\n");
+	if (var->xoffset > info->var.xres_virtual - info->var.xres)
+		return -EINVAL;
+	if (var->yoffset > info->var.yres_virtual - info->var.yres)
+		return -EINVAL;
 
-	/* Initialize the VPSS Clock Control register */
-	dispc_reg_out(VPSS_CLKCTL, 0x18);
+	/* xoffset must be a multiple of xpanstep */
+	if (var->xoffset & ~(info->fix.xpanstep - 1))
+		return -EINVAL;
 
-	/* Set Base Pixel X and Base Pixel Y */
-	dispc_reg_out(OSD_BASEPX, BASEX);
-	dispc_reg_out(OSD_BASEPY, BASEY);
-
-	/* Reset OSD registers to default. */
-	dispc_reg_out(OSD_MODE, 0);
-	dispc_reg_out(OSD_OSDWIN0MD, 0);
-
-	/* Set blue background color */
-	set_bg_color(0, 162);
-
-	/* Field Inversion Workaround */
-	dispc_reg_out(OSD_MODE, 0x200);
-
-	/* Setup VID0 framebuffer */
-	if (!(dmparams.windows & (1 << VID0))) {
-		printk(KERN_WARNING "No video/osd windows will be enabled "
-		       "because Video0 is disabled\n");
-		return 0;	/* background will still be shown */
-	}
-	/* Setup VID0 framebuffer */
-	if (!mem_alloc(&dm->vid0, VID0_FB_PHY, VID0_FB_SIZE, VID0_FBNAME)) {
-		dm->vid0->dm = dm;
-		fix_default_var(dm->vid0,
-				dmparams.vid0_xres, dmparams.vid0_yres,
-				dmparams.vid0_xpos, dmparams.vid0_ypos,
-				TRIPLE_BUF);
-		info = init_fb_info(dm->vid0, &vid0_default_var, VID0_FBNAME);
-		if (davincifb_check_var(&info->var, info)) {
-			dev_err(dm->dev, ": invalid default video mode\n");
-			goto exit;
-		}
-		memset((void *)dm->vid0->fb_base, 0x88, dm->vid0->fb_size);
-	} else
-		goto exit;
-    printk("DAVFB 6\r\n");
-	/* Setup OSD0 framebuffer */
-	if ((dmparams.windows & (1 << OSD0)) &&
-	    (!mem_alloc(&dm->osd0, OSD0_FB_PHY, OSD0_FB_SIZE, OSD0_FBNAME))) {
-		dm->osd0->dm = dm;
-		fix_default_var(dm->osd0,
-				dmparams.osd0_xres, dmparams.osd0_yres,
-				dmparams.osd0_xpos, dmparams.osd0_ypos,
-				DOUBLE_BUF);
-		info = init_fb_info(dm->osd0, &osd0_default_var, OSD0_FBNAME);
-		if (davincifb_check_var(&info->var, info)) {
-			dev_err(dm->dev, ": invalid default video mode\n");
-			mem_release(dm->osd0);
-		} else
-			memset((void *)dm->osd0->fb_base, 0, dm->osd0->fb_size);
-	}
-    printk("DAVFB 7\r\n");
-	/* Setup OSD1 framebuffer */
-	if ((dmparams.windows & (1 << OSD1)) &&
-	    (!mem_alloc(&dm->osd1, OSD1_FB_PHY, OSD1_FB_SIZE, OSD1_FBNAME))) {
-		dm->osd1->dm = dm;
-		fix_default_var(dm->osd1,
-				dmparams.osd1_xres, dmparams.osd1_yres,
-				dmparams.osd1_xpos, dmparams.osd1_ypos,
-				DOUBLE_BUF);
-		info = init_fb_info(dm->osd1, &osd1_default_var, OSD1_FBNAME);
-		if (davincifb_check_var(&info->var, info)) {
-			dev_err(dm->dev, ": invalid default video mode\n");
-			mem_release(dm->osd1);
-		} else
-			/* Set blend factor to show OSD windows */
-			memset((void *)dm->osd1->fb_base, 0xff,
-			       dm->osd1->fb_size);
-	}
-    printk("DAVFB 8\r\n");
-	/* Setup VID1 framebuffer */
-	if ((dmparams.windows & (1 << VID1)) &&
-	    (!mem_alloc(&dm->vid1, VID1_FB_PHY, VID1_FB_SIZE, VID1_FBNAME))) {
-		dm->vid1->dm = dm;
-		fix_default_var(dm->vid1,
-				dmparams.vid1_xres, dmparams.vid1_yres,
-				dmparams.vid1_xpos, dmparams.vid1_ypos,
-				TRIPLE_BUF);
-		info = init_fb_info(dm->vid1, &vid1_default_var, VID1_FBNAME);
-		if (davincifb_check_var(&info->var, info)) {
-			dev_err(dm->dev,
-				VID1_FBNAME ": invalid default video mode\n");
-			mem_release(dm->vid1);
-		} else
-			memset((void *)dm->vid1->fb_base, 0x88,
-			       dm->vid1->fb_size);
-	}
-    printk("DAVFB 9\r\n");
-	/* Register OSD0 framebuffer */
-	if (dm->osd0) {
-		info = &dm->osd0->info;
-		if (register_framebuffer(info) < 0) {
-			dev_err(dm->dev, OSD0_FBNAME
-				"Unable to register OSD0 framebuffer\n");
-			mem_release(dm->osd0);
-		} else {
-			printk(KERN_INFO "fb%d: %s frame buffer device\n",
-			       info->node, info->fix.id);
-			davincifb_set_par(info);
-		}
-	}
-
-	/* Register VID0 framebuffer */
-	info = &dm->vid0->info;
-	if (register_framebuffer(info) < 0) {
-		dev_err(dm->dev,
-			VID0_FBNAME "Unable to register VID0 framebuffer\n");
-		goto exit;
+	/* For DM365 video windows:
+   * using bits_per_pixel to calculate start/offset address
+   * needs to be changed for YUV420 planar format since
+   * it is 8. But consider CbCr the real (avg) bits per pixel
+   * is 12. line_length is calcuate using 8, so offset needs
+   * to time 1.5 to take C plane into account.
+   */
+	if (cpu_is_davinci_dm365() &&
+			info->var.bits_per_pixel == 8 &&
+			(win->layer == WIN_VID0 || win->layer == WIN_VID1)
+			) {
+		start =
+	    info->fix.smem_start +
+	    (var->xoffset * 12) / 8 +
+	    var->yoffset * 3 / 2 * info->fix.line_length;
 	} else {
-		printk(KERN_INFO "fb%d: %s frame buffer device\n",
-		       info->node, info->fix.id);
-		davincifb_set_par(info);
+		start =
+	    info->fix.smem_start +
+	    (var->xoffset * info->var.bits_per_pixel) / 8 +
+	    var->yoffset * info->fix.line_length;
 	}
-    printk("DAVFB 10\r\n");
-	/* Register OSD1 framebuffer */
-	if (dm->osd1) {
-		info = &dm->osd1->info;
-		if (register_framebuffer(info) < 0) {
-			dev_err(dm->dev, OSD1_FBNAME
-				"Unable to register OSD1 framebuffer\n");
-			mem_release(dm->osd1);
-		} else {
-			printk(KERN_INFO "fb%d: %s frame buffer device\n",
-			       info->node, info->fix.id);
-			davincifb_set_par(info);
-		}
-	}
-    printk("DAVFB 11\r\n");
-	/* Register VID1 framebuffer */
-	if (dm->vid1) {
-		info = &dm->vid1->info;
-		if (register_framebuffer(info) < 0) {
-			mem_release(dm->vid1);
-			dev_err(dm->dev, VID1_FBNAME
-				"Unable to register VID1 framebuffer\n");
-			mem_release(dm->vid1);
-		} else {
-			printk(KERN_INFO "fb%d: %s frame buffer device\n",
-			       info->node, info->fix.id);
-			davincifb_set_par(info);
-		}
-	}
+	if (davinci_disp_is_second_field()) {
+		davinci_disp_start_layer(win->layer, start, NULL);
+	} else
+		win->sdram_address = start;
 
-	/* install our interrupt service routine */
-	if (request_irq(IRQ_VENCINT, davincifb_isr, IRQF_SHARED, MODULE_NAME,
-			dm)) {
-		dev_err(dm->dev, MODULE_NAME
-			": could not install interrupt service routine\n");
-		goto exit;
-	}
-
-	/* Turn ON the output device */
-	dm->output_device_config(1);
-    printk("DAVFB 12\r\n");
-	return (0);
-
-      exit:
-    printk("DAVFB 13\r\n");
-	davincifb_remove(pdev);
-	iounmap((void *)dm->mmio_base);
-      release_mmio:
-    printk("DAVFB 14\r\n");
-	release_mem_region(dm->mmio_base_phys, dm->mmio_size);
-	return (-ENODEV);
+	return 0;
 }
 
-/* ------------------------------------------------------------------------- */
+/*
+ * fb_blank method
+ *
+ * Blank the screen if blank_mode != 0, else unblank.
+ */
+int davincifb_blank(int blank_mode, struct fb_info *info)
+{
+	struct vpbe_dm_win_info *win = info->par;
+	int retval = 0;
 
-    /*
-     *  Frame buffer operations
-     */
+	if (!win->own_window)
+		return -ENODEV;
+
+	if (!blank_mode) {
+		win->display_window = 1;
+		retval = info->fbops->fb_check_var(&info->var, info);
+		if (retval)
+			return retval;
+		retval = info->fbops->fb_set_par(info);
+	} else {
+		win->display_window = 0;
+		davinci_disp_disable_layer(win->layer);
+	}
+
+	return retval;
+}
+
+/*
+ *  Frame buffer operations
+ */
 static struct fb_ops davincifb_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = davincifb_check_var,
@@ -1683,40 +1855,610 @@ static struct fb_ops davincifb_ops = {
 	.fb_ioctl = davincifb_ioctl,
 };
 
-static struct platform_driver davincifb_driver = {
-	.probe		= davincifb_probe,
-	.remove		= davincifb_remove,
-	.driver		= {
-		.name	= MODULE_NAME,
-		.owner	= THIS_MODULE,
-	},
+static void davincifb_release_window(struct device *dev,
+				     struct vpbe_dm_win_info *win)
+{
+	struct fb_info *info = win->info;
+
+	if (info) {
+		unregister_framebuffer(info);
+		win->info = NULL;
+	}
+
+	if (win->own_window) {
+		davinci_disp_release_layer(win->layer);
+		win->own_window = 0;
+	}
+	win->display_window = 0;
+
+	if (info) {
+		dma_free_coherent(dev, info->fix.smem_len, info->screen_base,
+				  info->fix.smem_start);
+		fb_dealloc_cmap(&info->cmap);
+		kfree(info);
+	}
+}
+
+static int davincifb_init_window(struct device *dev,
+				 struct vpbe_dm_win_info *win,
+				 struct davinci_layer_config *lconfig,
+				 unsigned fb_size, const char *name)
+{
+	struct fb_info *info;
+	int err;
+
+	if (!fb_size)
+		return 0;
+
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info) {
+		dev_err(dev, "%s: Can't allocate memory for fb_info struct.\n",
+			name);
+		return -ENOMEM;
+	}
+	win->info = info;
+
+	/* initialize fb_info */
+	info->par = win;
+	info->flags =
+	    FBINFO_DEFAULT | FBINFO_HWACCEL_COPYAREA | FBINFO_HWACCEL_FILLRECT |
+	    FBINFO_HWACCEL_IMAGEBLIT | FBINFO_HWACCEL_XPAN |
+	    FBINFO_HWACCEL_YPAN;
+	info->fbops = &davincifb_ops;
+	info->screen_size = fb_size;
+	info->pseudo_palette = win->pseudo_palette;
+	if (fb_alloc_cmap(&info->cmap, 256, 0) < 0) {
+		dev_err(dev, "%s: Can't allocate color map.\n", name);
+		err = -ENODEV;
+		goto cmap_out;
+	}
+
+	/* initialize fb_fix_screeninfo */
+	strlcpy(info->fix.id, name, sizeof(info->fix.id));
+	info->fix.smem_len = fb_size;
+	info->fix.type = FB_TYPE_PACKED_PIXELS;
+
+	/* allocate the framebuffer */
+	info->screen_base =
+	    dma_alloc_coherent(dev, info->fix.smem_len,
+			       (dma_addr_t *) & info->fix.smem_start,
+			       GFP_KERNEL | GFP_DMA);
+	if (!info->screen_base) {
+		dev_err(dev, "%s: dma_alloc_coherent failed when allocating "
+			"framebuffer.\n", name);
+		err = -ENOMEM;
+		goto fb_alloc_out;
+	}
+
+	/*
+	 * Fill the framebuffer with zeros unless it is an OSD1 window in
+	 * attribute mode, in which case we fill it with 0x77 to make the OSD0
+	 * pixels opaque.
+	 */
+	memset(info->screen_base,
+	       (lconfig->pixfmt == PIXFMT_OSD_ATTR) ? 0x77 : 0,
+	       info->fix.smem_len);
+
+	/* initialize fb_var_screeninfo */
+	construct_fb_var(&info->var, &win->dm->mode, lconfig);
+	win->xpos = lconfig->xpos;
+	win->ypos = lconfig->ypos;
+	info->var.xres_virtual = info->var.xres;
+	info->var.yres_virtual = info->var.yres;
+
+	/* update the fix info to be consistent with the var */
+	update_fix_info(&info->var, &info->fix);
+
+	/*
+	 * Request ownership of the window from the OSD manager unless this is
+	 * a video window and the window size is 0.
+	 */
+	if (is_osd_win(info) || (info->var.xres != 0 && info->var.yres != 0)) {
+		if (!davinci_disp_request_layer(win->layer))
+			win->own_window = 1;
+	}
+	/* bail out if this is an OSD window and we don't own it */
+	if (is_osd_win(info) && !win->own_window) {
+		dev_err(dev, "%s: Failed to obtain ownership of OSD "
+			"window.\n", name);
+		err = -ENODEV;
+		goto own_out;
+	}
+
+	win->display_window = 1;
+
+	if (win->own_window) {
+		/* check if our initial window configuration is valid */
+		if (info->fbops->fb_check_var(&info->var, info)) {
+			dev_warn(dev, "%s: Initial window configuration is "
+				 "invalid.\n", name);
+		} else
+			info->fbops->fb_set_par(info);
+	}
+
+	/* register the framebuffer */
+	if (register_framebuffer(info)) {
+		dev_err(dev, "%s: Failed to register framebuffer.\n", name);
+		err = -ENODEV;
+		goto register_out;
+	}
+
+	dev_info(dev, "%s: %dx%dx%d@%d,%d with framebuffer size %dKB\n",
+		 info->fix.id, info->var.xres, info->var.yres,
+		 info->var.bits_per_pixel, win->xpos, win->ypos,
+		 info->fix.smem_len >> 10);
+
+	return 0;
+
+      register_out:
+	if (win->own_window)
+		davinci_disp_release_layer(win->layer);
+	win->own_window = 0;
+      own_out:
+	dma_free_coherent(dev, info->fix.smem_len, info->screen_base,
+			  info->fix.smem_start);
+      fb_alloc_out:
+	fb_dealloc_cmap(&info->cmap);
+      cmap_out:
+	kfree(info);
+
+	return err;
+}
+
+static int davincifb_remove(struct device *dev)
+{
+//	struct device *dev = &pdev->dev;
+	struct vpbe_dm_info *dm = dev_get_drvdata(dev);
+
+	dev_set_drvdata(dev, NULL);
+
+	davinci_disp_unregister_callback(&dm->vsync_callback);
+
+	davincifb_release_window(dev, &dm->win[WIN_VID1]);
+	davincifb_release_window(dev, &dm->win[WIN_OSD1]);
+	davincifb_release_window(dev, &dm->win[WIN_VID0]);
+	davincifb_release_window(dev, &dm->win[WIN_OSD0]);
+
+	kfree(dm);
+
+	return 0;
+}
+
+/*
+ * Return the maximum number of bytes per screen for a display layer at a
+ * resolution specified by an fb_videomode struct.
+ */
+static unsigned davincifb_max_screen_size(enum davinci_disp_layer layer,
+					  const struct fb_videomode *mode)
+{
+	unsigned max_bpp = 32;
+	unsigned line_length;
+	unsigned size;
+
+	switch (layer) {
+	case WIN_OSD0:
+	case WIN_OSD1:
+		if (cpu_is_davinci_dm355())
+			max_bpp = 32;
+		else
+			max_bpp = 16;
+		break;
+	case WIN_VID0:
+	case WIN_VID1:
+		if (cpu_is_davinci_dm355())
+			max_bpp = 16;
+		else
+			max_bpp = 24;
+		break;
+	}
+
+	line_length = (mode->xres * max_bpp + 7) / 8;
+	line_length = ((line_length + 31) / 32) * 32;
+	size = mode->yres * line_length;
+
+	return size;
+}
+
+static void parse_win_params(struct vpbe_dm_win_info *win,
+			     struct davinci_layer_config *lconfig,
+			     unsigned *fb_size, char *opt)
+{
+	char *s, *p, c = 0;
+	unsigned bits_per_pixel;
+
+	if (!opt)
+		return;
+
+	/* xsize */
+	p = strpbrk(opt, "x,@");
+	if (p)
+		c = *p;
+	if ((s = strsep(&opt, "x,@")) == NULL)
+		return;
+	if (*s)
+		lconfig->xsize = simple_strtoul(s, NULL, 0);
+	if (!p || !opt)
+		return;
+
+	/* ysize */
+	if (c == 'x') {
+		p = strpbrk(opt, "x,@");
+		if (p)
+			c = *p;
+		if ((s = strsep(&opt, "x,@")) == NULL)
+			return;
+		if (*s)
+			lconfig->ysize = simple_strtoul(s, NULL, 0);
+		if (!p || !opt)
+			return;
+	}
+
+	/* bits per pixel */
+	if (c == 'x') {
+		p = strpbrk(opt, ",@");
+		if (p)
+			c = *p;
+		if ((s = strsep(&opt, ",@")) == NULL)
+			return;
+		if (*s) {
+			bits_per_pixel = simple_strtoul(s, NULL, 0);
+			switch (bits_per_pixel) {
+			case 1:
+				if (win->layer == WIN_OSD0
+				    || win->layer == WIN_OSD1)
+					lconfig->pixfmt = PIXFMT_1BPP;
+				break;
+			case 2:
+				if (win->layer == WIN_OSD0
+				    || win->layer == WIN_OSD1)
+					lconfig->pixfmt = PIXFMT_2BPP;
+				break;
+			case 4:
+				if (win->layer == WIN_OSD0
+				    || win->layer == WIN_OSD1)
+					lconfig->pixfmt = PIXFMT_4BPP;
+				break;
+			case 8:
+				if (win->layer == WIN_OSD0
+				    || win->layer == WIN_OSD1)
+					lconfig->pixfmt = PIXFMT_8BPP;
+				if (cpu_is_davinci_dm365())
+					if (win->layer == WIN_VID0 ||
+					    win->layer == WIN_VID1)
+						lconfig->pixfmt = PIXFMT_NV12;
+				break;
+			case 16:
+				if (win->layer == WIN_OSD0
+				    || win->layer == WIN_OSD1)
+					lconfig->pixfmt = PIXFMT_RGB565;
+				else
+					lconfig->pixfmt = win->dm->yc_pixfmt;
+				break;
+			case 24:
+				if (cpu_is_davinci_dm644x()
+				    && (win->layer == WIN_VID0
+					|| win->layer == WIN_VID1))
+					lconfig->pixfmt = PIXFMT_RGB888;
+				break;
+			case 32:
+				if (cpu_is_davinci_dm355()
+				    && (win->layer == WIN_OSD0
+					|| win->layer == WIN_OSD1))
+					lconfig->pixfmt = PIXFMT_RGB888;
+				break;
+			default:
+				break;
+			}
+		}
+		if (!p || !opt)
+			return;
+	}
+
+	/* framebuffer size */
+	if (c == ',') {
+		p = strpbrk(opt, "@");
+		if (p)
+			c = *p;
+		if ((s = strsep(&opt, "@")) == NULL)
+			return;
+		if (*s) {
+			*fb_size = simple_strtoul(s, &s, 0);
+			if (*s == 'K')
+				*fb_size <<= 10;
+			if (*s == 'M')
+				*fb_size <<= 20;
+		}
+		if (!p || !opt)
+			return;
+	}
+
+	/* xpos */
+	if (c == '@') {
+		p = strpbrk(opt, ",");
+		if (p)
+			c = *p;
+		if ((s = strsep(&opt, ",")) == NULL)
+			return;
+		if (*s)
+			lconfig->xpos = simple_strtoul(s, NULL, 0);
+		if (!p || !opt)
+			return;
+	}
+
+	/* ypos */
+	if (c == ',') {
+		s = opt;
+		if (*s)
+			lconfig->ypos = simple_strtoul(s, NULL, 0);
+	}
+
+	return;
+}
+
+/*
+ * Pass boot-time options by adding the following string to the boot params:
+ *	video=davincifb:options
+ * Valid options:
+ *	osd0=[MxNxP,S@X,Y]
+ *      osd1=[MxNxP,S@X,Y]
+ *	vid0=[off|MxNxP,S@X,Y]
+ *	vid1=[off|MxNxP,S@X,Y]
+ *		MxN are the horizontal and vertical window size
+ *		P is the color depth (bits per pixel)
+ *		S is the framebuffer size with a size suffix such as 'K' or 'M'
+ *		X,Y are the window position
+ *
+ * Only video windows can be turned off.  Turning off a video window means that
+ * no framebuffer device will be registered for it,
+ *
+ * To cause a window to be supported by the framebuffer driver but not displayed
+ * initially, pass a value of 0 for the window size.
+ *
+ * For example:
+ *      video=davincifb:osd0=720x480x16@0,0:osd1=720x480:vid0=off:vid1=off
+ *
+ * This routine returns 1 if the window is to be turned off, or 0 otherwise.
+ */
+static int davincifb_get_default_win_config(struct device *dev,
+					    struct vpbe_dm_win_info *win,
+					    struct davinci_layer_config
+					    *lconfig, unsigned *fb_size,
+					    const char *options)
+{
+	const char *win_names[] = { "osd0=", "vid0=", "osd1=", "vid1=" };
+	const char *this_opt, *next_opt;
+	int this_len, opt_len;
+	static char opt_buf[128];
+
+	/* supply default values for lconfig and fb_size */
+	switch (win->layer) {
+	case WIN_OSD0:
+		lconfig->pixfmt = PIXFMT_RGB565;
+		lconfig->xsize = win->dm->mode.xres;
+		lconfig->ysize = win->dm->mode.yres;
+		break;
+	case WIN_OSD1:
+		lconfig->pixfmt = PIXFMT_OSD_ATTR;
+		lconfig->xsize = win->dm->mode.xres;
+		lconfig->ysize = win->dm->mode.yres;
+		break;
+	case WIN_VID0:
+	case WIN_VID1:
+		lconfig->pixfmt = win->dm->yc_pixfmt;
+		lconfig->xsize = 0;
+		lconfig->ysize = 0;
+		break;
+	}
+	lconfig->xpos = 0;
+	lconfig->ypos = 0;
+
+	lconfig->interlaced = is_display_interlaced(&win->dm->mode);
+	*fb_size = davincifb_max_screen_size(win->layer, &win->dm->mode);
+
+	next_opt = options;
+	while ((this_opt = next_opt)) {
+		this_len = strcspn(this_opt, ":");
+		next_opt = strpbrk(this_opt, ":");
+		if (next_opt)
+			++next_opt;
+
+		opt_len = strlen(win_names[win->layer]);
+		if (this_len >= opt_len) {
+			if (strncmp(this_opt, win_names[win->layer], opt_len))
+				continue;
+			this_len -= opt_len;
+			this_opt += opt_len;
+			if ((this_len >= strlen("off"))
+			    && !strncmp(this_opt, "off", strlen("off")))
+				return 1;
+			else {
+				strlcpy(opt_buf, this_opt,
+					min_t(int, sizeof(opt_buf),
+					      this_len + 1));
+				parse_win_params(win, lconfig, fb_size,
+						 opt_buf);
+				return 0;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/*
+ *     Module parameter definitions
+ */
+static char *options = "";
+
+module_param(options, charp, S_IRUGO);
+
+static int davincifb_probe(struct device *dev)
+{
+	struct vpbe_dm_info *dm;
+	struct davinci_layer_config lconfig;
+	unsigned fb_size;
+	int err;
+	struct davincifb_platform_data *pdata = dev->platform_data;
+
+	if (!pdata)
+		pdata = &davincifb_pdata_default;
+
+	dm = kzalloc(sizeof(*dm), GFP_KERNEL);
+	if (!dm) {
+		dev_err(dev, "Can't allocate memory for driver state.\n");
+		return -ENOMEM;
+	}
+	dev_set_drvdata(dev, dm);
+
+	/* get the video mode from the encoder manager */
+	get_video_mode(&dm->mode);
+
+	/* set the default Cb/Cr order */
+	dm->yc_pixfmt = PIXFMT_YCbCrI;
+
+	/* initialize OSD0 */
+	dm->win[WIN_OSD0].layer = WIN_OSD0;
+	dm->win[WIN_OSD0].dm = dm;
+	dm->win[WIN_OSD0].sdram_address = 0;
+	davincifb_get_default_win_config(dev, &dm->win[WIN_OSD0], &lconfig,
+					 &fb_size, options);
+	err =
+	    davincifb_init_window(dev, &dm->win[WIN_OSD0], &lconfig, fb_size,
+				  OSD0_FBNAME);
+	if (err)
+		goto osd0_out;
+
+	/* initialize VID0 */
+	dm->win[WIN_VID0].layer = WIN_VID0;
+	dm->win[WIN_VID0].dm = dm;
+	dm->win[WIN_VID0].sdram_address = 0;
+	if (!davincifb_get_default_win_config
+	    (dev, &dm->win[WIN_VID0], &lconfig, &fb_size, options)) {
+		err =
+		    davincifb_init_window(dev, &dm->win[WIN_VID0], &lconfig,
+					  fb_size, VID0_FBNAME);
+		if (err)
+			goto vid0_out;
+	}
+
+	/* initialize OSD1 */
+	dm->win[WIN_OSD1].layer = WIN_OSD1;
+	dm->win[WIN_OSD1].dm = dm;
+	dm->win[WIN_OSD1].sdram_address = 0;
+	davincifb_get_default_win_config(dev, &dm->win[WIN_OSD1], &lconfig,
+					 &fb_size, options);
+	err =
+	    davincifb_init_window(dev, &dm->win[WIN_OSD1], &lconfig, fb_size,
+				  OSD1_FBNAME);
+	if (err)
+		goto osd1_out;
+
+	/* initialize VID1 */
+	dm->win[WIN_VID1].layer = WIN_VID1;
+	dm->win[WIN_VID1].dm = dm;
+	dm->win[WIN_VID1].sdram_address = 0;
+	if (!davincifb_get_default_win_config
+	    (dev, &dm->win[WIN_VID1], &lconfig, &fb_size, options)) {
+		err =
+		    davincifb_init_window(dev, &dm->win[WIN_VID1], &lconfig,
+					  fb_size, VID1_FBNAME);
+		if (err)
+			goto vid1_out;
+	}
+
+	/* initialize the vsync wait queue */
+	init_waitqueue_head(&dm->vsync_wait);
+	dm->timeout = HZ / 5;
+
+	/* register the end-of-frame callback */
+	dm->vsync_callback.mask = DAVINCI_DISP_FIRST_FIELD |
+	    DAVINCI_DISP_SECOND_FIELD | DAVINCI_DISP_END_OF_FRAME;
+
+	dm->vsync_callback.handler = davincifb_vsync_callback;
+	dm->vsync_callback.arg = dm;
+	davinci_disp_register_callback(&dm->vsync_callback);
+
+	fb->invert_field = pdata->invert_field;
+
+	return 0;
+
+      vid1_out:
+	davincifb_release_window(dev, &dm->win[WIN_OSD1]);
+      osd1_out:
+	davincifb_release_window(dev, &dm->win[WIN_VID0]);
+      vid0_out:
+	davincifb_release_window(dev, &dm->win[WIN_OSD0]);
+      osd0_out:
+	kfree(dm);
+
+	return err;
+}
+
+static void davincifb_release_dev(struct device *dev)
+{
+}
+
+static u64 davincifb_dmamask = ~(u32) 0;
+
+/* FIXME: move to board setup file */
+static struct platform_device davincifb_device = {
+	.name = "davincifb",
+	.id = 0,
+	.dev = {
+		.release = davincifb_release_dev,
+		.dma_mask = &davincifb_dmamask,
+		.coherent_dma_mask = 0xffffffff,
+		},
+	.num_resources = 0,
 };
 
-/* Register both the driver and the device */
-int __init davincifb_init(void)
+static struct device_driver davincifb_driver = {
+	.name = "davincifb",
+	.bus = &platform_bus_type,
+	.probe = davincifb_probe,
+	.remove = davincifb_remove,
+	.suspend = NULL,
+	.resume = NULL,
+};
+#if 0
+static struct platform_driver davincifb_driver = {
+	.probe = davincifb_probe,
+	.remove = davincifb_remove,
+	.driver = {
+			.name = "davincifb",
+			.owner = THIS_MODULE,
+		},
+};
+#endif
+static int __init davincifb_init(void)
 {
+	struct device *dev = &davincifb_device.dev;
 #ifndef MODULE
-	/* boot-line options */
-	/* handle options for "dm64xxfb" for backwards compatability */
-	char *option;
-	char *names[] = { "davincifb", "dm64xxfb" };
-	int i, num_names = 2, done = 0;
-	printk("Davinci FB init\r\n");
-	for (i = 0; i < num_names && !done; i++) {
-		if (fb_get_options(names[i], &option)) {
-			printk(MODULE_NAME
-			       ": Disabled on command-line.\n");
-			return -ENODEV;
-		} else if (option) {
-			davincifb_setup(option);
-				done = 1;
+	{
+		char *names[] = { "davincifb", "dm64xxfb", "dm355fb" };
+		int i, num_names = 3;
+
+		for (i = 0; i < num_names; i++) {
+			if (fb_get_options(names[i], &options)) {
+				dev_err(dev, " Disabled on command-line.\n");
+				return -ENODEV;
+			}
+			if (options)
+				break;
 		}
 	}
 #endif
-    printk("Davinci FB init\r\n");
+
+	/* Register the device with LDM */
+	if (platform_device_register(&davincifb_device)) {
+		pr_debug("failed to register davincifb device\n");
+		return -ENODEV;
+	}
+
 	/* Register the driver with LDM */
-	if (platform_driver_register(&davincifb_driver)) {
-		pr_debug("failed to register omapfb driver\n");
+	if (driver_register(&davincifb_driver)) {
+		dev_err(dev, "failed to register davincifb driver\n");
+		platform_device_unregister(&davincifb_device);
 		return -ENODEV;
 	}
 
@@ -1725,12 +2467,13 @@ int __init davincifb_init(void)
 
 static void __exit davincifb_cleanup(void)
 {
-	platform_driver_unregister(&davincifb_driver);
+	driver_unregister(&davincifb_driver);
+	platform_device_unregister(&davincifb_device);
 }
 
 module_init(davincifb_init);
 module_exit(davincifb_cleanup);
 
 MODULE_DESCRIPTION("Framebuffer driver for TI DaVinci");
-MODULE_AUTHOR("Texas Instruments");
+MODULE_AUTHOR("MontaVista Software");
 MODULE_LICENSE("GPL");

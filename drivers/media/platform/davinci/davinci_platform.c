@@ -28,6 +28,9 @@
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/stat.h>
+#include <linux/module.h>
+#include <linux/export.h>
+
 #include <mach/hardware.h>
 #include <mach/mux.h>
 #include <mach/cputype.h>
@@ -140,12 +143,12 @@ EXPORT_SYMBOL(davinci_modes);
 
 static __inline__ u32 dispc_reg_in(u32 offset)
 {
-	return (__raw_readl(venc->venc_base + offset));
+	return (__raw_readl((volatile void __iomem *)(venc->venc_base + offset)));
 }
 
 static __inline__ u32 dispc_reg_out(u32 offset, u32 val)
 {
-	__raw_writel(val, (venc->venc_base + offset));
+	__raw_writel(val, (volatile void __iomem *)(venc->venc_base + offset));
 
 	return (val);
 }
@@ -156,20 +159,20 @@ static __inline__ u32 dispc_reg_merge(u32 offset, u32 val, u32 mask)
 
 	addr = venc->venc_base + offset;
 
-	new_val = (__raw_readl(addr) & ~mask) | (val & mask);
-	__raw_writel(new_val, addr);
+	new_val = (__raw_readl((volatile void __iomem *)addr) & ~mask) | (val & mask);
+	__raw_writel(new_val, (volatile void __iomem *)addr);
 	return (new_val);
 }
 
 u32 venc_reg_in(u32 offset)
 {
-	return (__raw_readl(venc->venc_base + offset));
+	return (__raw_readl((volatile void __iomem *)(venc->venc_base + offset)));
 }
 EXPORT_SYMBOL(venc_reg_in);
 
 u32 venc_reg_out(u32 offset, u32 val)
 {
-	__raw_writel(val, (venc->venc_base + offset));
+	__raw_writel(val, (volatile void __iomem *)(venc->venc_base + offset));
 
 	return (val);
 }
@@ -181,8 +184,8 @@ u32 venc_reg_merge(u32 offset, u32 val, u32 mask)
 
 	addr = venc->venc_base + offset;
 
-	new_val = (__raw_readl(addr) & ~mask) | (val & mask);
-	__raw_writel(new_val, addr);
+	new_val = (__raw_readl((volatile void __iomem *)addr) & ~mask) | (val & mask);
+	__raw_writel(new_val, (volatile void __iomem *)addr);
 	return (new_val);
 }
 EXPORT_SYMBOL(venc_reg_merge);
@@ -361,8 +364,7 @@ static ssize_t osd_basepy_store(struct device *cdev, struct device_attribute *at
 }
 
 #define DECLARE_ATTR(_name, _mode, _show, _store) {		\
-	.attr   = { .name = __stringify(_name), .mode = _mode,	\
-		    .owner = THIS_MODULE },  			\
+	.attr   = { .name = __stringify(_name), .mode = _mode },	\
 	.show   = _show,                                        \
 	.store  = _store,}
 
@@ -548,15 +550,15 @@ static void enableDigitalOutput(int bEnable)
 		/*if (cpu_is_davinci_dm368()) {
 			enable_lcd();
 
-			/* Select EXTCLK as video clock source */
+
 			__raw_writel(0x1a, IO_ADDRESS(SYS_VPSS_CLKCTL));
 
-			/* Set PINMUX for GPIO82 */			
+
 			davinci_cfg_reg(DM365_GPIO82);
 			
 			gpio_request(82, "lcd_oe");
 			
-			/* Set GPIO82 low */
+
 			gpio_direction_output(82, 0);
 			gpio_set_value(82, 0);
 		}*/
@@ -731,7 +733,7 @@ static void davinci_enc_set_525p(struct vid_enc_mode_info *mode_info)
 
 	if (cpu_is_davinci_dm365()) {
 		dispc_reg_out(VENC_CLKCTL, 0x01);
-		ths7303_setval(THS7303_FILTER_MODE_480P_576P);
+		//ths7303_setval(THS7303_FILTER_MODE_480P_576P);
 		msleep(40);
 		__raw_writel(0x081141EF, IO_ADDRESS(DM3XX_VDAC_CONFIG));
 	}
@@ -774,7 +776,7 @@ static void davinci_enc_set_625p(struct vid_enc_mode_info *mode_info)
 
 	if (cpu_is_davinci_dm365()) {
 		dispc_reg_out(VENC_CLKCTL, 0x01);
-		ths7303_setval(THS7303_FILTER_MODE_480P_576P);
+		//ths7303_setval(THS7303_FILTER_MODE_480P_576P);
 		msleep(40);
 		__raw_writel(0x081141EF, IO_ADDRESS(DM3XX_VDAC_CONFIG));
 	}
@@ -939,7 +941,6 @@ static void davinci_enc_set_prgb(struct vid_enc_mode_info *mode_info)
 	dispc_reg_out(VENC_LCDOUT, 0x1);
 
 	/*if (cpu_is_davinci_dm368()) {
-		/* Turn on LCD display */
 		mdelay(200);
 		gpio_set_value(82, 1);
 	}*/
@@ -1131,7 +1132,7 @@ static void davinci_enc_set_internal_hd(struct vid_enc_mode_info *mode_info)
 	if (davinci_enc_select_venc_clock(VENC_74_25MHZ) < 0)
 		dev_err(venc->vdev, "PLL's doesnot yield required VENC clk\n");
 
-	ths7303_setval(THS7303_FILTER_MODE_720P_1080I);
+	//ths7303_setval(THS7303_FILTER_MODE_720P_1080I);
 	msleep(50);
 	__raw_writel(0x081141EF, IO_ADDRESS(DM3XX_VDAC_CONFIG));
 	return;
@@ -1247,7 +1248,7 @@ EXPORT_SYMBOL(davinci_enc_set_mode_platform);
 
 int davinci_disp_is_second_field(void)
 {
-	return ((__raw_readl(venc->venc_base + VENC_VSTAT) & VENC_VSTAT_FIDST)
+	return ((__raw_readl((volatile void *)(venc->venc_base + VENC_VSTAT)) & VENC_VSTAT_FIDST)
 		== VENC_VSTAT_FIDST);
 }
 EXPORT_SYMBOL(davinci_disp_is_second_field);

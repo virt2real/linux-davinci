@@ -27,7 +27,7 @@
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/videodev2.h>
-#include <linux/davinci_user.h>
+#include <linux/slab.h>
 #include <mach/mux.h>
 #include <media/davinci/dm365_ccdc.h>
 #include <media/davinci/vpss.h>
@@ -75,7 +75,7 @@ static struct ccdc_config_params_raw ccdc_config_defaults = {
 
 /* ISIF operation configuration */
 struct ccdc_oper_config {
-	enum v4l2_mbus_pixelcode if_type;
+	enum vpfe_hw_if_type if_type;
 	struct ccdc_ycbcr_config ycbcr;
 	struct ccdc_params_raw bayer;
 	enum ccdc_data_pack data_pack;
@@ -109,21 +109,21 @@ static struct ccdc_oper_config ccdc_cfg = {
 			.b_mg = {1, 0},
 		},
 		.cfa_pat = CCDC_CFA_PAT_MOSAIC,
-		.data_msb = CCDC_BIT_MSB_11,
+		.data_msb = CCDC_BIT_MSB_7,
 		.config_params = {
-			.data_size = CCDC_12_BITS,
+			.data_size = CCDC_10_BITS,
 			.data_shift = CCDC_NO_SHIFT,
 			.col_pat_field0 = {
-				.olop = CCDC_GREEN_BLUE,
-				.olep = CCDC_BLUE,
-				.elop = CCDC_RED,
-				.elep = CCDC_GREEN_RED,
+				.olop = CCDC_BLUE,//CCDC_GREEN_BLUE,
+				.olep = CCDC_GREEN_RED,//CCDC_BLUE,
+				.elop = CCDC_GREEN_BLUE,//CCDC_RED,
+				.elep = CCDC_RED,//CCDC_GREEN_RED,
 			},
-			.col_pat_field1 = {
-				.olop = CCDC_GREEN_BLUE,
-				.olep = CCDC_BLUE,
-				.elop = CCDC_RED,
-				.elep = CCDC_GREEN_RED,
+			.col_pat_field0 = {
+				.olop = CCDC_BLUE,//CCDC_GREEN_BLUE,
+				.olep = CCDC_GREEN_RED,//CCDC_BLUE,
+				.elop = CCDC_GREEN_BLUE,//CCDC_RED,
+				.elep = CCDC_RED,//CCDC_GREEN_RED,
 			},
 			.test_pat_gen = 0,
 		},
@@ -132,12 +132,12 @@ static struct ccdc_oper_config ccdc_cfg = {
 };
 
 /* Raw Bayer formats */
-static u32 ccdc_raw_bayer_pix_formats[] = { V4L2_PIX_FMT_SBGGR8,
-					      V4L2_PIX_FMT_SBGGR16};
+static u32 ccdc_raw_bayer_pix_formats[] =
+		{V4L2_PIX_FMT_SBGGR8, V4L2_PIX_FMT_SBGGR16};
 
 /* Raw YUV formats */
-static u32 ccdc_raw_yuv_pix_formats[] = { V4L2_PIX_FMT_UYVY,
-					      V4L2_PIX_FMT_YUYV };
+static u32 ccdc_raw_yuv_pix_formats[] =
+		{V4L2_PIX_FMT_UYVY, V4L2_PIX_FMT_YUYV};
 
 /* register access routines */
 static inline u32 regr(u32 offset)
@@ -147,11 +147,7 @@ static inline u32 regr(u32 offset)
 
 static inline void regw(u32 val, u32 offset)
 {
-	u32 read_value;
-
 	__raw_writel(val, ccdc_cfg.base_addr + offset);
-
-	read_value = __raw_readl(ccdc_cfg.base_addr + offset);
 }
 
 static inline u32 ccdc_merge(u32 mask, u32 val, u32 offset)
@@ -647,11 +643,6 @@ static int ccdc_config_raw(int mode)
 
 	dev_dbg(dev, "\nStarting ccdc_config_raw..\n");
 
-	/* In case of user has set BT656IF earlier, it should be reset
-	   when configuring for raw input.
-	 */
-	regw(0, REC656IF);
-
 	/* Configure CCDCFG register */
 
 	/**
@@ -668,7 +659,7 @@ static int ccdc_config_raw(int mode)
 		CCDC_CCDCFG_EXTRG_DISABLE | (ccdc_cfg.data_pack &
 		CCDC_DATA_PACK_MASK);
 
-	dev_dbg(dev, "Writing 0x%x to ...CCDCFG\n", val);
+	dev_dbg(dev, "Writing 0x%x to ...CCDCFG \n", val);
 	regw(val, CCDCFG);
 
 	/**
@@ -710,7 +701,7 @@ static int ccdc_config_raw(int mode)
 
 	val = val | ((params->data_msb & CCDC_ALAW_GAMA_WD_MASK) <<
 			CCDC_ALAW_GAMA_WD_SHIFT);
-
+    printk("VPFE REG GAMMAWD = %x\r\n", val);
 	regw(val, CGAMMAWD);
 
 	/* Configure DPCM compression settings */
@@ -824,8 +815,8 @@ static int ccdc_config_raw(int mode)
 static int ccdc_validate_df_csc_params(struct ccdc_df_csc *df_csc)
 {
 	struct ccdc_color_space_conv *csc;
-	int err = -EINVAL;
 	int i, csc_df_en = 0;
+	int err = -EINVAL;
 
 	if (!df_csc->df_or_csc) {
 		/* csc configuration */
@@ -1023,7 +1014,7 @@ exit:
 
 static int ccdc_set_buftype(enum ccdc_buftype buf_type)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		ccdc_cfg.bayer.buf_type = buf_type;
 	else
 		ccdc_cfg.ycbcr.buf_type = buf_type;
@@ -1033,7 +1024,7 @@ static int ccdc_set_buftype(enum ccdc_buftype buf_type)
 }
 static enum ccdc_buftype ccdc_get_buftype(void)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		return ccdc_cfg.bayer.buf_type;
 
 	return ccdc_cfg.ycbcr.buf_type;
@@ -1043,7 +1034,7 @@ static int ccdc_enum_pix(u32 *pix, int i)
 {
 	int ret = -EINVAL;
 
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10) {
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER) {
 		if (i < ARRAY_SIZE(ccdc_raw_bayer_pix_formats)) {
 			*pix = ccdc_raw_bayer_pix_formats[i];
 			ret = 0;
@@ -1060,7 +1051,7 @@ static int ccdc_enum_pix(u32 *pix, int i)
 
 static int ccdc_set_pixel_format(unsigned int pixfmt)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10) {
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER) {
 		if (pixfmt == V4L2_PIX_FMT_SBGGR8) {
 			if ((ccdc_cfg.bayer.config_params.compress.alg !=
 					CCDC_ALAW) &&
@@ -1075,9 +1066,8 @@ static int ccdc_set_pixel_format(unsigned int pixfmt)
 			ccdc_cfg.bayer.config_params.compress.alg =
 					CCDC_NO_COMPRESSION;
 			ccdc_cfg.data_pack = CCDC_PACK_16BIT;
-		} else {
+		} else
 			return -EINVAL;
-		}
 		ccdc_cfg.bayer.pix_fmt = CCDC_PIXFMT_RAW;
 	} else {
 		if (pixfmt == V4L2_PIX_FMT_YUYV)
@@ -1095,7 +1085,7 @@ static u32 ccdc_get_pixel_format(void)
 {
 	u32 pixfmt;
 
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		if (ccdc_cfg.bayer.config_params.compress.alg
 			== CCDC_ALAW
 			|| ccdc_cfg.bayer.config_params.compress.alg
@@ -1114,7 +1104,7 @@ static u32 ccdc_get_pixel_format(void)
 
 static int ccdc_set_image_window(struct v4l2_rect *win)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10) {
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER) {
 		ccdc_cfg.bayer.win.top = win->top;
 		ccdc_cfg.bayer.win.left = win->left;
 		ccdc_cfg.bayer.win.width = win->width;
@@ -1130,7 +1120,7 @@ static int ccdc_set_image_window(struct v4l2_rect *win)
 
 static void ccdc_get_image_window(struct v4l2_rect *win)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		*win = ccdc_cfg.bayer.win;
 	else
 		*win = ccdc_cfg.ycbcr.win;
@@ -1140,7 +1130,7 @@ static unsigned int ccdc_get_line_length(void)
 {
 	unsigned int len;
 
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10) {
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER) {
 		if (ccdc_cfg.data_pack == CCDC_PACK_8BIT)
 			len = ((ccdc_cfg.bayer.win.width));
 		else if (ccdc_cfg.data_pack == CCDC_PACK_12BIT)
@@ -1156,7 +1146,7 @@ static unsigned int ccdc_get_line_length(void)
 
 static int ccdc_set_frame_format(enum ccdc_frmfmt frm_fmt)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		ccdc_cfg.bayer.frm_fmt = frm_fmt;
 	else
 		ccdc_cfg.ycbcr.frm_fmt = frm_fmt;
@@ -1165,7 +1155,7 @@ static int ccdc_set_frame_format(enum ccdc_frmfmt frm_fmt)
 }
 static enum ccdc_frmfmt ccdc_get_frame_format(void)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		return ccdc_cfg.bayer.frm_fmt;
 	else
 		return ccdc_cfg.ycbcr.frm_fmt;
@@ -1188,18 +1178,18 @@ static int ccdc_set_hw_if_params(struct vpfe_hw_if_param *params)
 	ccdc_cfg.if_type = params->if_type;
 
 	switch (params->if_type) {
-	case V4L2_MBUS_FMT_YUYV8_2X8:
-	case V4L2_MBUS_FMT_YUYV10_2X10:
-	case V4L2_MBUS_FMT_Y8_1X8:
+	case VPFE_BT656:
+	case VPFE_BT656_10BIT:
+	case VPFE_YCBCR_SYNC_8:
 		ccdc_cfg.ycbcr.pix_fmt = CCDC_PIXFMT_YCBCR_8BIT;
 		ccdc_cfg.ycbcr.pix_order = CCDC_PIXORDER_CBYCRY;
 		break;
-	case V4L2_MBUS_FMT_YUYV10_1X20:
-	case V4L2_MBUS_FMT_YUYV8_1X16:
+	case VPFE_BT1120:
+	case VPFE_YCBCR_SYNC_16:
 		ccdc_cfg.ycbcr.pix_fmt = CCDC_PIXFMT_YCBCR_16BIT;
 		ccdc_cfg.ycbcr.pix_order = CCDC_PIXORDER_CBYCRY;
 		break;
-	case V4L2_MBUS_FMT_SBGGR10_1X10:
+	case VPFE_RAW_BAYER:
 		ccdc_cfg.bayer.pix_fmt = CCDC_PIXFMT_RAW;
 		break;
 	default:
@@ -1211,39 +1201,54 @@ static int ccdc_set_hw_if_params(struct vpfe_hw_if_param *params)
 }
 
 /* Parameter operations */
-static int ccdc_get_params(void *params)
+static int ccdc_get_params(void __user *params)
 {
 	/* only raw module parameters can be set through the IOCTL */
-	if (ccdc_cfg.if_type != V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type != VPFE_RAW_BAYER)
 		return -EINVAL;
 
-	memcpy(params,
+	if (copy_to_user(params,
 			&ccdc_cfg.bayer.config_params,
-			sizeof(ccdc_cfg.bayer.config_params));
-
+			sizeof(ccdc_cfg.bayer.config_params))) {
+		dev_dbg(dev, "ccdc_get_params: error in copying ccdc params\n");
+		return -EFAULT;
+	}
 	return 0;
 }
 
 /* Parameter operations */
-static int ccdc_set_params(void *params)
+static int ccdc_set_params(void __user *params)
 {
-	struct ccdc_config_params_raw ccdc_raw_params;
+	struct ccdc_config_params_raw *ccdc_raw_params;
 	int ret = -EINVAL;
 
 	/* only raw module parameters can be set through the IOCTL */
-	if (ccdc_cfg.if_type != V4L2_MBUS_FMT_SBGGR10_1X10)
+	if (ccdc_cfg.if_type != VPFE_RAW_BAYER)
 		return ret;
 
-	memcpy(&ccdc_raw_params, params, sizeof(ccdc_raw_params));
+	ccdc_raw_params = kzalloc(sizeof(*ccdc_raw_params), GFP_KERNEL);
 
-	if (!validate_ccdc_config_params_raw(&ccdc_raw_params)) {
+	if (NULL == ccdc_raw_params)
+		return -ENOMEM;
+
+	ret = copy_from_user(ccdc_raw_params,
+			     params, sizeof(*ccdc_raw_params));
+	if (ret) {
+		dev_dbg(dev, "ccdc_set_params: error in copying ccdc"
+			"params, %d\n", ret);
+		ret = -EFAULT;
+		goto free_out;
+	}
+
+	if (!validate_ccdc_config_params_raw(ccdc_raw_params)) {
 		memcpy(&ccdc_cfg.bayer.config_params,
-			&ccdc_raw_params,
-			sizeof(ccdc_raw_params));
+			ccdc_raw_params,
+			sizeof(*ccdc_raw_params));
 		ret = 0;
 	} else
 		ret = -EINVAL;
-
+free_out:
+	kfree(ccdc_raw_params);
 	return ret;
 }
 
@@ -1273,7 +1278,7 @@ static int ccdc_config_ycbcr(int mode)
 
 	/* pack the data to 8-bit CCDCCFG */
 	switch (ccdc_cfg.if_type) {
-	case V4L2_MBUS_FMT_YUYV8_2X8:
+	case VPFE_BT656:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
 			return -1;
@@ -1284,7 +1289,7 @@ static int ccdc_config_ycbcr(int mode)
 		regw(3, REC656IF);
 		ccdcfg = ccdcfg | CCDC_DATA_PACK8 | CCDC_YCINSWP_YCBCR;
 		break;
-	case V4L2_MBUS_FMT_YUYV10_2X10:
+	case VPFE_BT656_10BIT:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
 			return -1;
@@ -1295,7 +1300,7 @@ static int ccdc_config_ycbcr(int mode)
 		ccdcfg = ccdcfg | CCDC_DATA_PACK8 | CCDC_YCINSWP_YCBCR |
 			CCDC_BW656_ENABLE;
 		break;
-	case V4L2_MBUS_FMT_YUYV10_1X20:
+	case VPFE_BT1120:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_16BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
 			return -EINVAL;
@@ -1303,7 +1308,7 @@ static int ccdc_config_ycbcr(int mode)
 		regw(3, REC656IF);
 		break;
 
-	case V4L2_MBUS_FMT_Y8_1X8:
+	case VPFE_YCBCR_SYNC_8:
 		ccdcfg |= CCDC_DATA_PACK8;
 		ccdcfg |= CCDC_YCINSWP_YCBCR;
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
@@ -1311,7 +1316,7 @@ static int ccdc_config_ycbcr(int mode)
 			return -EINVAL;
 		}
 		break;
-	case V4L2_MBUS_FMT_YUYV8_1X16:
+	case VPFE_YCBCR_SYNC_16:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_16BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
 			return -EINVAL;
@@ -1332,8 +1337,8 @@ static int ccdc_config_ycbcr(int mode)
 	regw(ccdcfg, CCDCFG);
 
 	/* configure video window */
-	if ((ccdc_cfg.if_type == V4L2_MBUS_FMT_YUYV10_1X20) ||
-	    (ccdc_cfg.if_type == V4L2_MBUS_FMT_YUYV8_1X16))
+	if ((ccdc_cfg.if_type == VPFE_BT1120) ||
+	    (ccdc_cfg.if_type == VPFE_YCBCR_SYNC_16))
 		ccdc_setwin(&params->win, params->frm_fmt, 1, mode);
 	else
 		ccdc_setwin(&params->win, params->frm_fmt, 2, mode);
@@ -1365,7 +1370,9 @@ static int ccdc_config_ycbcr(int mode)
 
 static int ccdc_configure(int mode)
 {
-	if (ccdc_cfg.if_type == V4L2_MBUS_FMT_SBGGR10_1X10)
+	printk("CCDC CONFIGURE");
+	return ccdc_config_raw(mode);
+	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		return ccdc_config_raw(mode);
 	else
 		ccdc_config_ycbcr(mode);
@@ -1384,7 +1391,7 @@ static int ccdc_close(struct device *device)
 }
 
 static struct ccdc_hw_device ccdc_hw_dev = {
-	.name = "dm365_isif",
+	.name = "DM365 ISIF",
 	.owner = THIS_MODULE,
 	.hw_ops = {
 		.open = ccdc_open,
@@ -1410,18 +1417,20 @@ static struct ccdc_hw_device ccdc_hw_dev = {
 	},
 };
 
-struct ccdc_hw_device *get_ccdc_dev(void)
-{
-	return &ccdc_hw_dev;
-}
-EXPORT_SYMBOL(get_ccdc_dev);
-
-int dm365_ccdc_init(struct platform_device *pdev)
+static int dm365_ccdc_probe(struct platform_device *pdev)
 {
 	static resource_size_t  res_len;
 	struct resource	*res;
 	void *__iomem addr;
 	int status = 0, i;
+    printk("PROBE CCDC\r\n");
+	/**
+	 * first try to register with vpfe. If not correct platform, then we
+	 * don't have to iomap
+	 */
+	status = vpfe_register_ccdc_device(&ccdc_hw_dev);
+	if (status < 0)
+		return status;
 
 	i = 0;
 	/* Get the ISIF base address, linearization table0 and table1 addr. */
@@ -1459,16 +1468,18 @@ int dm365_ccdc_init(struct platform_device *pdev)
 		i++;
 	}
 
-	davinci_cfg_reg(DM365_VIN_CAM_WEN);
+	//davinci_cfg_reg(DM365_VIN_CAM_WEN);
 	davinci_cfg_reg(DM365_VIN_CAM_VD);
 	davinci_cfg_reg(DM365_VIN_CAM_HD);
 	davinci_cfg_reg(DM365_VIN_YIN4_7_EN);
 	davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
-
+	printk("CCDC_CONFIGURE BEFORE\r\n");
+	ccdc_hw_dev.hw_ops.configure(0);
 	printk(KERN_NOTICE "%s is registered with vpfe.\n",
 		ccdc_hw_dev.name);
 	return 0;
 fail_base_iomap:
+
 	release_mem_region(res->start, res_len);
 	i--;
 fail_nobase_res:
@@ -1482,11 +1493,11 @@ fail_nobase_res:
 		release_mem_region(res->start, res_len);
 		i--;
 	}
-
+	vpfe_unregister_ccdc_device(&ccdc_hw_dev);
 	return status;
 }
 
-void dm365_ccdc_remove(struct platform_device *pdev)
+static int dm365_ccdc_remove(struct platform_device *pdev)
 {
 	struct resource	*res;
 	int i = 0;
@@ -1501,4 +1512,31 @@ void dm365_ccdc_remove(struct platform_device *pdev)
 					   res->end - res->start + 1);
 		i++;
 	}
+	vpfe_unregister_ccdc_device(&ccdc_hw_dev);
+	return 0;
 }
+
+static struct platform_driver dm365_ccdc_driver = {
+	.driver = {
+		.name	= "dm365_isif",
+		.owner = THIS_MODULE,
+	},
+	.remove = (dm365_ccdc_remove),
+	.probe = dm365_ccdc_probe,
+};
+
+static int dm365_ccdc_init(void)
+{
+	return platform_driver_register(&dm365_ccdc_driver);
+}
+
+
+static void dm365_ccdc_exit(void)
+{
+	platform_driver_unregister(&dm365_ccdc_driver);
+}
+
+module_init(dm365_ccdc_init);
+module_exit(dm365_ccdc_exit);
+
+MODULE_LICENSE("GPL");

@@ -1060,9 +1060,13 @@ fb_blank(struct fb_info *info, int blank)
 	if (info->fbops->fb_blank)
  		ret = info->fbops->fb_blank(blank, info);
 
-	if (!ret)
+ 	if (!ret) {
+		struct fb_event event;
+
+		event.info = info;
+		event.data = &blank;
 		fb_notifier_call_chain(FB_EVENT_BLANK, &event);
-	else {
+ 	} else {
 		/*
 		 * if fb_blank is failed then revert effects of
 		 * the early blank event.

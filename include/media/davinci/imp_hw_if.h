@@ -50,18 +50,6 @@ struct imp_hw_interface {
 	 */
 	struct prev_module_if *(*prev_enum_modules) (struct device *dev,
 						     int index);
-							 	/*
-	 * set operating mode for IPIPE; 1-single shot, 0-continous
-	 */
-	int (*set_oper_mode) (unsigned int mode);
-	/*
-	 * reset operating mode for IPIPE;
-	 */
-	void (*reset_oper_mode) (void);
-	/*
-	 *  get IPIPE operation mode
-	 */
-	unsigned int (*get_oper_mode) (void);
 	/*
 	 *  get preview operation mode
 	 */
@@ -140,8 +128,6 @@ struct imp_hw_interface {
 	 * shared channel is assumed
 	 */
 	int (*hw_setup) (struct device *dev, void *config);
-	/* Get imp engine irq number */
-	void (*get_imp_irq) (struct irq_numbers *irq);
 	/* Get preview irq numbers */
 	void (*get_preview_irq) (struct irq_numbers *irq);
 	/* Get resize irq numbers */

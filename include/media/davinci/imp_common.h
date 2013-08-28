@@ -23,7 +23,6 @@
 #define IMP_MODE_CONTINUOUS	0
 #define	IMP_MODE_SINGLE_SHOT	1
 #define IMP_MODE_INVALID	2
-#define IMP_MODE_NOT_CONFIGURED	4
 #define IMP_MAX_NAME_SIZE	40
 
 /* input buffer */

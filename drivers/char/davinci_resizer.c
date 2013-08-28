@@ -449,7 +449,7 @@ int rsz_start(struct rsz_resize *resize, struct channel_config *rsz_conf_chan)
 	/* Initialize the interrupt ISR to ZER0 */
 	device_config.sem_isr.done = ZERO;
 	/* Function call to enable resizer hardware */
-	ret = rsz_enable_dr(rsz_conf_chan);
+	ret = rsz_enable_dvrz(rsz_conf_chan);
 
 	dev_dbg(rsz_device, "After ENABLE PCR = %x", regr(PCR));
 
@@ -1268,7 +1268,9 @@ static long rsz_ioctl(struct file *file,
 	 * get the configuratin of this channel from private_data member
 	 * of file
 	 */
-	struct channel_config *rsz_conf_chan;
+	struct channel_config *rsz_conf_chan =
+	    (struct channel_config *) file->private_data;
+
 	/* Create the structures of different parameters passed by user */
 	struct rsz_priority *prio;
 	struct rsz_status *status;
@@ -1487,7 +1489,7 @@ static struct device_driver resizer_driver = {
 /*
  * function to register resizer character driver
  */
-static int __init rsz_init(void)
+static int rsz_init(void)
 {
 	int result;
 
@@ -1573,7 +1575,7 @@ static int __init rsz_init(void)
 /*
  * Function is called by the kernel. It unregister the device.
  */
-void __exit rsz_cleanup(void)
+static void __exit rsz_cleanup(void)
 {
 	device_destroy(rsz_class, dev);
 

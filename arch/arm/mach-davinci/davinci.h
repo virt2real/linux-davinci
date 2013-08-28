@@ -29,12 +29,9 @@
 
 #include <media/davinci/vpfe_types.h>
 #include <media/davinci/vpfe_capture.h>
-#include <media/davinci/vpif_types.h>
-#include <media/davinci/vpss.h>
-#include <media/davinci/vpbe_types.h>
-#include <media/davinci/vpbe_venc.h>
-#include <media/davinci/vpbe.h>
-#include <media/davinci/vpbe_osd.h>
+#include <video/davinci_osd.h>
+#include <video/davinci_vpbe.h>
+
 
 //#define DAVINCI_SYSTEM_MODULE_BASE	0x01c40000
 #define SYSMOD_VDAC_CONFIG		0x2c
@@ -74,12 +71,9 @@ void davinci_map_sysmod(void);
 void __init dm365_init(void);
 void __init dm365_init_asp(struct snd_platform_data *pdata);
 void __init dm365_init_vc(struct snd_platform_data *pdata);
-void __init dm365_init_ks(struct davinci_ks_platform_data *pdata);
 void __init dm365_init_rtc(void);
-void dm365_init_spi0(unsigned chipselect_mask,
-			struct spi_board_info *info, unsigned len);
+
 
 void dm365_set_vpfe_config(struct vpfe_config *cfg);
-void dm365_set_vpbe_display_config(struct vpbe_display_config *cfg);
 void __init davinci_setup_usb(unsigned mA, unsigned potpgt_ms);
 #endif /* __ASM_ARCH_DM365_H */

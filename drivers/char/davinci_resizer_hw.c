@@ -104,7 +104,7 @@ void rsz_hardware_setup(struct channel_config *rsz_conf_chan)
 /*
  * Function to enable the resizer
  */
-int rsz_enable_dr(struct channel_config *rsz_conf_chan)
+int rsz_enable_dvrz(struct channel_config *rsz_conf_chan)
 {
 	/* Eanbling the resizer the setting enable bit */
 	rsz_conf_chan->register_config.rsz_pcr =

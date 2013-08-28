@@ -640,7 +640,7 @@ static int vpss_probe(struct platform_device *pdev)
 		/* INT0, INT1, AF */
 		isp5_write((isp5_read(0x10) | 0x0b1f0100), 0x10);
 		/* AEW, RSZ_INT_DMA */
-		isp5_write((isp5_read(0x14) | 0x1f0a0f1f), 0x14);
+		isp5_write((isp5_read(0x14) | 0x1f0a0f0d), 0x14);
 		/* VENC */
 		isp5_write((isp5_read(0x18) | 0x00000015), 0x18);
 		/* No event selected */

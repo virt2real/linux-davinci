@@ -34,6 +34,8 @@
 #include <linux/mutex.h>
 #include <linux/videodev2.h>
 #include <linux/gcd.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
 #include <asm/pgtable.h>
 #include <mach/cputype.h>
 #include <media/davinci/davinci_enc.h>
@@ -1379,7 +1381,7 @@ static int vpbe_reqbufs(struct file *file, void *priv,
 					    &layer->irqlock,
 					    V4L2_BUF_TYPE_VIDEO_OUTPUT,
 					    layer->pix_fmt.field,
-					    sizeof(struct videobuf_buffer), fh, 0);
+					    sizeof(struct videobuf_buffer), fh);
 
 	/* Set io allowed member of file handle to TRUE */
 	fh->io_allowed = 1;
@@ -1850,7 +1852,7 @@ static int davinci_release(struct file *filep)
 	memset(&layer->tpf_info, 0, sizeof(struct davinci_timeperframe_info));
 
 	/* Close the priority */
-	v4l2_prio_close(&layer->prio, fh->prio);
+	v4l2_prio_close(&layer->prio, &fh->prio);
 	filep->private_data = NULL;
 
 	/* Free memory allocated to file handle object */
@@ -1909,7 +1911,7 @@ static const struct v4l2_ioctl_ops vpbe_ioctl_ops = {
  * This function creates device entries by register itself to the V4L2 driver
  * and initializes fields of each layer objects
  */
-static __init int davinci_probe(struct device *device)
+static int davinci_probe(struct device *device)
 {
 	int i, j = 0, k, err = 0;
 	struct video_device *vbd = NULL;

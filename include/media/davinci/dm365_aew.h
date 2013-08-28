@@ -75,10 +75,13 @@
 
 
 /* List of ioctls */
+#pragma pack(1)
 #define AEW_MAGIC_NO	'e'
-#define AEW_S_PARAM	_IOWR(AEW_MAGIC_NO, 1, struct aew_configuration)
-#define AEW_G_PARAM	_IOWR(AEW_MAGIC_NO, 2, struct aew_configuration)
-#define AEW_GET_STAT	_IOWR(AEW_MAGIC_NO, 5, struct aew_statdata)
+#define AEW_S_PARAM	_IOWR(AEW_MAGIC_NO, 1, struct aew_configuration *)
+#define AEW_G_PARAM	_IOWR(AEW_MAGIC_NO, 2, struct aew_configuration *)
+#define AEW_ENABLE	_IO(AEW_MAGIC_NO, 3)
+#define AEW_DISABLE	_IO(AEW_MAGIC_NO, 4)
+#pragma  pack()
 
 /* Enum for device usage */
 enum aew_in_use_flag {
@@ -163,12 +166,6 @@ struct aew_configuration {
 	/* Black Window */
 	struct aew_black_window blackwindow_config;
 };
-
-struct aew_statdata {
-	void *buffer;
-	int buf_length;
-};
-
 #ifdef __KERNEL__
 /* Contains information about device structure of AEW*/
 struct aew_device {
@@ -198,6 +195,5 @@ struct aew_device {
 
 int aew_hardware_setup(void);
 int aew_validate_parameters(void);
-void dump_aew_regs(void);
 #endif				/* End of #ifdef __KERNEL__ */
 #endif				/*End of DM365_AEW_H */

@@ -46,7 +46,7 @@
 #include <asm/irq.h>
 #include <asm/page.h>
 #include <mach/hardware.h>
-
+#define CONFIG_PREEMPT_RT
 #ifdef CONFIG_PREEMPT_RT
 #include <linux/completion.h>
 #endif

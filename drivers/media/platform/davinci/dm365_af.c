@@ -28,17 +28,22 @@
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
 #include <linux/major.h>
+#include <linux/sched.h>
 #include <media/v4l2-device.h>
 #include <media/davinci/dm365_a3_hw.h>
 #include <media/davinci/vpss.h>
-#include <media/davinci/vpfe_af.h>
 
-#define DRIVERNAME  "DM365AF"
 
 /*Global structure for device */
 static struct af_device *af_dev_configptr;
 
-static struct device *afdev;
+/* For registeration of character device */
+static struct cdev c_dev;
+
+/* device structure to make entry in device */
+static struct class *af_class;
+static dev_t dev;
+struct device *afdev;
 
 /* inline function to free reserver pages  */
 inline void af_free_pages(unsigned long addr, unsigned long bufsize)
@@ -353,8 +358,14 @@ static int af_hardware_setup(void)
 	return 0;
 }
 
-int dm365_af_open(void)
+/*
+ * This function called when driver is opened.It creates Channel
+ * Configuration Structure
+ */
+static int af_open(struct inode *inode, struct file *filp)
 {
+	dev_dbg(afdev, "E\n");
+
 	/* Return if device is in use */
 	if (af_dev_configptr->in_use == AF_IN_USE)
 		return -EBUSY;
@@ -368,23 +379,31 @@ int dm365_af_open(void)
 		return -ENOMEM;
 	}
 
+	/* Initialize the wait queue */
+	init_waitqueue_head(&(af_dev_configptr->af_wait_queue));
+
 	/* Driver is in use */
 	af_dev_configptr->in_use = AF_IN_USE;
 
 	/* Hardware is not set up */
 	af_dev_configptr->af_config = H3A_AF_CONFIG_NOT_DONE;
-
-	/* No statistics are available */
 	af_dev_configptr->buffer_filled = 0;
 
+	/* Initialize the mutex */
+	mutex_init(&(af_dev_configptr->read_blocked));
+	dev_dbg(afdev, "L\n");
 	return 0;
 }
-EXPORT_SYMBOL(dm365_af_open);
 
-int dm365_af_release(void)
+/*
+ * This function called when driver is closed.
+ * It will deallocate all the buffers.
+ */
+static int af_release(struct inode *inode, struct file *filp)
 {
-	af_engine_setup(afdev, 0);
+	dev_dbg(afdev, "E\n");
 
+	af_engine_setup(afdev, 0);
 	/* free current buffer */
 	if (af_dev_configptr->buff_curr)
 		af_free_pages((unsigned long)af_dev_configptr->buff_curr,
@@ -410,20 +429,65 @@ int dm365_af_release(void)
 	/* Device is not in use */
 	af_dev_configptr->in_use = AF_NOT_IN_USE;
 
+	dev_dbg(afdev, "L\n");
+
 	return 0;
 }
-EXPORT_SYMBOL(dm365_af_release);
+static void af_platform_release(struct device *device)
+{
+	/* This is called when the reference count goes to zero */
+}
+static int af_probe(struct device *device)
+{
+	afdev = device;
+	return 0;
+}
+
+static int af_remove(struct device *device)
+{
+	return 0;
+}
 
 /*
  * This function will process IOCTL commands sent by the application and
  * control the device IO operations.
  */
-int dm365_af_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+static long af_ioctl(struct file *filep,
+		    unsigned int cmd, unsigned long arg)
 {
 	struct af_configuration afconfig = *(af_dev_configptr->config);
-	struct af_statdata *stat_data = (struct af_statdata *)arg;
-	void *buff_temp;
 	int result = 0;
+	dev_dbg(afdev, "E\n");
+
+	/* Block the mutex while ioctl is called */
+	result = mutex_lock_interruptible(&af_dev_configptr->read_blocked);
+	if (result)
+		return result;
+
+	/* Extract the type and number bitfields, and don't decode wrong cmds */
+	if (_IOC_TYPE(cmd) != AF_MAGIC_NO) {
+		mutex_unlock(&af_dev_configptr->read_blocked);
+		return -ENOTTY;
+	}
+
+	if (_IOC_NR(cmd) > AF_IOC_MAXNR) {
+		mutex_unlock(&af_dev_configptr->read_blocked);
+		return -ENOTTY;
+	}
+
+	/* Use 'access_ok' to validate user space pointer */
+	if (_IOC_DIR(cmd) & _IOC_READ)
+		result =
+		    !access_ok(VERIFY_WRITE, (void __user *)arg,
+			       _IOC_SIZE(cmd));
+	else if (_IOC_DIR(cmd) & _IOC_WRITE)
+		result =
+		    !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+
+	if (result) {
+		mutex_unlock(&af_dev_configptr->read_blocked);
+		return -EFAULT;
+	}
 
 	switch (cmd) {
 
@@ -432,21 +496,20 @@ int dm365_af_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 		 * set up for AF Engine. It will configure all the registers.
 		 */
 	case AF_S_PARAM:
-		memcpy(af_dev_configptr->config,
+		if (copy_from_user(af_dev_configptr->config,
 				   (struct af_configuration *)arg,
-				   sizeof(struct af_configuration));
+				   sizeof(struct af_configuration))) {
+			/* Release the semaphore */
+			mutex_unlock(&af_dev_configptr->read_blocked);
+			return -EFAULT;
+		}
 
 		/* Call AF_hardware_setup to perform register configuration */
 		result = af_hardware_setup();
 		if (!result) {
-			/*
-			 * Hardware Set up is successful
-			 * Return the no of bytes required for buffer
-			 */
 			result = af_dev_configptr->size_paxel;
 		} else {
 			dev_err(afdev, "Error : AF_S_PARAM failed");
-			/* Change Configuration Structure to original */
 			*(af_dev_configptr->config) = afconfig;
 		}
 		break;
@@ -455,10 +518,14 @@ int dm365_af_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 	case AF_G_PARAM:
 		/* Check if Hardware is configured or not */
 		if (af_dev_configptr->af_config == H3A_AF_CONFIG) {
-			memcpy((struct af_configuration *)arg,
+			if (copy_to_user((struct af_configuration *)arg,
 					 af_dev_configptr->config,
-					 sizeof(struct af_configuration));
-			result = af_dev_configptr->size_paxel;
+					 sizeof(struct af_configuration))) {
+				mutex_unlock(&af_dev_configptr->read_blocked);
+				return -EFAULT;
+			} else
+				result = af_dev_configptr->size_paxel;
+
 		} else {
 			dev_dbg(afdev, "Error : AF Hardware not configured.");
 			result = -EINVAL;
@@ -466,14 +533,82 @@ int dm365_af_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 
 		break;
 
-	case AF_GET_STAT:
-		/* Implement the read  functionality */
-		if (af_dev_configptr->buffer_filled != 1)
-			return -EINVAL;
+		/*
+		 * This ioctl will enable AF Engine if hardware configuration
+		 * is done
+		 */
+	case AF_ENABLE:
+		/* Check if hardware is configured or not */
+		if (af_dev_configptr->af_config == H3A_AF_CONFIG_NOT_DONE) {
+			dev_err(afdev, "Error :  AF Hardware not configured.");
+			result = -EINVAL;
+		} else
+			af_engine_setup(afdev, 1);
+		break;
 
-		if (stat_data->buf_length < af_dev_configptr->size_paxel)
-			return -EINVAL;
+		/* This ioctl will disable AF Engine */
+	case AF_DISABLE:
+		af_engine_setup(afdev, 0);
+		break;
 
+	default:
+		dev_err(afdev, "Error : Invalid IOCTL!");
+		result = -ENOTTY;
+		break;
+	}
+
+	/* Before returning increment semaphore */
+	mutex_unlock(&af_dev_configptr->read_blocked);
+	dev_dbg(afdev, "L\n");
+	return result;
+}
+
+/* Function will return the statistics to user */
+ssize_t af_read(struct file *filep, char *kbuff, size_t size, loff_t *offset)
+{
+	void *buff_temp;
+	int result = 0;
+	int ret;
+	dev_dbg(afdev, "E\n");
+
+	ret = mutex_trylock(&(af_dev_configptr->read_blocked));
+	if (!ret) {
+		dev_err(afdev, "\n Read Call : busy");
+		return -EBUSY;
+	}
+
+	/*
+	 * If no of bytes specified by the user is less than that of buffer
+	 * return error
+	 */
+	if (size < af_dev_configptr->size_paxel) {
+		dev_err(afdev, "\n Error : Invalid buffer size");
+		mutex_unlock(&(af_dev_configptr->read_blocked));
+		return -1;
+	}
+
+	/*
+	 * The value of bufffer_filled flag determines
+	 * the status of statistics
+	 */
+	if (af_dev_configptr->buffer_filled == 0) {
+		dev_dbg(afdev, "Read call is blocked .......................");
+		/*
+		 * Block the read call until new statistics are available
+		 * or timer expires Decrement the semaphore count
+		 */
+		wait_event_interruptible_timeout(af_dev_configptr->
+						 af_wait_queue,
+						 af_dev_configptr->
+						 buffer_filled, AF_TIMEOUT);
+		dev_dbg(afdev,
+			"\n Read Call Unblocked..........................");
+	}
+	if (af_dev_configptr->buffer_filled == 1) {
+		/*
+		 * New Statistics are available. Disable the interrupts while
+		 * swapping the buffers
+		 */
 		dev_dbg(afdev, "\n Reading.............................");
 		disable_irq(3);
 
@@ -490,24 +625,25 @@ int dm365_af_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
 		enable_irq(3);
 
 		/*
-		* Copy the entire statistics located in application
-		* buffer to user space
-		*/
-		memcpy(stat_data->buffer, af_dev_configptr->buff_app,
-				 af_dev_configptr->size_paxel);
-
-		result = af_dev_configptr->size_paxel;
-
-		break;
-	default:
-		dev_err(afdev, "Error : Invalid IOCTL!");
-		result = -ENOTTY;
-		break;
+		 * New Statistics are not availaible copy the application
+		 * buffer to user. Return the entire statistics to user
+		 */
+		if (copy_to_user(kbuff, af_dev_configptr->buff_app,
+				 af_dev_configptr->size_paxel)) {
+			/* Release the semaphore in case of fault */
+			mutex_unlock(&(af_dev_configptr->read_blocked));
+			return -EFAULT;
+		} else
+			result = af_dev_configptr->size_paxel;
 	}
 
+	/* Release the Mutex */
+	mutex_unlock(&(af_dev_configptr->read_blocked));
+	dev_dbg(afdev, "\n Read APPLICATION  BUFFER %d",
+		*((int *)((af_dev_configptr->buff_app))));
+	dev_dbg(afdev, "L\n");
 	return result;
 }
-EXPORT_SYMBOL(dm365_af_ioctl);
 
 /* This function will handle the H3A interrupt. */
 static irqreturn_t af_isr(int irq, void *dev_id)
@@ -515,8 +651,8 @@ static irqreturn_t af_isr(int irq, void *dev_id)
 	/* Temporary buffer for swapping */
 	void *buff_temp;
 	int enaf;
-	struct v4l2_subdev *sd = dev_id;
 
+	dev_dbg(afdev, "E\n");
 
 	/* Get the value of PCR register */
 	enaf = af_get_enable();
@@ -541,55 +677,115 @@ static irqreturn_t af_isr(int irq, void *dev_id)
 
 		/* Wake up read as new statistics are available */
 		af_dev_configptr->buffer_filled = 1;
-
-		/* queue the event with v4l2 */
-		af_queue_event(sd);
-
+		wake_up(&(af_dev_configptr->af_wait_queue));
+		dev_dbg(afdev, "L\n");
 		return IRQ_RETVAL(IRQ_HANDLED);
 	}
 	return IRQ_RETVAL(IRQ_NONE);
 }
 
-int dm365_af_set_stream(struct v4l2_subdev *sd, int enable)
+/* File Operation Structure */
+static const struct file_operations af_fops = {
+	.owner = THIS_MODULE,
+	.open = af_open,
+	.unlocked_ioctl = af_ioctl,
+	.read = af_read,
+	.release = af_release
+};
+static struct platform_device afdevice = {
+	.name = "dm365_af",
+	.id = 2,
+	.dev = {
+		.release = af_platform_release,
+		}
+};
+
+static struct device_driver af_driver = {
+	.name = "dm365_af",
+	.bus = &platform_bus_type,
+	.probe = af_probe,
+	.remove = af_remove,
+};
+
+/* Function to register the AF character device driver. */
+#define DRIVERNAME  "DM365AF"
+int __init af_init(void)
 {
+	int err;
 	int result = 0;
 
-	if (enable) {
-		/* start capture */
-		/* Enable AEW Engine if Hardware set up is done */
-		if (af_dev_configptr->af_config == H3A_AF_CONFIG_NOT_DONE) {
-			dev_err(afdev,
-				"Error : AF Hardware is not configured.\n");
-			result = -EINVAL;
-		} else {
-			result = request_irq(3, af_isr, IRQF_SHARED,
-					     "dm365_h3a_af",
-				(void *)sd);
-			if (result != 0)
-				return result;
+	/*
+	 * Register the driver in the kernel
+	 * dynmically get the major number for the driver using
+	 * alloc_chrdev_region function
+	 */
+	result = alloc_chrdev_region(&dev, 0, 1, DRIVERNAME);
 
-			/* Enable AF Engine */
-			af_engine_setup(afdev, 1);
-		}
-	} else {
-		/* stop capture */
-		free_irq(3, sd);
-		/* Disable AEW Engine */
-		af_engine_setup(afdev, 0);
+	if (result < 0) {
+		printk(KERN_ERR "Error :  Could not register character device");
+		return -ENODEV;
 	}
-	return result;
-}
-EXPORT_SYMBOL(dm365_af_set_stream);
-
-int dm365_af_init(struct platform_device *pdev)
-{
-
+	printk(KERN_INFO "af major#: %d, minor# %d\n", MAJOR(dev), MINOR(dev));
 	/* allocate memory for device structure and initialize it with 0 */
 	af_dev_configptr =
 	    kmalloc(sizeof(struct af_device), GFP_KERNEL);
 	if (!af_dev_configptr) {
 		printk(KERN_ERR "Error : kmalloc fail");
+		unregister_chrdev_region(dev, AF_NR_DEVS);
 		return -ENOMEM;
+	}
+	/* Initialize character device */
+	cdev_init(&c_dev, &af_fops);
+	c_dev.owner = THIS_MODULE;
+	c_dev.ops = &af_fops;
+	err = cdev_add(&c_dev, dev, 1);
+	if (err) {
+		printk(KERN_ERR "Error : Error in  Adding Davinci AF");
+		unregister_chrdev_region(dev, AF_NR_DEVS);
+		kfree(af_dev_configptr);
+		return -err;
+	}
+	/* register driver as a platform driver */
+	if (driver_register(&af_driver) != 0) {
+		unregister_chrdev_region(dev, 1);
+		cdev_del(&c_dev);
+		return -EINVAL;
+	}
+
+	/* Register the drive as a platform device */
+	if (platform_device_register(&afdevice) != 0) {
+		driver_unregister(&af_driver);
+		unregister_chrdev_region(dev, 1);
+		cdev_del(&c_dev);
+		return -EINVAL;
+	}
+	af_class = class_create(THIS_MODULE, "dm365_af");
+	if (!af_class) {
+		printk(KERN_ERR "af_init: error in creating device class\n");
+		driver_unregister(&af_driver);
+		platform_device_unregister(&afdevice);
+		unregister_chrdev_region(dev, 1);
+		unregister_chrdev(MAJOR(dev), DRIVERNAME);
+		cdev_del(&c_dev);
+		return -EINVAL;
+	}
+	/* register device class */
+	device_create(af_class, NULL, dev, NULL, "dm365_af");
+
+	/* Set up the Interrupt handler for H3AINT interrupt */
+	result = request_irq(3, af_isr, IRQF_SHARED, "dm365_h3a_af",
+			     (void *)af_dev_configptr);
+
+	if (result != 0) {
+		printk(KERN_ERR "Error : Request IRQ Failed");
+		unregister_chrdev_region(dev, AF_NR_DEVS);
+		kfree(af_dev_configptr);
+		device_destroy(af_class, dev);
+		class_destroy(af_class);
+		driver_unregister(&af_driver);
+		platform_device_unregister(&afdevice);
+		cdev_del(&c_dev);
+		return result;
 	}
 
 	/* Initialize device structure */
@@ -597,25 +793,40 @@ int dm365_af_init(struct platform_device *pdev)
 
 	af_dev_configptr->in_use = AF_NOT_IN_USE;
 	af_dev_configptr->buffer_filled = 0;
-
-	afdev = &pdev->dev;
-
 	printk(KERN_ERR "AF Driver initialized\n");
-
 	return 0;
 }
-EXPORT_SYMBOL(dm365_af_init);
 
-void dm365_af_cleanup(void)
+/*
+ * This function is called by the kernel while unloading the driver.
+ * It will unregister character device driver
+ */
+void __exit af_cleanup(void)
 {
-	/* in use */
+	/* Return if driver is busy */
 	if (af_dev_configptr->in_use == AF_IN_USE) {
-		printk(KERN_ERR "Error : dm365_af in use.");
+		printk(KERN_ERR "Error : Driver in use. Can't remove.");
 		return;
 	}
-
+	free_irq(3, af_dev_configptr);
 	/* Free device structure */
 	kfree(af_dev_configptr);
-	af_dev_configptr = NULL;
+
+	unregister_chrdev_region(dev, AF_NR_DEVS);
+
+	driver_unregister(&af_driver);
+
+	device_destroy(af_class, dev);
+
+	class_destroy(af_class);
+
+	platform_device_unregister(&afdevice);
+	/* unregistering the driver from the kernel */
+	cdev_del(&c_dev);
+
 }
-EXPORT_SYMBOL(dm365_af_cleanup);
+
+module_init(af_init)
+module_exit(af_cleanup)
+/* Module License */
+MODULE_LICENSE("GPL");

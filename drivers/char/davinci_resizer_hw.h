@@ -49,7 +49,7 @@
 
 /* functions definition */
 void rsz_hardware_setup(struct channel_config *rsz_conf_chan);
-int rsz_enable_dr(struct channel_config *rsz_conf_chan);
+int rsz_enable_dvrz(struct channel_config *rsz_conf_chan);
 
 static inline void rsz_set_exp(int exp)
 {

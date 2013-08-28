@@ -77,11 +77,14 @@
 #define AF_VFV_THR_MAX			0xFFFF
 
 /* list of ioctls */
+#pragma pack(1)
 #define  AF_IOC_MAXNR			5
 #define  AF_MAGIC_NO			'a'
-#define  AF_S_PARAM	_IOWR(AF_MAGIC_NO, 1, struct af_configuration)
-#define  AF_G_PARAM	_IOWR(AF_MAGIC_NO, 2, struct af_configuration)
-#define  AF_GET_STAT	_IOWR(AF_MAGIC_NO, 3, struct af_statdata)
+#define  AF_S_PARAM	_IOWR(AF_MAGIC_NO, 1, struct af_configuration *)
+#define  AF_G_PARAM	_IOWR(AF_MAGIC_NO, 2, struct af_configuration *)
+#define  AF_ENABLE	_IO(AF_MAGIC_NO, 3)
+#define  AF_DISABLE	_IO(AF_MAGIC_NO, 4)
+#pragma  pack()
 
 /* enum used for status of specific feature */
 enum af_enable_flag {
@@ -207,11 +210,6 @@ struct af_configuration {
 	struct af_paxel paxel_config;
 	/* Accumulator mode */
 	enum af_mode mode;
-};
-
-struct af_statdata {
-	void *buffer;
-	int buf_length;
 };
 
 #ifdef __KERNEL__
