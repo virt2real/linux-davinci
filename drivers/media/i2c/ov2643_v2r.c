@@ -135,7 +135,9 @@ static int reg_read(struct i2c_client *client, const u8 reg)
 {
 	s32 data;
 	data = i2c_smbus_read_byte_data(client, reg);
+#ifdef CONFIG_V2R_DEBUG
 	printk("\nREAD CAMERA I2C address=0x%x, register=0x%x, res=0x%x\n", client->addr, reg, data);
+#endif
 	return data;
 }
 
@@ -144,8 +146,10 @@ static int reg_write(struct i2c_client *client, const u8 reg,
 {
 	int ret;
 	//ret = reg_read(client, reg);
-	//printk("\n***Register:0x%x actualvalue:0x%x, Value to be write:0x%x",reg,ret,data);
+#ifdef CONFIG_V2R_DEBUG
+	printk("\n***Register:0x%x actualvalue:0x%x, Value to be write:0x%x",reg,ret,data);
 	printk("\nWRITE CAMERA I2C address=0x%x, register=0x%x, res=0x%x\n", client->addr, reg, data);
+#endif
 	ret = i2c_smbus_write_byte_data(client, reg, data);
 	if (reg == 0x12) msleep(5);
 	return ret;
@@ -156,7 +160,7 @@ struct regval_list {
 	unsigned char reg_num;
 	unsigned char value;
 };
-static struct regval_list ov9710_default_regs[] = 
+static struct regval_list ov2643_default_regs[] = 
 {
 		//;pclk=72mhz,30fps/pclk=36mhz,15fps
 		//
@@ -187,7 +191,7 @@ static struct regval_list ov9710_default_regs[] =
 		//{0x1f,0xe1},
 		{ 0xff, 0xff },	/* END MARKER */
 };
-static int ov9710_write_array(struct v4l2_subdev *sd, struct regval_list *vals)
+static int ov2643_write_array(struct v4l2_subdev *sd, struct regval_list *vals)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	while (vals->reg_num != 0xff || vals->value != 0xff) {
@@ -200,7 +204,7 @@ static int ov9710_write_array(struct v4l2_subdev *sd, struct regval_list *vals)
 }
 static int mt9p031_init(struct v4l2_subdev *sd, u32 val)
 {
-	return ov9710_write_array(sd, ov9710_default_regs);
+	return ov2643_write_array(sd, ov2643_default_regs);
 }
 
 
@@ -388,9 +392,9 @@ static int mt9p031_detect(struct i2c_client *client, int *model)
 	v = reg_read(client, REG_PIDL);
 	printk("\n***Detect:0x%x\n",v);
 	if (v != 0x43) return -ENODEV;
-	printk("\nOVM9710 successfully detected\n");
+	printk("\nOV2643 successfully detected\n");
 	*model = V4L2_IDENT_MT9P031;
-	dev_info(&client->dev, "Detected a ov9710 chip ID\n");
+	dev_info(&client->dev, "Detected a OV2643 chip ID\n");
     return 0;
     
 }
