@@ -19,4 +19,11 @@ config V2R_VIDEOOUTALWAYSON
 	---help---
 	Allow virt2real do not disable video out if camera not connected
 
+config V2R_DEBUG
+
+	bool "Turn ON kernel debug output"
+	default y
+	---help---
+	Allow  kernel make debug output
+
 endif
