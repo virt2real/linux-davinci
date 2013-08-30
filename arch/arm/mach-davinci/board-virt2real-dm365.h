@@ -2,8 +2,11 @@
 static void v2r_parse_cmdline(char * string);
 #endif
 
-bool w1_run;
-
+bool w1_run; // 1-wire init flag
+bool lan_run; // LAN init flag
+bool spi0_run; // SPI0 init flag
+bool led_run; // LED-triggers init flag
+bool camera_run; // camera init flag
 
 /*  PRTCSS functionality */
 

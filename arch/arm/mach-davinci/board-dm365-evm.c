@@ -112,6 +112,7 @@ static inline int have_imager(void)
 	return 0;
 #endif
 }
+
 static void dm365_camera_configure(void){
 	davinci_cfg_reg(DM365_CAM_OFF);
 	gpio_request(98, "CAMERA_OFF");
@@ -336,14 +337,53 @@ static struct davinci_spi_unit_desc dm365_evm_spi_udesc_KSZ8851 = {
 	}
 };
 
+/* SPI0 init */
+
+static struct davinci_spi_config v2rdac_config = {
+	.io_type = SPI_IO_TYPE_DMA,
+	.c2tdelay = 0,
+	.t2cdelay = 0
+};
+
+static struct spi_board_info v2rdac_info[] __initdata = {
+	{
+		.modalias  = "spidev",
+		.bus_num  = 0,
+		.chip_select  = 1,
+		.max_speed_hz  = 1000000,
+		.controller_data = &v2rdac_config,
+		.mode = SPI_MODE_1
+	}
+};
+
+
+static struct davinci_spi_unit_desc v2rdac_spi_udesc = {
+	.spi_hwunit  = 0,
+	.chipsel  = BIT(1),
+	.irq    = IRQ_DM365_SPIINT0_0,
+	.dma_tx_chan  = 16,
+	.dma_rx_chan  = 17,
+	.dma_evtq  = EVENTQ_3,
+	.pdata = {
+		.version   = SPI_VERSION_1,
+		.num_chipselect = 2,
+		.intr_line = 0,
+		.chip_sel = 0,
+		.cshold_bug = 0,
+		.dma_event_q  = EVENTQ_3,
+	}
+};
+
+/* end SPI0 init */
+
 
 /* 1-wire init block */
 
 static struct w1_gpio_platform_data w1_gpio_pdata = {
-	.pin		= 22,
+	.pin		= 26,
 	.is_open_drain	= 0,
 	.enable_external_pullup	= w1_enable_external_pullup,
-	.ext_pullup_enable_pin	= 23
+	.ext_pullup_enable_pin	= 27
 };
 
 static struct platform_device w1_device = {
@@ -423,12 +463,23 @@ static __init void dm365_evm_init(void)
 	//struct davinci_soc_info *soc_info = &davinci_soc_info;
 	struct clk *aemif_clk;
 
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+	v2r_parse_cmdline(saved_command_line);
+#endif
+
 	aemif_clk = clk_get(NULL, "aemif");
 	if (IS_ERR(aemif_clk))	return;
 	clk_prepare_enable(aemif_clk);
+
+	// try to init NAND
 	platform_add_devices(dm365_evm_nand_devices, ARRAY_SIZE(dm365_evm_nand_devices));
+
 	v2r_init_i2c();
-	dm365_camera_configure();
+
+	// try to init camera
+	if (camera_run) dm365_camera_configure();
+
+	// try to init UART0
 	davinci_serial_init(&uart_config);
 
 	//dm365evm_emac_configure();
@@ -436,26 +487,35 @@ static __init void dm365_evm_init(void)
 
 	dm365evm_mmc_configure();
 
-#ifdef CONFIG_V2R_PARSE_CMDLINE
-	//printk (KERN_INFO "Parse cmdline: %s\n", saved_command_line);
-	v2r_parse_cmdline(saved_command_line);
-
+	// try to init LED-triggers
 	#if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
-	led_init();
+	if (led_run) led_init();
 	#endif
 
-	if (w1_run) w1_gpio_init(); // run 1-wire master
-#endif
-
+	// try to init MMC0 (microSD)
 	davinci_setup_mmc(0, &dm365evm_mmc_config);
 
-
+	// try to init VoiceCodec
 	dm365_init_vc(&dm365_evm_snd_data);
 
+	// try to init Real Time Clock
 	dm365_init_rtc();
+
+	// try to init USB
 	dm365_usb_configure();
-	dm365_ks8851_init();
-	davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info),	ksz8851_snl_info);
+
+	// try to init LAN module
+	if (lan_run) {
+	    dm365_ks8851_init();
+	    davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info), ksz8851_snl_info);
+	}
+
+	// try to init 1-Wire
+	if (w1_run) w1_gpio_init(); // run 1-wire master
+
+	// try to init SPI0
+	if (spi0_run) davinci_init_spi(&v2rdac_spi_udesc, ARRAY_SIZE(v2rdac_info),  v2rdac_info); // run SPI0 init
+
 	return;
 }
 
@@ -503,10 +563,12 @@ static void v2r_parse_cmdline(char * string)
 	    #if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
 	    if (!strcmp(param_name, "redled")) {
 		v2r_led[0].default_trigger = param_value;
+		led_run = 1;
 	    }
 
 	    if (!strcmp(param_name, "greenled")) {
 		v2r_led[1].default_trigger = param_value;
+		led_run = 1;
 	    }
 	    #endif
 
@@ -514,10 +576,24 @@ static void v2r_parse_cmdline(char * string)
 		if (!strcmp(param_value, "on")) {
 		    printk(KERN_INFO "Wi-Fi board enabled\n");
 		    davinci_setup_mmc(1, &dm365evm_mmc_config);
-		    /* maybe setup mmc1/etc ... _after_ mmc0 */
 		    //dm365_wifi_configure();
 		}
 	    }
+
+	    if (!strcmp(param_name, "lan0")) {
+		if (!strcmp(param_value, "on")) {
+		    printk(KERN_INFO "LAN enabled\n");
+		    lan_run = 1;
+		}
+	    }
+
+	    if (!strcmp(param_name, "spi0")) {
+		if (!strcmp(param_value, "on")) {
+		    printk(KERN_INFO "SPI0 enabled\n");
+		    spi0_run = 1;
+		}
+	    }
+
 
 	    if (!strcmp(param_name, "1wire")) {
 		int temp;
@@ -536,6 +612,10 @@ static void v2r_parse_cmdline(char * string)
 	    }
 
 	    if (!strcmp(param_name, "camera")) {
+		if (!strcmp(param_value, "ov2643")) {
+		    printk(KERN_INFO "Use camera OmniVision OV2643\n");
+		    camera_run = 1;
+		}
 		if (!strcmp(param_value, "ov5642")) {
 		    printk(KERN_INFO "Use camera OmniVision OV5642\n");
 		}
