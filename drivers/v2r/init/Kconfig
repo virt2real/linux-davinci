@@ -12,4 +12,11 @@ config V2R_PARSE_CMDLINE
 	---help---
 	Allow virt2real init function to parse kernel cmdline (from uEnv.txt) for device initialization
 
+config V2R_VIDEOOUTALWAYSON
+
+	bool "VideoOut always ON"
+	default y
+	---help---
+	Allow virt2real do not disable video out if camera not connected
+
 endif

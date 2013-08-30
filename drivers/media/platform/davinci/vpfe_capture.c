@@ -2639,6 +2639,7 @@ static struct vpfe_device *vpfe_initialize(void)
 
 static void vpfe_disable_clock(struct vpfe_device *vpfe_dev)
 {
+#ifndef CONFIG_V2R_VIDEOOUTALWAYSON
 	struct vpfe_config *vpfe_cfg = vpfe_dev->cfg;
 	int i;
 
@@ -2648,6 +2649,7 @@ static void vpfe_disable_clock(struct vpfe_device *vpfe_dev)
 	}
 	kfree(vpfe_dev->clks);
 	v4l2_info(vpfe_dev->pdev->driver, "vpfe capture clocks disabled\n");
+#endif
 }
 
 /**
