@@ -164,12 +164,21 @@ struct ipipeif_5_1 ipipeif_5_1_defaults = {
 		.type = DPCM_8BIT_12BIT,
 		.pred = DPCM_SIMPLE_PRED
 	},
+#ifdef CONFIG_VIDEO_YCBCR
+	.pix_order = IPIPEIF_Y_CBCR,
+	.isif_port = {
+		.if_type = VPFE_YCBCR_SYNC_8,
+		.hdpol = VPFE_PINPOL_POSITIVE,
+		.vdpol =VPFE_PINPOL_POSITIVE
+	},
+#else
 	.pix_order = IPIPEIF_CBCR_Y,
 	.isif_port = {
 		.if_type = VPFE_RAW_BAYER,
 		.hdpol = VPFE_PINPOL_POSITIVE,
 		.vdpol =VPFE_PINPOL_POSITIVE 
 	},
+#endif
 	.clip = 4095,
 	.align_sync = 0,
 	.rsz_start = 0,

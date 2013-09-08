@@ -544,8 +544,8 @@ static void enableDigitalOutput(int bEnable)
 		dispc_reg_out(VENC_VMOD, 0);
 		dispc_reg_out(VENC_CVBS, 0);
 
-		if (cpu_is_davinci_dm644x())
-			__raw_writel(0, IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
+		//if (cpu_is_davinci_dm644x())
+		//	__raw_writel(0, IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
 
 		/*if (cpu_is_davinci_dm368()) {
 			enable_lcd();
@@ -580,8 +580,8 @@ static void enableDigitalOutput(int bEnable)
 		if (davinci_enc_select_venc_clock(VENC_27MHZ) < 0)
 			dev_err(venc->vdev, "PLL's doesnot yield required\
 					VENC clk\n");
-		if (cpu_is_davinci_dm644x())
-			__raw_writel(0, IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
+		//if (cpu_is_davinci_dm644x())
+		//	__raw_writel(0, IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
 
 		/* Set PINMUX0 reg to enable LCD (all other settings are kept
 		   per boot)
@@ -738,15 +738,14 @@ static void davinci_enc_set_525p(struct vid_enc_mode_info *mode_info)
 		__raw_writel(0x081141EF, IO_ADDRESS(DM3XX_VDAC_CONFIG));
 	}
 
-	if (cpu_is_davinci_dm644x())
-		__raw_writel(VPBE_PCR_VENC_DIV,
-			       IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
+	//if (cpu_is_davinci_dm644x())
+	//	__raw_writel(VPBE_PCR_VENC_DIV, IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
 	dispc_reg_out(VENC_OSDCLK0, 0);
 	dispc_reg_out(VENC_OSDCLK1, 1);
-	if (cpu_is_davinci_dm644x()) {
-		dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAFRQ, VENC_VDPRO_DAFRQ);
-		dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAUPS, VENC_VDPRO_DAUPS);
-	}
+	//if (cpu_is_davinci_dm644x()) {
+	//	dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAFRQ, VENC_VDPRO_DAFRQ);
+	//	dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAUPS, VENC_VDPRO_DAUPS);
+	//}
 
 	dispc_reg_merge(VENC_VMOD,
 			VENC_VMOD_VDMD_YCBCR8 <<
@@ -781,16 +780,16 @@ static void davinci_enc_set_625p(struct vid_enc_mode_info *mode_info)
 		__raw_writel(0x081141EF, IO_ADDRESS(DM3XX_VDAC_CONFIG));
 	}
 
-	if (cpu_is_davinci_dm644x())
-		__raw_writel(VPBE_PCR_VENC_DIV,
-			       IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
+	//if (cpu_is_davinci_dm644x())
+	//	__raw_writel(VPBE_PCR_VENC_DIV, IO_ADDRESS(DM644X_VPBE_REG_BASE + VPBE_PCR));
+
 	dispc_reg_out(VENC_OSDCLK0, 0);
 	dispc_reg_out(VENC_OSDCLK1, 1);
 
-	if (cpu_is_davinci_dm644x()) {
-		dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAFRQ, VENC_VDPRO_DAFRQ);
-		dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAUPS, VENC_VDPRO_DAUPS);
-	}
+	//if (cpu_is_davinci_dm644x()) {
+	//	dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAFRQ, VENC_VDPRO_DAFRQ);
+	//	dispc_reg_merge(VENC_VDPRO, VENC_VDPRO_DAUPS, VENC_VDPRO_DAUPS);
+	//}
 
 	dispc_reg_merge(VENC_VMOD,
 			VENC_VMOD_VDMD_YCBCR8 <<

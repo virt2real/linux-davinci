@@ -227,6 +227,7 @@ static int __videobuf_iolock(struct videobuf_queue *q,
 	case V4L2_MEMORY_MMAP:
 		dev_dbg(q->dev, "%s memory method MMAP\n", __func__);
 
+
 		/* All handling should be done by __videobuf_mmap_mapper() */
 		if (!mem->vaddr) {
 			dev_err(q->dev, "memory is not alloced/mmapped.\n");
@@ -356,7 +357,6 @@ static int __videobuf_mmap_mapper(struct videobuf_queue *q,
 		map, q, vma->vm_start, vma->vm_end,
 		(long int) q->bufs[first]->bsize,
 		vma->vm_pgoff, first);
-
 	videobuf_vm_open(vma);
 
 	return 0;
@@ -440,6 +440,7 @@ void videobuf_queue_dma_contig_init(struct videobuf_queue *q,
 				    unsigned int msize,
 				    void *priv)
 {
+	//printk("videobuf_queue_dma_contig_init %x\r\n", msize);
 	videobuf_queue_core_init(q, ops, dev, irqlock, type, field, msize,
 				 priv, &qops);
 }

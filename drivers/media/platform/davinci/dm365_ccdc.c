@@ -85,6 +85,17 @@ struct ccdc_oper_config {
 };
 
 static struct ccdc_oper_config ccdc_cfg = {
+#ifdef CONFIG_VIDEO_YCBCR
+		.ycbcr = {
+			.pix_fmt = CCDC_PIXFMT_YCBCR_8BIT,
+			.frm_fmt = CCDC_FRMFMT_PROGRESSIVE,
+			.win = CCDC_WIN_VGA,
+			.fid_pol = VPFE_PINPOL_POSITIVE,
+			.vd_pol = VPFE_PINPOL_POSITIVE,
+			.hd_pol = VPFE_PINPOL_POSITIVE,
+			.pix_order = CCDC_PIXORDER_YCBYCR,
+		},
+#else
 	.ycbcr = {
 		.pix_fmt = CCDC_PIXFMT_YCBCR_8BIT,
 		.frm_fmt = CCDC_FRMFMT_INTERLACED,
@@ -95,6 +106,7 @@ static struct ccdc_oper_config ccdc_cfg = {
 		.pix_order = CCDC_PIXORDER_CBYCRY,
 		.buf_type = CCDC_BUFTYPE_FLD_INTERLEAVED,
 	},
+#endif
 	.bayer = {
 		.pix_fmt = CCDC_PIXFMT_RAW,
 		.frm_fmt = CCDC_FRMFMT_PROGRESSIVE,
@@ -1309,8 +1321,12 @@ static int ccdc_config_ycbcr(int mode)
 		break;
 
 	case VPFE_YCBCR_SYNC_8:
+#ifdef CONFIG_VIDEO_YCBCR
+		ccdcfg = CCDC_DATA_PACK8|CCDC_CCDCFG_WENLOG_OR;
+#else
 		ccdcfg |= CCDC_DATA_PACK8;
 		ccdcfg |= CCDC_YCINSWP_YCBCR;
+#endif
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
 			return -EINVAL;
@@ -1389,6 +1405,74 @@ static int ccdc_close(struct device *device)
 
 	return 0;
 }
+static void ccdc_dump_hw_config(void)
+{
+	u32 utemp;
+
+	printk(KERN_NOTICE"ISIF registers:\n");
+	utemp = regr(SYNCEN);
+	printk(KERN_NOTICE"ISIF_SYNCEN = 0x%x\n", utemp);
+	utemp = regr(MODESET);
+	printk(KERN_NOTICE"ISIF_MODESET = 0x%x\n", utemp);
+	utemp = regr(CCDCFG);
+	printk(KERN_NOTICE"ISIF_CCDCFG = 0x%x\n", utemp);
+	utemp = regr(CADU);
+	printk(KERN_NOTICE"ISIF_CADU = 0x%x\n", utemp);
+	utemp = regr(CADL);
+	printk(KERN_NOTICE"ISIF_CADL = 0x%x\n", utemp);
+	utemp = regr(HSIZE);
+	printk(KERN_NOTICE"ISIF_HSIZE = 0x%x\n", utemp);
+	utemp = regr(SDOFST);
+	printk(KERN_NOTICE"ISIF_SDOFST = 0x%x\n", utemp);
+	utemp = regr(HDW);
+	printk(KERN_NOTICE"ISIF_HDW = 0x%x\n", utemp);
+	utemp = regr(VDW);
+	printk(KERN_NOTICE"ISIF_VDW = 0x%x\n", utemp);
+	utemp = regr(PPLN);
+	printk(KERN_NOTICE"ISIF_PPLN = 0x%x\n", utemp);
+	utemp = regr(LPFR);
+	printk(KERN_NOTICE"ISIF_LPFR = 0x%x\n", utemp);
+	utemp = regr(SPH);
+	printk(KERN_NOTICE"ISIF_SPH = 0x%x\n", utemp);
+	utemp = regr(LNH);
+	printk(KERN_NOTICE"ISIF_LNH = 0x%x\n", utemp);
+	utemp = regr(SLV0);
+	printk(KERN_NOTICE"ISIF_SLV0 = 0x%x\n", utemp);
+	utemp = regr(SLV1);
+	printk(KERN_NOTICE"ISIF_SLV1 = 0x%x\n", utemp);
+	utemp = regr(LNV);
+	printk(KERN_NOTICE"ISIF_LNV = 0x%x\n", utemp);
+	utemp = regr(CULH);
+	printk(KERN_NOTICE"ISIF_CULH = 0x%x\n", utemp);
+	utemp = regr(CULV);
+	printk(KERN_NOTICE"ISIF_CULV = 0x%x\n", utemp);
+	utemp = regr(HSIZE);
+	printk(KERN_NOTICE"ISIF_HSIZE = 0x%x\n", utemp);
+	utemp = regr(SDOFST);
+	printk(KERN_NOTICE"ISIF_SDOFST = 0x%x\n", utemp);
+	utemp = regr(CADU);
+	printk(KERN_NOTICE"ISIF_CADU = 0x%x\n", utemp);
+	utemp = regr(CADL);
+	printk(KERN_NOTICE"ISIF_CADL = 0x%x\n", utemp);
+	utemp = regr(LINCFG0);
+	printk(KERN_NOTICE"ISIF_LINCFG0 = 0x%x\n", utemp);
+	utemp = regr(LINCFG1);
+	printk(KERN_NOTICE"ISIF_LINCFG1 = 0x%x\n", utemp);
+	utemp = regr(VDINT0);
+	printk(KERN_NOTICE"ISIF_VDINT0 = 0x%x\n", utemp);
+	utemp = regr(VDINT1);
+	printk(KERN_NOTICE"ISIF_VDINT1 = 0x%x\n", utemp);
+	utemp = regr(VDINT2);
+	printk(KERN_NOTICE"ISIF_VDINT2 = 0x%x\n", utemp);
+	utemp = regr(MISC);
+	printk(KERN_NOTICE"ISIF_MISC = 0x%x\n", utemp);
+	utemp = regr(CGAMMAWD);
+	printk(KERN_NOTICE"ISIF_CGAMMAWD = 0x%x\n", utemp);
+	utemp = regr(REC656IF);
+	printk(KERN_NOTICE"ISIF_REC656IF = 0x%x\n", utemp);
+
+	return;
+}
 
 static struct ccdc_hw_device ccdc_hw_dev = {
 	.name = "DM365 ISIF",
@@ -1414,6 +1498,7 @@ static struct ccdc_hw_device ccdc_hw_dev = {
 		.get_line_length = ccdc_get_line_length,
 		.setfbaddr = ccdc_setfbaddr,
 		.getfid = ccdc_getfid,
+		.isif_dump_hw_config = ccdc_dump_hw_config,
 	},
 };
 
@@ -1471,8 +1556,8 @@ static int dm365_ccdc_probe(struct platform_device *pdev)
 	//davinci_cfg_reg(DM365_VIN_CAM_WEN);
 	davinci_cfg_reg(DM365_VIN_CAM_VD);
 	davinci_cfg_reg(DM365_VIN_CAM_HD);
-	davinci_cfg_reg(DM365_VIN_YIN4_7_EN);
-	davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
+	//davinci_cfg_reg(DM365_VIN_YIN4_7_EN);
+	//davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
 	printk("CCDC_CONFIGURE BEFORE\r\n");
 	ccdc_hw_dev.hw_ops.configure(0);
 	printk(KERN_NOTICE "%s is registered with vpfe.\n",

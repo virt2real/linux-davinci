@@ -85,8 +85,12 @@
 #define PAL_IMAGE_SIZE		(720 * 576 * 2)
 #define SECOND_IMAGE_SIZE_MAX	(640 * 480 * 2)
 
-static int debug;
+static int debug = 1;
+#ifdef CONFIG_VIDEO_YCBCR
+static u32 numbuffers = 4;
+#else
 static u32 numbuffers = 3;
+#endif
 static u32 bufsize = HD_IMAGE_SIZE + SECOND_IMAGE_SIZE_MAX;
 static int interface;
 static u32 cont_bufoffset = 0;
@@ -120,6 +124,12 @@ MODULE_DESCRIPTION("VPFE Video for Linux Capture Driver");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Texas Instruments");
 
+//TODO !!!
+#ifdef CONFIG_VIDEO_YCBCR
+static size_t     ipipif_dma_size = 0;
+static dma_addr_t ipipif_dma_addr_phys = 0;
+static void *     ipipif_dma_addr_cpu = NULL;
+#endif
 /* standard information */
 struct vpfe_standard {
 	v4l2_std_id std_id;
@@ -141,8 +151,13 @@ struct ccdc_config {
 
 /* data structures */
 static struct vpfe_config_params config_params = {
+#ifdef CONFIG_VIDEO_YCBCR
+	.min_numbuffers = 4,
+	.numbuffers = 4,
+#else
 	.min_numbuffers = 3,
 	.numbuffers = 3,
+#endif
 	.min_bufsize = 1280 * 720 * 2,
 	/* DM365 IPIPE supports up to 2176 pixels, otherwise you need to use raw */
 	.device_bufsize = 2176 * 2176 * 2,
@@ -359,6 +374,10 @@ static int vpfe_get_camera_frame_params(struct vpfe_device *vpfe_dev)
 	 * would require change.
 	 */
 	memset(&sd_fmt, 0, sizeof(sd_fmt));
+#ifdef CONFIG_VIDEO_YCBCR
+	ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
+			sdinfo->grp_id, video, g_fmt, &sd_fmt);
+#else
 	sd_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	/* hard code it to match that of mt9p031 sensor */
 	sd_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_SGRBG10;
@@ -367,7 +386,7 @@ static int vpfe_get_camera_frame_params(struct vpfe_device *vpfe_dev)
 	sd_fmt.fmt.pix.height = 1 << 31;
 	ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
 			sdinfo->grp_id, video, try_fmt, &sd_fmt);
-
+#endif
 	if (!ret) {
 		vpfe_dev->std_info.active_pixels = sd_fmt.fmt.pix.width;
 		vpfe_dev->std_info.active_lines = sd_fmt.fmt.pix.height;
@@ -390,7 +409,11 @@ static int vpfe_get_ccdc_image_format(struct vpfe_device *vpfe_dev,
 	vpfe_dev->crop.top = 0;
 	vpfe_dev->crop.left = 0;
 	memset(f, 0, sizeof(*f));
+#ifdef CONFIG_VIDEO_YCBCR
+	f->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+#else
 	f->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+#endif
 	ccdc_dev->hw_ops.get_image_window(&image_win);
 	vpfe_dev->crop.width = image_win.width;
 	vpfe_dev->crop.height = image_win.height;
@@ -434,10 +457,24 @@ static int vpfe_config_ccdc_image_format(struct vpfe_device *vpfe_dev)
 
 	/* At CCDC we need to set pix format based on source. */
 	if (vpfe_dev->imp_chained) {
-		if (vpfe_dev->current_subdev->is_camera)
+		if (vpfe_dev->current_subdev->is_camera){
+#ifdef CONFIG_VIDEO_YCBCR
+			if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+			{
+				pix_fmt = V4L2_PIX_FMT_YUYV;
+			}
+			//TODO
+			else
+			{
+				pix_fmt = V4L2_PIX_FMT_SBGGR16;
+			}
+#else
 			pix_fmt = V4L2_PIX_FMT_SBGGR16;
-		else if (pix_fmt == V4L2_PIX_FMT_NV12)
+#endif
+		}
+		else if (pix_fmt == V4L2_PIX_FMT_NV12){
 			pix_fmt = V4L2_PIX_FMT_UYVY;
+		}
 	}
 
 	if (ccdc_dev->hw_ops.set_pixel_format(pix_fmt) < 0) {
@@ -567,10 +604,22 @@ static int vpfe_set_format_in_sensor(struct vpfe_device *vpfe_dev,
 	int ret;
 
 	memset(&sd_fmt, 0, sizeof(sd_fmt));
-	sd_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	sd_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_SGRBG10;
-	sd_fmt.fmt.pix.width = fmt->fmt.pix.width;
-	sd_fmt.fmt.pix.height = fmt->fmt.pix.height;
+	if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+	{
+		sd_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		sd_fmt.fmt.pix.colorspace = V4L2_COLORSPACE_JPEG;
+		sd_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+		sd_fmt.fmt.pix.width = fmt->fmt.pix.width;
+		sd_fmt.fmt.pix.height = fmt->fmt.pix.height;
+	}
+	//TODO
+	else
+	{
+		sd_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		sd_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_SGRBG10;
+		sd_fmt.fmt.pix.width = fmt->fmt.pix.width;
+		sd_fmt.fmt.pix.height = fmt->fmt.pix.height;
+	}
 	ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
 			sdinfo->grp_id, video, s_fmt, &sd_fmt);
 	return ret;
@@ -652,7 +701,7 @@ static int vpfe_initialize_device(struct vpfe_device *vpfe_dev)
 		(imp_hw_if->get_preview_oper_mode() == IMP_MODE_CONTINUOUS)) {
 		if (imp_hw_if->get_previewer_config_state()
 			== STATE_CONFIGURED) {
-			//v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "IPIPE Chained\n");
+			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "IPIPE Chained\n");
 			v4l2_info(&vpfe_dev->v4l2_dev, "IPIPE Chained\n");
 			vpfe_dev->imp_chained = 1;
 			vpfe_dev->out_from = VPFE_IMP_PREV_OUT;
@@ -769,7 +818,9 @@ static void vpfe_process_buffer_complete(struct vpfe_device *vpfe_dev)
 	wake_up_interruptible(&vpfe_dev->cur_frm->done);
 	vpfe_dev->cur_frm = vpfe_dev->next_frm;
 }
-
+#ifdef CONFIG_VIDEO_YCBCR
+extern void ipipeif_set_enable(char en, unsigned int mode);
+#endif
 /* ISR for VINT0*/
 static irqreturn_t vpfe_isr(int irq, void *dev_id)
 {
@@ -793,9 +844,23 @@ static irqreturn_t vpfe_isr(int irq, void *dev_id)
 			if (!vpfe_dev->skip_frame_count) {
 				vpfe_dev->skip_frame_count =
 					vpfe_dev->skip_frame_count_init;
+#ifdef CONFIG_VIDEO_YCBCR
+				//TODO
+				if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+				{
+					ipipeif_set_enable(1,0);
+				}
+#endif
 				if (imp_hw_if->enable_resize)
 					imp_hw_if->enable_resize(1);
 			} else {
+#ifdef CONFIG_VIDEO_YCBCR
+				//TODO
+				if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+				{
+					ipipeif_set_enable(0,0);
+				}
+#endif
 				if (imp_hw_if->enable_resize)
 					imp_hw_if->enable_resize(0);
 			}
@@ -1412,11 +1477,18 @@ static int vpfe_config_imp_image_format(struct vpfe_device *vpfe_dev)
 	struct imp_window imp_win;
 
 	/* first setup input and output pixel formats */
+#ifdef CONFIG_VIDEO_YCBCR
+	if (sdinfo->is_camera && sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+		imp_pix = IMP_YUYV;
+	//TODO
+	else
+		imp_pix = IMP_BAYER;
+#else
 	if (sdinfo->is_camera)
 		imp_pix = IMP_BAYER;
 	else
 		imp_pix = IMP_UYVY;
-
+#endif
 	if (imp_hw_if->set_in_pixel_format(imp_pix) < 0) {
 		v4l2_err(&vpfe_dev->v4l2_dev,
 			"Couldn't set in pix format at IMP\n");
@@ -2130,6 +2202,7 @@ static int vpfe_streamon(struct file *file, void *priv,
 	struct vpfe_fh *fh = file->private_data;
 	struct vpfe_subdev_info *sdinfo;
 	unsigned long addr;
+	unsigned long addr_ipipeif = 0;
 	int ret = -EINVAL;
 
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_streamon\n");
@@ -2179,7 +2252,20 @@ static int vpfe_streamon(struct file *file, void *priv,
 	/* Initialize field_id and started member */
 	vpfe_dev->field_id = 0;
 	addr = videobuf_to_dma_contig(vpfe_dev->cur_frm);
-
+#ifdef CONFIG_VIDEO_YCBCR
+	//TODO
+	if(sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+	{
+		ipipif_dma_size = (vpfe_dev->fmt.fmt.pix.width*vpfe_dev->fmt.fmt.pix.height)*2;
+		ipipif_dma_addr_cpu = dma_alloc_coherent(vpfe_dev->pdev,ipipif_dma_size,&ipipif_dma_addr_phys,GFP_KERNEL);
+		if(!ipipif_dma_addr_cpu)
+		{
+			goto unlock_out;
+		}
+		addr_ipipeif = ipipif_dma_addr_phys;
+		ccdc_dev->hw_ops.setfbaddr(addr_ipipeif);
+	}
+#endif
 	/* Calculate field offset */
 	vpfe_calculate_offsets(vpfe_dev);
 
@@ -2212,7 +2298,13 @@ static int vpfe_streamon(struct file *file, void *priv,
 			"Error setting up IMP\n");
 		goto unlock_out;
 	}
-
+#ifdef CONFIG_VIDEO_YCBCR
+	//TODO
+	if(sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+	{
+		imp_hw_if->set_ipipif_addr(vpfe_dev->pdev, NULL,addr_ipipeif);
+	}
+#endif
 	if (imp_hw_if->update_outbuf1_address(NULL, addr) < 0) {
 		v4l2_err(&vpfe_dev->v4l2_dev,
 			"Error setting up address in IMP output1\n");
@@ -2279,6 +2371,17 @@ static int vpfe_streamoff(struct file *file, void *priv,
 
 	if (ret && (ret != -ENOIOCTLCMD))
 		v4l2_err(&vpfe_dev->v4l2_dev, "stream off failed in subdev\n");
+
+#if CONFIG_VIDEO_YCBCR
+	if(ipipif_dma_addr_cpu)
+	{
+		dma_free_coherent(vpfe_dev->pdev,ipipif_dma_size,ipipif_dma_addr_cpu,ipipif_dma_addr_phys);
+		ipipif_dma_addr_cpu = NULL;
+		ipipif_dma_size = 0;
+		ipipif_dma_addr_phys = 0;
+	}
+#endif
+
 	ret = videobuf_streamoff(&vpfe_dev->buffer_queue);
 	mutex_unlock(&vpfe_dev->lock);
 	return ret;
@@ -2541,12 +2644,26 @@ static int vpfe_enum_framesizes(struct file *file, void *priv,
 	mutex_lock(&vpfe_dev->lock);
 
 	if (sdinfo->is_camera) {
+#ifdef CONFIG_VIDEO_YCBCR
+		if(frms->pixel_format == V4L2_PIX_FMT_SGRBG10)
+		{
+			/* Assume the sensor supports V4L2_PIX_FMT_SGRBG10*/
+			ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
+					sdinfo->grp_id, video, enum_framesizes, frms);
+		}
+		//TODO
+		else
+		{
+			ret = 0;
+		}
+#else
 		/* Assume the sensor supports V4L2_PIX_FMT_SGRBG10*/
 		pixel_format = frms->pixel_format;
 		frms->pixel_format = V4L2_PIX_FMT_SGRBG10;
 		ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
 			sdinfo->grp_id, video, enum_framesizes, frms);
 		frms->pixel_format = pixel_format;
+#endif
 	}
 
 	mutex_unlock(&vpfe_dev->lock);
@@ -2567,12 +2684,25 @@ static int vpfe_enum_frameintervals(struct file *file, void *priv,
 	mutex_lock(&vpfe_dev->lock);
 
 	if (sdinfo->is_camera) {
+#ifdef CONFIG_VIDEO_YCBCR
+		if(frmi->pixel_format == V4L2_PIX_FMT_SGRBG10)
+		{
+			/* Assume the sensor supports V4L2_PIX_FMT_SGRBG10*/
+			ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
+					sdinfo->grp_id, video, enum_frameintervals, frmi);
+		}
+		else
+		{
+			ret = 0;
+		}
+#else
 		/* Assume the sensor supports V4L2_PIX_FMT_SGRBG10*/
 		pixel_format = frmi->pixel_format;
 		frmi->pixel_format = V4L2_PIX_FMT_SGRBG10;
 		ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
 			sdinfo->grp_id, video, enum_frameintervals, frmi);
 		frmi->pixel_format = pixel_format;
+#endif
 	}
 
 	mutex_unlock(&vpfe_dev->lock);
@@ -2743,16 +2873,22 @@ static int vpfe_probe(struct platform_device *pdev)
 	}
 
 	vpfe_dev->pdev = &pdev->dev;
+	//printk("Cont buffer size = %d\r\n", cont_bufsize);
 
 	if (cont_bufsize) {
 		/* attempt to determine the end of Linux kernel memory */
+		unsigned int tmp_size = 0;
 		phys_end_kernel = virt_to_phys((void *)PAGE_OFFSET) +
 			(num_physpages << PAGE_SHIFT);
 		size = cont_bufsize;
 		phys_end_kernel += cont_bufoffset;
+		//printk("Cont memory %x -> %x for device %p\r\n", phys_end_kernel, size, &pdev->dev);
+		tmp_size = PAGE_ALIGN(size);
+		//printk("Page align %d\r\n", tmp_size);
 		err = dma_declare_coherent_memory(&pdev->dev, phys_end_kernel,
 				phys_end_kernel, size,
 				DMA_MEMORY_MAP | DMA_MEMORY_EXCLUSIVE);
+		//printk("Cont memory %d\r\n", err);
 		if (!err) {
 			dev_err(&pdev->dev, "Unable to declare MMAP memory.\n");
 			ret = -ENOENT;

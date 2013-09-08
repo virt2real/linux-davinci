@@ -1352,6 +1352,8 @@ void rsz_src_enable(int enable);
 int rsz_set_output_address(struct ipipe_params *params,
 			      int resize_no, unsigned int address);
 int rsz_set_in_pix_format(unsigned char y_c);
-
+#ifdef CONFIG_VIDEO_YCBCR
+int ipipe_hw_set_ipipeif_addr(struct ipipe_params *config, unsigned int address);
+#endif
 #endif
 #endif

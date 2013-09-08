@@ -164,7 +164,9 @@ static int get_car_params(struct device *dev, void *param, int len);
 static struct prev_cgs cgs;
 static int set_cgs_params(struct device *dev, void *param, int len);
 static int get_cgs_params(struct device *dev, void *param, int len);
-
+#ifdef CONFIG_VIDEO_YCBCR
+static int ipipe_set_ipipeif_addr(struct device *dev, void *config, unsigned int address);
+#endif
 /* Tables for various tuning modules */
 struct ipipe_lutdpc_entry ipipe_lutdpc_table[MAX_SIZE_DPC];
 struct ipipe_3d_lut_entry ipipe_3d_lut_table[MAX_SIZE_3D_LUT];
@@ -482,6 +484,9 @@ struct imp_hw_interface dm365_ipipe_interface = {
 	.get_max_output_width = ipipe_get_max_output_width,
 	.get_max_output_height = ipipe_get_max_output_height,
 	.enum_pix = ipipe_enum_pix,
+#ifdef CONFIG_VIDEO_YCBCR
+	.set_ipipif_addr = ipipe_set_ipipeif_addr,
+#endif
 	/* debug function */
 	.dump_hw_config = ipipe_dump_hw_config,
 };
@@ -621,6 +626,25 @@ static int ipipe_do_hw_setup(struct device *dev, void *config)
 	mutex_unlock(&oper_state.lock);
 	return ret;
 }
+#ifdef CONFIG_VIDEO_YCBCR
+static int ipipe_set_ipipeif_addr(struct device *dev, void *config, unsigned int address)
+{
+	struct ipipe_params *param = (struct ipipe_params *)config;
+	int ret = 0;
+
+	dev_dbg(dev, "ipipe_do_hw_setup\n");
+	ret = mutex_lock_interruptible(&oper_state.lock);
+	if (ret)
+		return ret;
+	if ((ISNULL(config)) && (oper_mode == IMP_MODE_CONTINUOUS)) {
+		/* continuous mode */
+		param = oper_state.shared_config_param;
+		ret = ipipe_hw_set_ipipeif_addr(param,address);
+	}
+	mutex_unlock(&oper_state.lock);
+	return ret;
+}
+#endif
 static void ipipe_get_irq(struct irq_numbers *irq)
 {
 	irq->sdram = IRQ_PRVUINT;
@@ -3702,6 +3726,7 @@ static void ipipe_dump_hw_config(void)
 #else
 static void ipipe_dump_hw_config(void)
 {
+	return ipipe_hw_dump_config();
 }
 #endif
 

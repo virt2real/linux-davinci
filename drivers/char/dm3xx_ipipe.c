@@ -53,7 +53,12 @@ u32 ipipeif_get_enable(void)
 int ipipeif_set_address(struct ipipeif *params, unsigned int address)
 {
 	unsigned int utemp, utemp1;
+#ifdef CONFIG_VIDEO_YCBCR
+	//TODO
+	if(params->source != 0 || (params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_8)) {
+#else
 	if (params->source != 0) {
+#endif
 		utemp = ((params->adofs >> 5) & IPIPEIF_ADOFS_LSB_MASK);
 		regw_if(utemp, IPIPEIF_ADOFS);
 
@@ -87,7 +92,16 @@ int ipipeif_hw_setup(struct ipipeif *params)
 {
 	unsigned int utemp = 0, utemp1 = 0x7;
 	enum vpfe_hw_if_type isif_port_if;
-
+#ifdef CONFIG_VIDEO_YCBCR
+	//TODO
+	if(params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_8)
+	{
+		regw_if(params->glob_hor_size, IPIPEIF_PPLN);
+		regw_if(params->glob_ver_size, IPIPEIF_LPFR);
+		regw_if(params->hnum, IPIPEIF_HNUM);
+		regw_if(params->vnum, IPIPEIF_VNUM);
+	}
+#endif
 	if (NULL == params)
 		return -1;
 	/* Enable clock to IPIPEIF and IPIPE */
@@ -114,6 +128,15 @@ int ipipeif_hw_setup(struct ipipeif *params)
 		else
 			utemp &= (~(utemp1 << DATASFT_SHIFT));
 	}
+#ifdef CONFIG_VIDEO_YCBCR
+	//TODO
+	if(params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_8)
+	{
+		utemp &= ~(3<<2);
+		utemp |= (3<<2);
+		utemp |= 1;
+	}
+#endif
 	regw_if(utemp, IPIPEIF_GFG1);
 
 	switch (params->source) {
@@ -290,6 +313,14 @@ int ipipeif_hw_setup(struct ipipeif *params)
 					}
 				}
 				regw_if(utemp, IPIPEIF_CFG2);
+#ifdef CONFIG_VIDEO_YCBCR
+				if(params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_8)
+				{
+					utemp = ((params->var.if_5_1.clk_div.m - 1) << IPIPEIF_CLKDIV_M_SHIFT);
+					utemp |= (params->var.if_5_1.clk_div.n - 1);
+					regw_if(utemp, IPIPEIF_CLKDIV);
+				}
+#endif
 				break;
 			}
 		default:

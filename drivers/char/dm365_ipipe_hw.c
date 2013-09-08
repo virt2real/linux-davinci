@@ -387,7 +387,11 @@ static void rsz_set_rsz_regs(unsigned int rsz_id, struct ipipe_params *params)
 	regw_rsz(ext_mem->rsz_sdr_ptr_e_y, reg_base + RSZ_SDR_Y_PTR_E);
 	regw_rsz(ext_mem->rsz_sdr_oft_c, reg_base + RSZ_SDR_C_OFT);
 	regw_rsz(ext_mem->rsz_sdr_ptr_s_c, reg_base + RSZ_SDR_C_PTR_S);
+#ifdef CONFIG_VIDEO_YCBCR
+	regw_rsz(ext_mem->rsz_sdr_ptr_e_c, reg_base + RSZ_SDR_C_PTR_E);
+#else
 	regw_rsz((ext_mem->rsz_sdr_ptr_e_c >> 1), reg_base + RSZ_SDR_C_PTR_E);
+#endif
 }
 
 static int ipipe_setup_resizer(struct ipipe_params *params)
@@ -453,6 +457,9 @@ int ipipe_hw_setup(struct ipipe_params *config)
 		/* enable ipipe mode to either one shot or continuous */
 		utemp = config->ipipe_mode;
 		regw_ip((utemp), IPIPE_SRC_MODE);
+#ifdef CONFIG_VIDEO_YCBCR
+		if(config->ipipe_dpaths_fmt != IPIPE_YUV2YUV)
+#endif
 		regw_ip(1, IPIPE_SRC_EN);
 		data_format = config->ipipe_dpaths_fmt;
 		regw_ip(data_format, IPIPE_SRC_FMT);
@@ -480,7 +487,22 @@ int ipipe_hw_setup(struct ipipe_params *config)
 	}
 	return ipipe_setup_resizer(config);
 }
+#ifdef CONFIG_VIDEO_YCBCR
+int ipipe_hw_set_ipipeif_addr(struct ipipe_params *config, unsigned int address)
+{
+	if (!config) {
+		printk(KERN_ERR "NULL config block received\n");
+		return -EINVAL;
+	}
 
+	if (ipipeif_set_address(&config->ipipeif_param,address) < 0) {
+		printk(KERN_ERR "Unable to set IPIPEIF sdram addr");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+#endif
 static void rsz_set_y_address(unsigned int address, unsigned int offset)
 {
 	u32 utemp;

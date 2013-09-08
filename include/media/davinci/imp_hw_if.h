@@ -174,6 +174,10 @@ struct imp_hw_interface {
 	int (*get_max_output_height) (int rsz);
 	/* Enumerate pixel format for a given input format */
 	int (*enum_pix) (u32 *output_pix, int index);
+#ifdef CONFIG_VIDEO_YCBCR
+	int (*set_ipipif_addr ) (struct device *dev, void *config, unsigned int address);
+#endif
+
 };
 
 struct imp_hw_interface *imp_get_hw_if(void);

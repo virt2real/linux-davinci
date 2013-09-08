@@ -91,6 +91,8 @@ struct ccdc_hw_ops {
 	void (*setfbaddr) (unsigned long addr);
 	/* Pointer to function to get field id */
 	int (*getfid) (void);
+	/* Dump configuration registers */
+	void (*isif_dump_hw_config) (void);
 };
 
 struct ccdc_hw_device {
