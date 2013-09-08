@@ -121,7 +121,17 @@ config VIDEO_VPFE_CAPTURE
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called vpfe-capture.
+	  
+config VIDEO_YCBCR
+	depends on (VIDEO_VPFE_CAPTURE)
+	bool "VPFE YCBCR format support"
+	default y
+	help
+	  Enables support for YCbCr camera
 
+	  This is temporary option that enables to support YCbCr camera with resolution 640x480.
+	  Later image format will be detected automatically
+	  
 config VIDEO_DM6446_CCDC
 	tristate "DM6446 CCDC HW module"
 	depends on VIDEO_VPFE_CAPTURE && ARCH_DAVINCI_DM644x
