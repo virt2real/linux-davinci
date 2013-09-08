@@ -429,9 +429,7 @@ static void ks8851_init_mac(struct ks8851_net *ks)
     printk("Init mac address\r\n");
 	/* first, try reading what we've got already */
 	if (ks->rc_ccr & CCR_EEPROM) {
-	    printk("EEPROM PRESENT\r\n");
 		ks8851_read_mac_addr(dev);
-	    printk("EEPROM PRESENT %s\r\n", dev->dev_addr);
 		if (is_valid_ether_addr(dev->dev_addr))
 			return;
 
