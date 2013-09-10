@@ -1411,10 +1411,12 @@ static int ks8851_probe(struct spi_device *spi)
 	struct ks8851_net *ks;
 	int ret;
 	unsigned cider;
-
+    printk("Network ethernet (ks8851) probe\r\n");
 	ndev = alloc_etherdev(sizeof(struct ks8851_net));
-	if (!ndev)
+	if (!ndev){
+	    printk("Network ethernet failed to allocate ndev\r\n");
 		return -ENOMEM;
+	}
 
 	spi->bits_per_word = 8;
 
@@ -1479,6 +1481,7 @@ static int ks8851_probe(struct spi_device *spi)
 	cider = ks8851_rdreg16(ks, KS_CIDER);
 	if ((cider & ~CIDER_REV_MASK) != CIDER_ID) {
 		dev_err(&spi->dev, "failed to read device ID\n");
+	    printk("Network ethernet failed to read device ID\r\n");
 		ret = -ENODEV;
 		goto err_id;
 	}
@@ -1499,16 +1502,21 @@ static int ks8851_probe(struct spi_device *spi)
 				   ndev->name, ks);
 	if (ret < 0) {
 		dev_err(&spi->dev, "failed to get irq\n");
+	    printk("Network ethernet failed to failed to get irq\r\n");
 		goto err_irq;
 	}
 
 	ret = register_netdev(ndev);
 	if (ret) {
 		dev_err(&spi->dev, "failed to register network device\n");
+	    printk("Network ethernet failed to register network device\r\n");
 		goto err_netdev;
 	}
 
 	netdev_info(ndev, "revision %d, MAC %pM, IRQ %d, %s EEPROM\n",
+		    CIDER_REV_GET(cider), ndev->dev_addr, ndev->irq,
+		    ks->rc_ccr & CCR_EEPROM ? "has" : "no");
+	printk("revision %d, MAC %pM, IRQ %d, %s EEPROM\n",
 		    CIDER_REV_GET(cider), ndev->dev_addr, ndev->irq,
 		    ks->rc_ccr & CCR_EEPROM ? "has" : "no");
 

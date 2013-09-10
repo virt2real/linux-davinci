@@ -1798,7 +1798,7 @@ long __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 		    !(vm_flags & vma->vm_flags))
 		{
 			//printk("VMA PTR=%x\r\n", vma);
-			if (vma) printk("VMA->VM_FLAGS=%x\r\n", vma->vm_flags);
+			//if (vma) printk("VMA->VM_FLAGS=%x\r\n", vma->vm_flags);
 			//printk("VM FLAGS=%x\r\n", vm_flags);
 
 			//printk("get user pages error 5 %d\r\n", i);
