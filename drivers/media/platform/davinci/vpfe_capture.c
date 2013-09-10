@@ -604,6 +604,7 @@ static int vpfe_set_format_in_sensor(struct vpfe_device *vpfe_dev,
 	int ret;
 
 	memset(&sd_fmt, 0, sizeof(sd_fmt));
+#ifdef CONFIV_VIDEO_YCBCR
 	if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
 	{
 		sd_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -620,6 +621,12 @@ static int vpfe_set_format_in_sensor(struct vpfe_device *vpfe_dev,
 		sd_fmt.fmt.pix.width = fmt->fmt.pix.width;
 		sd_fmt.fmt.pix.height = fmt->fmt.pix.height;
 	}
+#else
+	sd_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	sd_fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_SGRBG10;
+	sd_fmt.fmt.pix.width = fmt->fmt.pix.width;
+	sd_fmt.fmt.pix.height = fmt->fmt.pix.height;
+#endif
 	ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev,
 			sdinfo->grp_id, video, s_fmt, &sd_fmt);
 	return ret;
@@ -2181,8 +2188,11 @@ static void vpfe_calculate_offsets(struct vpfe_device *vpfe_dev)
 static void vpfe_start_capture(struct vpfe_device *vpfe_dev)
 {
 	if (ccdc_dev->hw_ops.enable_out_to_sdram)
-		ccdc_dev->hw_ops.enable_out_to_sdram(!vpfe_dev->imp_chained);
-
+#ifdef CONFIG_VIDEO_YCBCR
+	ccdc_dev->hw_ops.enable_out_to_sdram((!vpfe_dev->imp_chained || (vpfe_dev->imp_chained && (vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8))));
+#else
+	ccdc_dev->hw_ops.enable_out_to_sdram(!vpfe_dev->imp_chained);
+#endif
 	if (vpfe_dev->imp_chained)
 		imp_hw_if->enable(1, NULL);
 
@@ -2372,7 +2382,7 @@ static int vpfe_streamoff(struct file *file, void *priv,
 	if (ret && (ret != -ENOIOCTLCMD))
 		v4l2_err(&vpfe_dev->v4l2_dev, "stream off failed in subdev\n");
 
-#if CONFIG_VIDEO_YCBCR
+#ifdef CONFIG_VIDEO_YCBCR
 	if(ipipif_dma_addr_cpu)
 	{
 		dma_free_coherent(vpfe_dev->pdev,ipipif_dma_size,ipipif_dma_addr_cpu,ipipif_dma_addr_phys);
@@ -2877,13 +2887,13 @@ static int vpfe_probe(struct platform_device *pdev)
 
 	if (cont_bufsize) {
 		/* attempt to determine the end of Linux kernel memory */
-		unsigned int tmp_size = 0;
+		//unsigned int tmp_size = 0;
 		phys_end_kernel = virt_to_phys((void *)PAGE_OFFSET) +
 			(num_physpages << PAGE_SHIFT);
 		size = cont_bufsize;
 		phys_end_kernel += cont_bufoffset;
 		//printk("Cont memory %x -> %x for device %p\r\n", phys_end_kernel, size, &pdev->dev);
-		tmp_size = PAGE_ALIGN(size);
+		//tmp_size = PAGE_ALIGN(size);
 		//printk("Page align %d\r\n", tmp_size);
 		err = dma_declare_coherent_memory(&pdev->dev, phys_end_kernel,
 				phys_end_kernel, size,

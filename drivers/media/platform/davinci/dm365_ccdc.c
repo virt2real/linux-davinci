@@ -123,19 +123,19 @@ static struct ccdc_oper_config ccdc_cfg = {
 		.cfa_pat = CCDC_CFA_PAT_MOSAIC,
 		.data_msb = CCDC_BIT_MSB_7,
 		.config_params = {
-			.data_size = CCDC_10_BITS,
+			.data_size = CCDC_12_BITS,
 			.data_shift = CCDC_NO_SHIFT,
 			.col_pat_field0 = {
-				.olop = CCDC_BLUE,//CCDC_GREEN_BLUE,
-				.olep = CCDC_GREEN_RED,//CCDC_BLUE,
-				.elop = CCDC_GREEN_BLUE,//CCDC_RED,
-				.elep = CCDC_RED,//CCDC_GREEN_RED,
+				.olop = CCDC_GREEN_BLUE,
+				.olep = CCDC_BLUE,
+				.elop = CCDC_RED,
+				.elep = CCDC_GREEN_RED,
 			},
-			.col_pat_field0 = {
-				.olop = CCDC_BLUE,//CCDC_GREEN_BLUE,
-				.olep = CCDC_GREEN_RED,//CCDC_BLUE,
-				.elop = CCDC_GREEN_BLUE,//CCDC_RED,
-				.elep = CCDC_RED,//CCDC_GREEN_RED,
+			.col_pat_field1 = {
+				.olop = CCDC_GREEN_BLUE,
+				.olep = CCDC_BLUE,
+				.elop = CCDC_RED,
+				.elep = CCDC_GREEN_RED,
 			},
 			.test_pat_gen = 0,
 		},
@@ -1386,8 +1386,10 @@ static int ccdc_config_ycbcr(int mode)
 
 static int ccdc_configure(int mode)
 {
+#ifndef CONFIG_VIDEO_YCBCR
 	printk("CCDC CONFIGURE");
 	return ccdc_config_raw(mode);
+#endif
 	if (ccdc_cfg.if_type == VPFE_RAW_BAYER)
 		return ccdc_config_raw(mode);
 	else
@@ -1556,10 +1558,12 @@ static int dm365_ccdc_probe(struct platform_device *pdev)
 	//davinci_cfg_reg(DM365_VIN_CAM_WEN);
 	davinci_cfg_reg(DM365_VIN_CAM_VD);
 	davinci_cfg_reg(DM365_VIN_CAM_HD);
-	//davinci_cfg_reg(DM365_VIN_YIN4_7_EN);
-	//davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
+	davinci_cfg_reg(DM365_VIN_YIN4_7_EN);
+	davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
 	printk("CCDC_CONFIGURE BEFORE\r\n");
+#ifndef CONFIG_VIDE_YCBCR
 	ccdc_hw_dev.hw_ops.configure(0);
+#endif
 	printk(KERN_NOTICE "%s is registered with vpfe.\n",
 		ccdc_hw_dev.name);
 	return 0;

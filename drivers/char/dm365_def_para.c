@@ -67,15 +67,15 @@ struct prev_cfa dm365_cfa_defaults = {
 
 /* Defaults for rgb2rgb */
 struct prev_rgb2rgb dm365_rgb2rgb_defaults = {
-	.coef_rr = {0, 0},	/* 256 */
+	.coef_rr = {1, 0},	/* 256 */
 	.coef_gr = {0, 0},
-	.coef_br = {1, 0},
+	.coef_br = {0, 0},
 	.coef_rg = {0, 0},
 	.coef_gg = {1, 0},	/* 256 */
 	.coef_bg = {0, 0},
-	.coef_rb = {1, 0},
+	.coef_rb = {0, 0},
 	.coef_gb = {0, 0},
-	.coef_bb = {0, 0},	/* 256 */
+	.coef_bb = {1, 0},	/* 256 */
 	.out_ofst_r = 0,
 	.out_ofst_g = 0,
 	.out_ofst_b = 0
@@ -202,10 +202,10 @@ struct ipipe_params dm365_ipipe_defs = {
 	},
 	.ipipe_mode = ONE_SHOT,
 	.ipipe_dpaths_fmt = IPIPE_RAW2YUV,
-	.ipipe_colpat_olop = IPIPE_BLUE,//IPIPE_GREEN_BLUE,
-	.ipipe_colpat_olep = IPIPE_GREEN_RED, //IPIPE_BLUE,
-	.ipipe_colpat_elop = IPIPE_GREEN_BLUE,//IPIPE_RED,
-	.ipipe_colpat_elep = IPIPE_RED,//IPIPE_GREEN_RED
+	.ipipe_colpat_olop = IPIPE_GREEN_BLUE,
+	.ipipe_colpat_olep = IPIPE_BLUE,
+	.ipipe_colpat_elop = IPIPE_RED,
+	.ipipe_colpat_elep = IPIPE_GREEN_RED,
 	.ipipe_vps = 0,
 	.ipipe_vsz = HEIGHT_I - 1,
 	.ipipe_hps = 0,
@@ -347,10 +347,10 @@ struct prev_single_shot_config dm365_prev_ss_config_defs = {
 		.align_sync = 0,
 		.rsz_start = 0,
 		.pix_fmt = IPIPE_BAYER,
-		.colp_olop = IPIPE_GREEN_RED,
-		.colp_olep = IPIPE_RED,
-		.colp_elop = IPIPE_BLUE,
-		.colp_elep = IPIPE_GREEN_BLUE
+		.colp_olop = IPIPE_GREEN_BLUE,
+		.colp_olep = IPIPE_BLUE,
+		.colp_elop = IPIPE_RED,
+		.colp_elep = IPIPE_GREEN_RED
 	},
 	.output = {
 		.pix_fmt = IPIPE_UYVY
@@ -366,10 +366,11 @@ struct prev_continuous_config dm365_prev_cont_config_defs = {
 		.avg_filter_en = AVG_OFF,
 		.gain = 512,
 		.clip = 4095,
-		.colp_olop = IPIPE_GREEN_BLUE,
-		.colp_olep = IPIPE_BLUE,
-		.colp_elop = IPIPE_RED,
-		.colp_elep = IPIPE_GREEN_RED
+		//YCBCR
+		.colp_olop = IPIPE_GREEN_RED,
+		.colp_olep = IPIPE_RED,
+		.colp_elop = IPIPE_BLUE,
+		.colp_elep = IPIPE_GREEN_BLUE
 	},
 };
 

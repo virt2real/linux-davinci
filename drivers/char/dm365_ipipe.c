@@ -2318,8 +2318,10 @@ static void ipipe_set_oper_state(unsigned int state)
 
 static unsigned int ipipe_get_prev_config_state(void)
 {
+#ifndef CONFIG_VIDEO_YCBCR
 	set_rgb2rgb_params(0, 0, 0, 0);
 	set_rgb2rgb_params(0, 1, 0, 0);
+#endif
 	return oper_state.prev_config_state;
 }
 
