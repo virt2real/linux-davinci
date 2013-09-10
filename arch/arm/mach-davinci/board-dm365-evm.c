@@ -60,7 +60,7 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 };
 /* Input available at the ov7690 */
 //Shadrin camera
-static struct v4l2_input mt9p031_inputs[] = {
+static struct v4l2_input ov2643_inputs[] = {
 	{
 		.index = 0,
 		.name = "Camera",
@@ -68,22 +68,26 @@ static struct v4l2_input mt9p031_inputs[] = {
 	}
 };
 
-//Shadrin camera
+
 static struct vpfe_subdev_info vpfe_sub_devs[] = {
 	{
 		//Clock for camera????
-		.module_name = "mt9p031",
+		.module_name = "ov2643",
 		.is_camera = 1,
-		.grp_id = VPFE_SUBDEV_MT9P031,
-		.num_inputs = ARRAY_SIZE(mt9p031_inputs),
-		.inputs = mt9p031_inputs,
+		.grp_id = VPFE_SUBDEV_OV2643,
+		.num_inputs = ARRAY_SIZE(ov2643_inputs),
+		.inputs = ov2643_inputs,
 		.ccdc_if_params = {
+#ifdef CONFIG_VIDEO_YCBCR
+			.if_type = VPFE_YCBCR_SYNC_8,
+#else
 			.if_type = VPFE_RAW_BAYER,
+#endif
 			.hdpol = VPFE_PINPOL_POSITIVE,
 			.vdpol = VPFE_PINPOL_POSITIVE,
 		},
 		.board_info = {
-			I2C_BOARD_INFO("mt9p031", 0x30),
+			I2C_BOARD_INFO("ov2643", 0x30),
 			/* this is for PCLK rising edge */
 			.platform_data = (void *)1,
 		},
