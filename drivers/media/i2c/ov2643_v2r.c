@@ -21,7 +21,9 @@
 #include <media/davinci/videohd.h>
 
 
-#define OV2643_DEBUG
+#ifdef CONFIG_V2R_DEBUG
+    #define OV2643_DEBUG
+#endif
 
 /* OV2643 has 8 I2C registers */
 #define I2C_8BIT			1
