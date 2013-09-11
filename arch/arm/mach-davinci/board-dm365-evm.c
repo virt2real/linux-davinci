@@ -467,6 +467,12 @@ static __init void dm365_evm_init(void)
 	//struct davinci_soc_info *soc_info = &davinci_soc_info;
 	struct clk *aemif_clk;
 
+	camera_run = 0;
+	led_run = 0;
+	lan_run = 0;
+	w1_run  = 0;
+	spi0_run = 0;
+
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	v2r_parse_cmdline(saved_command_line);
 #endif
@@ -622,12 +628,15 @@ static void v2r_parse_cmdline(char * string)
 		}
 		if (!strcmp(param_value, "ov5642")) {
 		    printk(KERN_INFO "Use camera OmniVision OV5642\n");
+		    camera_run = 1;
 		}
 		if (!strcmp(param_value, "ov7675")) {
 		    printk(KERN_INFO "Use camera OmniVision OV7675\n");
+		    camera_run = 1;
 		}
 		if (!strcmp(param_value, "ov9710")) {
 		    printk(KERN_INFO "Use camera OmniVision OV9710\n");
+		    camera_run = 1;
 		}
 	    }
 	    
