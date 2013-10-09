@@ -542,7 +542,9 @@ int rsz_set_output_address(struct ipipe_params *params,
 	struct ipipe_rsz_rescale_param *rsc_param =
 		&params->rsz_rsc_param[resize_no];
 
+#ifdef CONFIG_V2R_DEBUG
 	printk(KERN_DEBUG "rsz_set_output_address %d\n", resize_no);
+#endif
 	if (resize_no == RSZ_A)
 		rsz_start_add = RSZ_EN_A;
 	else

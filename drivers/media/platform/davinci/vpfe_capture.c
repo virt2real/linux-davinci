@@ -708,8 +708,10 @@ static int vpfe_initialize_device(struct vpfe_device *vpfe_dev)
 		(imp_hw_if->get_preview_oper_mode() == IMP_MODE_CONTINUOUS)) {
 		if (imp_hw_if->get_previewer_config_state()
 			== STATE_CONFIGURED) {
+#ifdef CONFIG_V2R_DEBUG
 			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "IPIPE Chained\n");
 			v4l2_info(&vpfe_dev->v4l2_dev, "IPIPE Chained\n");
+#endif
 			vpfe_dev->imp_chained = 1;
 			vpfe_dev->out_from = VPFE_IMP_PREV_OUT;
 			if (imp_hw_if->get_resizer_config_state()
@@ -750,8 +752,9 @@ static int vpfe_open(struct file *file)
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	struct vpfe_fh *fh;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_open\n");
-
+#endif
 	if (!vpfe_dev->cfg->num_subdevs) {
 		v4l2_err(&vpfe_dev->v4l2_dev, "No decoder registered\n");
 		return -ENODEV;
@@ -950,7 +953,9 @@ static irqreturn_t vpfe_imp_dma_isr(int irq, void *dev_id)
 	int fid;
 	enum v4l2_field field;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "\nvpfe_imp_dma_isr\n");
+#endif
 
 	/* if streaming not started, don't do anything */
 	if (!vpfe_dev->started)
@@ -983,7 +988,9 @@ static irqreturn_t vpfe_imp_update_isr(int irq, void *dev_id)
 {
 	struct vpfe_device *vpfe_dev = dev_id;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "\nvpfe_imp_update_isr\n");
+#endif
 
 	/* if streaming not started, don't do anything */
 	if (!vpfe_dev->started)
@@ -1103,7 +1110,9 @@ static int vpfe_release(struct file *file)
 	struct vpfe_subdev_info *sdinfo;
 	int ret;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_release\n");
+#endif
 
 	/* Get the device lock */
 	mutex_lock(&vpfe_dev->lock);
@@ -1158,7 +1167,9 @@ static int vpfe_mmap(struct file *file, struct vm_area_struct *vma)
 	/* Get the device object and file handle object */
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_mmap\n");
+#endif
 
 	return videobuf_mmap_mapper(&vpfe_dev->buffer_queue, vma);
 }
@@ -1170,7 +1181,9 @@ static unsigned int vpfe_poll(struct file *file, poll_table *wait)
 {
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_poll\n");
+#endif
 
 	if (vpfe_dev->started)
 		return videobuf_poll_stream(file,
@@ -1184,11 +1197,15 @@ static long vpfe_param_handler(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	int ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_param_handler\n");
+#endif
 
 	if (NULL == param) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 			"Invalid user ptr\n");
+#endif
 	}
 
 	if (vpfe_dev->started) {
@@ -1207,8 +1224,10 @@ static long vpfe_param_handler(struct file *file, void *priv,
 			return ret;
 		ret = ccdc_dev->hw_ops.set_params(param);
 		if (ret) {
+#ifdef CONFIG_V2R_DEBUG
 			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 				"Error in setting parameters in CCDC\n");
+#endif
 			goto unlock_out;
 		}
 
@@ -1229,8 +1248,10 @@ unlock_out:
 		}
 		ret = ccdc_dev->hw_ops.get_params(param);
 		if (ret) {
+#ifdef CONFIG_V2R_DEBUG
 			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 				"Error in getting parameters from CCDC\n");
+#endif
 		}
 		break;
 
@@ -1377,8 +1398,10 @@ static const struct vpfe_pixel_format *
 
 	min_width /= vpfe_pix_fmt->bpp;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "width = %d, height = %d, bpp = %d\n",
 		  pixfmt->width, pixfmt->height, vpfe_pix_fmt->bpp);
+#endif
 
 	pixfmt->width = clamp((pixfmt->width), min_width, max_width);
 	pixfmt->height = clamp((pixfmt->height), min_height, max_height);
@@ -1399,10 +1422,12 @@ static const struct vpfe_pixel_format *
 	else
 		pixfmt->sizeimage = pixfmt->bytesperline * pixfmt->height;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "adjusted width = %d, height ="
 		 " %d, bpp = %d, bytesperline = %d, sizeimage = %d\n",
 		 pixfmt->width, pixfmt->height, vpfe_pix_fmt->bpp,
 		 pixfmt->bytesperline, pixfmt->sizeimage);
+#endif
 	return vpfe_pix_fmt;
 }
 
@@ -1411,7 +1436,9 @@ static int vpfe_querycap(struct file *file, void  *priv,
 {
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_querycap\n");
+#endif
 
 	cap->version = VPFE_CAPTURE_VERSION_CODE;
 	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
@@ -1427,7 +1454,9 @@ static int vpfe_g_fmt_vid_cap(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	int ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_g_fmt_vid_cap\n");
+#endif
 	/* Fill in the information about format */
 	*fmt = vpfe_dev->fmt;
 	return ret;
@@ -1441,7 +1470,9 @@ static int vpfe_enum_fmt_vid_cap(struct file *file, void  *priv,
 	int temp_index;
 	u32 pix;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_enum_fmt_vid_cap\n");
+#endif
 
 	if (!vpfe_dev->imp_chained) {
 		if (ccdc_dev->hw_ops.enum_pix(&pix, fmt->index) < 0)
@@ -1582,7 +1613,9 @@ static int vpfe_s_fmt_vid_cap(struct file *file, void *priv,
 	struct vpfe_subdev_info *sdinfo;
 	int ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_s_fmt_vid_cap\n");
+#endif
 
 	/* If streaming is started, return error */
 	if (vpfe_dev->started) {
@@ -1662,7 +1695,9 @@ static int vpfe_try_fmt_vid_cap(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	const struct vpfe_pixel_format *pix_fmts;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_try_fmt_vid_cap\n");
+#endif
 
 	pix_fmts = vpfe_check_format(vpfe_dev, &f->fmt.pix);
 	if (NULL == pix_fmts)
@@ -1728,15 +1763,19 @@ static int vpfe_enum_input(struct file *file, void *priv,
 	struct vpfe_subdev_info *sdinfo;
 	int subdev, index, temp_index;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_enum_input\n");
+#endif
 
 	temp_index = inp->index;
 	if (vpfe_get_subdev_input_index(vpfe_dev,
 					&subdev,
 					&index,
 					inp->index) < 0) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "input information not found"
 			 " for the subdev\n");
+#endif
 		return -EINVAL;
 	}
 	sdinfo = &vpfe_dev->cfg->sub_devs[subdev];
@@ -1749,7 +1788,9 @@ static int vpfe_g_input(struct file *file, void *priv, unsigned int *index)
 {
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_g_input\n");
+#endif
 
 	return vpfe_get_app_input_index(vpfe_dev, index);
 }
@@ -1762,7 +1803,9 @@ static int vpfe_s_input(struct file *file, void *priv, unsigned int index)
 	struct vpfe_route *route;
 	u32 input = 0, output = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_s_input\n");
+#endif
 
 	ret = mutex_lock_interruptible(&vpfe_dev->lock);
 	if (ret)
@@ -1797,9 +1840,11 @@ static int vpfe_s_input(struct file *file, void *priv, unsigned int index)
 	if (vpfe_dev->cfg->setup_input) {
 		if (vpfe_dev->cfg->setup_input(sdinfo->grp_id) < 0) {
 			ret = -EFAULT;
+#ifdef CONFIG_V2R_DEBUG
 			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 				 "couldn't setup input for %s\n",
 				 sdinfo->module_name);
+#endif
 			goto unlock_out;
 		}
 	}
@@ -1813,9 +1858,11 @@ static int vpfe_s_input(struct file *file, void *priv, unsigned int index)
 						 s_routing, input, output, 0);
 
 		if (ret) {
+#ifdef CONFIG_V2R_DEBUG
 			v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 				"s_input:error in setting input in"
 				" decoder \n");
+#endif
 			ret = -EINVAL;
 			goto unlock_out;
 		}
@@ -1865,7 +1912,9 @@ static int vpfe_querystd(struct file *file, void *priv, v4l2_std_id *std_id)
 	struct vpfe_subdev_info *sdinfo;
 	int ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_querystd\n");
+#endif
 
 	ret = mutex_lock_interruptible(&vpfe_dev->lock);
 	sdinfo = vpfe_dev->current_subdev;
@@ -1884,7 +1933,9 @@ static int vpfe_s_std(struct file *file, void *priv, v4l2_std_id *std_id)
 	struct vpfe_subdev_info *sdinfo;
 	int ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_s_std\n");
+#endif
 
 	/* Call decoder driver function to set the standard */
 	ret = mutex_lock_interruptible(&vpfe_dev->lock);
@@ -1926,11 +1977,15 @@ static int vpfe_g_std(struct file *file, void *priv, v4l2_std_id *std_id)
 {
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_g_std\n");
+#endif
 
 	if (vpfe_dev->std_index < 0 ||
 	    vpfe_dev->std_index >= ARRAY_SIZE(vpfe_standards)) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "Standard not supported\n");
+#endif
 		return -EINVAL;
 	}
 	*std_id = vpfe_standards[vpfe_dev->std_index].std_id;
@@ -1947,7 +2002,9 @@ static int vpfe_videobuf_setup(struct videobuf_queue *vq,
 	struct vpfe_fh *fh = vq->priv_data;
 	struct vpfe_device *vpfe_dev = fh->vpfe_dev;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_buffer_setup\n");
+#endif
 
 	/*
 	 * if we are using mmap, check the size of the allocated buffer is less
@@ -1974,8 +2031,10 @@ static int vpfe_videobuf_setup(struct videobuf_queue *vq,
 	if (*count < config_params.min_numbuffers)
 		*count = config_params.min_numbuffers;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 		"count=%d, size=%d\n", *count, *size);
+#endif
 	return 0;
 }
 
@@ -1988,7 +2047,9 @@ static int vpfe_videobuf_prepare(struct videobuf_queue *vq,
 	unsigned long addr;
 	int ret;
 
+	#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_videobuf_prepare\n");
+	#endif
 
 	/* If buffer is not initialized, initialize it */
 	if (VIDEOBUF_NEEDS_INIT == vb->state) {
@@ -2035,7 +2096,9 @@ static void vpfe_videobuf_release(struct videobuf_queue *vq,
 	struct vpfe_fh *fh = vq->priv_data;
 	struct vpfe_device *vpfe_dev = fh->vpfe_dev;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_videobuf_release\n");
+#endif
 
 	if (vpfe_dev->memory == V4L2_MEMORY_MMAP)
 		videobuf_dma_contig_free(vq, vb);
@@ -2060,7 +2123,9 @@ static int vpfe_reqbufs(struct file *file, void *priv,
 	struct vpfe_fh *fh = file->private_data;
 	int ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_reqbufs\n");
+#endif
 
 	if (V4L2_BUF_TYPE_VIDEO_CAPTURE != req_buf->type) {
 		v4l2_err(&vpfe_dev->v4l2_dev, "Invalid buffer type\n");
@@ -2103,7 +2168,9 @@ static int vpfe_querybuf(struct file *file, void *priv,
 {
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_querybuf\n");
+#endif
 
 	if (V4L2_BUF_TYPE_VIDEO_CAPTURE != buf->type) {
 		v4l2_err(&vpfe_dev->v4l2_dev, "Invalid buf type\n");
@@ -2124,7 +2191,9 @@ static int vpfe_qbuf(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	struct vpfe_fh *fh = file->private_data;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_qbuf\n");
+#endif
 
 	if (V4L2_BUF_TYPE_VIDEO_CAPTURE != p->type) {
 		v4l2_err(&vpfe_dev->v4l2_dev, "Invalid buf type\n");
@@ -2147,7 +2216,9 @@ static int vpfe_dqbuf(struct file *file, void *priv,
 {
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_dqbuf\n");
+#endif
 
 	if (V4L2_BUF_TYPE_VIDEO_CAPTURE != buf->type) {
 		v4l2_err(&vpfe_dev->v4l2_dev, "Invalid buf type\n");
@@ -2167,7 +2238,9 @@ static void vpfe_calculate_offsets(struct vpfe_device *vpfe_dev)
 {
 	struct v4l2_rect image_win;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_calculate_offsets\n");
+#endif
 
 	vpfe_dev->field_off = 0;
 	vpfe_dev->second_off = 0;
@@ -2215,7 +2288,9 @@ static int vpfe_streamon(struct file *file, void *priv,
 	unsigned long addr_ipipeif = 0;
 	int ret = -EINVAL;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_streamon\n");
+#endif
 
 	if (V4L2_BUF_TYPE_VIDEO_CAPTURE != buf_type) {
 		v4l2_err(&vpfe_dev->v4l2_dev, "Invalid buf type\n");
@@ -2349,16 +2424,22 @@ static int vpfe_streamoff(struct file *file, void *priv,
 	struct vpfe_subdev_info *sdinfo;
 	int ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_streamoff\n");
+#endif
 
 	if (V4L2_BUF_TYPE_VIDEO_CAPTURE != buf_type) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "Invalid buf type\n");
+#endif
 		return -EINVAL;
 	}
 
 	/* If io is allowed for this file handle, return error */
 	if (!fh->io_allowed) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "fh->io_allowed\n");
+#endif
 		return -EACCES;
 	}
 
@@ -2403,7 +2484,9 @@ static int vpfe_queryctrl(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	struct vpfe_subdev_info *sub_dev = vpfe_dev->current_subdev;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_queryctrl\n");
+#endif
 
 	/* pass it to sub device */
 	return v4l2_device_call_until_err(&vpfe_dev->v4l2_dev, sub_dev->grp_id,
@@ -2416,7 +2499,9 @@ static int vpfe_g_ctrl(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	struct vpfe_subdev_info *sub_dev = vpfe_dev->current_subdev;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_g_ctrl\n");
+#endif
 
 	return v4l2_device_call_until_err(&vpfe_dev->v4l2_dev, sub_dev->grp_id,
 					  core, g_ctrl, ctrl);
@@ -2428,7 +2513,9 @@ static int vpfe_s_ctrl(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	struct vpfe_subdev_info *sub_dev = vpfe_dev->current_subdev;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_s_ctrl\n");
+#endif
 
 	return v4l2_device_call_until_err(&vpfe_dev->v4l2_dev, sub_dev->grp_id,
 					  core, s_ctrl, ctrl);
@@ -2440,7 +2527,9 @@ static int vpfe_cropcap(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	struct vpfe_subdev_info *sdinfo;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_cropcap\n");
+#endif
 
 	memset(crop, 0, sizeof(struct v4l2_cropcap));
 	crop->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -2476,7 +2565,9 @@ static int vpfe_g_crop(struct file *file, void *priv,
 {
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_g_crop\n");
+#endif
 
 	crop->c = vpfe_dev->crop;
 	return 0;
@@ -2488,7 +2579,9 @@ static int vpfe_s_crop(struct file *file, void *priv,
 	struct vpfe_device *vpfe_dev = video_drvdata(file);
 	int ret = 0, max_height, max_width;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_s_crop\n");
+#endif
 
 	if (vpfe_dev->started) {
 		/* make sure streaming is not started */
@@ -2574,27 +2667,35 @@ static int vpfe_s_parm(struct file *file, void *priv,
 
 	/* TODO - Revisit it before submitting to upstream */
 	if (!cpu_is_davinci_dm365()) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 			"Ioctl not supported on this platform\n");
+#endif
 		goto out;
 	}
 
 	if (vpfe_dev->started) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 			"Steaming ON. Cannot change capture streaming params.");
+#endif
 		goto out;
 	}
 
 	if (vpfe_dev->std_info.frame_format) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 			"Supported only for progressive scan");
+#endif
 		goto out;
 	}
 
 	if (!capparam->timeperframe.numerator ||
 	    !capparam->timeperframe.denominator) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 			"invalid timeperframe");
+#endif
 		goto out;
 	}
 
@@ -2602,6 +2703,7 @@ static int vpfe_s_parm(struct file *file, void *priv,
 	    vpfe_dev->std_info.fps.numerator ||
 	    capparam->timeperframe.denominator >
 	    vpfe_dev->std_info.fps.denominator) {
+#ifdef CONFIG_V2R_DEBUG
 		v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 			"Invalid capparam, timeperframe.numerator = %d,"
 			"timeperframe.denominator = %d,\n"
@@ -2611,6 +2713,7 @@ static int vpfe_s_parm(struct file *file, void *priv,
 			capparam->timeperframe.denominator,
 			vpfe_dev->std_info.fps.numerator,
 			vpfe_dev->std_info.fps.denominator);
+#endif
 		goto out;
 	}
 
@@ -2648,7 +2751,9 @@ static int vpfe_enum_framesizes(struct file *file, void *priv,
 	u32 pixel_format;
 	int ret = -EINVAL;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_enum_framesizes\n");
+#endif
 	sdinfo = vpfe_dev->current_subdev;
 
 	mutex_lock(&vpfe_dev->lock);
@@ -2688,7 +2793,9 @@ static int vpfe_enum_frameintervals(struct file *file, void *priv,
 	u32 pixel_format;
 	int ret = -EINVAL;
 
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_enum_frameintervals\n");
+#endif
 	sdinfo = vpfe_dev->current_subdev;
 
 	mutex_lock(&vpfe_dev->lock);
@@ -3009,10 +3116,12 @@ static int vpfe_probe(struct platform_device *pdev)
 	/* Initialize prio member of device object */
 	v4l2_prio_init(&vpfe_dev->prio);
 	/* register video device */
+#ifdef CONFIG_V2R_DEBUG
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 		"trying to register vpfe device.\n");
 	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev,
 		"video_dev=%x\n", (int)&vpfe_dev->video_dev);
+#endif
 	vpfe_dev->fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	ret = video_register_device(vpfe_dev->video_dev,
 				    VFL_TYPE_GRABBER, -1);
