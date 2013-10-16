@@ -599,6 +599,14 @@ config INPUT_ADXL34X_SPI
 	  To compile this driver as a module, choose M here: the
 	  module will be called adxl34x-spi.
 
+config INPUT_ADXL34X_ALLOW_POLLING
+	bool "allow to fallback to polling mode"
+	depends on INPUT_ADXL34X
+	default y
+	help
+	Say Y here if the int lines of your ADXL345/6 are unused.
+
+
 config INPUT_CMA3000
 	tristate "VTI CMA3000 Tri-axis accelerometer"
 	help
