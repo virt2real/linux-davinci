@@ -1121,6 +1121,7 @@ static struct plat_serial8250_port dm365_serial_platform_data[] = {
 				  UPF_IOREMAP,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
+		.uartclk	= 24000000,
 	},
 	{
 		.mapbase	= DM365_UART1_BASE,
@@ -1129,6 +1130,7 @@ static struct plat_serial8250_port dm365_serial_platform_data[] = {
 				  UPF_IOREMAP,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
+		.uartclk	= 86250000,
 	},
 	{
 		.flags		= 0

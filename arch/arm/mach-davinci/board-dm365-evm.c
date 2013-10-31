@@ -53,11 +53,12 @@ static struct i2c_board_info i2c_info[] = {
 };
 
 static struct davinci_i2c_platform_data i2c_pdata = {
-	.bus_freq	= 400	/* kHz */,
+	.bus_freq	= 100	/* kHz */, //was 400
 	.bus_delay	= 0	/* usec */,
 	.sda_pin        = 21,
 	.scl_pin        = 20,
 };
+
 /* Input available at the ov7690 */
 //Shadrin camera
 static struct v4l2_input ov2643_inputs[] = {
@@ -296,7 +297,7 @@ static struct platform_device *dm365_evm_nand_devices[] __initdata = {
 
 
 static struct davinci_uart_config uart_config __initdata = {
-	.enabled_uarts = (1 << 0),
+	.enabled_uarts = (1 << 0) | (1 << 1),
 };
 
 static void __init dm365_evm_map_io(void)
@@ -489,7 +490,13 @@ static __init void dm365_evm_init(void)
 	// try to init camera
 	if (camera_run) dm365_camera_configure();
 
-	// try to init UART0
+	// set up UART1 GPIO
+	if (uart1_run) {
+	    davinci_cfg_reg(DM365_UART1_RXD);
+	    davinci_cfg_reg(DM365_UART1_TXD);
+	}
+
+	// try to init UARTs
 	davinci_serial_init(&uart_config);
 
 	//dm365evm_emac_configure();
@@ -601,6 +608,13 @@ static void v2r_parse_cmdline(char * string)
 		if (!strcmp(param_value, "on")) {
 		    printk(KERN_INFO "SPI0 enabled\n");
 		    spi0_run = 1;
+		}
+	    }
+
+	    if (!strcmp(param_name, "uart1")) {
+		if (!strcmp(param_value, "on")) {
+		    printk(KERN_INFO "UART1 enabled\n");
+		    uart1_run = 1;
 		}
 	    }
 
