@@ -163,6 +163,18 @@ static int cq93vc_probe(struct snd_soc_codec *codec)
 	/* Off, with power on */
 	cq93vc_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
+	/* Turn on Automatic Level Control (VC_REG06) */
+	cq93vc_write(codec, DAVINCI_VC_REG06, 1);
+
+	/* Turn on microphone Gain (VC_REG05) */
+	cq93vc_write(codec, DAVINCI_VC_REG05, 0x1f);
+
+	/* Recording Mode Control (VC_REG04) */
+	cq93vc_write(codec, DAVINCI_VC_REG04, 0x0);
+
+
+
+
 	return 0;
 }
 
