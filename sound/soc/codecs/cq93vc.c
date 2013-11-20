@@ -57,7 +57,7 @@ static inline int cq93vc_write(struct snd_soc_codec *codec, unsigned int reg,
 }
 
 static const struct snd_kcontrol_new cq93vc_snd_controls[] = {
-	SOC_SINGLE("PGA Capture Volume", DAVINCI_VC_REG05, 0, 0x03, 0),
+	SOC_SINGLE("PGA Capture Volume", DAVINCI_VC_REG05, 0, 0x1f, 0), // was 0x03
 	SOC_SINGLE("Mono DAC Playback Volume", DAVINCI_VC_REG09, 0, 0x3f, 0),
 };
 
