@@ -7,6 +7,7 @@ bool lan_run; // LAN init flag
 bool spi0_run; // SPI0 init flag
 bool led_run; // LED-triggers init flag
 bool camera_run; // camera init flag
+bool uart1_run; // UART1 init flag
 
 /*  PRTCSS functionality */
 
