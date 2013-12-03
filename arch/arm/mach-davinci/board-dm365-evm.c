@@ -468,11 +468,13 @@ static __init void dm365_evm_init(void)
 	//struct davinci_soc_info *soc_info = &davinci_soc_info;
 	struct clk *aemif_clk;
 
-	camera_run = 0;
-	led_run = 0;
+	w1_run = 0;
 	lan_run = 0;
-	w1_run  = 0;
 	spi0_run = 0;
+	led_run = 0;
+	camera_run = 0;
+	uart1_run = 0;
+
 
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	v2r_parse_cmdline(saved_command_line);
