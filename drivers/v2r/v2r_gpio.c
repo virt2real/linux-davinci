@@ -762,7 +762,7 @@ static int __init v2r_init_module(void){
 	for (i=0; i<=TOTAL_GPIO; i++) {
 		gpioGroupTable[i] = gpiotable[i];
 	}
-	gpioGroupTableCounter = i; // save group size
+	gpioGroupTableCounter = i-1; // save group size
 
 	return 0; /* success */
 fail:
