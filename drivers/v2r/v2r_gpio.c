@@ -145,11 +145,15 @@ static gpio gpiotable[TOTAL_GPIO+1] = {
 { 97, "GPIO97",	DM365_GPIO97, 97},
 { 98, "GPIO98",	DM365_GPIO98, 98},
 { 99, "GPIO99",	DM365_GPIO99, 99},
-{ 100, "GPIO100",	DM365_GPIO100, 100},
-{ 101, "GPIO101",	DM365_GPIO101, 101},
-{ 102, "GPIO102",	DM365_GPIO102, 102},
-{ 103, "GPIO103",	DM365_GPIO103, 103},
+{ 100, "GPIO100", DM365_GPIO100, 100},
+{ 101, "GPIO101", DM365_GPIO101, 101},
+{ 102, "GPIO102", DM365_GPIO102, 102},
+{ 103, "GPIO103", DM365_GPIO103, 103},
 };
+
+// array for GPIO group
+static gpio gpioGroupTable[TOTAL_GPIO+1];
+static short gpioGroupTableCounter = 0;
 
 static void v2r_gpio_direction_output(unsigned int number, unsigned int value){
 	gpio_direction_output(number, value);
@@ -249,7 +253,7 @@ static void process_con(char** data, unsigned int ordinal){
 
 	int tmp = NA;
 	if (!(ordinal > 0 && ordinal <= TOTAL_GPIO)){
-		printk("Wrong pin number (%d)\r\n", ordinal);
+		printk("Wrong gpio number (%d)\r\n", ordinal);
 		return;
 	}
 
@@ -259,7 +263,7 @@ static void process_con(char** data, unsigned int ordinal){
 
 		if (is_equal_string(data[2], "input")){
 
-			//printk("Configure con%d (GPIO %d) pin as input\r\n", ordinal, gpiotable[ordinal].gpio_number);
+			//printk("Configure con%d (GPIO %d) gpio as input\r\n", ordinal, gpiotable[ordinal].gpio_number);
 
 			v2r_gpio_direction_input(gpiotable[ordinal].gpio_number);
 			davinci_cfg_reg(gpiotable[ordinal].gpio_descriptor);
@@ -313,6 +317,8 @@ static void process_set(char** data){
 
 static void process_command(char** data){
 
+	int gpio = -1;
+
 	if (data[0]){
 
 		//Any parse result present
@@ -322,6 +328,45 @@ static void process_command(char** data){
 			//Process for set command
 			process_set(data); return;
 		}
+
+		if (is_equal_string(data[0], "group")){
+
+			if (is_equal_string(data[1], "clear")){
+
+                        	//Process for group clear command
+				gpioGroupTableCounter = -1; // just null a group size
+				printk("v2r_gpio: gpio group cleared\n");
+				return;
+
+			}
+
+			if (is_equal_string(data[1], "add")){
+
+                        	//Process for group add command
+
+				if (gpioGroupTableCounter >=TOTAL_GPIO) {
+					printk("v2r_gpio: group is full\n");
+					return;
+				}
+
+				gpio = starts_with(data[2], "gpio");
+
+				if (!(gpio > 0 && gpio <= TOTAL_GPIO)){
+					printk("Wrong gpio number (%d)\n", gpio);
+					return;
+				}
+
+				gpioGroupTableCounter++;
+				gpioGroupTable[gpioGroupTableCounter] = gpiotable[gpio];
+
+				printk("v2r_gpio: added gpio%d into group. New group size is %d\n", gpio, gpioGroupTableCounter+1);
+				return;
+
+			}
+
+		}
+
+
 	}
 
 	printk("Wrong V2R driver command\r\n");
@@ -400,7 +445,7 @@ int v2r_gpio_release(struct inode *inode, struct file *filp){
 	return 0;
 }
 
-ssize_t v2r_gpio_read(struct file *filp, char __user *buf, size_t count,	loff_t *f_pos){
+ssize_t v2r_gpio_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos){
 	volatile unsigned long i;
 	volatile unsigned int counter = 0;
 
@@ -409,10 +454,10 @@ ssize_t v2r_gpio_read(struct file *filp, char __user *buf, size_t count,	loff_t 
 	if (mutex_lock_killable(&dev->v2r_mutex)) return -EINTR;
 
 	//printk("v2r_gpio device read from %d to %d\r\n", (long) *f_pos, (long) *f_pos + count - 1);
-
-	if (count > TOTAL_GPIO) count = TOTAL_GPIO; /* EOF */
-	if (*f_pos > TOTAL_GPIO) goto out; /* EOF */
-	if ((*f_pos + count) > TOTAL_GPIO) goto out; /* EOF */
+/*
+	if (count > TOTAL_GPIO) count = TOTAL_GPIO;
+	if (*f_pos > TOTAL_GPIO) goto out;
+	if ((*f_pos + count) > TOTAL_GPIO) goto out;
 
 	for (i = *f_pos; i < (*f_pos + count); i++) {
 		int value;
@@ -422,17 +467,51 @@ ssize_t v2r_gpio_read(struct file *filp, char __user *buf, size_t count,	loff_t 
 		if (value) v2r_gpio_retBuffer[counter] = '1'; else v2r_gpio_retBuffer[counter] = '0';
 		counter++;
 	}
+*/
+	// binary output
+	volatile char bitcounter = 0;
+	volatile char tempByte = 0;
+	volatile char value;
 
-	v2r_gpio_retBuffer[counter] = '\n';
-	counter++;
+//	for (i = 0; i <= TOTAL_GPIO; i++) {
+	if (gpioGroupTableCounter != -1) {
+	  counter = 1;
+	  for (i = 0; i <= gpioGroupTableCounter; i++) {
 
-	if (copy_to_user(buf, v2r_gpio_retBuffer, counter) != 0){
+		//value = gpio_get_value(gpiotable[i].gpio_number)? 1 : 0;
+		value = gpio_get_value(gpioGroupTable[i].gpio_number)? 1 : 0;
+		//printk("i=%d value=%d\n",i,value);
+		tempByte |= (value << bitcounter);
+		bitcounter++;
+		if (bitcounter > 7) {
+                	v2r_gpio_retBuffer[counter-1] = tempByte;
+			//printk("\n(bits %d-%d) value[%d]=%d\n",counter*8,counter*8+7,counter,v2r_gpio_retBuffer[counter]);
+			tempByte = 0;
+			bitcounter = 0;
+			counter++;
+		}
+	  }
+
+	  if (bitcounter) {
+		// if not all byte filled
+		v2r_gpio_retBuffer[counter-1] = tempByte;
+		counter++;
+	  }
+
+	} else {
+		printk("v2r_gpio: empty gpio group\n");
+	}
+
+	//v2r_gpio_retBuffer[counter] = '\n';
+	//counter++;
+
+	if (copy_to_user(buf, v2r_gpio_retBuffer, counter-1) != 0){
 		retval = -EFAULT;
 		goto out;
 	}
 
 	//printk("\r\nv2r_gpio copied %d bytes to user\r\n", counter);
-	retval = counter;
+	retval = counter-1;
 out:
 
   	mutex_unlock(&dev->v2r_mutex);
@@ -445,6 +524,11 @@ ssize_t v2r_gpio_write(struct file *filp, const char __user *buf, size_t count, 
 	char *tmp = 0;
 	int nIndex = 0;
 	char** data = 0;
+
+	char gpio;
+	char direction;
+	char state;
+
 	//printk("v2r_gpio write\r\n");
 	if (mutex_lock_killable(&dev->v2r_mutex)) return -EINTR;
 	if (*f_pos !=0) {
@@ -463,18 +547,100 @@ ssize_t v2r_gpio_write(struct file *filp, const char __user *buf, size_t count, 
 	}
 	tmp[count] = 0;
 	dev->buffer_data_size = 0;
-	//tmp contains string to parse
+
+	// if first byte is not ASCII - it's a binary command
+	switch (tmp[0]) {
+		case 1:
+			// set GPIO state
+			if (count < 3) {
+				printk("v2r_gpio: very short command\n");
+				goto parseout;
+			}
+
+			/* 
+			   tmp[0] - command
+			   tmp[1] - GPIO number
+			   tmp[2] - [bit:0] - direction, [bit:1] - state
+			*/
+
+			gpio = tmp[1];
+			direction = tmp[2] & 0x01;
+			state = (tmp[2] >> 1) & 0x01;
+
+			if (!(gpio > 0 && gpio <= TOTAL_GPIO)){
+				printk("Wrong gpio number (%d)\n", gpio);
+				goto parseout;
+			}
+
+			if (direction) {
+				v2r_gpio_direction_output(gpiotable[gpio].gpio_number, state);
+				davinci_cfg_reg(gpiotable[gpio].gpio_descriptor);
+			} else {
+				v2r_gpio_direction_input(gpiotable[gpio].gpio_number);
+				davinci_cfg_reg(gpiotable[gpio].gpio_descriptor);
+			}
+
+			printk("v2r_gpio: set GPIO %d direction %d state %d\n", gpio, direction, state);
+			
+			goto parseout;
+
+			break;
+
+		case 2:
+			// clear GPIO group
+			gpioGroupTableCounter = -1; // just null a group size
+			printk("v2r_gpio: gpio group cleared\n");
+			goto parseout;
+			break;
+
+		case 3:
+			// add GPIO into group
+			/* 
+			   tmp[0] - command
+			   tmp[1] - GPIO number
+			*/
+
+			if (gpioGroupTableCounter >=TOTAL_GPIO) {
+				printk("v2r_gpio: group is full\n");
+				goto parseout;
+			}
+
+			gpio = tmp[1];
+			if (!(gpio > 0 && gpio <= TOTAL_GPIO)){
+				printk("Wrong gpio number (%d)\n", gpio);
+				goto parseout;
+			}
+
+			gpioGroupTableCounter++;
+			gpioGroupTable[gpioGroupTableCounter] = gpiotable[gpio];
+
+			printk("v2r_gpio: added gpio%d into group. New group size is %d\n", gpio, gpioGroupTableCounter+1);
+			goto parseout;
+			break;
+
+		default:
+			break;
+	}
+
+
+	// otherwise it a text command, tmp contains string to parse
 	data = split(tmp, ' ');
 	process_command(data);
+
+parseout:
+
 	memcpy(dev->data, "ok", 3);
 	dev->buffer_data_size = 3;
 	nIndex = 0;
-	while(data[nIndex]){
-		//Release allocated memory
-		kfree(data[nIndex]);
-		nIndex++;
+	if (data) {
+		while(data[nIndex]){
+			//Release allocated memory
+			kfree(data[nIndex]);
+			nIndex++;
+		}
+		kfree(data);
 	}
-	kfree(data);
+
 	kfree(tmp);
 	*f_pos = 0;
 	retval = count;
@@ -590,6 +756,13 @@ static int __init v2r_init_module(void){
 
 	v2r_gpio_retBuffer = kmalloc(TOTAL_GPIO+1, GFP_KERNEL);
 	if (v2r_gpio_retBuffer==NULL) return -ENOMEM;
+
+	// fill gpioGroupTable width default values - all GPIOs
+	printk("v2r_gpio: fill default GPIO group array\n");
+	for (i=0; i<=TOTAL_GPIO; i++) {
+		gpioGroupTable[i] = gpiotable[i];
+	}
+	gpioGroupTableCounter = i; // save group size
 
 	return 0; /* success */
 fail:
