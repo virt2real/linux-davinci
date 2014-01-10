@@ -1019,13 +1019,14 @@ ssize_t gpio_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
 		case 0:
 			/* text mode */
 
-			if (count > TOTAL_GPIO) count = TOTAL_GPIO;
-			if (*f_pos > TOTAL_GPIO) goto out;
-			if ((*f_pos + count) > TOTAL_GPIO) goto out;
+			//if (count > TOTAL_GPIO) count = TOTAL_GPIO;
+			//if (*f_pos > TOTAL_GPIO) goto out;
+			//if ((*f_pos + count) > TOTAL_GPIO) goto out;
 
 			counter = 0;
 
-			for (i = *f_pos; i <= (*f_pos + count); i++) {
+			//for (i = *f_pos; i <= (*f_pos + count); i++) {
+			for (i = 0; i <= gpioGroupTableCounter; i++) {
 
 				value = gpio_get_value(gpioGroupTable[i].gpio_number);
 
