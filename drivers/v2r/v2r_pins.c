@@ -846,6 +846,7 @@ static void pins_parse_command(char * string) {
 	static char *part;
 	static char *temp_string;
 	int cmd_ok = 0;
+	int i;
 
 	int pin_number = 0, direction = 0, value = 0, pwm_number = 0, duty = 0, period = 0;
 
@@ -874,6 +875,35 @@ static void pins_parse_command(char * string) {
 		if (!strcmp(command_parts[1], "bin")) 
 			output_mode = 1;
 		
+		cmd_ok = 1;
+		goto out;
+	}
+
+	/* string like "group clear" */
+	if (!strcmp(command_parts[0], "group")) {
+
+		if (!strcmp(command_parts[1], "clear")) 
+			group_clear();
+		else
+		if (!strcmp(command_parts[1], "init")) 
+			group_init();
+		else
+		if (!strcmp(command_parts[1], "add") && !strcmp(command_parts[2], "con")) {
+
+			if (command_parts_counter < 4) {
+				printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
+				return;
+			}
+
+			for (i = 3; i < command_parts_counter ; i++ ) {
+
+				kstrtoint(command_parts[i], 10, &pin_number);
+				group_add(pin_number);
+
+			}
+
+		}
+
 		cmd_ok = 1;
 		goto out;
 	}
@@ -1051,13 +1081,14 @@ ssize_t pins_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
 		case 0:
 			/* text mode */
 
-			if (count > TOTAL_PINS) count = TOTAL_PINS;
-			if (*f_pos > TOTAL_PINS) goto out;
-			if ((*f_pos + count) > TOTAL_PINS) goto out;
+			//if (count > TOTAL_PINS) count = TOTAL_PINS;
+			//if (*f_pos > TOTAL_PINS) goto out;
+			//if ((*f_pos + count) > TOTAL_PINS) goto out;
 
 			counter = 0;
 
-			for (i = *f_pos; i <= (*f_pos + count); i++) {
+			//for (i = *f_pos; i <= (*f_pos + count); i++) {
+			for (i = 0; i <= pinsGroupTableCounter; i++) {
 
 				value = gpio_get_value(pinsGroupTable[i].gpio_number);
 
