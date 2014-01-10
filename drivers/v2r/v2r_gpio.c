@@ -20,13 +20,38 @@
 #include <linux/mutex.h>
 #include <asm/uaccess.h>
 
+#include <linux/proc_fs.h>
+
 #include "prtcss.h"
 
+#define TRUE  1
+#define FALSE 0
+#define NA -1
+
+#define NUMBEROFDEVICES 1
+#define BUFFER_SIZE 8192
+#define RETBUFFER_SIZE 8192
+#define DEVICE_NAME "v2r_gpio"
+
 #define TOTAL_GPIO 103
+#define TOTAL_RTO 4
 
-char * v2r_gpio_retBuffer;
+/* The structure to represent 'v2r_gpio' devices.
+ *  data - data buffer;
+ *  buffer_size - size of the data buffer;
+ *  buffer_data_size - amount of data actually present in the buffer
+ *  device_mutex - a mutex to protect the fields of this structure;
+ *  cdev - character device structure.
+*/
 
-/* GPIO functionality */
+struct gpio_dev {
+	unsigned char *data;
+	unsigned long buffer_size;
+	unsigned long buffer_data_size;
+	struct mutex device_mutex;
+	struct cdev cdev;
+};
+
 
 typedef struct  {
 	int number;
@@ -35,14 +60,6 @@ typedef struct  {
 	int gpio_number;
 } gpio;
 
-#define TRUE  1
-#define FALSE 0
-#define NA    -1
-#define PRTO  10000
-#define PRTIO 20000
-#define INP 0
-#define OUT 1
-#define EMPTY 0
 
 static gpio gpiotable[TOTAL_GPIO+1] = {
 { 0, "GPIO0",	DM365_GPIO0, 0},
@@ -151,630 +168,1186 @@ static gpio gpiotable[TOTAL_GPIO+1] = {
 { 103, "GPIO103", DM365_GPIO103, 103},
 };
 
-// array for GPIO group
+/* array and counter for GPIO group */
 static gpio gpioGroupTable[TOTAL_GPIO+1];
 static short gpioGroupTableCounter = 0;
 
-static void v2r_gpio_direction_output(unsigned int number, unsigned int value){
-	gpio_direction_output(number, value);
-	return;
+static unsigned int gpio_major = 0;
+static struct gpio_dev *gpio_devices = NULL;
+static struct class *gpio_class = NULL;
+static int numberofdevices = NUMBEROFDEVICES;
+static char * v2r_gpio_retBuffer;
+
+static char ** command_parts;
+static int command_parts_counter;
+
+static int output_mode = 0; // text mode default
+
+
+/**********************************************************************
+ for PROC_FS 
+**********************************************************************/
+
+#ifndef CONFIG_PROC_FS
+
+static int gpio_add_proc_fs(void) {
+	return 0;
 }
 
-static void v2r_gpio_direction_input(unsigned int number){
-	gpio_direction_input(number);
-	return;
+static int gpio_remove_proc_fs(void) {
+	return 0;
 }
 
-static char** split(const char* str, char delimiter){
-	unsigned int input_len = strlen(str);
-	int nIndex = 0;
-	int nBites = 0;
-	int nTempIndex = 0;
-	int nTempByte = 0;
-	char** result;
+#else
 
-    // counting bits
-	for (nIndex = 0; nIndex < input_len; nIndex++){
-		if (str[nIndex] == delimiter) nBites++;
-	}
+static struct proc_dir_entry *proc_parent;
+static struct proc_dir_entry *proc_entry;
+static s32 proc_write_entry[TOTAL_GPIO+1];
 
-    result = kmalloc((size_t)(nBites+1)*sizeof(char*), GFP_KERNEL);
+static int gpio_read_proc (int gpio_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
-	for (nIndex = 0; nIndex <= input_len; nIndex++){
-		if ((str[nTempIndex] == delimiter)||(str[nTempIndex] == 0)||(str[nTempIndex] == '\n')||(str[nTempIndex] == '\r') ){
-			if (nTempIndex != 0){
-				result[nTempByte] = kmalloc(nTempIndex+1, GFP_KERNEL);
-				memcpy(result[nTempByte], str, nTempIndex);
-				result[nTempByte][nTempIndex] = 0;
-				nTempByte++;
-				str += nTempIndex+1;
-				nTempIndex = 0;
-			} else
-			{
-				str++; nTempIndex = 0;
-			}
-        } else {
-			nTempIndex++;
+	int len=0;
+	int value = 0;
+
+	value = gpio_get_value(gpiotable[gpio_number].gpio_number)? 1 : 0;
+
+	len = sprintf(buf, "%d", value);
+	
+	return len;
+
+}
+
+static int gpio_write_proc (int gpio_number, struct file *file, const char *buf, int count, void *data ) {
+
+	static int value = 0;
+	static char proc_data[2];
+
+	if(count > 1)
+		count = 1;
+
+	if(copy_from_user(proc_data, buf, count))
+		return -EFAULT;
+
+	if (proc_data[0] == 0) 
+		value = 0;
+	else if (proc_data[0] == 1) 
+		value = 1;
+	else
+		kstrtoint(proc_data, 2, &value);
+
+	gpio_direction_output(gpiotable[gpio_number].gpio_number, value);
+	davinci_cfg_reg(gpiotable[gpio_number].gpio_descriptor);
+
+	return count;
+}
+
+
+/* *i'd line to use array init, but i don't know how get file id from unified functions */
+
+static int gpio_write_proc_0 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (0, file, buf, count, data); }
+static int gpio_read_proc_0 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (0, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_1 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (1, file, buf, count, data); }
+static int gpio_read_proc_1 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (1, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_2 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (2, file, buf, count, data); }
+static int gpio_read_proc_2 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (2, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_3 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (3, file, buf, count, data); }
+static int gpio_read_proc_3 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (3, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_4 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (4, file, buf, count, data); }
+static int gpio_read_proc_4 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (4, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_5 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (5, file, buf, count, data); }
+static int gpio_read_proc_5 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (5, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_6 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (6, file, buf, count, data); }
+static int gpio_read_proc_6 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (6, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_7 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (7, file, buf, count, data); }
+static int gpio_read_proc_7 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (7, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_8 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (8, file, buf, count, data); }
+static int gpio_read_proc_8 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (8, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_9 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (9, file, buf, count, data); }
+static int gpio_read_proc_9 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (9, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_10 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (10, file, buf, count, data); }
+static int gpio_read_proc_10 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (10, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_11 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (11, file, buf, count, data); }
+static int gpio_read_proc_11 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (11, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_12 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (12, file, buf, count, data); }
+static int gpio_read_proc_12 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (12, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_13 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (13, file, buf, count, data); }
+static int gpio_read_proc_13 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (13, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_14 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (14, file, buf, count, data); }
+static int gpio_read_proc_14 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (14, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_15 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (15, file, buf, count, data); }
+static int gpio_read_proc_15 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (15, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_16 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (16, file, buf, count, data); }
+static int gpio_read_proc_16 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (16, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_17 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (17, file, buf, count, data); }
+static int gpio_read_proc_17 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (17, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_18 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (18, file, buf, count, data); }
+static int gpio_read_proc_18 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (18, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_19 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (19, file, buf, count, data); }
+static int gpio_read_proc_19 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (19, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_20 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (20, file, buf, count, data); }
+static int gpio_read_proc_20 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (20, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_21 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (21, file, buf, count, data); }
+static int gpio_read_proc_21 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (21, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_22 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (22, file, buf, count, data); }
+static int gpio_read_proc_22 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (22, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_23 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (23, file, buf, count, data); }
+static int gpio_read_proc_23 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (23, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_24 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (24, file, buf, count, data); }
+static int gpio_read_proc_24 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (24, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_25 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (25, file, buf, count, data); }
+static int gpio_read_proc_25 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (25, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_26 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (26, file, buf, count, data); }
+static int gpio_read_proc_26 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (26, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_27 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (27, file, buf, count, data); }
+static int gpio_read_proc_27 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (27, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_28 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (28, file, buf, count, data); }
+static int gpio_read_proc_28 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (28, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_29 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (29, file, buf, count, data); }
+static int gpio_read_proc_29 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (29, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_30 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (30, file, buf, count, data); }
+static int gpio_read_proc_30 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (30, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_31 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (31, file, buf, count, data); }
+static int gpio_read_proc_31 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (31, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_32 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (32, file, buf, count, data); }
+static int gpio_read_proc_32 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (32, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_33 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (33, file, buf, count, data); }
+static int gpio_read_proc_33 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (33, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_34 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (34, file, buf, count, data); }
+static int gpio_read_proc_34 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (34, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_35 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (35, file, buf, count, data); }
+static int gpio_read_proc_35 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (35, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_36 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (36, file, buf, count, data); }
+static int gpio_read_proc_36 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (36, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_37 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (37, file, buf, count, data); }
+static int gpio_read_proc_37 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (37, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_38 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (38, file, buf, count, data); }
+static int gpio_read_proc_38 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (38, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_39 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (39, file, buf, count, data); }
+static int gpio_read_proc_39 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (39, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_40 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (40, file, buf, count, data); }
+static int gpio_read_proc_40 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (40, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_41 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (41, file, buf, count, data); }
+static int gpio_read_proc_41 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (41, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_42 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (42, file, buf, count, data); }
+static int gpio_read_proc_42 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (42, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_43 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (43, file, buf, count, data); }
+static int gpio_read_proc_43 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (43, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_44 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (44, file, buf, count, data); }
+static int gpio_read_proc_44 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (44, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_45 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (45, file, buf, count, data); }
+static int gpio_read_proc_45 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (45, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_46 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (46, file, buf, count, data); }
+static int gpio_read_proc_46 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (46, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_47 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (47, file, buf, count, data); }
+static int gpio_read_proc_47 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (47, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_48 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (48, file, buf, count, data); }
+static int gpio_read_proc_48 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (48, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_49 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (49, file, buf, count, data); }
+static int gpio_read_proc_49 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (49, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_50 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (50, file, buf, count, data); }
+static int gpio_read_proc_50 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (50, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_51 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (51, file, buf, count, data); }
+static int gpio_read_proc_51 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (51, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_52 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (52, file, buf, count, data); }
+static int gpio_read_proc_52 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (52, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_53 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (53, file, buf, count, data); }
+static int gpio_read_proc_53 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (53, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_54 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (54, file, buf, count, data); }
+static int gpio_read_proc_54 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (54, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_55 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (55, file, buf, count, data); }
+static int gpio_read_proc_55 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (55, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_56 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (56, file, buf, count, data); }
+static int gpio_read_proc_56 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (56, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_57 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (57, file, buf, count, data); }
+static int gpio_read_proc_57 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (57, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_58 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (58, file, buf, count, data); }
+static int gpio_read_proc_58 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (58, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_59 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (59, file, buf, count, data); }
+static int gpio_read_proc_59 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (59, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_60 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (60, file, buf, count, data); }
+static int gpio_read_proc_60 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (60, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_61 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (61, file, buf, count, data); }
+static int gpio_read_proc_61 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (61, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_62 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (62, file, buf, count, data); }
+static int gpio_read_proc_62 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (62, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_63 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (63, file, buf, count, data); }
+static int gpio_read_proc_63 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (63, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_64 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (64, file, buf, count, data); }
+static int gpio_read_proc_64 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (64, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_65 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (65, file, buf, count, data); }
+static int gpio_read_proc_65 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (65, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_66 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (66, file, buf, count, data); }
+static int gpio_read_proc_66 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (66, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_67 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (67, file, buf, count, data); }
+static int gpio_read_proc_67 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (67, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_68 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (68, file, buf, count, data); }
+static int gpio_read_proc_68 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (68, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_69 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (69, file, buf, count, data); }
+static int gpio_read_proc_69 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (69, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_70 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (70, file, buf, count, data); }
+static int gpio_read_proc_70 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (70, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_71 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (71, file, buf, count, data); }
+static int gpio_read_proc_71 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (71, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_72 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (72, file, buf, count, data); }
+static int gpio_read_proc_72 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (72, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_73 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (73, file, buf, count, data); }
+static int gpio_read_proc_73 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (73, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_74 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (74, file, buf, count, data); }
+static int gpio_read_proc_74 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (74, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_75 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (75, file, buf, count, data); }
+static int gpio_read_proc_75 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (75, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_76 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (76, file, buf, count, data); }
+static int gpio_read_proc_76 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (76, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_77 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (77, file, buf, count, data); }
+static int gpio_read_proc_77 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (77, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_78 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (78, file, buf, count, data); }
+static int gpio_read_proc_78 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (78, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_79 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (79, file, buf, count, data); }
+static int gpio_read_proc_79 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (79, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_80 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (80, file, buf, count, data); }
+static int gpio_read_proc_80 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (80, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_81 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (81, file, buf, count, data); }
+static int gpio_read_proc_81 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (81, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_82 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (82, file, buf, count, data); }
+static int gpio_read_proc_82 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (82, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_83 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (83, file, buf, count, data); }
+static int gpio_read_proc_83 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (83, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_84 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (84, file, buf, count, data); }
+static int gpio_read_proc_84 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (84, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_85 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (85, file, buf, count, data); }
+static int gpio_read_proc_85 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (85, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_86 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (86, file, buf, count, data); }
+static int gpio_read_proc_86 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (86, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_87 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (87, file, buf, count, data); }
+static int gpio_read_proc_87 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (87, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_88 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (88, file, buf, count, data); }
+static int gpio_read_proc_88 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (88, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_89 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (89, file, buf, count, data); }
+static int gpio_read_proc_89 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (89, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_90 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (90, file, buf, count, data); }
+static int gpio_read_proc_90 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (90, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_91 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (91, file, buf, count, data); }
+static int gpio_read_proc_91 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (91, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_92 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (92, file, buf, count, data); }
+static int gpio_read_proc_92 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (92, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_93 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (93, file, buf, count, data); }
+static int gpio_read_proc_93 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (93, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_94 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (94, file, buf, count, data); }
+static int gpio_read_proc_94 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (94, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_95 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (95, file, buf, count, data); }
+static int gpio_read_proc_95 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (95, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_96 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (96, file, buf, count, data); }
+static int gpio_read_proc_96 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (96, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_97 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (97, file, buf, count, data); }
+static int gpio_read_proc_97 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (97, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_98 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (98, file, buf, count, data); }
+static int gpio_read_proc_98 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (98, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_99 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (99, file, buf, count, data); }
+static int gpio_read_proc_99 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (99, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_100 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (100, file, buf, count, data); }
+static int gpio_read_proc_100 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (100, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_101 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (101, file, buf, count, data); }
+static int gpio_read_proc_101 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (101, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_102 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (102, file, buf, count, data); }
+static int gpio_read_proc_102 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (102, buf, start, offset, count, eof, data); }
+static int gpio_write_proc_103 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (103, file, buf, count, data); }
+static int gpio_read_proc_103 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (103, buf, start, offset, count, eof, data); }
+
+
+static int gpio_remove_proc_fs(void) {
+
+	int i;
+	char fn[10];
+
+	for (i = 0; i <= TOTAL_GPIO; i++) {
+
+		if (proc_write_entry[i]) { 
+			sprintf(fn, "%d", i);
+			remove_proc_entry(fn, proc_parent);
 		}
-    }
 
-  	result[nTempByte] = 0;
-	for (nIndex = 0; nIndex < nTempByte; nIndex++){
-		//printk("Chunk %d = %s\r\n", nIndex, result[nIndex]);
-    }
-    return result;
-};
-
-static int is_equal_string(const char* str1, const char* str2){
-	return !strcmp(str1, str2);
-}
-
-static int str_to_int(const char* str){
-    int result = 0;
-    if (kstrtoint(str, 10, &result)) {
-    	// error in convertion
-    	printk("Parse error %s\r\n", str);
-    	return FALSE;
-    }
-    return result;
-}
-
-static int starts_with(const char* str1, const char* ref){
-	int i = 0;
-	int len = strlen(str1);
-	const char* substr = 0;
-
-	if (len <= strlen(ref)) {
-		printk("starts_with len error\r\n");
-		return NA;
-    }
-
-    len = strlen(ref);
-    for (i = 0; i < len; i++){
-		if (str1[i] != ref[i]) {
-			//printk("starts with not equal error %d\r\n", i);
-			return NA;
-    	}
 	}
 
-    // here it a good candidate for perfect result. Lets get appropriate value
+	/* remove proc_fs directory */
+	remove_proc_entry("v2r_gpio",NULL);
 
-    substr = &str1[len];
-
-    if (is_equal_string(substr, "true")) return TRUE;
-    if (is_equal_string(substr, "false")) return FALSE;
-
-    return str_to_int(substr);
+	return 0;
 }
 
-/* the most stupid methods I have ever written, but it works! */
+static int gpio_add_proc_fs(void) {
 
-static void process_con(char** data, unsigned int ordinal){
+	proc_parent = proc_mkdir("v2r_gpio", NULL);
 
-	int tmp = NA;
-	if (!(ordinal > 0 && ordinal <= TOTAL_GPIO)){
-		printk("Wrong gpio number (%d)\r\n", ordinal);
+	if (!proc_parent) {
+		printk("%s: error creating proc entry (/proc/v2r_gpio)\n", DEVICE_NAME);
+		return 1;
+	}
+
+	proc_entry = create_proc_entry("0", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_0; proc_entry-> write_proc = (void *) gpio_write_proc_0; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[0] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("1", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_1; proc_entry-> write_proc = (void *) gpio_write_proc_1; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[1] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("2", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_2; proc_entry-> write_proc = (void *) gpio_write_proc_2; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[2] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("3", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_3; proc_entry-> write_proc = (void *) gpio_write_proc_3; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[3] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("4", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_4; proc_entry-> write_proc = (void *) gpio_write_proc_4; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[4] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("5", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_5; proc_entry-> write_proc = (void *) gpio_write_proc_5; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[5] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("6", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_6; proc_entry-> write_proc = (void *) gpio_write_proc_6; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[6] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("7", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_7; proc_entry-> write_proc = (void *) gpio_write_proc_7; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[7] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("8", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_8; proc_entry-> write_proc = (void *) gpio_write_proc_8; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[8] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("9", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_9; proc_entry-> write_proc = (void *) gpio_write_proc_9; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[9] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("10", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_10; proc_entry-> write_proc = (void *) gpio_write_proc_10; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[10] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("11", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_11; proc_entry-> write_proc = (void *) gpio_write_proc_11; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[11] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("12", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_12; proc_entry-> write_proc = (void *) gpio_write_proc_12; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[12] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("13", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_13; proc_entry-> write_proc = (void *) gpio_write_proc_13; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[13] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("14", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_14; proc_entry-> write_proc = (void *) gpio_write_proc_14; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[14] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("15", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_15; proc_entry-> write_proc = (void *) gpio_write_proc_15; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[15] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("16", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_16; proc_entry-> write_proc = (void *) gpio_write_proc_16; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[16] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("17", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_17; proc_entry-> write_proc = (void *) gpio_write_proc_17; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[17] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("18", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_18; proc_entry-> write_proc = (void *) gpio_write_proc_18; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[18] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("19", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_19; proc_entry-> write_proc = (void *) gpio_write_proc_19; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[19] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("20", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_20; proc_entry-> write_proc = (void *) gpio_write_proc_20; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[20] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("21", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_21; proc_entry-> write_proc = (void *) gpio_write_proc_21; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[21] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("22", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_22; proc_entry-> write_proc = (void *) gpio_write_proc_22; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[22] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("23", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_23; proc_entry-> write_proc = (void *) gpio_write_proc_23; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[23] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("24", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_24; proc_entry-> write_proc = (void *) gpio_write_proc_24; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[24] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("25", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_25; proc_entry-> write_proc = (void *) gpio_write_proc_25; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[25] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("26", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_26; proc_entry-> write_proc = (void *) gpio_write_proc_26; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[26] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("27", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_27; proc_entry-> write_proc = (void *) gpio_write_proc_27; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[27] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("28", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_28; proc_entry-> write_proc = (void *) gpio_write_proc_28; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[28] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("29", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_29; proc_entry-> write_proc = (void *) gpio_write_proc_29; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[29] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("30", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_30; proc_entry-> write_proc = (void *) gpio_write_proc_30; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[30] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("31", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_31; proc_entry-> write_proc = (void *) gpio_write_proc_31; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[31] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("32", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_32; proc_entry-> write_proc = (void *) gpio_write_proc_32; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[32] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("33", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_33; proc_entry-> write_proc = (void *) gpio_write_proc_33; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[33] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("34", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_34; proc_entry-> write_proc = (void *) gpio_write_proc_34; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[34] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("35", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_35; proc_entry-> write_proc = (void *) gpio_write_proc_35; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[35] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("36", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_36; proc_entry-> write_proc = (void *) gpio_write_proc_36; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[36] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("37", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_37; proc_entry-> write_proc = (void *) gpio_write_proc_37; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[37] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("38", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_38; proc_entry-> write_proc = (void *) gpio_write_proc_38; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[38] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("39", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_39; proc_entry-> write_proc = (void *) gpio_write_proc_39; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[39] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("40", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_40; proc_entry-> write_proc = (void *) gpio_write_proc_40; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[40] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("41", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_41; proc_entry-> write_proc = (void *) gpio_write_proc_41; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[41] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("42", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_42; proc_entry-> write_proc = (void *) gpio_write_proc_42; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[42] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("43", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_43; proc_entry-> write_proc = (void *) gpio_write_proc_43; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[43] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("44", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_44; proc_entry-> write_proc = (void *) gpio_write_proc_44; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[44] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("45", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_45; proc_entry-> write_proc = (void *) gpio_write_proc_45; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[45] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("46", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_46; proc_entry-> write_proc = (void *) gpio_write_proc_46; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[46] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("47", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_47; proc_entry-> write_proc = (void *) gpio_write_proc_47; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[47] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("48", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_48; proc_entry-> write_proc = (void *) gpio_write_proc_48; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[48] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("49", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_49; proc_entry-> write_proc = (void *) gpio_write_proc_49; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[49] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("50", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_50; proc_entry-> write_proc = (void *) gpio_write_proc_50; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[50] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("51", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_51; proc_entry-> write_proc = (void *) gpio_write_proc_51; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[51] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("52", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_52; proc_entry-> write_proc = (void *) gpio_write_proc_52; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[52] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("53", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_53; proc_entry-> write_proc = (void *) gpio_write_proc_53; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[53] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("54", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_54; proc_entry-> write_proc = (void *) gpio_write_proc_54; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[54] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("55", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_55; proc_entry-> write_proc = (void *) gpio_write_proc_55; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[55] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("56", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_56; proc_entry-> write_proc = (void *) gpio_write_proc_56; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[56] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("57", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_57; proc_entry-> write_proc = (void *) gpio_write_proc_57; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[57] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("58", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_58; proc_entry-> write_proc = (void *) gpio_write_proc_58; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[58] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("59", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_59; proc_entry-> write_proc = (void *) gpio_write_proc_59; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[59] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("60", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_60; proc_entry-> write_proc = (void *) gpio_write_proc_60; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[60] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("61", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_61; proc_entry-> write_proc = (void *) gpio_write_proc_61; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[61] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("62", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_62; proc_entry-> write_proc = (void *) gpio_write_proc_62; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[62] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("63", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_63; proc_entry-> write_proc = (void *) gpio_write_proc_63; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[63] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("64", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_64; proc_entry-> write_proc = (void *) gpio_write_proc_64; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[64] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("65", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_65; proc_entry-> write_proc = (void *) gpio_write_proc_65; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[65] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("66", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_66; proc_entry-> write_proc = (void *) gpio_write_proc_66; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[66] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("67", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_67; proc_entry-> write_proc = (void *) gpio_write_proc_67; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[67] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("68", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_68; proc_entry-> write_proc = (void *) gpio_write_proc_68; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[68] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("69", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_69; proc_entry-> write_proc = (void *) gpio_write_proc_69; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[69] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("70", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_70; proc_entry-> write_proc = (void *) gpio_write_proc_70; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[70] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("71", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_71; proc_entry-> write_proc = (void *) gpio_write_proc_71; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[71] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("72", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_72; proc_entry-> write_proc = (void *) gpio_write_proc_72; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[72] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("73", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_73; proc_entry-> write_proc = (void *) gpio_write_proc_73; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[73] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("74", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_74; proc_entry-> write_proc = (void *) gpio_write_proc_74; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[74] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("75", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_75; proc_entry-> write_proc = (void *) gpio_write_proc_75; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[75] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("76", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_76; proc_entry-> write_proc = (void *) gpio_write_proc_76; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[76] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("77", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_77; proc_entry-> write_proc = (void *) gpio_write_proc_77; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[77] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("78", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_78; proc_entry-> write_proc = (void *) gpio_write_proc_78; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[78] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("79", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_79; proc_entry-> write_proc = (void *) gpio_write_proc_79; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[79] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("80", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_80; proc_entry-> write_proc = (void *) gpio_write_proc_80; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[80] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("81", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_81; proc_entry-> write_proc = (void *) gpio_write_proc_81; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[81] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("82", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_82; proc_entry-> write_proc = (void *) gpio_write_proc_82; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[82] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("83", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_83; proc_entry-> write_proc = (void *) gpio_write_proc_83; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[83] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("84", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_84; proc_entry-> write_proc = (void *) gpio_write_proc_84; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[84] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("85", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_85; proc_entry-> write_proc = (void *) gpio_write_proc_85; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[85] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("86", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_86; proc_entry-> write_proc = (void *) gpio_write_proc_86; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[86] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("87", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_87; proc_entry-> write_proc = (void *) gpio_write_proc_87; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[87] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("88", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_88; proc_entry-> write_proc = (void *) gpio_write_proc_88; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[88] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("89", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_89; proc_entry-> write_proc = (void *) gpio_write_proc_89; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[89] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("90", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_90; proc_entry-> write_proc = (void *) gpio_write_proc_90; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[90] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("91", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_91; proc_entry-> write_proc = (void *) gpio_write_proc_91; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[91] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("92", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_92; proc_entry-> write_proc = (void *) gpio_write_proc_92; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[92] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("93", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_93; proc_entry-> write_proc = (void *) gpio_write_proc_93; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[93] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("94", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_94; proc_entry-> write_proc = (void *) gpio_write_proc_94; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[94] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("95", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_95; proc_entry-> write_proc = (void *) gpio_write_proc_95; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[95] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("96", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_96; proc_entry-> write_proc = (void *) gpio_write_proc_96; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[96] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("97", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_97; proc_entry-> write_proc = (void *) gpio_write_proc_97; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[97] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("98", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_98; proc_entry-> write_proc = (void *) gpio_write_proc_98; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[98] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("99", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_99; proc_entry-> write_proc = (void *) gpio_write_proc_99; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[99] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("100", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_100; proc_entry-> write_proc = (void *) gpio_write_proc_100; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[100] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("101", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_101; proc_entry-> write_proc = (void *) gpio_write_proc_101; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[101] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("102", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_102; proc_entry-> write_proc = (void *) gpio_write_proc_102; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[102] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("103", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_103; proc_entry-> write_proc = (void *) gpio_write_proc_103; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[103] = (s32) proc_entry; }
+
+	return 0;
+}
+
+#endif /* CONFIG_PROC_FS */
+
+
+/**********************************************************************
+ end for PROC_FS 
+**********************************************************************/
+
+
+
+/* 
+  set RTO state 
+*/
+
+static int v2r_set_rto(int number, int value) {
+
+	u8 result = 0;
+
+	if (!(number >= 0 && number <= TOTAL_RTO)) {
+		printk("%s: wrong RTP number (%d)\n", DEVICE_NAME, number);
+		return 1;
+	}
+
+	result = davinci_rtcss_read(0x00);
+
+	if (value)
+		result |= 1 << number;
+	else
+		result &= !(1 << number);
+
+	davinci_rtcss_write(result, 0x00);
+
+	return 0;
+
+}
+
+
+/* 
+  set GPIO state 
+  direction =0 - input, =1 - output
+*/
+
+static int v2r_set_gpio(int gpio_number, int direction, int value) {
+
+	if (!(gpio_number >= 0 && gpio_number <= TOTAL_GPIO)) {
+		printk("%s: wrong GPIO number (%d)\n", DEVICE_NAME, gpio_number);
+		return 1;
+	}
+
+
+	if (gpiotable[gpio_number].gpio_descriptor == NA) {
+		printk("%s: GPIO descriptor is not available\n", DEVICE_NAME);
+		return 1;
+	}
+
+	if (value > 1) {
+		printk("%s: wrong value (%d)\n", DEVICE_NAME, value);
+		return 1;
+	}
+
+	if (direction)
+		gpio_direction_output(gpiotable[gpio_number].gpio_number, value);
+	else 
+		gpio_direction_input(gpiotable[gpio_number].gpio_number);
+
+	davinci_cfg_reg(gpiotable[gpio_number].gpio_descriptor);
+
+	return 0;
+}
+
+/*
+  clear GPIO group
+*/
+
+static int group_clear(void) {
+
+	gpioGroupTableCounter = -1; // just null a group size
+	printk("%s: GPIO group cleared\n", DEVICE_NAME);
+
+	return 0;
+}
+
+/*
+  add GPIO into group
+*/
+
+static int group_add(int gpio_number) {
+
+	if (gpioGroupTableCounter >=TOTAL_GPIO) {
+
+		printk("%s: GPIO group is full\n", DEVICE_NAME);
+		return 1;
+
+	}
+
+	if (!(gpio_number >= 0 && gpio_number <= TOTAL_GPIO)){
+
+		printk("%s: wrong gpio number (%d)\n", DEVICE_NAME, gpio_number);
+		return 1;
+
+	}
+
+	gpioGroupTableCounter++;
+	gpioGroupTable[gpioGroupTableCounter] = gpiotable[gpio_number];
+
+	printk("%s: added GPIO %d into group. New group size is %d\n", DEVICE_NAME, gpio_number, gpioGroupTableCounter+1);
+
+	return 0;
+}
+
+
+/*
+  add all GPIO into group
+*/
+
+static void group_init(void) {
+
+	unsigned int i;
+
+	for (i=0; i <= TOTAL_GPIO; i++) {
+
+		gpioGroupTable[i] = gpiotable[i];
+
+	}
+
+	gpioGroupTableCounter = i-1;
+
+	printk("%s: added all GPIO's into group\n", DEVICE_NAME);
+
+}
+
+
+static void gpio_parse_binary_command(char * buffer, unsigned int count) {
+
+	int gpio_number = 0, direction = 0, value = 0;
+
+	unsigned int i;
+
+	switch (buffer[0]) {
+
+		case 1:
+			/* 
+				set GPIO state
+				buffer[1] - GPIO number
+				buffer[2] - [bit:0] - direction, [bit:1] - state
+			*/
+
+			if (count < 3) {
+				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
+				break;
+			}
+
+			gpio_number = buffer[1];
+			direction = buffer[2] & 0x01;
+			value = (buffer[2] >> 1) & 0x01;
+
+			v2r_set_gpio(gpio_number, direction, value);
+
+			break;
+
+		case 2:
+
+			/* clear GPIO group */
+
+			group_clear();
+
+			break;
+
+		case 3:
+			/* 
+				add GPIO into group
+				buffer[1] - GPIO number
+			*/
+
+			if (count < 2) {
+				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
+				break;
+			}
+
+			for (i = 1; i < count; i++)
+				group_add(buffer[i]);
+
+			break;
+
+		case 4:
+			/* 
+				add all GPIO into group
+			*/
+
+			group_init();
+
+			break;
+
+		case 5:
+			/* 
+				set output mode
+				buffer[1] - mode
+			*/
+
+			if (count < 2) {
+				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
+				break;
+			}
+			
+			output_mode = buffer[1] ? 1 : 0 ;
+
+			break;
+
+		case 6:
+			/* 
+				set RTO
+				buffer[1] - RTO number
+				buffer[2] - value
+			*/
+
+			if (count < 3) {
+				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
+				break;
+			}
+
+			v2r_set_rto(buffer[1], buffer[2]);
+
+			break;
+
+
+		default:
+			printk("%s: i don't know this command\n", DEVICE_NAME);
+		
+	}
+
+
+}
+
+static void gpio_parse_command(char * string) {
+
+	static char *part;
+	static char *temp_string;
+	int cmd_ok = 0;
+	int i;
+
+	int gpio_number = 0, direction = 0, value = 0;
+
+	// last symbol can be a \n symbol, we must clear him
+	if (string[strlen(string)-1] == '\n') string[strlen(string)-1] = 0;
+
+	temp_string = kstrdup(string, GFP_KERNEL);
+
+	do {
+		part = strsep(&temp_string, " ");
+		if (part) {
+			
+			command_parts[command_parts_counter] = part;
+			command_parts_counter++;
+		}
+
+	} while (part);
+
+
+
+	/* string like "set gpio 1 output 1" */
+	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "gpio")) {
+
+		if (command_parts_counter < 4) {
+			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
+			return;
+		}
+
+		if (!strcmp(command_parts[3], "output")) {
+			direction = 1;
+		} else if (!strcmp(command_parts[3], "input")) {
+			direction = 0;
+		}
+
+		kstrtoint(command_parts[2], 10, &gpio_number);
+		kstrtoint(command_parts[4], 10, &value);
+		v2r_set_gpio(gpio_number, direction, value);
+		cmd_ok = 1;
+		goto out;
+	}
+
+
+	/* string like "set rto 1 1" */
+	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "rto")) {
+
+		if (command_parts_counter < 4) {
+			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
+			return;
+		}
+
+		kstrtoint(command_parts[2], 10, &gpio_number);
+		kstrtoint(command_parts[3], 10, &value);
+		v2r_set_rto(gpio_number, value);
+
+		cmd_ok = 1;
+		goto out;
+	}
+
+
+
+	/* string like "group clear" */
+	if (!strcmp(command_parts[0], "group")) {
+
+		if (!strcmp(command_parts[1], "clear")) 
+			group_clear();
+		else
+		if (!strcmp(command_parts[1], "init")) 
+			group_init();
+		else
+		if (!strcmp(command_parts[1], "add") && !strcmp(command_parts[2], "gpio")) {
+
+			if (command_parts_counter < 4) {
+				printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
+				return;
+			}
+
+			for (i = 3; i < command_parts_counter ; i++ ) {
+
+				kstrtoint(command_parts[i], 10, &gpio_number);
+				group_add(gpio_number);
+
+			}
+
+		}
+
+		cmd_ok = 1;
+		goto out;
+	}
+
+
+	/* string like "output bin" */
+	/* or  like "output text" */
+	if (!strcmp(command_parts[0], "output")) {
+
+		if (!strcmp(command_parts[1], "bin"))
+			output_mode = 1;
+		else
+		if (!strcmp(command_parts[1], "text"))
+			output_mode = 0;
+		
+		cmd_ok = 1;
+		goto out;
+	}
+
+
+out:
+
+	if (!cmd_ok) {
+		printk("%s: i don't know this command (%s)\n", DEVICE_NAME, string);
 		return;
 	}
 
-    if (data[2]){
-
-		// check if direction needed is "input"
-
-		if (is_equal_string(data[2], "input")){
-
-			//printk("Configure con%d (GPIO %d) gpio as input\r\n", ordinal, gpiotable[ordinal].gpio_number);
-
-			v2r_gpio_direction_input(gpiotable[ordinal].gpio_number);
-			davinci_cfg_reg(gpiotable[ordinal].gpio_descriptor);
-			return;
-
-		}
-
-		// if we are here - direction needed is "output"
-
-		tmp = starts_with(data[2], "output:");
-
-		if (tmp != NA) {
-
-			if (gpiotable[ordinal].gpio_descriptor == NA){
-				printk("GPIO descriptor is not available\r\n");
-				return;
-			}
-
-			v2r_gpio_direction_output(gpiotable[ordinal].gpio_number, tmp);
-			davinci_cfg_reg(gpiotable[ordinal].gpio_descriptor);
-			return;
-
-		} else {
-			printk("Error output value\r\n");
-		}
-
-	}
-
-	printk("Error setting gpio function\r\n");
-}
-
-static void process_set(char** data){
-
-	int ordinal = -1;
-
-	if (data[1]){
-
-		//Any parse result present
-
-		ordinal = starts_with(data[1], "gpio");
-
-		//This is gpio
-		if (ordinal > 0 && ordinal <= TOTAL_GPIO) {
-			process_con(data, ordinal);
-			return;
-		}
-
-	}
+	return;
 
 }
 
-static void process_command(char** data){
-
-	int gpio = -1;
-
-	if (data[0]){
-
-		//Any parse result present
-
-		if (is_equal_string(data[0], "set")){
-
-			//Process for set command
-			process_set(data); return;
-		}
-
-		if (is_equal_string(data[0], "group")){
-
-			if (is_equal_string(data[1], "clear")){
-
-                        	//Process for group clear command
-				gpioGroupTableCounter = -1; // just null a group size
-				printk("v2r_gpio: gpio group cleared\n");
-				return;
-
-			}
-
-			if (is_equal_string(data[1], "add")){
-
-                        	//Process for group add command
-
-				if (gpioGroupTableCounter >=TOTAL_GPIO) {
-					printk("v2r_gpio: group is full\n");
-					return;
-				}
-
-				gpio = starts_with(data[2], "gpio");
-
-				if (!(gpio > 0 && gpio <= TOTAL_GPIO)){
-					printk("Wrong gpio number (%d)\n", gpio);
-					return;
-				}
-
-				gpioGroupTableCounter++;
-				gpioGroupTable[gpioGroupTableCounter] = gpiotable[gpio];
-
-				printk("v2r_gpio: added gpio%d into group. New group size is %d\n", gpio, gpioGroupTableCounter+1);
-				return;
-
-			}
-
-		}
 
 
-	}
-
-	printk("Wrong V2R driver command\r\n");
-
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Here the driver itself begins
-
-
-MODULE_AUTHOR("Alexander V. Shadrin");
-MODULE_LICENSE("GPL");
-
-#define V2R_NDEVICES 1
-#define V2R_BUFFER_SIZE 8192
-#define V2R_DEVICE_NAME "v2r_gpio"
-
-/* The structure to represent 'v2r' devices.
- *  data - data buffer;
- *  buffer_size - size of the data buffer;
- *  buffer_data_size - amount of data actually present in the buffer
- *  v2r_mutex - a mutex to protect the fields of this structure;
- *  cdev - character device structure.
-*/
-
-struct v2r_dev {
-	unsigned char *data;
-	unsigned long buffer_size;
-	unsigned long buffer_data_size;
-	struct mutex v2r_mutex;
-	struct cdev cdev;
-};
-
-#define v2r_buffer_size V2R_BUFFER_SIZE
-static unsigned int v2r_major = 0;
-static struct v2r_dev *v2r_devices = NULL;
-static struct class *v2r_class = NULL;
-static int v2r_ndevices = V2R_NDEVICES;
-
-int v2r_gpio_open(struct inode *inode, struct file *filp){
+int gpio_open(struct inode *inode, struct file *filp) {
 
 	unsigned int mj = imajor(inode);
 	unsigned int mn = iminor(inode);
-	struct v2r_dev *dev = NULL;
+	struct gpio_dev *dev = NULL;
 
-	if (mj != v2r_major || mn < 0 || mn >= 1){
+	if (mj != gpio_major || mn < 0 || mn >= 1){
 		//One and only device
-		printk("No device found with minor=%d and major=%d\n", mj, mn);
+		printk("%s: no device found with minor=%d and major=%d\n", DEVICE_NAME, mj, mn);
 		return -ENODEV; /* No such device */
 	}
 
-	/* store a pointer to struct v2r_dev here for other methods */
+	/* store a pointer to struct gpio_dev here for other methods */
 
-	dev = &v2r_devices[mn];
+	dev = &gpio_devices[mn];
 	filp->private_data = dev;
-	if (inode->i_cdev != &dev->cdev){
-		printk("v2r open: internal error\n");
+	if (inode->i_cdev != &dev->cdev) {
+		printk("%s: open: internal error\n", DEVICE_NAME);
 		return -ENODEV; /* No such device */
 	}
 
 	/* if opened the 1st time, allocate the buffer */
 	if (dev->data == NULL){
-		dev->data = (unsigned char*)kzalloc(dev->buffer_size, GFP_KERNEL);
+
+		dev->data = (unsigned char*) kzalloc(dev->buffer_size, GFP_KERNEL);
+
 		if (dev->data == NULL){
-			printk("v2r open(): out of memory\n");
+			printk("%s: open: out of memory\n", DEVICE_NAME);
 			return -ENOMEM;
 		}
+
 		dev->buffer_data_size = 0;
+
 	}
 
 	return 0;
 }
 
-int v2r_gpio_release(struct inode *inode, struct file *filp){
-	//printk("V2R release device\r\n");
+int gpio_release(struct inode *inode, struct file *filp) {
+
+	// printk("%s: release device\n", DEVICE_NAME);
 	return 0;
+
 }
 
-ssize_t v2r_gpio_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos){
+
+ssize_t gpio_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos){
+
 	volatile unsigned long i;
-	volatile unsigned int counter = 0;
+	volatile unsigned int counter;
 
-	struct v2r_dev *dev = (struct v2r_dev *)filp->private_data;
+	volatile char bitcounter;
+	volatile char tempByte;
+	volatile unsigned int value;
+
+	struct gpio_dev *dev = (struct gpio_dev *)filp->private_data;
 	ssize_t retval = 0;
-	if (mutex_lock_killable(&dev->v2r_mutex)) return -EINTR;
+	if (mutex_lock_killable(&dev->device_mutex)) return -EINTR;
 
-	//printk("v2r_gpio device read from %d to %d\r\n", (long) *f_pos, (long) *f_pos + count - 1);
-/*
-	if (count > TOTAL_GPIO) count = TOTAL_GPIO;
-	if (*f_pos > TOTAL_GPIO) goto out;
-	if ((*f_pos + count) > TOTAL_GPIO) goto out;
+	/* exit if empty group */
+	if (gpioGroupTableCounter < 0) {
 
-	for (i = *f_pos; i < (*f_pos + count); i++) {
-		int value;
-		if (gpiotable[i].gpio_number == NA) value = 0;
-		else
-			value = gpio_get_value(gpiotable[i].gpio_number);
-		if (value) v2r_gpio_retBuffer[counter] = '1'; else v2r_gpio_retBuffer[counter] = '0';
-		counter++;
+		v2r_gpio_retBuffer[0] = 0;
+		counter = 0;
+		goto show;
 	}
-*/
-	// binary output
-	volatile char bitcounter = 0;
-	volatile char tempByte = 0;
-	volatile char value;
 
-//	for (i = 0; i <= TOTAL_GPIO; i++) {
-	if (gpioGroupTableCounter != -1) {
-	  counter = 1;
-	  for (i = 0; i <= gpioGroupTableCounter; i++) {
+	switch (output_mode) {
 
-		//value = gpio_get_value(gpiotable[i].gpio_number)? 1 : 0;
-		value = gpio_get_value(gpioGroupTable[i].gpio_number)? 1 : 0;
-		//printk("i=%d value=%d\n",i,value);
-		tempByte |= (value << bitcounter);
-		bitcounter++;
-		if (bitcounter > 7) {
-                	v2r_gpio_retBuffer[counter-1] = tempByte;
-			//printk("\n(bits %d-%d) value[%d]=%d\n",counter*8,counter*8+7,counter,v2r_gpio_retBuffer[counter]);
-			tempByte = 0;
-			bitcounter = 0;
+		case 0:
+			/* text mode */
+
+			if (count > TOTAL_GPIO) count = TOTAL_GPIO;
+			if (*f_pos > TOTAL_GPIO) goto out;
+			if ((*f_pos + count) > TOTAL_GPIO) goto out;
+
+			counter = 0;
+
+			for (i = *f_pos; i <= (*f_pos + count); i++) {
+
+				value = gpio_get_value(gpioGroupTable[i].gpio_number);
+
+				/* bers, eat this */
+				v2r_gpio_retBuffer[counter] = value ? '1' : '0';
+
+				counter++;
+			}
+
+			v2r_gpio_retBuffer[counter] = '\n';
+
 			counter++;
-		}
-	  }
 
-	  if (bitcounter) {
-		// if not all byte filled
-		v2r_gpio_retBuffer[counter-1] = tempByte;
-		counter++;
-	  }
+			break;
 
-	} else {
-		printk("v2r_gpio: empty gpio group\n");
+		case 1:
+			/* binary mode */
+
+			counter = 0;
+			bitcounter = 0;
+			tempByte = 0;
+
+			for (i = 0; i <= gpioGroupTableCounter; i++) {
+
+				value = gpio_get_value(gpioGroupTable[i].gpio_number)? 1 : 0;
+
+				tempByte |= value << bitcounter;
+				bitcounter++;
+				if (bitcounter > 7) {
+	        	        	v2r_gpio_retBuffer[counter] = tempByte;
+
+					tempByte = 0;
+					bitcounter = 0;
+					counter++;
+				}
+			}
+
+			if (bitcounter) {
+				// if not all byte filled
+				v2r_gpio_retBuffer[counter] = tempByte;
+				counter++;
+			}
+
+			break;
+
 	}
 
-	//v2r_gpio_retBuffer[counter] = '\n';
-	//counter++;
+show:
 
-	if (copy_to_user(buf, v2r_gpio_retBuffer, counter-1) != 0){
+	if (copy_to_user(buf, v2r_gpio_retBuffer, counter) != 0){
+
 		retval = -EFAULT;
 		goto out;
+
 	}
 
-	//printk("\r\nv2r_gpio copied %d bytes to user\r\n", counter);
-	retval = counter-1;
+	retval = counter;
 out:
 
-  	mutex_unlock(&dev->v2r_mutex);
+  	mutex_unlock(&dev->device_mutex);
 	return retval;
 }
 
-ssize_t v2r_gpio_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos){
-	struct v2r_dev *dev = (struct v2r_dev *)filp->private_data;
+
+
+
+ssize_t gpio_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos) {
+
+	struct gpio_dev *dev = (struct gpio_dev *)filp->private_data;
 	ssize_t retval = 0;
-	char *tmp = 0;
-	int nIndex = 0;
-	char** data = 0;
+	char *command = 0;
 
-	char gpio;
-	char direction;
-	char state;
+	if (mutex_lock_killable(&dev->device_mutex)) return -EINTR;
 
-	//printk("v2r_gpio write\r\n");
-	if (mutex_lock_killable(&dev->v2r_mutex)) return -EINTR;
 	if (*f_pos !=0) {
-    /* Writing in the middle of the file is not allowed */
-		printk("Writing in the middle (%d) of the file buffer is not allowed\r\n", (int)(*f_pos));
+		/* Writing in the middle of the file is not allowed */
+		printk("%s: writing in the middle (%d) of the file buffer is not allowed\n", DEVICE_NAME, (int)(*f_pos));
 		retval = -EINVAL;
-        goto out;
-    }
-	if (count > V2R_BUFFER_SIZE) count = V2R_BUFFER_SIZE;
-	tmp = kmalloc(count+1,GFP_KERNEL);
-	if (tmp==NULL)	return -ENOMEM;
-	if (copy_from_user(tmp,buf,count)){
-		kfree(tmp);
+        	goto out;
+	}
+
+	if (count > BUFFER_SIZE) 
+		count = BUFFER_SIZE;
+
+	command = kmalloc(count+1, GFP_KERNEL);
+
+	if (command==NULL)
+		return -ENOMEM;
+
+	if (copy_from_user(command, buf, count)) {
+		kfree(command);
 		retval = -EFAULT;
 		goto out;
 	}
-	tmp[count] = 0;
-	dev->buffer_data_size = 0;
 
-	// if first byte is not ASCII - it's a binary command
-	switch (tmp[0]) {
-		case 1:
-			// set GPIO state
-			if (count < 3) {
-				printk("v2r_gpio: very short command\n");
-				goto parseout;
-			}
+	command[count] = 0;
 
-			/* 
-			   tmp[0] - command
-			   tmp[1] - GPIO number
-			   tmp[2] - [bit:0] - direction, [bit:1] - state
-			*/
 
-			gpio = tmp[1];
-			direction = tmp[2] & 0x01;
-			state = (tmp[2] >> 1) & 0x01;
-
-			if (!(gpio > 0 && gpio <= TOTAL_GPIO)){
-				printk("Wrong gpio number (%d)\n", gpio);
-				goto parseout;
-			}
-
-			if (direction) {
-				v2r_gpio_direction_output(gpiotable[gpio].gpio_number, state);
-				davinci_cfg_reg(gpiotable[gpio].gpio_descriptor);
-			} else {
-				v2r_gpio_direction_input(gpiotable[gpio].gpio_number);
-				davinci_cfg_reg(gpiotable[gpio].gpio_descriptor);
-			}
-
-			printk("v2r_gpio: set GPIO %d direction %d state %d\n", gpio, direction, state);
-			
-			goto parseout;
-
-			break;
-
-		case 2:
-			// clear GPIO group
-			gpioGroupTableCounter = -1; // just null a group size
-			printk("v2r_gpio: gpio group cleared\n");
-			goto parseout;
-			break;
-
-		case 3:
-			// add GPIO into group
-			/* 
-			   tmp[0] - command
-			   tmp[1] - GPIO number
-			*/
-
-			if (gpioGroupTableCounter >=TOTAL_GPIO) {
-				printk("v2r_gpio: group is full\n");
-				goto parseout;
-			}
-
-			gpio = tmp[1];
-			if (!(gpio > 0 && gpio <= TOTAL_GPIO)){
-				printk("Wrong gpio number (%d)\n", gpio);
-				goto parseout;
-			}
-
-			gpioGroupTableCounter++;
-			gpioGroupTable[gpioGroupTableCounter] = gpiotable[gpio];
-
-			printk("v2r_gpio: added gpio%d into group. New group size is %d\n", gpio, gpioGroupTableCounter+1);
-			goto parseout;
-			break;
-
-		default:
-			break;
+	// parse command
+	command_parts_counter = 0;
+	if (command[0] < 10) {
+		gpio_parse_binary_command(command, count-1);
+	} else {
+		gpio_parse_command(command);
 	}
 
 
-	// otherwise it a text command, tmp contains string to parse
-	data = split(tmp, ' ');
-	process_command(data);
+	// make return to userspace string
 
-parseout:
-
-	memcpy(dev->data, "ok", 3);
+	memcpy(dev->data, "ok\n", 3);
 	dev->buffer_data_size = 3;
-	nIndex = 0;
-	if (data) {
-		while(data[nIndex]){
-			//Release allocated memory
-			kfree(data[nIndex]);
-			nIndex++;
-		}
-		kfree(data);
-	}
 
-	kfree(tmp);
+	kfree(command);
 	*f_pos = 0;
 	retval = count;
+	//retval = 0;
+
 out:
-  	mutex_unlock(&dev->v2r_mutex);
+  	mutex_unlock(&dev->device_mutex);
+
 	return retval;
+
 }
 
-struct file_operations v2r_gpio_fops = {
+struct file_operations gpio_fops = {
 	.owner =    THIS_MODULE,
-	.read =     v2r_gpio_read,
-	.write =    v2r_gpio_write,
-	.open =     v2r_gpio_open,
-	.release =  v2r_gpio_release,
+	.read =     gpio_read,
+	.write =    gpio_write,
+	.open =     gpio_open,
+	.release =  gpio_release,
 };
 
-static int v2r_construct_device(struct v2r_dev *dev, int minor, struct class *class){
+
+static int gpio_construct_device(struct gpio_dev *dev, int minor, struct class *class) {
+
 	int err = 0;
-	dev_t devno = MKDEV(v2r_major, minor);
+	dev_t devno = MKDEV(gpio_major, minor);
 	struct device *device = NULL;
+
 	BUG_ON(dev == NULL || class == NULL);
+
 	/* Memory is to be allocated when the device is opened the first time */
-	printk("v2r_gpio construct device:%d\r\n", minor);
+	printk("%s: construct device:%d\n", DEVICE_NAME, minor);
+
 	dev->data = NULL;
-	dev->buffer_size = v2r_buffer_size;
-	mutex_init(&dev->v2r_mutex);
-	cdev_init(&dev->cdev, &v2r_gpio_fops);
+	dev->buffer_size = BUFFER_SIZE;
+	mutex_init(&dev->device_mutex);
+	cdev_init(&dev->cdev, &gpio_fops);
 	dev->cdev.owner = THIS_MODULE;
 	err = cdev_add(&dev->cdev, devno, 1);
+
 	if (err){
-		printk("V2R Error %d while trying to add %s%d",	err, V2R_DEVICE_NAME, minor);
+		printk("%s: error %d while trying to add %d",	DEVICE_NAME, err, minor);
 		return err;
 	}
-	device = device_create(class, NULL/*no parent device*/,  devno, NULL/*no additional data */,V2R_DEVICE_NAME);
+
+	device = device_create(class, NULL /*no parent device*/,  devno, NULL /*no additional data */, DEVICE_NAME);
+
 	if (IS_ERR(device)) {
 		err = PTR_ERR(device);
-		printk("Error %d while trying to create %s%d", err, V2R_DEVICE_NAME, minor);
-        cdev_del(&dev->cdev);
-        return err;
-    }
-	printk("v2r_gpio device is created successfully\r\n");
+		printk("%s: error %d while trying to create %d", DEVICE_NAME, err, minor);
+        	cdev_del(&dev->cdev);
+        	return err;
+	}
+
+	printk("%s: device is created successfully\n", DEVICE_NAME);
+
 	return 0;
+
 }
 
-static void v2r_destroy_device(struct v2r_dev *dev, int minor, struct class *class){
+static void gpio_destroy_device(struct gpio_dev *dev, int minor, struct class *class) {
+
 	BUG_ON(dev == NULL || class == NULL);
-	printk("v2r destroy device: %d\r\n", minor);
-	device_destroy(class, MKDEV(v2r_major, minor));
+
+	printk("%s: destroy device %d\n", DEVICE_NAME, minor);
+
+	device_destroy(class, MKDEV(gpio_major, minor));
 	cdev_del(&dev->cdev);
 	kfree(dev->data);
-	printk("v2r device is destroyed successfully\r\n");
+
+	printk("%s: device is destroyed successfully\n", DEVICE_NAME);
+
 	return;
+
 }
 
-static void v2r_cleanup_module(int devices_to_destroy){
+
+static void gpio_cleanup_module(int devices_to_destroy) {
+
 	int i = 0;
+
 	/* Get rid of character devices (if any exist) */
-	printk("v2r_gpio cleanup module\r\n");
-	if (v2r_devices) {
+
+	printk("%s: cleanup module\n", DEVICE_NAME);
+
+	if (gpio_devices) {
+
 		for (i = 0; i < devices_to_destroy; ++i) {
-			v2r_destroy_device(&v2r_devices[i], i, v2r_class);
-        }
-		kfree(v2r_devices);
+
+			gpio_destroy_device(&gpio_devices[i], i, gpio_class);
+
+	        }
+
+		kfree(gpio_devices);
+
 	}
-	if (v2r_class) class_destroy(v2r_class);
+
+	if (gpio_class) class_destroy(gpio_class);
 	if (v2r_gpio_retBuffer) kfree(v2r_gpio_retBuffer);
-	unregister_chrdev_region(MKDEV(v2r_major, 0), v2r_ndevices);
-	printk("v2r_gpio cleanup completed\r\n");
+	if (command_parts) kfree(command_parts);
+
+
+	/* remove proc_fs files */
+	gpio_remove_proc_fs();	
+
+	unregister_chrdev_region(MKDEV(gpio_major, 0), numberofdevices);
+
+	printk("%s: cleanup completed\n", DEVICE_NAME);
+
 	return;
+
 }
 
-static int __init v2r_init_module(void){
+static int __init gpio_init_module (void) {
+
 	int err = 0;
 	int i = 0;
 	int devices_to_destroy = 0;
 	dev_t dev = 0;
-	printk("v2r_gpio module version 1.3 init\r\n");
-	if (v2r_ndevices <= 0){
-		printk("v2r invalid value of v2r_ndevices: %d\n", v2r_ndevices);
+
+	printk("Virt2real GPIO Driver version 0.3\n");
+
+	if (gpio_add_proc_fs()) {
+		printk(KERN_ERR "%s: can't create PROCFS files\n", DEVICE_NAME);
+	}
+
+	if (numberofdevices <= 0) {
+		printk("%s: invalid value of numberofdevices: %d\n", DEVICE_NAME, numberofdevices);
 		return -EINVAL;
 	}
+
 	/* Get a range of minor numbers (starting with 0) to work with */
-	err = alloc_chrdev_region(&dev, 0, v2r_ndevices, V2R_DEVICE_NAME);
+
+	err = alloc_chrdev_region(&dev, 0, numberofdevices, DEVICE_NAME);
+
 	if (err < 0) {
-		printk("v2r alloc_chrdev_region() failed\n");
+		printk("%s: alloc_chrdev_region() failed\n", DEVICE_NAME);
 		return err;
 	}
-	v2r_major = MAJOR(dev);
-	printk("v2r_gpio device major: %d\r\n", v2r_major);
+
+	gpio_major = MAJOR(dev);
+
 	/* Create device class (before allocation of the array of devices) */
-	v2r_class = class_create(THIS_MODULE, V2R_DEVICE_NAME);
-	if (IS_ERR(v2r_class)){
-		err = PTR_ERR(v2r_class);
-		printk("v2r_gpio class not created %d\r\n", err);
+
+	gpio_class = class_create(THIS_MODULE, DEVICE_NAME);
+
+	if (IS_ERR(gpio_class)) {
+
+		err = PTR_ERR(gpio_class);
+		printk("%s: class not created %d\n", DEVICE_NAME, err);
 		goto fail;
-    }
-	/* Allocate the array of devices */
-	v2r_devices = (struct v2r_dev *)kzalloc( v2r_ndevices * sizeof(struct v2r_dev), GFP_KERNEL);
-	if (v2r_devices == NULL) {
-		err = -ENOMEM;
-		printk("v2r_gpio devices not allocated %d\r\n", err);
-		goto fail;
+
 	}
+
+	/* Allocate the array of devices */
+
+	gpio_devices = (struct gpio_dev *) kzalloc( numberofdevices * sizeof(struct gpio_dev), GFP_KERNEL);
+
+	if (gpio_devices == NULL) {
+
+		err = -ENOMEM;
+		printk("%s: devices not allocated %d\n", DEVICE_NAME, err);
+		goto fail;
+
+	}
+
 	/* Construct devices */
-	for (i = 0; i < v2r_ndevices; ++i) {
-		err = v2r_construct_device(&v2r_devices[i], i, v2r_class);
+	for (i = 0; i < numberofdevices; ++i) {
+
+		err = gpio_construct_device(&gpio_devices[i], i, gpio_class);
 		if (err) {
-			printk("v2r_gpio device is not created\r\n");
+
+			printk("%s: device is not created\n", DEVICE_NAME);
 			devices_to_destroy = i;
 			goto fail;
-        }
+
+        	}
 	}
 
-	v2r_gpio_retBuffer = kmalloc(TOTAL_GPIO+1, GFP_KERNEL);
-	if (v2r_gpio_retBuffer==NULL) return -ENOMEM;
+	v2r_gpio_retBuffer = kmalloc(RETBUFFER_SIZE + 1, GFP_KERNEL);
+	if (v2r_gpio_retBuffer == NULL) return -ENOMEM;
 
-	// fill gpioGroupTable width default values - all GPIOs
-	printk("v2r_gpio: fill default GPIO group array\n");
-	for (i=0; i<=TOTAL_GPIO; i++) {
-		gpioGroupTable[i] = gpiotable[i];
-	}
-	gpioGroupTableCounter = i-1; // save group size
+
+	command_parts = kmalloc(128, GFP_KERNEL);
+	if (command_parts == NULL) return -ENOMEM;
+
+
+	/* fill gpioGroupTable width default values - all GPIOs */
+	group_init();
 
 	return 0; /* success */
+
 fail:
-	v2r_cleanup_module(devices_to_destroy);
+
+	gpio_cleanup_module(devices_to_destroy);
 	return err;
+
 }
 
-static void __exit v2r_exit_module(void){
-	printk("v2r_gpio module exit\r\n");
-	v2r_cleanup_module(v2r_ndevices);
+static void __exit gpio_exit_module(void){
+
+	gpio_cleanup_module(numberofdevices);
+	
 	return;
+
 }
 
-module_init(v2r_init_module);
-module_exit(v2r_exit_module);
+module_init(gpio_init_module);
+module_exit(gpio_exit_module);
+
+MODULE_DESCRIPTION("Virt2real GPIO Driver version 0.3");
+MODULE_AUTHOR("Alexandr Shadrin");
+MODULE_AUTHOR("Gol (gol@g0l.ru)");
+MODULE_LICENSE("GPL2");
