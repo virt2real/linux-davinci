@@ -32,12 +32,19 @@ config V2R_GPIO
 	---help---
 	Virt2real GPIO driver
 
+config V2R_EXTPWM
+        depends on V2R_DRIVERS
+        tristate "External PWM driver"
+        default y
+        ---help---
+        Virt2real External PWM driver
+
 config V2R_SWPWM
 	depends on V2R_DRIVERS
 	tristate "SW PWM driver"
-	default y
+	default n
 	---help---
 	Virt2real Software PWM driver (not good yet)
-	
+	OLD VERSION, not fully usable on current board version
 	
 
