@@ -34,10 +34,10 @@
 #define DEVICE_NAME "v2r_gpio"
 
 #define TOTAL_GPIO 103
-#define TOTAL_RTO 4
+#define TOTAL_PWCTR 4
 
-static int v2r_set_rto(int number, int value);
-static int v2r_get_rto(int number);
+static int v2r_set_pwctr(int number, int value);
+static int v2r_get_pwctr(int number);
 
 
 /* The structure to represent 'v2r_gpio' devices.
@@ -206,7 +206,7 @@ static int gpio_remove_proc_fs(void) {
 
 static struct proc_dir_entry *proc_parent;
 static struct proc_dir_entry *proc_entry;
-static s32 proc_write_entry[TOTAL_GPIO + TOTAL_RTO + 2];
+static s32 proc_write_entry[TOTAL_GPIO + TOTAL_PWCTR + 2];
 
 static int gpio_read_proc (int gpio_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
@@ -245,12 +245,12 @@ static int gpio_write_proc (int gpio_number, struct file *file, const char *buf,
 	return count;
 }
 
-static int rto_read_proc (int rto_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
+static int pwctr_read_proc (int pwctr_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
 	int len=0;
 	int value = 0;
 
-	value = v2r_get_rto(rto_number) ? 1 : 0;
+	value = v2r_get_pwctr(pwctr_number) ? 1 : 0;
 
 	len = sprintf(buf, "%d", value);
 	
@@ -258,7 +258,7 @@ static int rto_read_proc (int rto_number, char *buf, char **start, off_t offset,
 
 }
 
-static int rto_write_proc (int rto_number, struct file *file, const char *buf, int count, void *data ) {
+static int pwctr_write_proc (int pwctr_number, struct file *file, const char *buf, int count, void *data ) {
 
 	static int value = 0;
 	static char proc_data[2];
@@ -276,7 +276,7 @@ static int rto_write_proc (int rto_number, struct file *file, const char *buf, i
 	else
 		kstrtoint(proc_data, 2, &value);
 
-	v2r_set_rto(rto_number, value);
+	v2r_set_pwctr(pwctr_number, value);
 
 	return count;
 }
@@ -493,14 +493,14 @@ static int gpio_read_proc_102 (char *buf, char **start, off_t offset, int count,
 static int gpio_write_proc_103 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (103, file, buf, count, data); }
 static int gpio_read_proc_103 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (103, buf, start, offset, count, eof, data); }
 
-static int rto_write_proc_0 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (0, file, buf, count, data); }
-static int rto_read_proc_0 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (0, buf, start, offset, count, eof, data); }
-static int rto_write_proc_1 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (1, file, buf, count, data); }
-static int rto_read_proc_1 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (1, buf, start, offset, count, eof, data); }
-static int rto_write_proc_2 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (2, file, buf, count, data); }
-static int rto_read_proc_2 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (2, buf, start, offset, count, eof, data); }
-static int rto_write_proc_3 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (3, file, buf, count, data); }
-static int rto_read_proc_3 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (3, buf, start, offset, count, eof, data); }
+static int pwctr_write_proc_0 (struct file *file, const char *buf, int count, void *data ) { return pwctr_write_proc (0, file, buf, count, data); }
+static int pwctr_read_proc_0 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pwctr_read_proc (0, buf, start, offset, count, eof, data); }
+static int pwctr_write_proc_1 (struct file *file, const char *buf, int count, void *data ) { return pwctr_write_proc (1, file, buf, count, data); }
+static int pwctr_read_proc_1 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pwctr_read_proc (1, buf, start, offset, count, eof, data); }
+static int pwctr_write_proc_2 (struct file *file, const char *buf, int count, void *data ) { return pwctr_write_proc (2, file, buf, count, data); }
+static int pwctr_read_proc_2 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pwctr_read_proc (2, buf, start, offset, count, eof, data); }
+static int pwctr_write_proc_3 (struct file *file, const char *buf, int count, void *data ) { return pwctr_write_proc (3, file, buf, count, data); }
+static int pwctr_read_proc_3 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pwctr_read_proc (3, buf, start, offset, count, eof, data); }
 
 
 static int gpio_read_proc_all (char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
@@ -531,7 +531,7 @@ static int gpio_remove_proc_fs(void) {
 	int i;
 	char fn[10];
 
-	for (i = 0; i <= TOTAL_GPIO + TOTAL_RTO + 1; i++) {
+	for (i = 0; i <= TOTAL_GPIO + TOTAL_PWCTR + 1; i++) {
 
 		if (proc_write_entry[i]) { 
 			sprintf(fn, "%d", i);
@@ -663,11 +663,11 @@ static int gpio_add_proc_fs(void) {
 	/* all */
 	proc_entry = create_proc_entry("all", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_all; proc_write_entry[104] = (s32) proc_entry; }
 
-	/* rto 0-3 */
-	proc_entry = create_proc_entry("rto0", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_0; proc_entry-> write_proc = (void *) rto_write_proc_0; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[105] = (s32) proc_entry; }
-	proc_entry = create_proc_entry("rto1", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_1; proc_entry-> write_proc = (void *) rto_write_proc_1; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[106] = (s32) proc_entry; }
-	proc_entry = create_proc_entry("rto2", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_2; proc_entry-> write_proc = (void *) rto_write_proc_2; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[107] = (s32) proc_entry; }
-	proc_entry = create_proc_entry("rto3", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_3; proc_entry-> write_proc = (void *) rto_write_proc_3; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[108] = (s32) proc_entry; }
+	/* pwctr 0-3 */
+	proc_entry = create_proc_entry("pwctr0", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pwctr_read_proc_0; proc_entry-> write_proc = (void *) pwctr_write_proc_0; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[105] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("pwctr1", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pwctr_read_proc_1; proc_entry-> write_proc = (void *) pwctr_write_proc_1; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[106] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("pwctr2", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pwctr_read_proc_2; proc_entry-> write_proc = (void *) pwctr_write_proc_2; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[107] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("pwctr3", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pwctr_read_proc_3; proc_entry-> write_proc = (void *) pwctr_write_proc_3; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[108] = (s32) proc_entry; }
 
 	return 0;
 }
@@ -682,14 +682,14 @@ static int gpio_add_proc_fs(void) {
 
 
 /* 
-  set RTO state 
+  set PWCTR state 
 */
 
-static int v2r_set_rto(int number, int value) {
+static int v2r_set_pwctr(int number, int value) {
 
 	u8 result = 0;
 
-	if (!(number >= 0 && number <= TOTAL_RTO)) {
+	if (!(number >= 0 && number <= TOTAL_PWCTR)) {
 		printk("%s: wrong RTP number (%d)\n", DEVICE_NAME, number);
 		return 1;
 	}
@@ -709,14 +709,14 @@ static int v2r_set_rto(int number, int value) {
 
 
 /* 
-  get RTO state 
+  get PWCTR state 
 */
 
-static int v2r_get_rto(int number) {
+static int v2r_get_pwctr(int number) {
 
 	u8 result = 0;
 
-	if (!(number >= 0 && number <= TOTAL_RTO)) {
+	if (!(number >= 0 && number <= TOTAL_PWCTR)) {
 		printk("%s: wrong RTP number (%d)\n", DEVICE_NAME, number);
 		return 1;
 	}
@@ -902,8 +902,8 @@ static void gpio_parse_binary_command(char * buffer, unsigned int count) {
 
 		case 6:
 			/* 
-				set RTO
-				buffer[1] - RTO number
+				set PWCTR
+				buffer[1] - PWCTR number
 				buffer[2] - value
 			*/
 
@@ -912,7 +912,7 @@ static void gpio_parse_binary_command(char * buffer, unsigned int count) {
 				break;
 			}
 
-			v2r_set_rto(buffer[1], buffer[2]);
+			v2r_set_pwctr(buffer[1], buffer[2]);
 
 			break;
 
@@ -973,8 +973,8 @@ static void gpio_parse_command(char * string) {
 	}
 
 
-	/* string like "set rto 1 1" */
-	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "rto")) {
+	/* string like "set pwctr 1 1" */
+	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "pwctr")) {
 
 		if (command_parts_counter < 4) {
 			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
@@ -983,7 +983,7 @@ static void gpio_parse_command(char * string) {
 
 		kstrtoint(command_parts[2], 10, &gpio_number);
 		kstrtoint(command_parts[3], 10, &value);
-		v2r_set_rto(gpio_number, value);
+		v2r_set_pwctr(gpio_number, value);
 
 		cmd_ok = 1;
 		goto out;
