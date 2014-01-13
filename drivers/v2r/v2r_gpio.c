@@ -36,6 +36,10 @@
 #define TOTAL_GPIO 103
 #define TOTAL_RTO 4
 
+static int v2r_set_rto(int number, int value);
+static int v2r_get_rto(int number);
+
+
 /* The structure to represent 'v2r_gpio' devices.
  *  data - data buffer;
  *  buffer_size - size of the data buffer;
@@ -202,7 +206,7 @@ static int gpio_remove_proc_fs(void) {
 
 static struct proc_dir_entry *proc_parent;
 static struct proc_dir_entry *proc_entry;
-static s32 proc_write_entry[TOTAL_GPIO+2];
+static s32 proc_write_entry[TOTAL_GPIO + TOTAL_RTO + 2];
 
 static int gpio_read_proc (int gpio_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
@@ -237,6 +241,42 @@ static int gpio_write_proc (int gpio_number, struct file *file, const char *buf,
 
 	gpio_direction_output(gpiotable[gpio_number].gpio_number, value);
 	davinci_cfg_reg(gpiotable[gpio_number].gpio_descriptor);
+
+	return count;
+}
+
+static int rto_read_proc (int rto_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
+
+	int len=0;
+	int value = 0;
+
+	value = v2r_get_rto(rto_number) ? 1 : 0;
+
+	len = sprintf(buf, "%d", value);
+	
+	return len;
+
+}
+
+static int rto_write_proc (int rto_number, struct file *file, const char *buf, int count, void *data ) {
+
+	static int value = 0;
+	static char proc_data[2];
+
+	if(count > 1)
+		count = 1;
+
+	if(copy_from_user(proc_data, buf, count))
+		return -EFAULT;
+
+	if (proc_data[0] == 0) 
+		value = 0;
+	else if (proc_data[0] == 1) 
+		value = 1;
+	else
+		kstrtoint(proc_data, 2, &value);
+
+	v2r_set_rto(rto_number, value);
 
 	return count;
 }
@@ -453,6 +493,16 @@ static int gpio_read_proc_102 (char *buf, char **start, off_t offset, int count,
 static int gpio_write_proc_103 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (103, file, buf, count, data); }
 static int gpio_read_proc_103 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (103, buf, start, offset, count, eof, data); }
 
+static int rto_write_proc_0 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (0, file, buf, count, data); }
+static int rto_read_proc_0 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (0, buf, start, offset, count, eof, data); }
+static int rto_write_proc_1 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (1, file, buf, count, data); }
+static int rto_read_proc_1 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (1, buf, start, offset, count, eof, data); }
+static int rto_write_proc_2 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (2, file, buf, count, data); }
+static int rto_read_proc_2 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (2, buf, start, offset, count, eof, data); }
+static int rto_write_proc_3 (struct file *file, const char *buf, int count, void *data ) { return rto_write_proc (3, file, buf, count, data); }
+static int rto_read_proc_3 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return rto_read_proc (3, buf, start, offset, count, eof, data); }
+
+
 static int gpio_read_proc_all (char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
 	char buffer[TOTAL_GPIO + 1];
@@ -481,7 +531,7 @@ static int gpio_remove_proc_fs(void) {
 	int i;
 	char fn[10];
 
-	for (i = 0; i <= TOTAL_GPIO+1; i++) {
+	for (i = 0; i <= TOTAL_GPIO + TOTAL_RTO + 1; i++) {
 
 		if (proc_write_entry[i]) { 
 			sprintf(fn, "%d", i);
@@ -610,7 +660,14 @@ static int gpio_add_proc_fs(void) {
 	proc_entry = create_proc_entry("102", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_102; proc_entry-> write_proc = (void *) gpio_write_proc_102; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[102] = (s32) proc_entry; }
 	proc_entry = create_proc_entry("103", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_103; proc_entry-> write_proc = (void *) gpio_write_proc_103; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[103] = (s32) proc_entry; }
 
+	/* all */
 	proc_entry = create_proc_entry("all", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_all; proc_write_entry[104] = (s32) proc_entry; }
+
+	/* rto 0-3 */
+	proc_entry = create_proc_entry("rto0", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_0; proc_entry-> write_proc = (void *) rto_write_proc_0; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[105] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("rto1", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_1; proc_entry-> write_proc = (void *) rto_write_proc_1; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[106] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("rto2", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_2; proc_entry-> write_proc = (void *) rto_write_proc_2; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[107] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("rto3", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = rto_read_proc_3; proc_entry-> write_proc = (void *) rto_write_proc_3; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[108] = (s32) proc_entry; }
 
 	return 0;
 }
@@ -649,6 +706,27 @@ static int v2r_set_rto(int number, int value) {
 	return 0;
 
 }
+
+
+/* 
+  get RTO state 
+*/
+
+static int v2r_get_rto(int number) {
+
+	u8 result = 0;
+
+	if (!(number >= 0 && number <= TOTAL_RTO)) {
+		printk("%s: wrong RTP number (%d)\n", DEVICE_NAME, number);
+		return 1;
+	}
+
+	result = davinci_rtcss_read(0x00);
+
+	return (result >> number) & 1;
+
+}
+
 
 
 /* 
