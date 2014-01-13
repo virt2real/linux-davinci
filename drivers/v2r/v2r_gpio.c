@@ -202,7 +202,7 @@ static int gpio_remove_proc_fs(void) {
 
 static struct proc_dir_entry *proc_parent;
 static struct proc_dir_entry *proc_entry;
-static s32 proc_write_entry[TOTAL_GPIO+1];
+static s32 proc_write_entry[TOTAL_GPIO+2];
 
 static int gpio_read_proc (int gpio_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
@@ -453,13 +453,35 @@ static int gpio_read_proc_102 (char *buf, char **start, off_t offset, int count,
 static int gpio_write_proc_103 (struct file *file, const char *buf, int count, void *data ) { return gpio_write_proc (103, file, buf, count, data); }
 static int gpio_read_proc_103 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return gpio_read_proc (103, buf, start, offset, count, eof, data); }
 
+static int gpio_read_proc_all (char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
+
+	char buffer[TOTAL_GPIO + 1];
+	int i;
+	int len=0;
+	int value = 0;
+
+	for (i = 0; i <= TOTAL_GPIO; i++) {
+
+		value = gpio_get_value(gpiotable[i].gpio_number);
+
+		/* bers, eat this */
+		buffer[i] = value ? '1' : '0';
+
+	}
+
+	len = sprintf(buf, "%s", buffer);
+	
+	return len;
+
+}
+
 
 static int gpio_remove_proc_fs(void) {
 
 	int i;
 	char fn[10];
 
-	for (i = 0; i <= TOTAL_GPIO; i++) {
+	for (i = 0; i <= TOTAL_GPIO+1; i++) {
 
 		if (proc_write_entry[i]) { 
 			sprintf(fn, "%d", i);
@@ -587,6 +609,8 @@ static int gpio_add_proc_fs(void) {
 	proc_entry = create_proc_entry("101", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_101; proc_entry-> write_proc = (void *) gpio_write_proc_101; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[101] = (s32) proc_entry; }
 	proc_entry = create_proc_entry("102", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_102; proc_entry-> write_proc = (void *) gpio_write_proc_102; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[102] = (s32) proc_entry; }
 	proc_entry = create_proc_entry("103", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_103; proc_entry-> write_proc = (void *) gpio_write_proc_103; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[103] = (s32) proc_entry; }
+
+	proc_entry = create_proc_entry("all", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = gpio_read_proc_all; proc_write_entry[104] = (s32) proc_entry; }
 
 	return 0;
 }
