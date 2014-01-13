@@ -289,7 +289,7 @@ static int pins_remove_proc_fs(void) {
 
 static struct proc_dir_entry *proc_parent;
 static struct proc_dir_entry *proc_entry;
-static s32 proc_write_entry[TOTAL_PINS+1];
+static s32 proc_write_entry[TOTAL_PINS+2];
 
 static int pins_read_proc (int pin_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
@@ -453,13 +453,35 @@ static int pins_read_proc_84 (char *buf, char **start, off_t offset, int count, 
 static int pins_write_proc_85 (struct file *file, const char *buf, int count, void *data ) { return pins_write_proc (85, file, buf, count, data); }
 static int pins_read_proc_85 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pins_read_proc (85, buf, start, offset, count, eof, data); }
 
+static int pins_read_proc_all (char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
+
+	char buffer[TOTAL_PINS + 1];
+	int i;
+	int len=0;
+	int value = 0;
+
+	for (i = 0; i <= TOTAL_PINS; i++) {
+
+		value = gpio_get_value(ext_bus_pins[i].gpio_number);
+
+		/* bers, eat this */
+		buffer[i] = value ? '1' : '0';
+
+	}
+
+	len = sprintf(buf, "%s", buffer);
+	
+	return len;
+
+}
+
 
 static int pins_remove_proc_fs(void) {
 
 	int i;
 	char fn[10];
 
-	for (i = 0; i <= TOTAL_PINS; i++) {
+	for (i = 0; i <= TOTAL_PINS + 1; i++) {
 
 		if (proc_write_entry[i]) { 
 			sprintf(fn, "%d", i);
@@ -566,6 +588,8 @@ static int pins_add_proc_fs(void) {
 	proc_entry = create_proc_entry("83", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_83; proc_entry-> write_proc = (void *) pins_write_proc_83; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[83] = (s32) proc_entry; }
 	proc_entry = create_proc_entry("84", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_84; proc_entry-> write_proc = (void *) pins_write_proc_84; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[84] = (s32) proc_entry; }
 	proc_entry = create_proc_entry("85", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_85; proc_entry-> write_proc = (void *) pins_write_proc_85; proc_entry-> mode = S_IFREG | S_IRUGO; proc_write_entry[85] = (s32) proc_entry; }
+
+	proc_entry = create_proc_entry("all", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_all; proc_write_entry[86] = (s32) proc_entry; }
 
 	return 0;
 }
