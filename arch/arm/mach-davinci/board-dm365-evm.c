@@ -157,34 +157,29 @@ static struct mtd_partition davinci_nand_partitions[] = {
 		.name		= "bootloader",
 		.offset		= 0,
 		.size		= 30 * NAND_BLOCK_SIZE,
-		.mask_flags	= MTD_WRITEABLE, /* force read-only */
+		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
 	}, {
 		/* U-Boot environment */
 		.name		= "params",
 		.offset		= MTDPART_OFS_APPEND,
 		.size		= 2 * NAND_BLOCK_SIZE,
-		.mask_flags	= 0,
+		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
 	}, {
 		.name		= "kernel",
 		.offset		= MTDPART_OFS_APPEND,
 		.size		= SZ_4M,
-		.mask_flags	= 0,
+		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
 	}, {
-		.name		= "filesystem1",
-		.offset		= MTDPART_OFS_APPEND,
-		.size		= SZ_512M,
-		.mask_flags	= 0,
-	}, {
-		.name		= "filesystem2",
+		.name		= "fs",
 		.offset		= MTDPART_OFS_APPEND,
 		.size		= MTDPART_SIZ_FULL,
-		.mask_flags	= 0,
+		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
 	}
 	/* two blocks with bad block table (and mirror) at the end */
 };
 
 static struct davinci_nand_pdata davinci_nand_data = {
-	.mask_chipsel		= BIT(14),
+	.mask_chipsel		= 0,
 	.parts			= davinci_nand_partitions,
 	.nr_parts		= ARRAY_SIZE(davinci_nand_partitions),
 	.ecc_mode		= NAND_ECC_HW,
@@ -474,7 +469,6 @@ static __init void dm365_evm_init(void)
 	led_run = 0;
 	camera_run = 0;
 	uart1_run = 0;
-
 
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	v2r_parse_cmdline(saved_command_line);
