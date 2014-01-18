@@ -104,6 +104,7 @@ typedef struct  {
 	const char* alt_func_name3;
 	int alt_func_descriptor3;
 	int alt_func_direction3;
+
 } pincon;
 
 /* array and counter for pins group */
@@ -112,95 +113,95 @@ static short pinsGroupTableCounter = 0;
 
 
 static pincon ext_bus_pins[TOTAL_PINS+1] = {
-    { 0, "ZERO FAKE PIN",  	FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 1, "GND",			FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 2, "UART0_TXD", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 3, "UART0_RXD", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 4, "AGND", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 5, "ETHERNET1", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 6, "ETHERNET2", 		FALSE, NA,		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 7, "ETHERNET3", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 8, "ETHERNET4", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    { 9, "ETHERNET5", 		FALSE, NA,		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {10, "GPIO15", 		TRUE,  DM365_GPIO15, 	15, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {11, "GPIO14", 		TRUE,  DM365_GPIO14, 	14, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {12, "GPIO13", 		TRUE,  DM365_GPIO13, 	13, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {13, "GPIO12", 		TRUE,  DM365_GPIO12, 	12, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {14, "GPIO11", 		TRUE,  DM365_GPIO11, 	11, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {15, "GPIO10", 		TRUE,  DM365_GPIO10, 	10, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {16, "GPIO90",		TRUE,  DM365_GPIO90, 	90, INP,  0, 	"pwm2", DM365_PWM2_G90, OUT, EMPTY, NA, NA, EMPTY, NA, NA},
-    {17, "GPIO89", 		TRUE,  DM365_GPIO89, 	89, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {18, "GPIO88", 		TRUE,  DM365_GPIO88, 	88, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {19, "GPIO87", 		TRUE,  DM365_GPIO87, 	87, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {20, "GPIO50", 		TRUE,  DM365_GPIO50, 	50, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {21, "PWR_VIN", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {22, "+3V3", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {23, "RESET", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {24, "LINEOUT", 		FALSE, NA,		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {25, "GPIO1", 		TRUE,  DM365_GPIO1, 	1,  INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {26, "GPIO37", 		TRUE,  DM365_GPIO37,	37, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {27, "GPIO36", 		TRUE,  DM365_GPIO36,    36, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {28, "GPIO17", 		TRUE,  DM365_GPIO17,    17, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {29, "GPIO16", 		TRUE,  DM365_GPIO16,    16, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {30, "GPIO33", 		TRUE,  DM365_GPIO33, 	33, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {31, "GPIO32", 		TRUE,  DM365_GPIO32, 	32, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {32, "GPIO31", 		TRUE,  DM365_GPIO31, 	31, INP,  0,	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {33, "GPIO30", 		TRUE,  DM365_GPIO30, 	30, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {34, "GPIO29", 		TRUE,  DM365_GPIO29, 	29, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {35, "GPIO28", 		TRUE,  DM365_GPIO28, 	28, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {36, "GPIO27", 		TRUE,  DM365_GPIO27, 	27, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {37, "GPIO26", 		TRUE,  DM365_GPIO26, 	26, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {38, "GPIO2", 		TRUE,  DM365_GPIO2, 	2, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {39, "GPIO24",		TRUE,  DM365_GPIO24, 	24, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {40, "GPIO23", 		TRUE,  DM365_GPIO23, 	23, INP,  0, 	"pwm0", DM365_PWM0_G23, OUT, EMPTY, NA, NA, EMPTY, NA, NA},
-    {41, "GPIO22", 		TRUE,  DM365_GPIO22, 	22, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {42, "GPIO80", 		TRUE,  DM365_GPIO80, 	80, INP,  0, 	"pwm3", DM365_PWM3_G80, OUT, EMPTY, NA, NA, EMPTY, NA, NA},
-    {43, "GPIO92", 		TRUE,  DM365_GPIO92, 	92, INP,  0, 	"pwm0", DM365_PWM0, 	OUT, EMPTY, NA, NA, EMPTY, NA, NA},
-    {44, "GPIO91", 		TRUE,  DM365_GPIO91, 	91, INP,  0, 	"pwm1", DM365_PWM1, 	OUT, EMPTY, NA, NA, EMPTY, NA, NA},
+    { 0, "ZERO FAKE PIN",  	FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 1, "GND",			FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 2, "UART0_TXD", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 3, "UART0_RXD", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 4, "AGND", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 5, "ETHERNET1", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 6, "ETHERNET2", 		FALSE, NA,		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 7, "ETHERNET3", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 8, "ETHERNET4", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    { 9, "ETHERNET5", 		FALSE, NA,		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {10, "GPIO15", 		TRUE,  DM365_GPIO15, 	15, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {11, "GPIO14", 		TRUE,  DM365_GPIO14, 	14, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {12, "GPIO13", 		TRUE,  DM365_GPIO13, 	13, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {13, "GPIO12", 		TRUE,  DM365_GPIO12, 	12, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {14, "GPIO11", 		TRUE,  DM365_GPIO11, 	11, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {15, "GPIO10", 		TRUE,  DM365_GPIO10, 	10, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {16, "GPIO90",		TRUE,  DM365_GPIO90, 	90, INP,  0, 	"pwm2", DM365_PWM2_G90, OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {17, "GPIO89", 		TRUE,  DM365_GPIO89, 	89, INP,  0, 	"pwm2", DM365_PWM2_G89,	OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {18, "GPIO88", 		TRUE,  DM365_GPIO88, 	88, INP,  0, 	"pwm2", DM365_PWM2_G88,	OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {19, "GPIO87", 		TRUE,  DM365_GPIO87, 	87, INP,  0, 	"pwm2", DM365_PWM2_G87,	OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {20, "GPIO50", 		TRUE,  DM365_GPIO50, 	50, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {21, "PWR_VIN", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {22, "+3V3", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {23, "RESET", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {24, "LINEOUT", 		FALSE, NA,		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {25, "GPIO1", 		TRUE,  DM365_GPIO1, 	1,  INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {26, "GPIO37", 		TRUE,  DM365_GPIO37,	37, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {27, "GPIO36", 		TRUE,  DM365_GPIO36,    36, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {28, "GPIO17", 		TRUE,  DM365_GPIO17,    17, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {29, "GPIO16", 		TRUE,  DM365_GPIO16,    16, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {30, "GPIO33", 		TRUE,  DM365_GPIO33, 	33, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {31, "GPIO32", 		TRUE,  DM365_GPIO32, 	32, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {32, "GPIO31", 		TRUE,  DM365_GPIO31, 	31, INP,  0,	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {33, "GPIO30", 		TRUE,  DM365_GPIO30, 	30, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {34, "GPIO29", 		TRUE,  DM365_GPIO29, 	29, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {35, "GPIO28", 		TRUE,  DM365_GPIO28, 	28, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {36, "GPIO27", 		TRUE,  DM365_GPIO27, 	27, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {37, "GPIO26", 		TRUE,  DM365_GPIO26, 	26, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {38, "GPIO2", 		TRUE,  DM365_GPIO2, 	2,  INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {39, "GPIO24",		TRUE,  DM365_GPIO24, 	24, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {40, "GPIO23", 		TRUE,  DM365_GPIO23, 	23, INP,  0, 	"pwm0", DM365_PWM0_G23, OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {41, "GPIO22", 		TRUE,  DM365_GPIO22, 	22, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {42, "GPIO80", 		TRUE,  DM365_GPIO80, 	80, INP,  0, 	"pwm3", DM365_PWM3_G80, OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {43, "GPIO92", 		TRUE,  DM365_GPIO92, 	92, INP,  0, 	"pwm0", DM365_PWM0, 	OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {44, "GPIO91", 		TRUE,  DM365_GPIO91, 	91, INP,  0, 	"pwm1", DM365_PWM1, 	OUT, EMPTY, NA, NA, EMPTY, NA, NA },
 
-    {45, "TVOUT", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {46, "SP+", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {47, "SP-", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {48, "ADC0", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {49, "ADC1", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {50, "ADC2", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {51, "ADC3", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {52, "ADC4", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {53, "ADC5", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
+    {45, "TVOUT", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {46, "SP+", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {47, "SP-", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {48, "ADC0", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {49, "ADC1", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {50, "ADC2", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {51, "ADC3", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {52, "ADC4", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {53, "ADC5", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
 
-    {54, "GPIO3", 		TRUE,  DM365_GPIO3, 	3, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {55, "GPIO4", 		TRUE,  DM365_GPIO4, 	4, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {56, "GPIO5", 		TRUE,  DM365_GPIO5, 	5, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {57, "GPIO6", 		TRUE,  DM365_GPIO6, 	6, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {58, "GPIO7", 		TRUE,  DM365_GPIO7, 	7, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {59, "GPIO8", 		TRUE,  DM365_GPIO8, 	8, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {60, "GPIO9", 		TRUE,  DM365_GPIO9, 	9, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {61, "GPIO82", 		TRUE,  DM365_GPIO82, 	82, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {62, "GPIO79", 		TRUE,  DM365_GPIO79, 	79, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {63, "GPIO86", 		TRUE,  DM365_GPIO86, 	86, INP, 0, 	"pwm3", DM365_PWM3_G86, OUT, EMPTY, NA, NA, EMPTY, NA, NA},
-    {64, "GPIO85", 		TRUE,  DM365_GPIO85, 	85, INP, 0, 	"pwm3", DM365_PWM3_G85, OUT, EMPTY, NA, NA, EMPTY, NA, NA},
-    {65, "GPIO81", 		TRUE,  DM365_GPIO81, 	81, INP, 0, 	"pwm3", DM365_PWM3_G81, OUT, EMPTY, NA, NA, EMPTY, NA, NA},
-    {66, "AGND", 		FALSE, NA, 		-1, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {67, "+3V3", 		FALSE, NA, 		-1, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {68, "PWR_VIN",		FALSE, NA, 		-1, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {69, "DSP_GND", 		FALSE, NA, 		-1, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {70, "I2C_DATA", 		FALSE, NA, 		-1, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {71, "I2C_CLK", 		FALSE, NA,		-1, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {72, "COMPPR", 		FALSE, NA, 		-1, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {73, "COMPY", 		FALSE, NA, 		-1, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {74, "COMPPB", 		FALSE, NA, 		-1, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {75, "GPIO49", 		TRUE,  DM365_GPIO49, 	49, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {76, "GPIO48", 		TRUE,  DM365_GPIO48, 	48, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {77, "GPIO47", 		TRUE,  DM365_GPIO47, 	47, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {78, "GPIO46", 		TRUE,  DM365_GPIO46, 	46, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {79, "GPIO45", 		TRUE,  DM365_GPIO45, 	45, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {80, "GPIO44", 		TRUE,  DM365_GPIO44, 	44, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {81, "GPIO35", 		TRUE,  DM365_GPIO35, 	35, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {82, "GPIO84", 		TRUE,  DM365_GPIO84, 	84, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {83, "GPIO83", 		TRUE,  DM365_GPIO83, 	83, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {84, "GPIO25", 		TRUE,  DM365_GPIO25, 	25, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {85, "GPIO34", 		TRUE,  DM365_GPIO34, 	34, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
-    {86, "GND", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA},
+    {54, "GPIO3", 		TRUE,  DM365_GPIO3, 	3, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {55, "GPIO4", 		TRUE,  DM365_GPIO4, 	4, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {56, "GPIO5", 		TRUE,  DM365_GPIO5, 	5, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {57, "GPIO6", 		TRUE,  DM365_GPIO6, 	6, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {58, "GPIO7", 		TRUE,  DM365_GPIO7, 	7, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {59, "GPIO8", 		TRUE,  DM365_GPIO8, 	8, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {60, "GPIO9", 		TRUE,  DM365_GPIO9, 	9, INP,  0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {61, "GPIO82", 		TRUE,  DM365_GPIO82, 	82, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {62, "GPIO79", 		TRUE,  DM365_GPIO79, 	79, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {63, "GPIO86", 		TRUE,  DM365_GPIO86, 	86, INP, 0, 	"pwm3", DM365_PWM3_G86, OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {64, "GPIO85", 		TRUE,  DM365_GPIO85, 	85, INP, 0, 	"pwm3", DM365_PWM3_G85, OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {65, "GPIO81", 		TRUE,  DM365_GPIO81, 	81, INP, 0, 	"pwm3", DM365_PWM3_G81, OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {66, "AGND", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {67, "+3V3", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {68, "PWR_VIN",		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {69, "DSP_GND", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {70, "I2C_DATA", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {71, "I2C_CLK", 		FALSE, NA,		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {72, "COMPPR", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {73, "COMPY", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {74, "COMPPB", 		FALSE, NA, 		NA, OUT, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {75, "GPIO49", 		TRUE,  DM365_GPIO49, 	49, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {76, "GPIO48", 		TRUE,  DM365_GPIO48, 	48, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {77, "GPIO47", 		TRUE,  DM365_GPIO47, 	47, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {78, "GPIO46", 		TRUE,  DM365_GPIO46, 	46, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {79, "GPIO45", 		TRUE,  DM365_GPIO45, 	45, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {80, "GPIO44", 		TRUE,  DM365_GPIO44, 	44, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {81, "GPIO35", 		TRUE,  DM365_GPIO35, 	35, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {82, "GPIO84", 		TRUE,  DM365_GPIO84, 	84, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {83, "GPIO83", 		TRUE,  DM365_GPIO83, 	83, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {84, "GPIO25", 		TRUE,  DM365_GPIO25, 	25, INP, 0, 	"pwm1", DM365_PWM1_G25, OUT, EMPTY, NA, NA, EMPTY, NA, NA },
+    {85, "GPIO34", 		TRUE,  DM365_GPIO34, 	34, INP, 0, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
+    {86, "GND", 		FALSE, NA, 		NA, INP, NA, 	 EMPTY, NA, 		NA,  EMPTY, NA, NA, EMPTY, NA, NA },
 };
 
 
@@ -289,7 +290,7 @@ static int pins_remove_proc_fs(void) {
 
 static struct proc_dir_entry *proc_parent;
 static struct proc_dir_entry *proc_entry;
-static s32 proc_write_entry[TOTAL_PINS+2];
+static s32 proc_write_entry[TOTAL_PINS + TOTAL_PWM +2 ];
 
 static int pins_read_proc (int pin_number, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
 
@@ -303,7 +304,7 @@ static int pins_read_proc (int pin_number, char *buf, char **start, off_t offset
 
 	value = gpio_get_value(ext_bus_pins[pin_number].gpio_number)? 1 : 0;
 
-	len = sprintf(buf, "%d", value);
+	len = sprintf(buf, "%d\n", value);
 	
 	return len;
 
@@ -469,11 +470,48 @@ static int pins_read_proc_all (char *buf, char **start, off_t offset, int count,
 
 	}
 
-	len = sprintf(buf, "%s", buffer);
+	len = sprintf(buf, "%s\n", buffer);
 	
 	return len;
 
 }
+
+
+static int pins_read_proc_pwm (int id, char *buf, char **start, off_t offset, int count, int *eof, void *data ) {
+
+	int len=0;
+	int i;
+
+	char pwmstr[10];
+	char constr[5];
+	char *list;
+
+	list = kmalloc(50, GFP_KERNEL);
+	memset(list, 0, 50);
+
+	sprintf(pwmstr, "pwm%d", id);
+
+	for (i = 1; i < TOTAL_PINS; i++) {
+		if (!ext_bus_pins[i].alt_func_name1) continue;
+		if ((ext_bus_pins[i].current_af_number == 1) && (!strcmp(ext_bus_pins[i].alt_func_name1, pwmstr))) {
+			memset(constr, 0, sizeof(constr));
+			sprintf(constr, "%d ", i);
+			list = strcat(list, constr);
+		}
+	}
+
+	len = sprintf(buf, "%d %d %d %s\n", id, pwm[id]->ph1d, pwm[id]->period, list);
+
+	kfree(list);
+	
+	return len;
+
+}
+
+static int pins_read_proc_pwm0 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pins_read_proc_pwm (0, buf, start, offset, count, eof, data); }
+static int pins_read_proc_pwm1 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pins_read_proc_pwm (1, buf, start, offset, count, eof, data); }
+static int pins_read_proc_pwm2 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pins_read_proc_pwm (2, buf, start, offset, count, eof, data); }
+static int pins_read_proc_pwm3 (char *buf, char **start, off_t offset, int count, int *eof, void *data ) { return pins_read_proc_pwm (3, buf, start, offset, count, eof, data); }
 
 
 static int pins_remove_proc_fs(void) {
@@ -481,7 +519,7 @@ static int pins_remove_proc_fs(void) {
 	int i;
 	char fn[10];
 
-	for (i = 0; i <= TOTAL_PINS + 1; i++) {
+	for (i = 0; i <= TOTAL_PINS + TOTAL_PWM + 2; i++) {
 
 		if (proc_write_entry[i]) { 
 			sprintf(fn, "%d", i);
@@ -591,6 +629,11 @@ static int pins_add_proc_fs(void) {
 
 	proc_entry = create_proc_entry("all", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_all; proc_write_entry[86] = (s32) proc_entry; }
 
+	proc_entry = create_proc_entry("pwm0", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_pwm0; proc_write_entry[87] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("pwm1", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_pwm1; proc_write_entry[88] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("pwm2", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_pwm2; proc_write_entry[89] = (s32) proc_entry; }
+	proc_entry = create_proc_entry("pwm3", 0666, proc_parent); if (proc_entry) { proc_entry-> read_proc = pins_read_proc_pwm3; proc_write_entry[90] = (s32) proc_entry; }
+
 	return 0;
 }
 
@@ -625,6 +668,9 @@ static int v2r_set_pin(int pin_number, int direction, int value) {
 		return 1;
 	}
 
+	/* restore default pin function */
+	if (ext_bus_pins[pin_number].current_af_number > 0) ext_bus_pins[pin_number].current_af_number = 0;
+
 	if (direction)
 		gpio_direction_output(ext_bus_pins[pin_number].gpio_number, value);
 	else 
@@ -643,6 +689,8 @@ static int v2r_set_pin(int pin_number, int direction, int value) {
 static int v2r_pin_set_pwm(unsigned int pin_number) {
 
 	davinci_cfg_reg(ext_bus_pins[pin_number].alt_func_descriptor1);
+
+	ext_bus_pins[pin_number].current_af_number = 1;
 
 	if (ext_bus_pins[pin_number].alt_func_direction1 == INP) {
 
@@ -675,6 +723,10 @@ static int v2r_set_pwm(unsigned int pwm_number, unsigned int duty, unsigned int 
 		return 1;
 
 	}
+
+	/* duty must be smaller or equal then period */
+	
+	if (duty > period) duty = period;
 
 	pwm[pwm_number]->period  = period;
 	pwm[pwm_number]->ph1d  = duty;
@@ -966,6 +1018,11 @@ static void pins_parse_command(char * string) {
 		} else
 
 		// or set con alt function
+		if (!ext_bus_pins[pin_number].alt_func_name1) {
+			printk("%s: wrong CON%d alt function (%s)\n", DEVICE_NAME, pin_number, command_parts[3]);
+			return;
+		}
+
 		if (!strcmp(command_parts[3], ext_bus_pins[pin_number].alt_func_name1)) {
 
 			if (ext_bus_pins[pin_number].alt_func_descriptor1 == NA) {
@@ -980,35 +1037,34 @@ static void pins_parse_command(char * string) {
 			cmd_ok = 1;
 			goto out;
 
+		} else {
+			printk("%s: wrong CON%d alt function (%s)\n", DEVICE_NAME, pin_number, command_parts[3]);
+			return;
 		}
 
 	}
 
 
 	/* string like "set pwm 1 duty 123 period 123" */
+	/* changet ot string like "set pwm 1 123 567" */
 	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "pwm")) {
 
-		if (command_parts_counter < 7) {
+		if (command_parts_counter < 5) {
 			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
 			return;
 		}
 
-		if (!(!strcmp(command_parts[3], "duty") && !strcmp(command_parts[5], "period"))) {
-			printk("%s: wrong command format\n", DEVICE_NAME);
-			return;
-		}
-		
 		if (kstrtoint(command_parts[2], 10, &pwm_number)) {
 			printk("%s: wrong PWM number (%s)\n", DEVICE_NAME, command_parts[2]);
 			return;
 		}
 
-		if (kstrtoint(command_parts[4], 10, &duty)) {
+		if (kstrtoint(command_parts[3], 10, &duty)) {
 			printk("%s: wrong duty (%s)\n", DEVICE_NAME, command_parts[4]);
 			return;
 		}
 		
-		if (kstrtoint(command_parts[6], 10, &period)) {
+		if (kstrtoint(command_parts[4], 10, &period)) {
 			printk("%s: wrong period (%s)\n", DEVICE_NAME, command_parts[6]);
 			return;
 		}
