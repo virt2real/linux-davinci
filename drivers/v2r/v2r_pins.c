@@ -812,7 +812,7 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[2] - [bit:0] - direction, [bit:1] - state
 			*/
 
-			if (count < 3) {
+			if (count < 2) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -839,7 +839,7 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[1] - CON number
 			*/
 
-			if (count < 2) {
+			if (count < 1) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -867,7 +867,7 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[1] - mode
 			*/
 
-			if (count < 2) {
+			if (count < 1) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -882,7 +882,7 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[1] - mode
 			*/
 
-			if (count < 2) {
+			if (count < 1) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -899,7 +899,7 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[4:5] - period
 			*/
 
-			if (count < 6) {
+			if (count < 5) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -966,7 +966,7 @@ static void pins_parse_command(char * string) {
 		else
 		if (!strcmp(command_parts[1], "add") && !strcmp(command_parts[2], "con")) {
 
-			if (command_parts_counter < 4) {
+			if (command_parts_counter < 3) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
 				return;
 			}
@@ -989,7 +989,7 @@ static void pins_parse_command(char * string) {
 	/* or like "set con 1 pwm1" */
 	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "con")) {
 
-		if (command_parts_counter < 4) {
+		if (command_parts_counter < 3) {
 			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
 			return;
 		}
@@ -1049,7 +1049,7 @@ static void pins_parse_command(char * string) {
 	/* changet ot string like "set pwm 1 123 567" */
 	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "pwm")) {
 
-		if (command_parts_counter < 5) {
+		if (command_parts_counter < 4) {
 			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
 			return;
 		}

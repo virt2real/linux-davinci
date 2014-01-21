@@ -839,7 +839,7 @@ static void gpio_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[2] - [bit:0] - direction, [bit:1] - state
 			*/
 
-			if (count < 3) {
+			if (count < 2) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -866,7 +866,7 @@ static void gpio_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[1] - GPIO number
 			*/
 
-			if (count < 2) {
+			if (count < 1) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -891,7 +891,7 @@ static void gpio_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[1] - mode
 			*/
 
-			if (count < 2) {
+			if (count < 1) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -907,7 +907,7 @@ static void gpio_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[2] - value
 			*/
 
-			if (count < 3) {
+			if (count < 2) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
@@ -954,7 +954,7 @@ static void gpio_parse_command(char * string) {
 	/* string like "set gpio 1 output 1" */
 	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "gpio")) {
 
-		if (command_parts_counter < 4) {
+		if (command_parts_counter < 3) {
 			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
 			return;
 		}
@@ -976,7 +976,7 @@ static void gpio_parse_command(char * string) {
 	/* string like "set pwctr 1 1" */
 	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "pwctr")) {
 
-		if (command_parts_counter < 4) {
+		if (command_parts_counter < 3) {
 			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
 			return;
 		}
@@ -1002,7 +1002,7 @@ static void gpio_parse_command(char * string) {
 		else
 		if (!strcmp(command_parts[1], "add") && !strcmp(command_parts[2], "gpio")) {
 
-			if (command_parts_counter < 4) {
+			if (command_parts_counter < 3) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
 				return;
 			}
