@@ -15,13 +15,12 @@
 #define PCA9685_PRESCALE 0xFE
 
 /*
-  input/output modes
+  output modes
   0 - text mode (default)
   1 - binary mode
 */
 
 int output_mode = 0;
-int input_mode = 0;
 
 static ssize_t set_init(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -61,15 +60,10 @@ static ssize_t set_mode1(struct device *dev, struct device_attribute *attr, cons
 
 	if (!count)  return count;
 
-	switch (input_mode) {
-		case 0:
-			strict_strtoul(buf, 10, &value);
-			break;
-		case 1:
-			value = buf[0];
-			break;
-	}
-
+	if (buf[0] > 1)
+		strict_strtoul(buf, 10, &value);
+	else
+		value = buf[1];
 
 	i2c_smbus_write_byte_data(client, PCA9685_MODE1, value);
 
@@ -103,14 +97,10 @@ static ssize_t set_mode2(struct device *dev, struct device_attribute *attr, cons
 
 	if (!count)  return count;
 
-	switch (input_mode) {
-		case 0:
-			strict_strtoul(buf, 10, &value);
-			break;
-		case 1:
-			value = buf[0];
-			break;
-	}
+	if (buf[0] > 1)
+		strict_strtoul(buf, 10, &value);
+	else
+		value = buf[1];
 
 	result = i2c_smbus_write_byte_data(client, PCA9685_MODE2, value);
 
@@ -144,14 +134,10 @@ static ssize_t set_freq(struct device *dev, struct device_attribute *attr, const
 
 	if (!count)  return count;
 
-	switch (input_mode) {
-		case 0:
-			strict_strtoul(buf, 10, &value);
-			break;
-		case 1:
-			value = buf[0];
-			break;
-	}
+	if (buf[0] > 1)
+		strict_strtoul(buf, 10, &value);
+	else
+		value = buf[1];
 
 	/* turn on sleep mode */
 	current_mode = i2c_smbus_read_byte_data(client, PCA9685_MODE1);
@@ -203,13 +189,12 @@ static ssize_t set_cmdmode(struct device *dev, struct device_attribute *attr, co
 {
 	if (!count) return count;
 	output_mode = buf[0] & 1;
-	input_mode = (buf[0] >> 1) & 1;
 	return count;
 }
 
 static ssize_t get_cmdmode(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d\n", output_mode | (input_mode << 1));
+	return sprintf(buf, "%d\n", output_mode);
 }
 
 static ssize_t set_sleep(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
@@ -280,8 +265,7 @@ static ssize_t setchannelcommon(int id, struct device *dev, struct device_attrib
 	else 
 		address = 0x06 + id * 4;
 
-	switch (input_mode) {
-		case 0:
+	if (buf[0] > 1) {
 			// split cmd string via spaces (" ")
 			temp_string = kstrdup(buf, GFP_KERNEL);
 			i = 0;
@@ -299,22 +283,19 @@ static ssize_t setchannelcommon(int id, struct device *dev, struct device_attrib
 			value = value0 | (value1 << 16);
 
 			i2c_smbus_write_i2c_block_data(client, address, 4, &value);
-			
-			break;
-		case 1:
+	} else {
 			if (count < 4) {
 				dev_err(&client->dev, "wrong command length\n");
-				break;
+				return count;
 			}
 
-			if (buf[1] > 0x0F || buf[3] > 0x0F) {
+			if (buf[2] > 0x0F || buf[4] > 0x0F) {
 				dev_err(&client->dev, "wrong command bytes\n");
-				break;
+				return count;
 			}
 
-			i2c_smbus_write_i2c_block_data(client, address, 4, buf);
+			i2c_smbus_write_i2c_block_data(client, address, 4, buf+1);
 
-			break;
 	}
 
 	return count;
@@ -355,6 +336,55 @@ static ssize_t getchannelcommon(int id, struct device *dev, struct device_attrib
 }
 
 
+static ssize_t setanychannel(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { 
+	struct i2c_client *client = to_i2c_client(dev);
+	unsigned long id = 0, value0 = 0, value1 = 0, value;
+	int i;
+	char *part;
+	char *temp_string;
+	s8 address; 
+
+	if (buf[0] > 1) {
+			// split cmd string via spaces (" ")
+			temp_string = kstrdup(buf, GFP_KERNEL);
+			i = 0;
+			do {
+				part = strsep(&temp_string, " ");
+				if (part) {
+					/* not good but it works */
+					if (i == 0) strict_strtoul(part, 10, &id);
+					if (i == 1) strict_strtoul(part, 10, &value0);
+					if (i == 2) strict_strtoul(part, 10, &value1);
+					i++;
+				}
+			
+			} while (part);
+
+			value = value0 | (value1 << 16);
+			address = 0x06 + id * 4;
+
+			i2c_smbus_write_i2c_block_data(client, address, 4, &value);
+	} else {
+			if (count < 6) {
+				dev_err(&client->dev, "wrong command length\n");
+				return count;
+			}
+
+			if (buf[3] > 0x0F || buf[5] > 0x0F) {
+				dev_err(&client->dev, "wrong command bytes\n");
+				return count;
+			}
+
+			id = buf[1];
+			address = 0x06 + id * 4;
+
+			i2c_smbus_write_i2c_block_data(client, address, 4, buf+2);
+
+	}
+
+	return count;
+}
+
 
 static ssize_t setallchannels(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return setchannelcommon(0xff, dev, attr, buf, count); }
 static ssize_t getallchannels(struct device *dev, struct device_attribute *attr, char *buf) { return getchannelcommon(0xff, dev, attr, buf); }
@@ -394,6 +424,7 @@ static ssize_t getchannel15(struct device *dev, struct device_attribute *attr, c
 
 
 static DEVICE_ATTR(all, S_IWUSR | S_IRUGO, getallchannels, setallchannels);
+static DEVICE_ATTR(any, S_IWUSR, NULL, setanychannel);
 
 static DEVICE_ATTR(ch0, S_IWUSR | S_IRUGO, getchannel0, setchannel0);
 static DEVICE_ATTR(ch1, S_IWUSR | S_IRUGO, getchannel1, setchannel1);
@@ -436,6 +467,7 @@ static struct attribute *extpwm_attributes[] = {
 	&dev_attr_ch14.attr,
 	&dev_attr_ch15.attr,
 	&dev_attr_all.attr,
+	&dev_attr_any.attr,
 	NULL
 };
 
