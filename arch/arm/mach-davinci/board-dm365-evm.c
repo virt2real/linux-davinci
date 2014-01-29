@@ -426,6 +426,43 @@ static struct gpio_led v2r_led[] = {
 	.gpio = 73,
 	.active_low = 0,
     },
+    {
+	.name = "lan:green:user",
+	.default_trigger = "none",
+	.gpio = 85,
+	.active_low = 0,
+    },
+    {
+	.name = "lan:yellow:user",
+	.default_trigger = "none",
+	.gpio = 86,
+	.active_low = 0,
+    },
+
+    {
+	.name = "debug:red:user",
+	.default_trigger = "none",
+	.gpio = 49,
+	.active_low = 0,
+    },
+    {
+	.name = "debug:green:user",
+	.default_trigger = "none",
+	.gpio = 47,
+	.active_low = 0,
+    },
+    {
+	.name = "debug:blue:user",
+	.default_trigger = "none",
+	.gpio = 46,
+	.active_low = 0,
+    },
+    {
+	.name = "debug:yellow:user",
+	.default_trigger = "none",
+	.gpio = 44,
+	.active_low = 0,
+    },
 };
 
 static struct gpio_led_platform_data v2r_led_data = {
@@ -583,6 +620,69 @@ static void v2r_parse_cmdline(char * string)
 		v2r_led[1].default_trigger = param_value;
 		led_run = 1;
 	    }
+
+	    if (!strcmp(param_name, "led1")) {
+		v2r_led[2].default_trigger = param_value;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led2")) {
+		v2r_led[3].default_trigger = param_value;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led3")) {
+		v2r_led[4].default_trigger = param_value;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led4")) {
+		v2r_led[5].default_trigger = param_value;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led5")) {
+		v2r_led[6].default_trigger = param_value;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led6")) {
+		v2r_led[7].default_trigger = param_value;
+		led_run = 1;
+	    }
+
+	    if (!strcmp(param_name, "led1gpio")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		v2r_led[2].gpio = (u8)temp;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led2gpio")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		v2r_led[3].gpio = (u8)temp;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led3gpio")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		v2r_led[4].gpio = (u8)temp;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led4gpio")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		v2r_led[5].gpio = (u8)temp;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led5gpio")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		v2r_led[6].gpio = (u8)temp;
+		led_run = 1;
+	    }
+	    if (!strcmp(param_name, "led6gpio")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		v2r_led[7].gpio = (u8)temp;
+		led_run = 1;
+	    }
+
 	    #endif
 
 	    if (!strcmp(param_name, "wifi")) {
