@@ -46,6 +46,8 @@
 #include "davinci.h"
 #include "dm365_spi.h"
 
+#include <linux/usb/g_hid.h>
+#include "hid_struct.h" 
 #include "board-virt2real-dm365.h"
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 static struct i2c_board_info i2c_info[] = {
@@ -491,7 +493,23 @@ static void led_init(void) {
 
 /* end LED triggers block */
 
+static void ghid_k_init(void) {
+	int err;
+	err = platform_device_register(&my_keybord_hid);
+	if (err)
+		printk("HID Gadget keybord registration failed\n");
+	else
+		printk("HID Gadget keybord registration success\n");
+}
 
+static void ghid_m_init(void) {
+	int err;
+	err = platform_device_register(&my_mouse_hid);
+	if (err)
+		printk("HID Gadget mouse registration failed\n");
+	else
+		printk("HID Gadget mouse registration success\n");
+}
 
 
 
@@ -506,6 +524,8 @@ static __init void dm365_evm_init(void)
 	led_run = 0;
 	camera_run = 0;
 	uart1_run = 0;
+	ghid_k_run=0;
+	ghid_m_run=0;
 
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	v2r_parse_cmdline(saved_command_line);
@@ -565,6 +585,10 @@ static __init void dm365_evm_init(void)
 
 	// try to init SPI0
 	if (spi0_run) davinci_init_spi(&v2rdac_spi_udesc, ARRAY_SIZE(v2rdac_info),  v2rdac_info); // run SPI0 init
+
+	// try to init G_HID
+	if (ghid_k_run) ghid_k_init();
+	if (ghid_m_run) ghid_m_init();
 
 	return;
 }
@@ -749,7 +773,16 @@ static void v2r_parse_cmdline(char * string)
 		    camera_run = 1;
 		}
 	    }
-	    
+	    if (!strcmp(param_name, "ghid")) {
+		if (strchr(param_value, 'k')) {
+		    printk("HID gadget keybord enabled\n");
+		    ghid_k_run = 1;
+		}
+		if (strchr(param_value, 'm')) {
+		    printk("HID gadget mouse enabled\n");
+		    ghid_m_run = 1;
+		}
+	    }
 	}
 
     } while(p);
@@ -771,4 +804,4 @@ MACHINE_START(DAVINCI_DM365_EVM, "DaVinci DM365 EVM")
 	.dma_zone_size	= SZ_128M,
 	.restart	= davinci_restart,
 MACHINE_END
-
+ 
