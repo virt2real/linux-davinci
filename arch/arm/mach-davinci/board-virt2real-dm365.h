@@ -8,7 +8,8 @@ bool spi0_run; // SPI0 init flag
 bool led_run; // LED-triggers init flag
 bool camera_run; // camera init flag
 bool uart1_run; // UART1 init flag
-
+bool ghid_k_run; //HID gadget keybord init flag
+bool ghid_m_run; //HID gadget mouse init flag 
 /*  PRTCSS functionality */
 
 #define PRTCSS_BASE 0x01C69000
