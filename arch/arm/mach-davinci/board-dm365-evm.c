@@ -158,22 +158,20 @@ static struct mtd_partition davinci_nand_partitions[] = {
 		/* UBL (a few copies) plus U-Boot */
 		.name		= "bootloader",
 		.offset		= 0,
-		.size		= 30 * NAND_BLOCK_SIZE,
+		//.size		= 30 * NAND_BLOCK_SIZE,
+		.size		= 0x400000,
 		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
-	}, {
-		/* U-Boot environment */
-		.name		= "params",
-		.offset		= MTDPART_OFS_APPEND,
-		.size		= 2 * NAND_BLOCK_SIZE,
-		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
-	}, {
+	},
+	{
 		.name		= "kernel",
-		.offset		= MTDPART_OFS_APPEND,
+		//.offset		= MTDPART_OFS_APPEND,
+		.offset		= 0x400000,
 		.size		= SZ_4M,
 		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
 	}, {
 		.name		= "fs",
-		.offset		= MTDPART_OFS_APPEND,
+		//.offset		= MTDPART_OFS_APPEND,
+		.offset		= 0x900000,
 		.size		= MTDPART_SIZ_FULL,
 		.mask_flags	= 0, // MTD_WRITEABLE, /* force read-only */
 	}
