@@ -243,6 +243,14 @@ static struct davinci_mmc_config dm365evm_mmc_config = {
 	.caps		= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED,
 };
 
+static struct davinci_mmc_config dm365evm_mmc1_config = {
+	//.get_cd		= mmc_get_cd,
+	//.get_ro		= mmc_get_ro,
+	.wires		= 4,
+	.max_freq	= 50000000,
+	.caps		= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ | MMC_BUS_WIDTH_4 | MMC_CAP_NONREMOVABLE | MMC_CAP_4_BIT_DATA,
+};
+
 
 static void dm365evm_mmc_configure(void)
 {
@@ -710,7 +718,7 @@ static void v2r_parse_cmdline(char * string)
 	    if (!strcmp(param_name, "wifi")) {
 		if (!strcmp(param_value, "on")) {
 		    printk(KERN_INFO "Wi-Fi board enabled\n");
-		    davinci_setup_mmc(1, &dm365evm_mmc_config);
+		    davinci_setup_mmc(1, &dm365evm_mmc1_config);
 		    //dm365_wifi_configure();
 		}
 	    }
