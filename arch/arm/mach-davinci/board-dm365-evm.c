@@ -526,6 +526,7 @@ static __init void dm365_evm_init(void)
 
 	w1_run = 0;
 	lan_run = 0;
+	wlan_run = 0;
 	spi0_run = 0;
 	led_run = 0;
 	camera_run = 0;
@@ -595,6 +596,13 @@ static __init void dm365_evm_init(void)
 	// try to init G_HID
 	if (ghid_k_run) ghid_k_init();
 	if (ghid_m_run) ghid_m_init();
+
+	// try to init wlan
+	if (wlan_run) {
+	    davinci_setup_mmc(1, &dm365evm_mmc1_config);
+	    //dm365_wifi_configure();
+	}
+
 
 	return;
 }
@@ -718,8 +726,7 @@ static void v2r_parse_cmdline(char * string)
 	    if (!strcmp(param_name, "wifi")) {
 		if (!strcmp(param_value, "on")) {
 		    printk(KERN_INFO "Wi-Fi board enabled\n");
-		    davinci_setup_mmc(1, &dm365evm_mmc1_config);
-		    //dm365_wifi_configure();
+		    wlan_run = 1;
 		}
 	    }
 

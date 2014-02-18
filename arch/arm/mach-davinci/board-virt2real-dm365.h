@@ -4,6 +4,7 @@ static void v2r_parse_cmdline(char * string);
 
 bool w1_run; // 1-wire init flag
 bool lan_run; // LAN init flag
+bool wlan_run; // WLAN init flag
 bool spi0_run; // SPI0 init flag
 bool led_run; // LED-triggers init flag
 bool camera_run; // camera init flag
