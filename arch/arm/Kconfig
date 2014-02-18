@@ -1556,7 +1556,7 @@ source kernel/Kconfig.preempt
 
 config HZ
 	int
-	default 100
+	default 1000
 
 config SCHED_HRTICK
 	def_bool HIGH_RES_TIMERS
