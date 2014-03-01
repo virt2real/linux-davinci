@@ -32,6 +32,13 @@ config V2R_GPIO
 	---help---
 	Virt2real GPIO driver
 
+config V2R_GPIOEVENT
+	depends on V2R_DRIVERS
+	tristate "GPIO event driver"
+	default y
+	---help---
+	Virt2real GPIO event driver. Taken from Gumstix.
+
 config V2R_EXTPWM
         depends on V2R_DRIVERS
         tristate "External PWM driver"
