@@ -258,7 +258,7 @@ static void v2r_init_pwm(void) {
 
 		pwm[i]->pcr = 0x1;
 		pwm[i]->cfg = 0x12;
-		pwm[i]->start = 1;
+		pwm[i]->start = 0;
 		pwm[i]->repeat = 0x0;
 		pwm[i]->period = 0;
 		pwm[i]->ph1d = 0x0;
@@ -500,7 +500,7 @@ static int pins_read_proc_pwm (int id, char *buf, char **start, off_t offset, in
 		}
 	}
 
-	len = sprintf(buf, "%d %d %d %s\n", id, pwm[id]->ph1d, pwm[id]->period, list);
+	len = sprintf(buf, "%d %d %d %d %s\n", id, pwm[id]->ph1d, pwm[id]->period, pwm[id]->repeat, list);
 
 	kfree(list);
 	
@@ -712,7 +712,7 @@ static int v2r_pin_set_pwm(unsigned int pin_number) {
   set pwm values 
 */
 
-static int v2r_set_pwm(unsigned int pwm_number, unsigned int duty, unsigned int period) {
+static int v2r_set_pwm(unsigned int pwm_number, unsigned int duty, unsigned int period, unsigned int repeat) {
 
 	// printk("%s: PWM%d set duty %d period %d\n", DEVICE_NAME, pwm_number, duty, period);
 
@@ -730,6 +730,14 @@ static int v2r_set_pwm(unsigned int pwm_number, unsigned int duty, unsigned int 
 
 	pwm[pwm_number]->period  = period;
 	pwm[pwm_number]->ph1d  = duty;
+	pwm[pwm_number]->repeat  = repeat;
+
+	if (repeat)
+	    pwm[pwm_number]->cfg  = (pwm[pwm_number]->cfg & 0xFFFFFD) | 1;
+	else
+	    pwm[pwm_number]->cfg  = (pwm[pwm_number]->cfg & 0xFFFFFE) | 2;
+
+	pwm[pwm_number]->start  = 1;
 
 	return 0;
 
@@ -800,6 +808,7 @@ static void group_init(void) {
 static void pins_parse_binary_command(char * buffer, unsigned int count) {
 
 	int pin_number = 0, direction = 0, value = 0;
+	unsigned int duty = 0, period = 0, repeat = 0;
 
 	unsigned int i;
 
@@ -897,14 +906,49 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[1] - PWM number
 				buffer[2:3] - duty
 				buffer[4:5] - period
+				buffer[6:7] - repeat (optional)
 			*/
 
-			if (count < 5) {
+			if (count < 6) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
+			
+			if ( count > 7 )
+			    repeat = buffer[6] + (buffer[7] << 8);
+			else
+			    repeat = 0; // endless repeat
 
-			v2r_set_pwm(buffer[1], (buffer[3] << 8) + buffer[2], (buffer[5] << 8) + buffer[4]);
+			duty = (buffer[3] << 8) + buffer[2];
+			period = (buffer[5] << 8) + buffer[4];
+
+			v2r_set_pwm(buffer[1], duty, period , repeat);
+
+			break;
+
+		case 8:
+			/* 
+				set full 32-bit PWM params
+				buffer[1] - PWM number
+				buffer[2:3:4:5] - duty
+				buffer[6:7:8:9] - period
+				buffer[10:11:12:13] - repeat (optional)
+			*/
+
+			if (count < 10) {
+				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
+				break;
+			}
+			
+			if ( count > 13 )
+			    repeat = buffer[10] + (buffer[11] << 8) + (buffer[12] << 16) + (buffer[13] << 24);
+			else
+			    repeat = 0; // endless repeat
+
+			duty = buffer[2] + (buffer[3] << 8) + (buffer[4] << 16) + (buffer[5] << 24);
+			period = buffer[6] + (buffer[7] << 8) + (buffer[8] << 16) + (buffer[9] << 24);
+
+			v2r_set_pwm(buffer[1], duty, period, repeat);
 
 			break;
 
@@ -924,7 +968,7 @@ static void pins_parse_command(char * string) {
 	int cmd_ok = 0;
 	int i;
 
-	int pin_number = 0, direction = 0, value = 0, pwm_number = 0, duty = 0, period = 0;
+	unsigned int pin_number = 0, direction = 0, value = 0, pwm_number = 0, duty = 0, period = 0, repeat = 0;
 
 	// last symbol can be a \n symbol, we must clear him
 	if (string[strlen(string)-1] == '\n') string[strlen(string)-1] = 0;
@@ -1046,7 +1090,8 @@ static void pins_parse_command(char * string) {
 
 
 	/* string like "set pwm 1 duty 123 period 123" */
-	/* changet ot string like "set pwm 1 123 567" */
+	/* changed on string like "set pwm 1 123 567" */
+	/* added optional repeat, changed on string like "set pwm 1 123 567 897" */
 	if (!strcmp(command_parts[0], "set") && !strcmp(command_parts[1], "pwm")) {
 
 		if (command_parts_counter < 4) {
@@ -1060,16 +1105,24 @@ static void pins_parse_command(char * string) {
 		}
 
 		if (kstrtoint(command_parts[3], 10, &duty)) {
-			printk("%s: wrong duty (%s)\n", DEVICE_NAME, command_parts[4]);
+			printk("%s: wrong duty (%s)\n", DEVICE_NAME, command_parts[3]);
 			return;
 		}
 		
 		if (kstrtoint(command_parts[4], 10, &period)) {
-			printk("%s: wrong period (%s)\n", DEVICE_NAME, command_parts[6]);
+			printk("%s: wrong period (%s)\n", DEVICE_NAME, command_parts[4]);
 			return;
 		}
 
-		v2r_set_pwm(pwm_number, duty, period);
+		if (command_parts_counter > 5) {
+
+			if (kstrtoint(command_parts[5], 10, &repeat)) {
+				printk("%s: wrong repeat (%s)\n", DEVICE_NAME, command_parts[5]);
+				return;
+			}
+		}
+
+		v2r_set_pwm(pwm_number, duty, period, repeat);
 				
 		cmd_ok = 1;
 		goto out;
