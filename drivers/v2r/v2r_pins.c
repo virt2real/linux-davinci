@@ -500,7 +500,7 @@ static int pins_read_proc_pwm (int id, char *buf, char **start, off_t offset, in
 		}
 	}
 
-	len = sprintf(buf, "%d %d %d %d %s\n", id, pwm[id]->ph1d, pwm[id]->period, pwm[id]->repeat, list);
+	len = sprintf(buf, "%d %d %d %d %X %s\n", id, pwm[id]->ph1d, pwm[id]->period, pwm[id]->repeat, pwm[id]->cfg, list);
 
 	kfree(list);
 	
@@ -743,6 +743,24 @@ static int v2r_set_pwm(unsigned int pwm_number, unsigned int duty, unsigned int 
 
 }
 
+static int v2r_cfg_pwm(unsigned int pwm_number, unsigned int cfg_and, unsigned int cfg_or) {
+
+	if (pwm_number >= TOTAL_PWM){
+
+	    printk("%s: wrong pwm number (%d)\n", DEVICE_NAME, pwm_number);
+	    return 1;
+
+	}
+
+	pwm[pwm_number]->cfg  &= cfg_and;
+	pwm[pwm_number]->cfg  |= cfg_or;
+	pwm[pwm_number]->start = 1;
+
+	return 0;
+
+}
+
+
 /*
   clear GPIO group
 */
@@ -968,7 +986,7 @@ static void pins_parse_command(char * string) {
 	int cmd_ok = 0;
 	int i;
 
-	unsigned int pin_number = 0, direction = 0, value = 0, pwm_number = 0, duty = 0, period = 0, repeat = 0;
+	unsigned int pin_number = 0, direction = 0, value = 0, pwm_number = 0, duty = 0, period = 0, repeat = 0, cfg_and = 0, cfg_or = 0;
 
 	// last symbol can be a \n symbol, we must clear him
 	if (string[strlen(string)-1] == '\n') string[strlen(string)-1] = 0;
@@ -1127,6 +1145,37 @@ static void pins_parse_command(char * string) {
 		cmd_ok = 1;
 		goto out;
 	}
+
+	/* string like "cfg pwm 1 ffffffff fffffff0" */
+	if (!strcmp(command_parts[0], "cfg") && !strcmp(command_parts[1], "pwm")) {
+
+		if (command_parts_counter < 5) {
+			printk("%s: too small arguments (%d)\n", DEVICE_NAME, command_parts_counter);
+			return;
+		}
+
+		if (kstrtoint(command_parts[2], 10, &pwm_number)) {
+			printk("%s: wrong PWM number (%s)\n", DEVICE_NAME, command_parts[2]);
+			return;
+		}
+
+		if (kstrtoint(command_parts[3], 16, &cfg_and)) {
+			printk("%s: wrong cfg_and (%s)\n", DEVICE_NAME, command_parts[3]);
+			return;
+		}
+
+		if (kstrtoint(command_parts[4], 16, &cfg_or)) {
+			printk("%s: wrong cfg_or (%s)\n", DEVICE_NAME, command_parts[4]);
+			return;
+		}
+
+		v2r_cfg_pwm(pwm_number, cfg_and, cfg_or);
+				
+		cmd_ok = 1;
+		goto out;
+	}
+
+
 
 
 out:
