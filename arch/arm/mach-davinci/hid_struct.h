@@ -1,5 +1,5 @@
 static struct hidg_func_descriptor my_keybord_data = {
-	.subclass = 1,				// No subclass
+	.subclass = 1,				// Boot device
 	.protocol = 1,				// Keyboard
 	.report_length = 8,
 	.report_desc_length = 63,
@@ -50,8 +50,8 @@ static struct platform_device my_keybord_hid = {
 };
 
 static struct hidg_func_descriptor my_mouse_data = {
-	.subclass = 1,
-	.protocol = 0,
+	.subclass = 1,				// Boot device
+	.protocol = 2,				// Mouse
 	.report_length = 3,
 	.report_desc_length= 50,
 	.report_desc= {
@@ -91,5 +91,5 @@ static struct platform_device my_mouse_hid = {
 	.resource = 0,
 	.dev = {
 		.platform_data = &my_mouse_data,
-	}
+	},
 };
