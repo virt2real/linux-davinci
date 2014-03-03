@@ -927,12 +927,12 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[6:7] - repeat (optional)
 			*/
 
-			if (count < 6) {
+			if (count < 5) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
 			
-			if ( count > 7 )
+			if ( count > 6 )
 			    repeat = buffer[6] + (buffer[7] << 8);
 			else
 			    repeat = 0; // endless repeat
@@ -953,12 +953,12 @@ static void pins_parse_binary_command(char * buffer, unsigned int count) {
 				buffer[10:11:12:13] - repeat (optional)
 			*/
 
-			if (count < 10) {
+			if (count < 9) {
 				printk("%s: too small arguments (%d)\n", DEVICE_NAME, count);
 				break;
 			}
 			
-			if ( count > 13 )
+			if ( count > 12 )
 			    repeat = buffer[10] + (buffer[11] << 8) + (buffer[12] << 16) + (buffer[13] << 24);
 			else
 			    repeat = 0; // endless repeat
