@@ -143,6 +143,7 @@ static int davinci_vcif_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	dma_params->acnt  = dma_params->data_type;
+	dma_params->fifo_level = 8;//AV2R
 
 	writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
 

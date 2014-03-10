@@ -1020,6 +1020,11 @@ static struct resource dm365_vc_resources[] = {
 		.end	= DAVINCI_DMA_VC_RX,
 		.flags	= IORESOURCE_DMA,
 	},
+	{
+		.start          = IRQ_MBXINT,
+		.end            = IRQ_MBXINT,
+		.flags          = IORESOURCE_IRQ,
+	},
 };
 
 static struct platform_device dm365_vc_device = {

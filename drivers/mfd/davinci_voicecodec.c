@@ -27,10 +27,13 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/clk.h>
+#include <linux/irqreturn.h>
+#include <linux/interrupt.h>
 
 #include <sound/pcm.h>
 #include <mach/hardware.h>
 #include <linux/mfd/davinci_voicecodec.h>
+#include <asm/irq.h>
 
 u32 davinci_vc_read(struct davinci_vc *davinci_vc, int reg)
 {
@@ -42,21 +45,36 @@ void davinci_vc_write(struct davinci_vc *davinci_vc,
 {
 	__raw_writel(val, davinci_vc->base + reg);
 }
-
-static int __init davinci_vc_probe(struct platform_device *pdev)
+static irqreturn_t davinci_vc_interrupt(int irq, void *dev){//AV2R
+	int handled = 0;
+	u32 w;
+	struct davinci_vc *davinci_vc = (struct davinci_vc*)dev;
+	w = readl(davinci_vc->base + DAVINCI_VC_INTSTATUS);//Read status
+	//printk ("VC interrupt status %x\r\n", w);
+	if (w & (DAVINCI_VC_INT_WERRUDR_MASK|
+			DAVINCI_VC_INT_WERROVF_MASKBIT|
+			DAVINCI_VC_INT_RERRUDR_MASK|
+			DAVINCI_VC_INT_RERROVF_MASK)){//AV2R if fifo error then clear both fifos
+		w = readl(davinci_vc->base + DAVINCI_VC_INTCLR);
+		w |= (DAVINCI_VC_CTRL_RFIFOCL|DAVINCI_VC_CTRL_WFIFOCL);//Reset fifos
+		writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
+	}
+	handled = IRQ_HANDLED;
+	return IRQ_RETVAL(handled);
+};
+static int /*__init*/ davinci_vc_probe(struct platform_device *pdev)
 {
 	struct davinci_vc *davinci_vc;
-	struct resource *res, *mem;
+	struct resource *res, *mem, *irq;
 	struct mfd_cell *cell = NULL;
 	int ret;
-
+    printk("Davinci Voice Codec Initialization....\r\n");
 	davinci_vc = kzalloc(sizeof(struct davinci_vc), GFP_KERNEL);
 	if (!davinci_vc) {
 		dev_dbg(&pdev->dev,
 			    "could not allocate memory for private data\n");
 		return -ENOMEM;
 	}
-
 	davinci_vc->clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(davinci_vc->clk)) {
 		dev_dbg(&pdev->dev,
@@ -97,7 +115,6 @@ static int __init davinci_vc_probe(struct platform_device *pdev)
 		ret = -ENXIO;
 		goto fail4;
 	}
-
 	davinci_vc->davinci_vcif.dma_tx_channel = res->start;
 	davinci_vc->davinci_vcif.dma_tx_addr =
 		(dma_addr_t)(io_v2p(davinci_vc->base) + DAVINCI_VC_WFIFO);
@@ -116,6 +133,17 @@ static int __init davinci_vc_probe(struct platform_device *pdev)
 	davinci_vc->dev = &pdev->dev;
 	davinci_vc->pdev = pdev;
 
+	irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+	if (!irq) {
+		dev_err(&pdev->dev, "no IRQ resource\n");
+		ret = -ENXIO;
+		goto fail4;
+	}
+	//AV2R
+	ret = request_irq(irq->start, davinci_vc_interrupt, 0, "davinci_voicecodec", davinci_vc);
+	if (ret < 0){
+		printk("Error requesting VC IRQ\r\n");
+	}
 	/* Voice codec interface client */
 	cell = &davinci_vc->cells[DAVINCI_VC_VCIF_CELL];
 	cell->name = "davinci-vcif";
@@ -134,7 +162,7 @@ static int __init davinci_vc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "fail to register client devices\n");
 		goto fail4;
 	}
-
+    printk("Davinci Voice Codec inited successfully\r\n");
 	return 0;
 
 fail4:
