@@ -126,16 +126,16 @@ static struct ccdc_oper_config ccdc_cfg = {
 			.data_size = CCDC_12_BITS,
 			.data_shift = CCDC_NO_SHIFT,
 			.col_pat_field0 = {
-				.olop = CCDC_GREEN_BLUE,
-				.olep = CCDC_BLUE,
-				.elop = CCDC_RED,
-				.elep = CCDC_GREEN_RED,
+				.olop = CCDC_GREEN_RED,//CCDC_GREEN_BLUE
+				.olep = CCDC_RED,//CCDC_BLUE
+				.elop = CCDC_BLUE,//CCDC_RED
+				.elep = CCDC_GREEN_BLUE,//CCDC_GREEN_RED
 			},
 			.col_pat_field1 = {
-				.olop = CCDC_GREEN_BLUE,
-				.olep = CCDC_BLUE,
-				.elop = CCDC_RED,
-				.elep = CCDC_GREEN_RED,
+				.olop = CCDC_GREEN_RED,//CCDC_GREEN_BLUE
+				.olep = CCDC_RED,//CCDC_BLUE
+				.elop = CCDC_BLUE,//CCDC_RED
+				.elep = CCDC_GREEN_BLUE,//CCDC_GREEN_RED
 			},
 			.test_pat_gen = 0,
 		},
