@@ -258,7 +258,7 @@ static void v2r_init_pwm(void) {
 
 		pwm[i]->pcr = 0x1;
 		pwm[i]->cfg = 0x12;
-		pwm[i]->start = 0;
+		pwm[i]->start = 1;
 		pwm[i]->repeat = 0x0;
 		pwm[i]->period = 0;
 		pwm[i]->ph1d = 0x0;
@@ -736,8 +736,6 @@ static int v2r_set_pwm(unsigned int pwm_number, unsigned int duty, unsigned int 
 	    pwm[pwm_number]->cfg  = (pwm[pwm_number]->cfg & 0xFFFFFD) | 1;
 	else
 	    pwm[pwm_number]->cfg  = (pwm[pwm_number]->cfg & 0xFFFFFE) | 2;
-
-	pwm[pwm_number]->start  = 1;
 
 	return 0;
 
