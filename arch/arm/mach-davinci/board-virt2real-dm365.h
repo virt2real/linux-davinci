@@ -3,7 +3,11 @@ static void v2r_parse_cmdline(char * string);
 #endif
 
 bool w1_run; // 1-wire init flag
-bool lan_run; // LAN init flag
+bool lan0_run; // LAN init flag
+bool lan1_run; // EMAC LAN init flag
+bool lan1_mac_run; // EMAC LAN set MAC flag
+char lan1_mac[6]; // new EMAC hw address
+
 bool wlan_run; // WLAN init flag
 bool spi0_run; // SPI0 init flag
 bool led_run; // LED-triggers init flag
@@ -123,3 +127,15 @@ static inline u8 davinci_rtcss_read(u8 addr){
     return davinci_rtcif_read(DAVINCI_PRTCIF_LDATA);
 }
 
+void ParseMACaddr(char * str) {
+    int i;
+    char tmp[3];
+    int res = 0;
+
+    for (i = 0; i < 6; i++) {
+	memcpy(tmp, str + i * 2, 2);
+	tmp[2] = 0;
+	kstrtoint(tmp, 16, &res);
+	lan1_mac[i] = res;
+    }
+}

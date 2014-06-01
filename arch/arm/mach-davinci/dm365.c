@@ -741,7 +741,65 @@ EVT_CFG(DM365,	EVT19_SPI3_RX, 4,     1,    1,     false)
 };
 
 
+static struct emac_platform_data dm365_emac_pdata = {
+	.ctrl_reg_offset	= DM365_EMAC_CNTRL_OFFSET,
+	.ctrl_mod_reg_offset	= DM365_EMAC_CNTRL_MOD_OFFSET,
+	.ctrl_ram_offset	= DM365_EMAC_CNTRL_RAM_OFFSET,
+	.ctrl_ram_size		= DM365_EMAC_CNTRL_RAM_SIZE,
+	.version		= EMAC_VERSION_2,
+};
 
+static struct resource dm365_emac_resources[] = {
+	{
+		.start	= DM365_EMAC_BASE,
+		.end	= DM365_EMAC_BASE + SZ_16K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= IRQ_DM365_EMAC_RXTHRESH,
+		.end	= IRQ_DM365_EMAC_RXTHRESH,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_DM365_EMAC_RXPULSE,
+		.end	= IRQ_DM365_EMAC_RXPULSE,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_DM365_EMAC_TXPULSE,
+		.end	= IRQ_DM365_EMAC_TXPULSE,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= IRQ_DM365_EMAC_MISCPULSE,
+		.end	= IRQ_DM365_EMAC_MISCPULSE,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device dm365_emac_device = {
+	.name		= "davinci_emac",
+	.id		= 1,
+	.dev = {
+		.platform_data	= &dm365_emac_pdata,
+	},
+	.num_resources	= ARRAY_SIZE(dm365_emac_resources),
+	.resource	= dm365_emac_resources,
+};
+static struct resource dm365_mdio_resources[] = {
+	{
+		.start	= DM365_EMAC_MDIO_BASE,
+		.end	= DM365_EMAC_MDIO_BASE + SZ_4K - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device dm365_mdio_device = {
+	.name		= "davinci_mdio",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(dm365_mdio_resources),
+	.resource	= dm365_mdio_resources,
+};
 
 
 
@@ -1168,7 +1226,7 @@ static struct davinci_soc_info davinci_soc_info_dm365 = {
 	.gpio_irq		= IRQ_DM365_GPIO0,
 	.gpio_unbanked		= 8,	/* really 16 ... skip muxed GPIOs */
 	.serial_dev		= &dm365_serial_device,
-	//.emac_pdata		= &dm365_emac_pdata,
+	.emac_pdata		= &dm365_emac_pdata,
 	.sram_dma		= 0x00010000,
 	.sram_len		= SZ_32K,
 	//.reset_device		= &davinci_wdt_device,
@@ -1679,6 +1737,11 @@ static int __init dm365_init_devices(void)
 
 	/* Register VENC device */
 	platform_device_register(&dm365_venc_dev);
+
+	platform_device_register(&dm365_mdio_device);
+	platform_device_register(&dm365_emac_device);
+	clk_add_alias(NULL, dev_name(&dm365_mdio_device.dev),
+		      NULL, &dm365_emac_device.dev);
 
 	return 0;
 }

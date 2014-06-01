@@ -27,7 +27,7 @@
 #include <linux/input.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/eeprom.h>
-
+#include <linux/delay.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -41,6 +41,7 @@
 #include <linux/platform_data/keyscan-davinci.h>
 #include <linux/platform_data/usb-davinci.h>
 #include <mach/gpio.h>
+
 
 #include <linux/w1-gpio.h>
 #include "davinci.h"
@@ -251,6 +252,50 @@ static struct davinci_mmc_config dm365evm_mmc1_config = {
 	.caps		= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED | MMC_CAP_SDIO_IRQ | MMC_BUS_WIDTH_4 | MMC_CAP_NONREMOVABLE | MMC_CAP_4_BIT_DATA,
 };
 
+static void dm365evm_emac_configure(void)
+{
+	/*
+	 * EMAC pins are multiplexed with GPIO and UART
+	 * Further details are available at the DM365 ARM
+	 * Subsystem Users Guide(sprufg5.pdf) pages 125 - 127
+	 */
+	davinci_cfg_reg(DM365_EMAC_TX_EN);
+	davinci_cfg_reg(DM365_EMAC_TX_CLK);
+	davinci_cfg_reg(DM365_EMAC_COL);
+	davinci_cfg_reg(DM365_EMAC_TXD3);
+	davinci_cfg_reg(DM365_EMAC_TXD2);
+	davinci_cfg_reg(DM365_EMAC_TXD1);
+	davinci_cfg_reg(DM365_EMAC_TXD0);
+	davinci_cfg_reg(DM365_EMAC_RXD3);
+	davinci_cfg_reg(DM365_EMAC_RXD2);
+	davinci_cfg_reg(DM365_EMAC_RXD1);
+	davinci_cfg_reg(DM365_EMAC_RXD0);
+	davinci_cfg_reg(DM365_EMAC_RX_CLK);
+	davinci_cfg_reg(DM365_EMAC_RX_DV);
+	davinci_cfg_reg(DM365_EMAC_RX_ER);
+	davinci_cfg_reg(DM365_EMAC_CRS);
+	davinci_cfg_reg(DM365_EMAC_MDIO);
+	davinci_cfg_reg(DM365_EMAC_MDCLK);
+
+	/*
+	 * EMAC interrupts are multiplexed with GPIO interrupts
+	 * Details are available at the DM365 ARM
+	 * Subsystem Users Guide(sprufg5.pdf) pages 133 - 134
+	 */
+	davinci_cfg_reg(DM365_INT_EMAC_RXTHRESH);
+	davinci_cfg_reg(DM365_INT_EMAC_RXPULSE);
+	davinci_cfg_reg(DM365_INT_EMAC_TXPULSE);
+	davinci_cfg_reg(DM365_INT_EMAC_MISCPULSE);
+
+	davinci_cfg_reg(DM365_GPIO29);
+	printk("reseting EMAC\n");
+	gpio_request(29, "emac-reset");
+	gpio_direction_output(29, 1);
+	msleep(20);
+	gpio_direction_output(29, 0);
+	msleep(100);
+	gpio_direction_output(29, 1);
+}
 
 static void dm365evm_mmc_configure(void)
 {
@@ -521,11 +566,13 @@ static void ghid_m_init(void) {
 
 static __init void dm365_evm_init(void)
 {
-	//struct davinci_soc_info *soc_info = &davinci_soc_info;
+	struct davinci_soc_info *soc_info = &davinci_soc_info;
 	struct clk *aemif_clk;
 
 	w1_run = 0;
-	lan_run = 0;
+	lan0_run = 0;
+	lan1_run = 0;
+	lan1_mac_run = 0;
 	wlan_run = 0;
 	spi0_run = 0;
 	led_run = 0;
@@ -533,6 +580,7 @@ static __init void dm365_evm_init(void)
 	uart1_run = 0;
 	ghid_k_run=0;
 	ghid_m_run=0;
+
 
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 	v2r_parse_cmdline(saved_command_line);
@@ -559,9 +607,6 @@ static __init void dm365_evm_init(void)
 	// try to init UARTs
 	davinci_serial_init(&uart_config);
 
-	//dm365evm_emac_configure();
-	//soc_info->emac_pdata->phy_id = DM365_EVM_PHY_ID;
-
 	dm365evm_mmc_configure();
 
 	// try to init LED-triggers
@@ -582,25 +627,44 @@ static __init void dm365_evm_init(void)
 	dm365_usb_configure();
 
 	// try to init LAN module
-	if (lan_run) {
+	if (lan0_run) {
 	    dm365_ks8851_init();
 	    davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info), ksz8851_snl_info);
 	}
 
+	// try to init EMAC LAN
+	if (lan1_run) {
+		if (lan1_mac_run) {
+		    soc_info->emac_pdata->mac_addr[0] = lan1_mac[0];
+		    soc_info->emac_pdata->mac_addr[1] = lan1_mac[1];
+		    soc_info->emac_pdata->mac_addr[2] = lan1_mac[2];
+		    soc_info->emac_pdata->mac_addr[3] = lan1_mac[3];
+		    soc_info->emac_pdata->mac_addr[4] = lan1_mac[4];
+		    soc_info->emac_pdata->mac_addr[5] = lan1_mac[5];
+		}
+
+		soc_info->emac_pdata->phy_id = DM365_EVM_PHY_ID;
+		dm365evm_emac_configure();
+	}
+
 	// try to init 1-Wire
-	if (w1_run) w1_gpio_init(); // run 1-wire master
+	if (w1_run) 
+		w1_gpio_init(); // run 1-wire master
 
 	// try to init SPI0
-	if (spi0_run) davinci_init_spi(&v2rdac_spi_udesc, ARRAY_SIZE(v2rdac_info),  v2rdac_info); // run SPI0 init
+	if (spi0_run) 
+		davinci_init_spi(&v2rdac_spi_udesc, ARRAY_SIZE(v2rdac_info),  v2rdac_info); // run SPI0 init
 
 	// try to init G_HID
-	if (ghid_k_run) ghid_k_init();
-	if (ghid_m_run) ghid_m_init();
+	if (ghid_k_run) 
+		ghid_k_init();
+
+	if (ghid_m_run) 
+		ghid_m_init();
 
 	// try to init wlan
 	if (wlan_run) {
 	    davinci_setup_mmc(1, &dm365evm_mmc1_config);
-	    //dm365_wifi_configure();
 	}
 
 
@@ -733,8 +797,21 @@ static void v2r_parse_cmdline(char * string)
 	    if (!strcmp(param_name, "lan0")) {
 		if (!strcmp(param_value, "on")) {
 		    printk(KERN_INFO "LAN enabled\n");
-		    lan_run = 1;
+		    lan0_run = 1;
 		}
+	    }
+
+	    if (!strcmp(param_name, "lan1")) {
+		if (!strcmp(param_value, "on")) {
+		    printk(KERN_INFO "EMAC LAN enabled\n");
+		    lan1_run = 1;
+		}
+	    }
+
+	    if (!strcmp(param_name, "lan1hwaddr")) {
+
+		ParseMACaddr(param_value);
+		lan1_mac_run = 1;
 	    }
 
 	    if (!strcmp(param_name, "spi0")) {
