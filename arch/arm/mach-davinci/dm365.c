@@ -34,10 +34,18 @@
 #include <mach/gpio-davinci.h>
 #include "davinci.h"
 
-
 #include "clock.h"
 #include "mux.h"
 #include "asp.h"
+
+/* for early cmdline parse */
+int early_lan1_run;
+
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+static void v2r_early_parse_cmdline(char * string);
+#endif
+
+
 
 #define DM365_REF_FREQ		24000000	/* 24 MHz on the DM365 EVM */
 #define DM365_RTC_BASE			0x01c69000
@@ -1720,6 +1728,8 @@ static int __init dm365_init_devices(void)
 	if (!cpu_is_davinci_dm365())
 		return 0;
 
+	early_lan1_run = 0;
+
 	davinci_cfg_reg(DM365_INT_EDMA_CC);
 	platform_device_register(&dm365_edma_device);
 
@@ -1738,10 +1748,16 @@ static int __init dm365_init_devices(void)
 	/* Register VENC device */
 	platform_device_register(&dm365_venc_dev);
 
-	platform_device_register(&dm365_mdio_device);
-	platform_device_register(&dm365_emac_device);
-	clk_add_alias(NULL, dev_name(&dm365_mdio_device.dev),
-		      NULL, &dm365_emac_device.dev);
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+	v2r_early_parse_cmdline(saved_command_line);
+#endif
+
+	if (early_lan1_run) {
+		platform_device_register(&dm365_mdio_device);
+		platform_device_register(&dm365_emac_device);
+		clk_add_alias(NULL, dev_name(&dm365_mdio_device.dev),
+			      NULL, &dm365_emac_device.dev);
+	}
 
 	return 0;
 }
@@ -1751,3 +1767,40 @@ void dm365_set_vpfe_config(struct vpfe_config *cfg)
 {
        vpfe_capture_dev.dev.platform_data = cfg;
 }
+
+
+/* Virt2real board devices early init function */
+#ifdef CONFIG_V2R_PARSE_CMDLINE
+static void v2r_early_parse_cmdline(char * string)
+{
+
+    char *p;
+    char *temp_string;
+    char *temp_param;
+    char *param_name;
+    char *param_value;
+    temp_string = kstrdup(string, GFP_KERNEL);
+    do
+    {
+		p = strsep(&temp_string, " ");
+		if (p) {
+		    temp_param = kstrdup(p, GFP_KERNEL);
+		    param_name = strsep(&temp_param, "=");
+	    	if (!param_name) continue;
+		    param_value = strsep(&temp_param, " ");
+		    if (!param_value) continue;
+
+	    	if (!strcmp(param_name, "lan1")) {
+				if (!strcmp(param_value, "on")) {
+			    	early_lan1_run = 1;
+				}
+		    }
+		}
+
+    } while(p);
+
+}
+
+#endif
+
+/* End virt2real board devices early init function */

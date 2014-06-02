@@ -50,7 +50,12 @@
 #include <linux/usb/g_hid.h>
 #include "hid_struct.h" 
 #include "board-virt2real-dm365.h"
-#ifdef CONFIG_V2R_PARSE_CMDLINE
+
+//#ifdef CONFIG_V2R_PARSE_CMDLINE
+//static void __init v2r_parse_cmdline(char * string);
+//#endif
+
+
 static struct i2c_board_info i2c_info[] = {
 
 };
@@ -106,8 +111,6 @@ static struct vpfe_config vpfe_cfg = {
        .num_clocks = 1,
        .clocks = {"vpss_master"},
 };
-static void __init v2r_parse_cmdline(char * string);
-#endif
 
 static void w1_enable_external_pullup(int enable);
 
@@ -645,7 +648,7 @@ static __init void dm365_evm_init(void)
 
 		soc_info->emac_pdata->phy_id = DM365_EVM_PHY_ID;
 		dm365evm_emac_configure();
-	}
+	} 
 
 	// try to init 1-Wire
 	if (w1_run) 
