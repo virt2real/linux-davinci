@@ -670,6 +670,10 @@ static __init void dm365_evm_init(void)
 	    davinci_setup_mmc(1, &dm365evm_mmc1_config);
 	}
 
+	// set USB prioruty, 
+	// see http://e2e.ti.com/support/embedded/linux/f/354/t/94930.aspx 
+	// and http://e2e.ti.com/support/dsp/davinci_digital_media_processors/f/100/t/150995.aspx
+	davinci_writel(0x0, 0x1c40040); //master priority1 register1 - to set USB
 
 	return;
 }
