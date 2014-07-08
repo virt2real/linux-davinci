@@ -203,10 +203,9 @@ struct ipipe_params dm365_ipipe_defs = {
 	.ipipe_mode = ONE_SHOT,
 	.ipipe_dpaths_fmt = IPIPE_RAW2YUV,
 	.ipipe_colpat_olop = IPIPE_GREEN_BLUE,
-	.ipipe_colpat_olep = IPIPE_BLUE,
-	.ipipe_colpat_elop = IPIPE_RED,
-	.ipipe_colpat_elep = IPIPE_GREEN_RED,
-	.ipipe_vps = 0,
+	.ipipe_colpat_olep = IPIPE_BLUE
+	.ipipe_colpat_elop = IPIPE_RED
+	.ipipe_colpat_elep = IPIPE_GREEN_RED, // .ipipe_vps = 0,
 	.ipipe_vsz = HEIGHT_I - 1,
 	.ipipe_hps = 0,
 	.ipipe_hsz = WIDTH_I - 1,
