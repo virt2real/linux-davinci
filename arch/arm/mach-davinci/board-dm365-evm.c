@@ -40,6 +40,7 @@
 #include <linux/platform_data/mtd-davinci.h>
 #include <linux/platform_data/keyscan-davinci.h>
 #include <linux/platform_data/usb-davinci.h>
+#include <mach/time.h>
 #include <mach/gpio.h>
 
 
@@ -136,6 +137,29 @@ static void dm365_camera_configure(void){
 }
 
 
+/* software PWM */
+#ifdef CONFIG_V2R_SWPWM
+static struct resource davinci_timer3_resources[] = {
+	{
+		.start = DAVINCI_TIMER3_BASE,
+		.end = DAVINCI_TIMER3_BASE + SZ_1K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = IRQ_DM365_TINT6,
+		.flags = IORESOURCE_IRQ,
+	}
+};
+
+static struct platform_device davinci_timer3_device = {
+    .name = "davinci_swpwm_driver",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(davinci_timer3_resources),
+    .resource = davinci_timer3_resources
+};
+#endif
+/* end software PWM */
+
 
 
 //#define DM365_EVM_PHY_ID		"davinci_mdio-0:01"  // replaced by Gol
@@ -218,7 +242,9 @@ static struct platform_device davinci_nand_device = {
 
 
 static struct snd_platform_data dm365_evm_snd_data = {
-	.asp_chan_q = EVENTQ_3,
+	.asp_chan_q = EVENTQ_0,
+	.ram_chan_q = EVENTQ_0,
+	.sram_size_capture = 0x100000000,    /* CMEM/H.264 uses TCM from 0x1000 */
 };
 
 
@@ -343,7 +369,10 @@ static void __init v2r_init_i2c(void)
 }
 
 static struct platform_device *dm365_evm_nand_devices[] __initdata = {
-	&davinci_nand_device,
+	&davinci_nand_device
+#ifdef CONFIG_V2R_SWPWM
+	,&davinci_timer3_device
+#endif
 };
 
 
@@ -565,8 +594,6 @@ static void ghid_m_init(void) {
 		printk("HID Gadget mouse registration success\n");
 }
 
-
-
 static __init void dm365_evm_init(void)
 {
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
@@ -673,7 +700,7 @@ static __init void dm365_evm_init(void)
 	// set USB prioruty, 
 	// see http://e2e.ti.com/support/embedded/linux/f/354/t/94930.aspx 
 	// and http://e2e.ti.com/support/dsp/davinci_digital_media_processors/f/100/t/150995.aspx
-	davinci_writel(0x0, 0x1c40040); //master priority1 register1 - to set USB
+	// davinci_writel(0x0, 0x1c40040); //master priority1 register1 - to set USB
 
 	return;
 }
