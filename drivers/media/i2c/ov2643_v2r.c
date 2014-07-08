@@ -133,8 +133,8 @@
 
 
 //The rest values will be declared later
-#define OV2643_IMAGE_WIDTH	640
-#define OV2643_IMAGE_HEIGHT	480
+#define OV2643_IMAGE_WIDTH	1280
+#define OV2643_IMAGE_HEIGHT	720
 
 #define SENSOR_DETECTED		1
 #define SENSOR_NOT_DETECTED	0
