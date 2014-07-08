@@ -43,13 +43,10 @@
 #include <linux/mutex.h>
 #include <asm/uaccess.h>
 
-
 #define PPM_MIN 800
 #define PPM_MAX 4400
 
-#define DEBUG_MESSAGES 1//if 0 then no debugging info at all
-
-#ifdef DEBUG_MESSAGES
+#ifdef CONFIG_V2R_SWPWM_DEBUG
 #define dbg_print printk
 #else
 #define dbg_print
@@ -179,95 +176,103 @@ typedef struct {
 
 //LIST OF POSSIBLE TASKS
 static TASK tasks[] = {
-    { 0, -1, "ZERO FAKE PIN",  	0x00000000, 0x0000000 },
-    { 1, -1,  "GND",			0x00000000, 0x0000000 },
-    { 2, -1,  "UART0_TXD", 		0x00000000, 0x0000000 },
-    { 3, -1,  "UART0_RXD", 		0x00000000, 0x0000000 },
-    { 4, -1,  "AGND", 			0x00000000, 0x0000000 },
-    { 5, -1,  "+3V3", 			0x00000000, 0x0000000 },
-    { 6, -1,  "ETHERNET1", 		0x00000000, 0x0000000 },
-    { 7, -1,  "ETHERNET2", 		0x00000000, 0x0000000 },
-    { 8, -1,  "ETHERNET3", 		0x00000000, 0x0000000 },
-    { 9, -1,  "ETHERNET4", 		0x00000000, 0x0000000 },
-    {10, -1,  "ETHERNET5", 		0x00000000, 0x0000000 },
-    {11, -1,  "ETHERNET6", 		0x00000000, 0x0000000 },
-    {12, -1,  "PWCTRO0", 		0x00000000, 0x0000000 },
-    {13, -1,  "PWCTRO1", 		0x00000000, 0x0000000 },
-    {14, -1,  "PWCTRO3", 		0x00000000, 0x0000000 },
-    {15, 90,  "PWMCON15", 		   GPIO_45,   (1<<26) },
-    {16, 89,  "PWMCON16",		   GPIO_45,   (1<<25) },
-    {17, 88,  "PWMCON17", 		   GPIO_45,   (1<<24) },
-    {18, 87,  "PWMCON18", 		   GPIO_45,   (1<<23) },
-    {19, 50,  "PWMCON19", 		   GPIO_23,   (1<<18) },
-    {20, -1,  "PWR_VIN", 		0x00000000, 0x0000000 },
-    {21, -1,  "+3V3", 			0x00000000, 0x0000000 },
-    {22, 67,  "PWMCON22", 		   GPIO_45,    (1<<3) },
-    {23, -1,  "RESET", 			0x00000000, 0x0000000 },
-    {24, -1,  "LINEOUT", 		0x00000000, 0x0000000 },
-    {25, 51,  "PWMCON25", 		   GPIO_23,   (1<<19) },
-    {26, 103, "PWMCON26", 		    GPIO_6,    (1<<7) },
-    {27, 102, "PWMCON27", 		    GPIO_6,    (1<<6) },
-    {28, 101, "PWMCON28", 		    GPIO_6,    (1<<5) },
-    {29, 100, "PWMCON29", 		    GPIO_6,    (1<<4) },
-    {30, 33,  "PWMCON30", 		   GPIO_23,    (1<<1) },
-    {31, 32,  "PWMCON31", 		   GPIO_23,       (1) },
-    {32, 31,  "PWMCON32", 		   GPIO_01,   (1<<31) },
-    {33, 30,  "PWMCON33", 		   GPIO_01,   (1<<30) },
-    {34, 29,  "PWMCON34", 		   GPIO_01,   (1<<29) },
-    {35, 28,  "PWMCON35", 		   GPIO_01,   (1<<28) },
-    {36, 27,  "PWMCON36", 		   GPIO_01,   (1<<27) },
-    {37, 26,  "PWMCON37", 		   GPIO_01,   (1<<26) },
-    {38, 25,  "PWMCON38", 		   GPIO_01,   (1<<25) },
-    {39, 24,  "PWMCON39",		   GPIO_01,   (1<<24) },
-    {40, 23,  "PWMCON40", 		   GPIO_01,   (1<<23) },
-    {41, 22,  "PWMCON41", 		   GPIO_01,   (1<<22) },
-    {42, 80,  "PWMCON42", 		   GPIO_45,   (1<<16) },
-    {43, 92,  "PWMCON43", 		   GPIO_45,   (1<<28) },
-    {44, 91,  "PWMCON44", 		   GPIO_45,   (1<<27) },
-    {45, -1,  "TVOUT", 			0x00000000, 0x0000000 },
-    {46, -1,  "SP+", 			0x00000000, 0x0000000 },
-    {47, -1,  "SP-", 			0x00000000, 0x0000000 },
-    {48, -1,  "ADC0", 			0x00000000, 0x0000000 },
-    {49, -1,  "ADC1", 			0x00000000, 0x0000000 },
-    {50, -1,  "ADC2", 			0x00000000, 0x0000000 },
-    {51, -1,  "ADC3", 			0x00000000, 0x0000000 },
-    {52, -1,  "ADC4", 			0x00000000, 0x0000000 },
-    {53, -1,  "ADC5", 			0x00000000, 0x0000000 },
-    {54, -1,  "PWCTRIO0", 		0x00000000, 0x0000000 },
-    {55, -1,  "PWCTRIO1", 		0x00000000, 0x0000000 },
-    {56, -1,  "PWCTRIO2", 		0x00000000, 0x0000000 },
-    {57, -1,  "PWCTRIO3", 		0x00000000, 0x0000000 },
-    {58, -1,  "PWCTRIO4", 		0x00000000, 0x0000000 },
-    {59, -1,  "PWCTRIO5", 		0x00000000, 0x0000000 },
-    {60, -1,  "PWCTRIO6", 		0x00000000, 0x0000000 },
-    {61, 82,  "PWMCON61", 		   GPIO_45,   (1<<18) },
-    {62, 79,  "PWMCON62", 		   GPIO_45,   (1<<15) },
-    {63, 86,  "PWMCON63", 		   GPIO_45,   (1<<22) },
-    {64, 85,  "PWMCON64", 		   GPIO_45,   (1<<21) },
-    {65, 81,  "PWMCON65", 		   GPIO_45,   (1<<17) },
-    {66, 34,  "PWMCON66", 		   GPIO_23,    (1<<2) },
-    {67, -1,  "AGND", 			0x00000000, 0x0000000 },
-    {68, -1,  "+3V3", 			0x00000000, 0x0000000 },
-    {69, -1,  "PWR_VIN",		0x00000000, 0x0000000 },
-    {70, -1,  "DSP_GND", 		0x00000000, 0x0000000 },
-    {71, -1,  "GND", 			0x00000000, 0x0000000 },
-    {72, -1,  "I2C_DATA", 		0x00000000, 0x0000000 },
-    {73, -1,  "I2C_CLK", 		0x00000000, 0x0000000 },
-    {74, -1,  "COMPPR", 		0x00000000, 0x0000000 },
-    {75, -1,  "COMPY", 			0x00000000, 0x0000000 },
-    {76, -1,  "COMPPB", 		0x00000000, 0x0000000 },
-    {77, 49,  "PWMCON18", 		   GPIO_23,   (1<<17) },
-    {78, 48,  "PWMCON78", 		   GPIO_23,   (1<<16) },
-    {79, 47,  "PWMCON79", 		   GPIO_23,   (1<<15) },
-    {80, 46,  "PWMCON80", 		   GPIO_23,   (1<<14) },
-    {81, 45,  "PWMCON81", 		   GPIO_23,   (1<<13) },
-    {82, 44,  "PWMCON82", 		   GPIO_23,   (1<<12) },
-    {83, 35,  "PWMCON83", 		   GPIO_23,    (1<<3) },
-    {84, 84,  "PWMCON84", 		   GPIO_45,   (1<<20) },
-    {85, 83,  "PWMCON85", 		   GPIO_45,   (1<<19) },
-    {86, -1,  "PWR_VIN", 		0x00000000, 0x0000000 },
-    {87, 73,  "LED1", 			   GPIO_45,   (1<<9)  },//Just for test
-    {88, 74,  "LED2", 			   GPIO_45,   (1<<10) }//Just for test
+    { 0, -1,  "GPIO0",		0x00000000, 0x0000000 },
+    { 1, -1,  "GND",		0x00000000, 0x0000000 },
+    { 2, -1,  "UART0_TXD",	0x00000000, 0x0000000 },
+    { 3, -1,  "UART0_RXD",	0x00000000, 0x0000000 },
+    { 4, -1,  "AGND",		0x00000000, 0x0000000 },
+    { 5, -1,  "ETHERNET1",	0x00000000, 0x0000000 },
+    { 6, -1,  "ETHERNET2",	0x00000000, 0x0000000 },
+    { 7, -1,  "ETHERNET3",	0x00000000, 0x0000000 },
+    { 8, -1,  "ETHERNET4",	0x00000000, 0x0000000 },
+    { 9, -1,  "ETHERNET5",	0x00000000, 0x0000000 },
+    {10, 15,  "PWMCON10",	0x00000000, 0x0000000 },
+    {11, 14,  "PWMCON11",	0x00000000, 0x0000000 },
+    {12, 13,  "PWMCON12",	0x00000000, 0x0000000 },
+    {13, 12,  "PWMCON13",	0x00000000, 0x0000000 },
+    {14, 11,  "PWMCON14",	0x00000000, 0x0000000 },
+    {15, 10,  "PWMCON15",	0x00000000, 0x0000000 },
+    {16, 90,  "PWMCON16",	GPIO_45,	(1<<26) },
+    {17, 89,  "PWMCON17",	GPIO_45,	(1<<25) },
+    {18, 88,  "PWMCON18",	GPIO_45,	(1<<24) },
+    {19, 87,  "PWMCON19",	GPIO_45,	(1<<23) },
+    {20, 50,  "PWMCON20",	GPIO_23,	(1<<18) },
+    {21, -1,  "PWR_VIN",	0x00000000, 0x0000000 },
+    {22, -1,  "+3V3",		0x00000000, 0x0000000 },
+    {23, -1,  "RESET",		0x00000000, 0x0000000 },
+    {24, -1,  "LINEOUT",	0x00000000, 0x0000000 },
+    {25,  1,  "PWMCON25",	0x00000000, 0x0000000 },
+    {26, 37,  "PWMCON26",	0x00000000, 0x0000000 },
+    {27, 36,  "PWMCON27",	0x00000000, 0x0000000 },
+    {28, 17,  "PWMCON28",	0x00000000, 0x0000000 },
+    {29, 16,  "PWMCON29",	0x00000000, 0x0000000 },
+    {30, 33,  "PWMCON30",	GPIO_23,    (1<<1) },
+	{31, 32,  "PWMCON31",	GPIO_23,	(1) },
+    {32, 31,  "PWMCON32",	GPIO_01,	(1<<31) },
+    {33, 30,  "PWMCON33",	GPIO_01,	(1<<30) },
+    {34, 29,  "PWMCON34",	GPIO_01,	(1<<29) },
+    {35, 28,  "PWMCON35",	GPIO_01,	(1<<28) },
+    {36, 27,  "PWMCON36",	GPIO_01,	(1<<27) },
+    {37, 26,  "PWMCON37",	GPIO_01,	(1<<26) },
+    {38,  2,  "PWMCON38",	0x00000000, 0x0000000 },
+    {39, 24,  "PWMCON39",	GPIO_01,	(1<<24) },
+    {40, 23,  "PWMCON40",	GPIO_01,	(1<<23) },
+    {41, 22,  "PWMCON41",	GPIO_01,	(1<<22) },
+    {42, 80,  "PWMCON42",	GPIO_45,	(1<<16) },
+    {43, 92,  "PWMCON43",	GPIO_45,	(1<<28) },
+    {44, 91,  "PWMCON44",	GPIO_45,	(1<<27) },
+    {45, -1,  "TVOUT",		0x00000000, 0x0000000 },
+    {46, -1,  "SP+",		0x00000000, 0x0000000 },
+    {47, -1,  "SP-",		0x00000000, 0x0000000 },
+    {48, -1,  "ADC0",		0x00000000, 0x0000000 },
+    {49, -1,  "ADC1",		0x00000000, 0x0000000 },
+    {50, -1,  "ADC2",		0x00000000, 0x0000000 },
+    {51, -1,  "ADC3",		0x00000000, 0x0000000 },
+    {52, -1,  "ADC4",		0x00000000, 0x0000000 },
+    {53, -1,  "ADC5",		0x00000000, 0x0000000 },
+    {54,  3,  "PWMCON54",	0x00000000, 0x0000000 },
+    {55,  4,  "PWMCON55",	0x00000000, 0x0000000 },
+    {56,  5,  "PWMCON56",	0x00000000, 0x0000000 },
+    {57,  6,  "PWMCON57",	0x00000000, 0x0000000 },
+    {58,  7,  "PWMCON58",	0x00000000, 0x0000000 },
+    {59,  8,  "PWMCON59",	0x00000000, 0x0000000 },
+    {60,  9,  "PWMCON60",	0x00000000, 0x0000000 },
+    {61, 82,  "PWMCON61",	GPIO_45,	(1<<18) },
+    {62, 79,  "PWMCON62",	GPIO_45,	(1<<15) },
+    {63, 86,  "PWMCON63",	GPIO_45,	(1<<22) },
+    {64, 85,  "PWMCON64",	GPIO_45,	(1<<21) },
+    {65, 81,  "PWMCON65",	GPIO_45,	(1<<17) },
+    {66, -1,  "AGND",		0x00000000, 0x0000000 },
+    {67, -1,  "+3V3",		0x00000000, 0x0000000 },
+    {68, -1,  "PWR_VIN",	0x00000000, 0x0000000 },
+    {69, -1,  "DSP_GND",	0x00000000, 0x0000000 },
+    {70, -1,  "I2C_DATA",	0x00000000, 0x0000000 },
+    {71, -1,  "I2C_CLK",	0x00000000, 0x0000000 },
+    {72, -1,  "COMPPR",		0x00000000, 0x0000000 },
+    {73, -1,  "COMPY",		0x00000000, 0x0000000 },
+    {74, -1,  "COMPPB",		0x00000000, 0x0000000 },
+    {75, 49,  "PWMCON75",	GPIO_23,   (1<<17) },
+    {76, 48,  "PWMCON76",	GPIO_23,   (1<<16) },
+    {77, 47,  "PWMCON77",	GPIO_23,   (1<<15) },
+    {78, 46,  "PWMCON78",	GPIO_23,   (1<<14) },
+    {79, 45,  "PWMCON79",	GPIO_23,   (1<<13) },
+    {80, 44,  "PWMCON80",	GPIO_23,   (1<<12) },
+    {81, 35,  "PWMCON81",	GPIO_23,    (1<<3) },
+    {82, 84,  "PWMCON82",	GPIO_45,   (1<<20) },
+    {83, 83,  "PWMCON83",	GPIO_45,   (1<<19) },
+    {84, 25,  "PWMCON84",	GPIO_01,   (1<<25) },
+    {85, 34,  "PWMCON85",	GPIO_23,    (1<<2) },
+    {86, -1,  "GND",		0x00000000, 0x0000000 },
+    {87, 73,  "LED1",		GPIO_45,   (1<<9)  },	//Just for test
+    {88, 74,  "LED2",		GPIO_45,   (1<<10) }	//Just for test
+/*
+    {, 51,  "PWMCON25", 		   GPIO_23,   (1<<19) },
+    {, 103, "PWMCON26", 		    GPIO_6,    (1<<7) },
+    {, 102, "PWMCON27", 		    GPIO_6,    (1<<6) },
+    {, 101, "PWMCON28", 		    GPIO_6,    (1<<5) },
+    {, 100, "PWMCON29", 		    GPIO_6,    (1<<4) },
+    {, 67,  "PWMCON22", 		   GPIO_45,    (1<<3) },
+*/
 };
 
 //Global interrupt index. Use to switch state machine during timer operation
@@ -362,24 +367,24 @@ static GPIO_PWM* find_pwmpin(const unsigned char pin){
 int alloc_gpio(const unsigned char pin, const unsigned char duty){
 	int i = 0;
 	if (pin > MAX_PIN_NUMBER){
-		dbg_print("alloc_gpio con number %d is greater then %d\r\n", pin, MAX_PIN_NUMBER);
+		dbg_print("alloc_gpio con number %d is greater then %d\n", pin, MAX_PIN_NUMBER);
 		return -SWPWM_WRONGPIN;//we cannot alloc terminating pin
 	}
 	if (tasks[pin].reg == 0x00000000){
-		dbg_print("alloc_gpio con number %d could not be modified\r\n", pin);
+		dbg_print("alloc_gpio con number %d could not be modified\n", pin);
 		return -SWPWM_WRONGPIN;
 	}
 	for (i = 0; i < MAX_PWM_NUMBER; i++){//if we find that this pin is allocated - use ready pin
 		if (pwmpins_pool[i].pin == pin){
 			pwmpins_pool[i].duty = duty;
 			sort_pwm_pins();
-			dbg_print("alloc_gpio con successfully reaasigned old pin %d\r\n", pin);
+			dbg_print("alloc_gpio con successfully reaasigned old pin %d\n", pin);
 			return SWPWM_OK;//return good assinged pin
 		}
 	}
     //if there is no assigned pin - try to allocate new one
 	if (gpio_request(tasks[pin].gpio, tasks[pin].name) != 0){
-		dbg_print("alloc_gpio gpio_request failed %d\r\n", pin);
+		dbg_print("alloc_gpio gpio_request failed %d\n", pin);
 		return -SWPWM_BUSY;//If cannot be requested, that means that someone else is using this pin
 	}
 	gpio_direction_output(tasks[pin].gpio, 0);
@@ -388,7 +393,7 @@ int alloc_gpio(const unsigned char pin, const unsigned char duty){
 			pwmpins_pool[i].pin = pin;
 			pwmpins_pool[i].duty = duty;
 			sort_pwm_pins();
-			dbg_print("alloc_gpio con successfully assigned new pin %d\r\n", pin);
+			dbg_print("alloc_gpio con successfully assigned new pin %d\n", pin);
 			return SWPWM_OK;//return good assinged pin
 		}
 	}
@@ -443,7 +448,7 @@ static REG_VAL int_queue[MAX_PWM_NUMBER+1][GPIO_CONF_REGS_NUMBER+1];
 static void start_timer_interrupts(void){
 	int i = 0;
 	volatile TIMER_REGS* tptr = (volatile TIMER_REGS*)TMR3_BASE;
-	dbg_print("Start timer interrupts %x\r\n", (unsigned int)TMR3_BASE);
+	dbg_print("Start timer interrupts %x\n", (unsigned int)TMR3_BASE);
 	if (!TMR3_BASE) return;//if timer3 base value not set we cant do any
 	if (drv_timing.tm_size < 2) return;//This means that some error occurs
 	gInterruptIndex = 0;
@@ -463,7 +468,7 @@ static void stop_timer_interrupts(void){
 	volatile TIMER_REGS* tptr = (volatile TIMER_REGS*)TMR3_BASE;
 	REG_VAL* regs = drv_queue[0];
 	int i = 0;
-	dbg_print("Stop timer interrupts %x\r\n", (unsigned int)TMR3_BASE);
+	dbg_print("Stop timer interrupts %x\n", (unsigned int)TMR3_BASE);
 	if (!TMR3_BASE) return;//if timer3 base value not set we cant do any
 	tptr->intctl_stat = 0;//Disable interrupts
 	tptr->tcr = 0;//DISABLE TIMER
@@ -476,10 +481,10 @@ static void stop_timer_interrupts(void){
 		volatile unsigned long* addr = (volatile unsigned long*)(regs[i].reg);
 		if (regs[i].set){
 			*addr |= regs[i].val;
-			//dbg_print("set %x, %x\r\n", (int)addr, (int)(regs[i].val) );
+			//dbg_print("set %x, %x\n", (int)addr, (int)(regs[i].val) );
 		} else {
 			*addr &= ~(regs[i].val);
-			//dbg_print("reset %x, %x\r\n", (int)addr, (int)(regs[i].val) );
+			//dbg_print("reset %x, %x\n", (int)addr, (int)(regs[i].val) );
 		}
 		i++;
 	}
@@ -508,17 +513,17 @@ static void interrupt_proc(void){
 		volatile unsigned long* addr = (volatile unsigned long*)(regs[i].reg);
 		if (regs[i].set){
 			*addr |= regs[i].val;
-			//dbg_print("set %x, %x\r\n", (int)addr, (int)(regs[i].val) );
+			//dbg_print("set %x, %x\n", (int)addr, (int)(regs[i].val) );
 		} else {
 			*addr &= ~(regs[i].val);
-			//dbg_print("reset %x, %x\r\n", (int)addr, (int)(regs[i].val) );
+			//dbg_print("reset %x, %x\n", (int)addr, (int)(regs[i].val) );
 		}
 		i++;
 	}
 	gInterruptIndex++;
 	if ( gInterruptIndex == (int_timing.tm_size) ){//If the queue is over - tryt update the queue
 		if (g_UpdateFlag){//If there are new data - just reload it into int_queue
-			dbg_print("Update int queue\r\n");
+			dbg_print("Update int queue\n");
 			update_int_queue();
 			g_UpdateFlag = FALSE;
 		}
@@ -533,7 +538,7 @@ static void interrupt_proc(void){
 static irqreturn_t timer3_interrupt(int irq, void *dev_id){
 	int handled = 0;
 	if (irq_timer3()){//Our interrupt must be processed
-		//dbg_print("--->>>\r\n");
+		//dbg_print("--->>>\n");
 		interrupt_proc();
 		handled = IRQ_HANDLED;
 	} else {
@@ -545,7 +550,7 @@ static irqreturn_t timer3_interrupt(int irq, void *dev_id){
 static int timer3_irq_chain(unsigned int irq){
 	int ret = 0;
 	ret = request_irq(irq, timer3_interrupt, 0, "timer3", 0);
-	dbg_print("Chain interrupt returned %x\r\n", ret);
+	dbg_print("Chain interrupt returned %x\n", ret);
 	return ret;
 }
 //Zeroes driver table to fill it with values later
@@ -624,7 +629,7 @@ static int process_update(void){
 		} else {
 		    if (pwmpins_pool[i].pin != 0xFF) gpio_set_task(drv_queue[0], pwmpins_pool[i].pin);
 		}
-		dbg_print("pool[%d]={%x,%x}\r\n", i, pwmpins_pool[i].pin, pwmpins_pool[i].duty);
+		dbg_print("pool[%d]={%x,%x}\n", i, pwmpins_pool[i].pin, pwmpins_pool[i].duty);
 	}
 	reg_size = 0;
 	//the rest of elements
@@ -656,12 +661,12 @@ static int process_update(void){
 	for (i = 0; i < drv_timing.tm_size; i++){
 		int j = 0;
 		REG_VAL* regs = drv_queue[i];
-		//dbg_print("-->> drv_timing[%d]=%.8d----------------------------------------\r\n", i, drv_timing.time[i]);
+		//dbg_print("-->> drv_timing[%d]=%.8d----------------------------------------\n", i, drv_timing.time[i]);
 		while(regs[j].reg != 0){
-			//dbg_print("    %s reg=%x val=%x\r\n", regs[j].set ? "set" : "reset", regs[j].reg, regs[j].val);
+			//dbg_print("    %s reg=%x val=%x\n", regs[j].set ? "set" : "reset", regs[j].reg, regs[j].val);
 			j++;
 		}
-		//dbg_print("-----------------------------------------------------------------\r\n");
+		//dbg_print("-----------------------------------------------------------------\n");
 	}
 	if (is_active_pwm && !g_IsActivePWM){//There were no interrupts and now we get it
 		g_IsActivePWM = is_active_pwm;
@@ -684,14 +689,14 @@ This method sets gpio to operate as pwm
 */
 static int start_pwm(const unsigned char gpio, const unsigned char duty){
 	int error = 0;
-	dbg_print("start_pwm_func con=%d duty=%d\r\n", gpio, duty);
+	dbg_print("start_pwm_func con=%d duty=%d\n", gpio, duty);
 	if ( (error = alloc_gpio(gpio, duty)) != SWPWM_OK ){
-		dbg_print("Alloc gpio error %d\r\n", error);
+		dbg_print("Alloc gpio error %d\n", error);
 		return -error;
 	}
-	dbg_print("Start_PWM: Before process update\r\n");
+	dbg_print("Start_PWM: Before process update\n");
 	process_update();
-	dbg_print("Start_PWM: After process update\r\n");
+	dbg_print("Start_PWM: After process update\n");
 	return 0;
 }
 
@@ -744,16 +749,16 @@ static char** split(const char* str, char delimiter){
     }
     result[nTempByte] = 0;
     for (nIndex = 0; nIndex < nTempByte; nIndex++){
-         dbg_print("Chunk %d = %s\r\n", nIndex, result[nIndex]);
+         dbg_print("Chunk %d = %s\n", nIndex, result[nIndex]);
     }
     return result;   
 };
 static int is_equal_string(const char* str1, const char* str2){
     int len = strlen(str1);
     int i = 0;
-    if (len != strlen(str2)){ dbg_print("IS EQUAL STRING LEN ERROR\r\n"); return FALSE;}
+    if (len != strlen(str2)){ dbg_print("IS EQUAL STRING LEN ERROR\n"); return FALSE;}
     for (i = 0; i < len; i++){
-       if (str1[i] != str2[i]) { dbg_print("IS EQUAL STRING COMPARE ERROR %s %s %d\r\n", str1, str2, i); return FALSE;}
+       if (str1[i] != str2[i]) { dbg_print("IS EQUAL STRING COMPARE ERROR %s %s %d\n", str1, str2, i); return FALSE;}
     }
     return TRUE;
 }
@@ -767,7 +772,7 @@ static int str_to_int(const char* str){
         if (c < '0' || c > '9') return NA;
         result = result*10 + c - '0';
     }
-    //dbg_print("str to int returned %d\r\n", result);
+    //dbg_print("str to int returned %d\n", result);
     return result;
 }
 
@@ -775,14 +780,14 @@ static int starts_with(const char* str1, const char* ref){
     int i = 0;
     int len = strlen(str1);
     const char* substr = 0;
-    if (len <= strlen(ref)) {dbg_print("starts with len error\r\n"); return NA;}
+    if (len <= strlen(ref)) {dbg_print("starts with len error\n"); return NA;}
     len = strlen(ref);
     for (i = 0; i < len; i++){
-       if (str1[i] != ref[i]) {dbg_print("starts with not equal error %d\r\n", i); return NA;}
+       if (str1[i] != ref[i]) {dbg_print("starts with not equal error %d\n", i); return NA;}
     }
     //Here it a good candidate for perfect result. Lets get appropriate value
     substr = &str1[len];
-    dbg_print("Really starts with. Substr %s\r\n", substr);
+    dbg_print("Really starts with. Substr %s\n", substr);
     //if (is_equal_string(substr, "true")) return 1;
     //if (is_equal_string(substr, "false")) return 0;
     return str_to_int(substr);    
@@ -797,21 +802,21 @@ int process_command(char** data){
 		gpio = starts_with(data[1], "con:");
 		duty = starts_with(data[2], "duty:");
 		if (gpio == NA || duty == NA) return 0;
-		dbg_print("Starts con %d, duty %d\r\n", gpio, duty);
+		dbg_print("Starts con %d, duty %d\n", gpio, duty);
 		start_pwm(gpio, duty);
 	} else if (is_equal_string(data[0], "stop")){
 		int gpio = 0;
 		if (!data[1] ) return 0;
 		gpio = starts_with(data[1], "con:");
 		if (gpio == NA ) return 0;
-		dbg_print("Stops con %d\r\n", gpio);
+		dbg_print("Stops con %d\n", gpio);
 		stop_pwm(gpio);
 	} else if (is_equal_string(data[0], "period")){
 		int period = 0;
 		if (!data[1] ) return 0;
 		period = starts_with(data[1], "");
 		if (period == NA ) return 0;
-		dbg_print("Period %d\r\n", period);
+		dbg_print("Period %d\n", period);
 		set_period(period);
 	}
 	return 0;
@@ -819,8 +824,6 @@ int process_command(char** data){
 
 
 
-MODULE_AUTHOR("Alexander V. Shadrin");
-MODULE_LICENSE("GPL");
 /**
 This driver implements software pwm function
 	period <VAL> - set pwm period in ms
@@ -860,7 +863,7 @@ int v2rswpwm_open(struct inode *inode, struct file *filp){
 	unsigned int mj = imajor(inode);//get major number
 	unsigned int mn = iminor(inode);//get minor number
 	struct v2rswpwm_dev *dev = NULL;
-	dbg_print("V2RSWPWM open device\r\n");
+	dbg_print("V2RSWPWM open device\n");
 	if (mj != v2rswpwm_major || mn < 0 || mn >= 1){//Only one device may exist
 		dbg_print("No device found with minor=%d and major=%d\n", mj, mn);
 		return -ENODEV; /* No such device */
@@ -881,14 +884,14 @@ int v2rswpwm_open(struct inode *inode, struct file *filp){
 		}
 		dev->buffer_data_size = 0;//setting initial buffer position
 	}
-	dbg_print("V2RSWPWM device is opened successfully\r\n");
+	dbg_print("V2RSWPWM device is opened successfully\n");
 	return 0;//Everything is OK
 }
 /** Closes driver 
 */
 int v2rswpwm_release(struct inode *inode, struct file *filp){
 	//One time when driver has allocated its memory, this memory will never be released, however its not a leak because it is a singleton
-	dbg_print("V2RSWPWM release device\r\n");
+	dbg_print("V2RSWPWM release device\n");
 	return 0;
 }
 /** Reads data from user console (user input)
@@ -896,7 +899,7 @@ int v2rswpwm_release(struct inode *inode, struct file *filp){
 ssize_t v2rswpwm_read(struct file *filp, char __user *buf, size_t count,	loff_t *f_pos){
 	struct v2rswpwm_dev *dev = (struct v2rswpwm_dev *)filp->private_data;
 	ssize_t retval = 0;
-	dbg_print("v2rswpwm device read\r\n");
+	dbg_print("v2rswpwm device read\n");
 	if (mutex_lock_killable(&dev->v2rswpwm_mutex)) return -EINTR;//Mutex is required to avoid simultanious reads or writes from different processes
 	if (*f_pos >= dev->buffer_data_size) goto out;/* EOF */
 	if (*f_pos + count > dev->buffer_data_size)	count = dev->buffer_data_size - *f_pos;//Reads the rest for buffer 
@@ -905,7 +908,7 @@ ssize_t v2rswpwm_read(struct file *filp, char __user *buf, size_t count,	loff_t 
 		goto out;
 	}
 	*f_pos += count;
-	dbg_print("v2rswpwm copied %d bytes to user\r\n", count);
+	dbg_print("v2rswpwm copied %d bytes to user\n", count);
 	retval = count;//Really read data size to return
 out:
   	mutex_unlock(&dev->v2rswpwm_mutex);//Free mutex
@@ -919,11 +922,11 @@ ssize_t v2rswpwm_write(struct file *filp, const char __user *buf, size_t count, 
 	char *tmp = 0;
 	int nIndex = 0;
 	char** data = 0;
-	dbg_print("v2rswpwm write\r\n");
+	dbg_print("v2rswpwm write\n");
 	if (mutex_lock_killable(&dev->v2rswpwm_mutex)) return -EINTR;//Locking the mutex to avoid simultanios accesses from different processes
 	if (*f_pos !=0) {
     /* Writing in the middle of the file is not allowed */
-		dbg_print("Writing in the middle (%d) of the file buffer is not allowed\r\n", (int)(*f_pos));
+		dbg_print("Writing in the middle (%d) of the file buffer is not allowed\n", (int)(*f_pos));
 		retval = -EINVAL;
         goto out;
     }
@@ -948,7 +951,7 @@ ssize_t v2rswpwm_write(struct file *filp, const char __user *buf, size_t count, 
 		nIndex++;
 	}
 	kfree(data);
-	dbg_print("v2rswpwm-dev message %s\r\n", tmp);
+	dbg_print("v2rswpwm-dev message %s\n", tmp);
 	kfree(tmp);
 	*f_pos = 0;//Set file pointer to zero
 	retval = count;
@@ -971,7 +974,7 @@ static int v2rswpwm_construct_device(struct v2rswpwm_dev *dev, int minor, struct
 	struct device *device = NULL;//Creating the device structure
 	BUG_ON(dev == NULL || class == NULL);
 	/* Memory is to be allocated when the device is opened the first time */
-	dbg_print("v2rswpwm construct device:%d\r\n", minor);
+	dbg_print("v2rswpwm construct device:%d\n", minor);
 	//Setting initial values
 	dev->data = NULL;     
 	dev->buffer_size = V2RSWPWM_BUFFER_SIZE;
@@ -991,24 +994,24 @@ static int v2rswpwm_construct_device(struct v2rswpwm_dev *dev, int minor, struct
         cdev_del(&dev->cdev);
         return err;
     }
-	dbg_print("v2rswpwm device is constructed successfully\r\n");
+	dbg_print("v2rswpwm device is constructed successfully\n");
 	return 0;
 }
 ///Destroying the device
 static void v2rswpwm_destroy_device(struct v2rswpwm_dev *dev, int minor, struct class *class){
 	BUG_ON(dev == NULL || class == NULL);
-	dbg_print("v2rswpwm destroy device: %d\r\n", minor);
+	dbg_print("v2rswpwm destroy device: %d\n", minor);
 	device_destroy(class, MKDEV(v2rswpwm_major, minor));
 	cdev_del(&dev->cdev);
 	kfree(dev->data);
-	dbg_print("v2rswpwm device is destroyed successfully\r\n");
+	dbg_print("v2rswpwm device is destroyed successfully\n");
 	return;
 }
 ///This method is called during driver release (seems that it never happen)
 static void v2rswpwm_cleanup_module(int devices_to_destroy){
 	int i = 0;
 	/* Get rid of character devices (if any exist) */
-	dbg_print("v2rswpwm pins cleanup module\r\n");
+	dbg_print("v2rswpwm pins cleanup module\n");
 	if (v2rswpwm_devices) {
 		for (i = 0; i < devices_to_destroy; ++i) {
 			v2rswpwm_destroy_device(&v2rswpwm_devices[i], i, v2rswpwm_class);
@@ -1017,7 +1020,7 @@ static void v2rswpwm_cleanup_module(int devices_to_destroy){
 	}
 	if (v2rswpwm_class) class_destroy(v2rswpwm_class);
 	unregister_chrdev_region(MKDEV(v2rswpwm_major, 0), v2rswpwm_ndevices);
-	dbg_print("v2rswpwm pins cleanup completed\r\n");
+	dbg_print("v2rswpwm pins cleanup completed\n");
 	return;
 
 }
@@ -1036,18 +1039,18 @@ static int __init swpwmdrv_probe(struct platform_device *pdev){
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	clock = clk_get(&pdev->dev, "timer3");//Enable clock for timer3
 	clk_enable(clock);
-	dbg_print("TIMER3 res: %x, %x\r\n", res->start, res->end);
+	dbg_print("TIMER3 res: %x, %x\n", res->start, res->end);
 	vaddr = ioremap(res->start, res->end - res->start);
 	memptr = (volatile unsigned char*)vaddr;
-	dbg_print("TIMER3 remap address: %x\r\n", (unsigned int)vaddr);
+	dbg_print("TIMER3 remap address: %x\n", (unsigned int)vaddr);
 	TMR3_BASE = (volatile unsigned long*)vaddr;
 	res_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-	dbg_print("TIMER3 IRQ: %x\r\n", (unsigned int)res_irq->start);
+	dbg_print("TIMER3 IRQ: %x\n", (unsigned int)res_irq->start);
 	TMR3_IRQ = res_irq->start;
 	init_timer_3();
-	dbg_print("Timer 3 is inited\r\n");
+	dbg_print("Timer 3 is inited\n");
 	timer3_irq_chain(TMR3_IRQ);
-	dbg_print("Timer interrupts %d is chained\r\n", TMR3_IRQ);
+	dbg_print("Timer interrupts %d is chained\n", TMR3_IRQ);
 	memset(pwmpins_pool, 0xff, sizeof(pwmpins_pool));
 	return 0;
 }
@@ -1058,7 +1061,7 @@ static int __init v2rswpwm_init_module(void){
 	int i = 0;
 	int devices_to_destroy = 0;
 	dev_t dev = 0;
-	dbg_print("v2rswpwm module init\r\n");
+	dbg_print("v2rswpwm module init\n");
 	err = platform_driver_probe(&davinci_swpwm_driver, swpwmdrv_probe);
 	if (v2rswpwm_ndevices <= 0){
 		dbg_print("V2RSWPWM Invalid value of v2rswpwm_ndevices: %d\n", v2rswpwm_ndevices);
@@ -1071,26 +1074,26 @@ static int __init v2rswpwm_init_module(void){
 		return err;
 	}
 	v2rswpwm_major = MAJOR(dev);
-	dbg_print("v2rswpwm device major: %d\r\n", v2rswpwm_major);
+	dbg_print("v2rswpwm device major: %d\n", v2rswpwm_major);
 	/* Create device class (before allocation of the array of devices) */
 	v2rswpwm_class = class_create(THIS_MODULE, V2RSWPWM_DEVICE_NAME);
 	if (IS_ERR(v2rswpwm_class)){
 		err = PTR_ERR(v2rswpwm_class);
-		dbg_print("v2rswpwm class not created %d\r\n", err);
+		dbg_print("v2rswpwm class not created %d\n", err);
 		goto fail;
     }
 	/* Allocate the array of devices */
 	v2rswpwm_devices = (struct v2rswpwm_dev *)kzalloc( v2rswpwm_ndevices * sizeof(struct v2rswpwm_dev), GFP_KERNEL);
 	if (v2rswpwm_devices == NULL) {
 		err = -ENOMEM;
-		dbg_print("v2rswpwm devices not allocated %d\r\n", err);
+		dbg_print("v2rswpwm devices not allocated %d\n", err);
 		goto fail;
 	}
 	/* Construct devices */
 	for (i = 0; i < v2rswpwm_ndevices; ++i) {
 		err = v2rswpwm_construct_device(&v2rswpwm_devices[i], i, v2rswpwm_class);
 		if (err) {
-			dbg_print("v2rswpwm device is not constructed\r\n");
+			dbg_print("v2rswpwm device is not constructed\n");
 			devices_to_destroy = i;
 			goto fail;
         }
@@ -1102,13 +1105,12 @@ fail:
 }
 
 static void __exit v2rswpwm_exit_module(void){
-	dbg_print("v2rswpwm module exit\r\n");
+	dbg_print("v2rswpwm module exit\n");
 	v2rswpwm_cleanup_module(v2rswpwm_ndevices);
 	return;
 }
 
 module_init(v2rswpwm_init_module);
 module_exit(v2rswpwm_exit_module);
-
- 
-
+MODULE_AUTHOR("Alexander V. Shadrin");
+MODULE_LICENSE("GPL");

@@ -39,6 +39,13 @@ config V2R_GPIOEVENT
 	---help---
 	Virt2real GPIO event driver. Taken from Gumstix.
 
+config V2R_PPM
+	depends on V2R_DRIVERS
+	tristate "GPIO PPM input driver"
+	default n
+	---help---
+	Virt2real GPIO PPM input driver. Not stable, FOR TESTING ONLY!
+
 config V2R_EXTPWM
         depends on V2R_DRIVERS
         tristate "External PWM driver"
@@ -48,10 +55,14 @@ config V2R_EXTPWM
 
 config V2R_SWPWM
 	depends on V2R_DRIVERS
-	tristate "SW PWM driver"
+	tristate "Software PWM driver"
 	default n
 	---help---
-	Virt2real Software PWM driver (not good yet)
-	OLD VERSION, not fully usable on current board version
+	Virt2real Software PWM driver (not good yet). Clocked by TIMER3.
 	
-
+config V2R_SWPWM_DEBUG
+	depends on V2R_DRIVERS && V2R_SWPWM
+	tristate "Debug output"
+	default n
+	---help---
+	Virt2real Software PWM driver debug output
