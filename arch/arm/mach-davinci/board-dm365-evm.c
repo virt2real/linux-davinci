@@ -242,9 +242,9 @@ static struct platform_device davinci_nand_device = {
 
 
 static struct snd_platform_data dm365_evm_snd_data = {
-	.asp_chan_q = EVENTQ_0,
-	.ram_chan_q = EVENTQ_0,
-	.sram_size_capture = 0x100000000,    /* CMEM/H.264 uses TCM from 0x1000 */
+	.asp_chan_q = EVENTQ_3,
+	.ram_chan_q = EVENTQ_3,
+	//.sram_size_capture = 0x100000000,    /* CMEM/H.264 uses TCM from 0x1000 */
 };
 
 
