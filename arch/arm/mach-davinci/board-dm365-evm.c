@@ -68,8 +68,6 @@ static struct davinci_i2c_platform_data i2c_pdata = {
 	.scl_pin        = 20,
 };
 
-/* Input available at the ov7690 */
-//Shadrin camera
 static struct v4l2_input ov2643_inputs[] = {
 	{
 		.index = 0,
@@ -78,6 +76,14 @@ static struct v4l2_input ov2643_inputs[] = {
 	}
 };
 
+
+static struct v4l2_input tvp5150_inputs[] = {
+	{
+		.index = 0,
+		.name = "Camera",
+		.type = V4L2_INPUT_TYPE_CAMERA,
+	}
+};
 
 static struct vpfe_subdev_info vpfe_sub_devs[] = {
 	{
@@ -101,7 +107,27 @@ static struct vpfe_subdev_info vpfe_sub_devs[] = {
 			/* this is for PCLK rising edge */
 			.platform_data = (void *)1,
 		},
-	}
+	},
+#ifdef CONFIG_VIDEO_TVP5150
+	{
+		//Clock for camera????
+		.module_name = "tvp5150",
+		.is_camera = 1,
+		.grp_id = VPFE_SUBDEV_TVP5150,
+		.num_inputs = ARRAY_SIZE(tvp5150_inputs),
+		.inputs = tvp5150_inputs,
+		.ccdc_if_params = {
+			.if_type = VPFE_YCBCR_SYNC_8,
+			.hdpol = VPFE_PINPOL_POSITIVE,
+			.vdpol = VPFE_PINPOL_POSITIVE,
+		},
+		.board_info = {
+			I2C_BOARD_INFO("tvp5150", 0x5D),
+			/* this is for PCLK rising edge */
+			.platform_data = (void *)1,
+		},
+	},
+#endif
 };
 
 static struct vpfe_config vpfe_cfg = {
@@ -118,7 +144,8 @@ static void w1_enable_external_pullup(int enable);
 static inline int have_imager(void)
 {
 #if defined(CONFIG_SOC_CAMERA_OV2643) || \
-	defined(CONFIG_SOC_CAMERA_OV2643_MODULE)
+	defined(CONFIG_SOC_CAMERA_OV2643_MODULE) || \
+	defined (CONFIG_VIDEO_TVP5150)
 	return 1;
 #else
 	return 0;
@@ -136,7 +163,16 @@ static void dm365_camera_configure(void){
 	davinci_cfg_reg(DM365_EXTCLK);
 }
 
-
+static void dm365_tvp5150_configure(void){
+	davinci_cfg_reg(DM365_CAM_OFF);
+	gpio_request(98, "CAMERA_OFF");
+	gpio_direction_output(98, 1);
+	davinci_cfg_reg(DM365_CAM_RESET);
+	gpio_request(99, "CAMERA_RESET");
+	gpio_direction_output(99, 1);
+	davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
+	davinci_cfg_reg(DM365_EXTCLK);
+}
 /* software PWM */
 #ifdef CONFIG_V2R_SWPWM
 static struct resource davinci_timer3_resources[] = {
@@ -594,6 +630,8 @@ static void ghid_m_init(void) {
 		printk("HID Gadget mouse registration success\n");
 }
 
+
+
 static __init void dm365_evm_init(void)
 {
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
@@ -626,7 +664,14 @@ static __init void dm365_evm_init(void)
 	v2r_init_i2c();
 
 	// try to init camera
-	if (camera_run) dm365_camera_configure();
+	if (camera_run){
+#if defined(CONFIG_SOC_CAMERA_OV2643) || \
+	defined(CONFIG_SOC_CAMERA_OV2643_MODULE) 
+		dm365_camera_configure();
+#elif defined CONFIG_VIDEO_TVP5150
+		dm365_tvp5150_configure();
+#endif
+	}
 
 	// set up UART1 GPIO
 	if (uart1_run) {
@@ -694,6 +739,17 @@ static __init void dm365_evm_init(void)
 
 	// try to init wlan
 	if (wlan_run) {
+		gpio_request(59, "wlan-pwdn");
+		gpio_direction_output(59, 1);
+		msleep(20);
+		gpio_request(59, "wlan-reset");
+		gpio_direction_output(60, 1);
+		msleep(20);
+		printk("RESETTING WLAN 0\r\n");
+		gpio_direction_output(60, 0);
+		msleep(1000);
+		printk("RESETTING WLAN 1\r\n");
+		gpio_direction_output(60, 1);
 	    davinci_setup_mmc(1, &dm365evm_mmc1_config);
 	}
 

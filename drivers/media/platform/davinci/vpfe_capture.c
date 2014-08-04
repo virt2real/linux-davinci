@@ -839,7 +839,11 @@ static irqreturn_t vpfe_isr(int irq, void *dev_id)
 	int fid;
 
 	field = vpfe_dev->fmt.fmt.pix.field;
-
+	//printk("\nvpfe_isr %x\n", field);
+#ifdef CONFIG_VIDEO_TVP5150
+	fid = ccdc_dev->hw_ops.getfid();
+	if (!fid ) return IRQ_HANDLED;
+#endif
 	/* if streaming not started, don't do anything */
 	if (!vpfe_dev->started)
 		return IRQ_HANDLED;
@@ -884,7 +888,6 @@ static irqreturn_t vpfe_isr(int irq, void *dev_id)
 
 	/* interlaced or TB capture check which field we are in hardware */
 	fid = ccdc_dev->hw_ops.getfid();
-
 	/* switch the software maintained field id */
 	vpfe_dev->field_id ^= 1;
 	if (fid == vpfe_dev->field_id) {
@@ -894,6 +897,9 @@ static irqreturn_t vpfe_isr(int irq, void *dev_id)
 			 * One frame is just being captured. If the next frame
 			 * is available, release the current frame and move on
 			 */
+		#ifdef CONFIG_VIDEO_TVP5150
+			ipipeif_set_enable(1,0);
+		#endif
 			if (vpfe_dev->cur_frm != vpfe_dev->next_frm)
 				vpfe_process_buffer_complete(vpfe_dev);
 			/*
@@ -1048,7 +1054,7 @@ static int vpfe_attach_irq(struct vpfe_device *vpfe_dev)
 			if (ret < 0) {
 				v4l2_err(&vpfe_dev->v4l2_dev,
 					"Error: requesting VINT1 interrupt\n");
-				free_irq(vpfe_dev->ccdc_irq0, vpfe_dev);
+				free_irq(vpfe_dev->ccdc_irq1, vpfe_dev);
 			}
 		}
 	} else {
@@ -1556,7 +1562,11 @@ static int vpfe_config_imp_image_format(struct vpfe_device *vpfe_dev)
 		imp_hw_if->set_frame_format(0);
 		ccdc_dev->hw_ops.set_frame_format(CCDC_FRMFMT_INTERLACED);
 	} else if (vpfe_dev->fmt.fmt.pix.field == V4L2_FIELD_NONE) {
-		imp_hw_if->set_frame_format(1);
+	#ifdef CONFIG_VIDEO_TVP5150
+		imp_hw_if->set_frame_format(0);
+	#else
+		imp_hw_if->set_frame_format(1);	
+	#endif
 		ccdc_dev->hw_ops.set_frame_format(CCDC_FRMFMT_PROGRESSIVE);
 	} else {
 		v4l2_err(&vpfe_dev->v4l2_dev, "\n field error!");
