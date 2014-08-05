@@ -739,17 +739,15 @@ static __init void dm365_evm_init(void)
 
 	// try to init wlan
 	if (wlan_run) {
-		gpio_request(59, "wlan-pwdn");
-		gpio_direction_output(59, 1);
-		msleep(20);
-		gpio_request(59, "wlan-reset");
-		gpio_direction_output(60, 1);
-		msleep(20);
-		printk("RESETTING WLAN 0\r\n");
-		gpio_direction_output(60, 0);
-		msleep(1000);
-		printk("RESETTING WLAN 1\r\n");
-		gpio_direction_output(60, 1);
+	    gpio_request(59, "wlan-pwdn");
+	    gpio_direction_output(59, 1);
+	    msleep(20);
+	    gpio_request(59, "wlan-reset");
+	    gpio_direction_output(60, 1);
+	    msleep(20);
+	    gpio_direction_output(60, 0);
+	    msleep(1000);
+	    gpio_direction_output(60, 1);
 	    davinci_setup_mmc(1, &dm365evm_mmc1_config);
 	}
 
