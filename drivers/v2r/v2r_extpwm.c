@@ -544,7 +544,7 @@ static void __exit extpwm_exit(void)
 
 MODULE_AUTHOR("Gol gol@g0l.ru");
 MODULE_DESCRIPTION("External PWM driver v0.1");
-MODULE_LICENSE("GPL2");
+MODULE_LICENSE("GPL v2");
 
 module_init(extpwm_init);
 module_exit(extpwm_exit);
