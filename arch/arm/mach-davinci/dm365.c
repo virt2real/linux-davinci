@@ -372,7 +372,13 @@ static struct clk pwm3_clk = {
 	.parent		= &pll1_aux_clk,
 	.lpsc		= DM365_LPSC_PWM3,
 };
-
+/*
+static struct clk rto_clk = {
+	.name		= "rto",
+	.parent		= &pll1_aux_clk,
+	.lpsc		= DM365_LPSC_RTO,
+};
+*/
 static struct clk timer0_clk = {
 	.name		= "timer0",
 	.parent		= &pll1_aux_clk,
@@ -480,6 +486,7 @@ static struct clk_lookup dm365_clks[] = {
 	CLK(NULL, "pwm1", &pwm1_clk),
 	CLK(NULL, "pwm2", &pwm2_clk),
 	CLK(NULL, "pwm3", &pwm3_clk),
+	//CLK(NULL, "rto", &rto_clk),
 	CLK(NULL, "timer0", &timer0_clk),
 	CLK(NULL, "timer1", &timer1_clk),
 	CLK("watchdog", NULL, &timer2_clk),
@@ -706,7 +713,15 @@ MUX_CFG(DM365,	GPIO86,		1,   12,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO87,		1,   10,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO88,		1,    8,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO89,		1,    6,    3,    0,	 false)
+
 MUX_CFG(DM365,	GPIO90,		1,    4,    3,    0,	 false)
+//added by dlinyj
+//(soc, desc, muxreg, mode_offset, mode_mask, mux_mode, dbg)
+MUX_CFG(DM365,	RTO0,		1,    4,    3,    3,	 false)
+MUX_CFG(DM365,	RTO1,		1,    6,    3,    3,	 false)
+MUX_CFG(DM365,	RTO2,		1,    8,    3,    3,	 false)
+MUX_CFG(DM365,	RTO3,		1,    10,    3,    3,	 false)
+//end added by dlinyj
 MUX_CFG(DM365,	GPIO91,		1,    2,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO92,		1,    0,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO100,	0,    6,    3,    1,	 false)
@@ -906,7 +921,8 @@ static u8 dm365_default_priorities[DAVINCI_N_AINTC_IRQ] = {
 	[IRQ_USBINT]			= 4,
 	[IRQ_DM365_RTOINT]		= 7,
 	[IRQ_DM365_TINT5]		= 7,
-	[IRQ_DM365_TINT6]		= 5,
+//	[IRQ_DM365_TINT6]		= 5,
+	[IRQ_DM365_TINT6]		= 0,
 	[IRQ_CCINT0]			= 5,
 	[IRQ_CCERRINT]			= 5,
 	[IRQ_TCERRINT0]			= 5,
@@ -968,7 +984,7 @@ dm365_queue_tc_mapping[][2] = {
 	{-1, -1},
 };
 
-static const s8
+static /*const*/ s8
 dm365_queue_priority_mapping[][2] = {
 	/* {event queue no, Priority} */
 	{0, 7},
