@@ -67,10 +67,10 @@ struct edmacc_param {
 #define ITCCHEN		BIT(23)
 
 /*ch_status paramater of callback function possible values*/
-#define DMA_COMPLETE 1
-#define DMA_CC_ERROR 2
-#define DMA_TC1_ERROR 3
-#define DMA_TC2_ERROR 4
+#define EDMA_DMA_COMPLETE 1
+#define EDMA_DMA_CC_ERROR 2
+#define EDMA_DMA_TC1_ERROR 3
+#define EDMA_DMA_TC2_ERROR 4
 
 enum address_mode {
 	INCR = 0,
@@ -130,7 +130,8 @@ void edma_set_src(unsigned slot, dma_addr_t src_port,
 				enum address_mode mode, enum fifo_width);
 void edma_set_dest(unsigned slot, dma_addr_t dest_port,
 				 enum address_mode mode, enum fifo_width);
-void edma_get_position(unsigned slot, dma_addr_t *src, dma_addr_t *dst);
+dma_addr_t edma_get_position(unsigned slot, bool dst);
+//void edma_get_position(unsigned slot, dma_addr_t *src, dma_addr_t *dst);
 void edma_set_src_index(unsigned slot, s16 src_bidx, s16 src_cidx);
 void edma_set_dest_index(unsigned slot, s16 dest_bidx, s16 dest_cidx);
 void edma_set_transfer_params(unsigned slot, u16 acnt, u16 bcnt, u16 ccnt,
@@ -149,6 +150,8 @@ void edma_clean_channel(unsigned channel);
 void edma_clear_event(unsigned channel);
 void edma_pause(unsigned channel);
 void edma_resume(unsigned channel);
+
+void edma_assign_channel_eventq(unsigned channel, enum dma_event_q eventq_no);
 
 struct edma_rsv_info {
 
@@ -176,7 +179,9 @@ struct edma_soc_info {
 	struct edma_rsv_info	*rsv;
 
 	const s8	(*queue_tc_mapping)[2];
-	const s8	(*queue_priority_mapping)[2];
+	/*const*/ s8	(*queue_priority_mapping)[2];
 };
+
+int edma_trigger_channel(unsigned);
 
 #endif

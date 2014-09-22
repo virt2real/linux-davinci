@@ -42,6 +42,7 @@
 #include <linux/platform_data/usb-davinci.h>
 #include <mach/time.h>
 #include <mach/gpio.h>
+#include <mach/rto.h>
 
 
 #include <linux/w1-gpio.h>
@@ -160,6 +161,39 @@ static struct platform_device davinci_timer3_device = {
 #endif
 /* end software PWM */
 
+/* software RTO */
+//#ifdef CONFIG_V2R_SWPWM
+static struct resource davinci_rto_resources[] = {
+	{
+		.start = DAVINCI_TIMER3_BASE,
+		.end = DAVINCI_TIMER3_BASE + SZ_1K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = DAVINCI_RTO_PHIS,
+		.end = DAVINCI_RTO_PHIS + SZ_1K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = IRQ_DM365_TINT6,
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+	        .start    =  0,
+	        .end    =  0,
+	        .flags    = IORESOURCE_DMA,
+	 }
+
+};
+
+static struct platform_device davinci_rto_device = {
+    .name = "davinci_rto_driver",
+    .id = -1,
+    .num_resources = ARRAY_SIZE(davinci_rto_resources),
+    .resource = davinci_rto_resources
+};
+//#endif
+/* end software PWM */
 
 
 //#define DM365_EVM_PHY_ID		"davinci_mdio-0:01"  // replaced by Gol
@@ -369,7 +403,8 @@ static void __init v2r_init_i2c(void)
 }
 
 static struct platform_device *dm365_evm_nand_devices[] __initdata = {
-	&davinci_nand_device
+	&davinci_nand_device,
+	&davinci_rto_device
 #ifdef CONFIG_V2R_SWPWM
 	,&davinci_timer3_device
 #endif
