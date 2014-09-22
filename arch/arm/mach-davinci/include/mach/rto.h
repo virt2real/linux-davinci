@@ -1,11 +1,11 @@
-#ifdef RTO_DAVINCI
+#ifndef RTO_DAVINCI
 #define RTO_DAVINCI
 
 
 #define DAVINCI_RTO_PHIS 0x01C20C00
 typedef struct {
-	unsigned long id,
-	unsigned long ctrl_status
+	unsigned long id;
+	unsigned long ctrl_status;
 } davinci_rto;
 
 

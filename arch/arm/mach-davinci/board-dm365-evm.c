@@ -170,7 +170,7 @@ static struct resource davinci_rto_resources[] = {
 		.flags = IORESOURCE_MEM,
 	},
 	{
-		.start = DAVINCI_RTO_PHIS
+		.start = DAVINCI_RTO_PHIS,
 		.end = DAVINCI_RTO_PHIS + SZ_1K - 1,
 		.flags = IORESOURCE_MEM,
 	},
@@ -180,11 +180,11 @@ static struct resource davinci_rto_resources[] = {
 	}
 };
 
-static struct platform_device davinci_timer3_device = {
+static struct platform_device davinci_rto_device = {
     .name = "davinci_swpwm_driver",
     .id = -1,
-    .num_resources = ARRAY_SIZE(davinci_timer3_resources),
-    .resource = davinci_timer3_resources
+    .num_resources = ARRAY_SIZE(davinci_rto_resources),
+    .resource = davinci_rto_resources
 };
 //#endif
 /* end software PWM */
