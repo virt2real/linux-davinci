@@ -959,6 +959,7 @@ config ARCH_DAVINCI
 	select TI_PRIV_EDMA
 	select USE_OF
 	select ZONE_DMA
+	select FIQ
 	help
 	  Support for TI's DaVinci platform.
 

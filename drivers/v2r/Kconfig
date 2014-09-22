@@ -66,3 +66,10 @@ config V2R_SWPWM_DEBUG
 	default n
 	---help---
 	Virt2real Software PWM driver debug output
+
+config V2R_PPMSUM
+	depends on V2R_DRIVERS
+	tristate "PPMSUM driver"
+	default n
+	---help---
+	Virt2real PPMSUM driver output. Not stable, FOR TESTING ONLY!
