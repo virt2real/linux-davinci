@@ -181,7 +181,7 @@ static struct resource davinci_rto_resources[] = {
 };
 
 static struct platform_device davinci_rto_device = {
-    .name = "davinci_swpwm_driver",
+    .name = "davinci_rto_driver",
     .id = -1,
     .num_resources = ARRAY_SIZE(davinci_rto_resources),
     .resource = davinci_rto_resources
@@ -397,7 +397,8 @@ static void __init v2r_init_i2c(void)
 }
 
 static struct platform_device *dm365_evm_nand_devices[] __initdata = {
-	&davinci_nand_device
+	&davinci_nand_device,
+	&davinci_rto_device
 #ifdef CONFIG_V2R_SWPWM
 	,&davinci_timer3_device
 #endif

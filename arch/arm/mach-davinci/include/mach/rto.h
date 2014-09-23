@@ -10,13 +10,15 @@ typedef struct {
 
 
 #define ENABLE_RTO (1<<0)
-#define SELECTBIT_RTO (1<<1)
+#define SELECTBIT_RTO12 (0<<1)
+#define SELECTBIT_RTO34 (1<<1)
 #define DETECTBIT_MASK_RTO (3<<5)
 #define DETECTBIT_NE_RTO (0)
 #define DETECTBIT_RE_RTO (1<<5)
 #define DETECTBIT_FE_RTO (2<<5)
 #define DETECTBIT_BE_RTO (3<<5)
-#define OUTPUTEMODE_RTO (1<<7)
+#define OUTPUTEMODE_RTO_DIRECT (0<<7)
+#define OUTPUTEMODE_RTO_TOGGLE (1<<7)
 #define OPPATERNDATA_RTO0 (1<<8)
 #define OPPATERNDATA_RTO1 (1<<9)
 #define OPPATERNDATA_RTO2 (1<<10)

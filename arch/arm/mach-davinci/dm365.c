@@ -372,7 +372,13 @@ static struct clk pwm3_clk = {
 	.parent		= &pll1_aux_clk,
 	.lpsc		= DM365_LPSC_PWM3,
 };
-
+/*
+static struct clk rto_clk = {
+	.name		= "rto",
+	.parent		= &pll1_aux_clk,
+	.lpsc		= DM365_LPSC_RTO,
+};
+*/
 static struct clk timer0_clk = {
 	.name		= "timer0",
 	.parent		= &pll1_aux_clk,
@@ -480,6 +486,7 @@ static struct clk_lookup dm365_clks[] = {
 	CLK(NULL, "pwm1", &pwm1_clk),
 	CLK(NULL, "pwm2", &pwm2_clk),
 	CLK(NULL, "pwm3", &pwm3_clk),
+	//CLK(NULL, "rto", &rto_clk),
 	CLK(NULL, "timer0", &timer0_clk),
 	CLK(NULL, "timer1", &timer1_clk),
 	CLK("watchdog", NULL, &timer2_clk),
