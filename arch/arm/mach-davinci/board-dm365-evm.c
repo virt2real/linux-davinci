@@ -177,7 +177,13 @@ static struct resource davinci_rto_resources[] = {
 	{
 		.start = IRQ_DM365_TINT6,
 		.flags = IORESOURCE_IRQ,
-	}
+	},
+	{
+	        .start    =  0,
+	        .end    =  0,
+	        .flags    = IORESOURCE_DMA,
+	 }
+
 };
 
 static struct platform_device davinci_rto_device = {
