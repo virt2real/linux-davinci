@@ -738,6 +738,7 @@ INT_CFG(DM365,  INT_IMX1_ENABLE,     24,    1,    1,     false)
 INT_CFG(DM365,  INT_IMX1_DISABLE,    24,    1,    0,     false)
 INT_CFG(DM365,  INT_NSF_ENABLE,      25,    1,    1,     false)
 INT_CFG(DM365,  INT_NSF_DISABLE,     25,    1,    0,     false)
+INT_CFG(DM365,  INT_VCIF,            7,     1,    1,     true)
 
 EVT_CFG(DM365,	EVT2_ASP_TX,         0,     1,    0,     false)
 EVT_CFG(DM365,	EVT3_ASP_RX,         1,     1,    0,     false)

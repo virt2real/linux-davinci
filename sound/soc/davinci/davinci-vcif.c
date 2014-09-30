@@ -34,6 +34,8 @@
 #include <sound/initval.h>
 #include <sound/soc.h>
 
+#include <mach/mux.h>
+
 #include "davinci-pcm.h"
 #include "davinci-i2s.h"
 
@@ -149,6 +151,30 @@ static int davinci_vcif_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static irqreturn_t davinci_vcif_irq_handler(int irq, void *data)
+{
+	struct davinci_vcif_dev *davinci_vcif_dev = data;
+	struct davinci_vc *davinci_vc = davinci_vcif_dev->davinci_vc;
+	int status;
+	uint32_t ctrl;
+
+	status = readl(davinci_vc->base + DAVINCI_VC_INTSTATUS);
+	pr_debug("vc intstatus=0x%x: rdy=%d, ovf=%d, udr=%d\n", status,
+			!!(status & 0x1), !!(status & 0x2), !!(status & 0x4));
+
+	if (status & (DAVINCI_VC_INT_RERRUDR_MASK)) {
+		ctrl = readl(davinci_vc->base + DAVINCI_VC_CTRL);
+		MOD_REG_BIT(ctrl, DAVINCI_VC_CTRL_RFIFOCL, 1);
+		writel(ctrl, davinci_vc->base + DAVINCI_VC_CTRL);
+		
+		ctrl = readl(davinci_vc->base + DAVINCI_VC_CTRL);
+		MOD_REG_BIT(ctrl, DAVINCI_VC_CTRL_RFIFOCL, 0);
+		writel(ctrl, davinci_vc->base + DAVINCI_VC_CTRL);
+	}
+
+	return IRQ_HANDLED;
+}
+
 static int davinci_vcif_trigger(struct snd_pcm_substream *substream, int cmd,
 				struct snd_soc_dai *dai)
 {
@@ -178,6 +204,7 @@ static int davinci_vcif_startup(struct snd_pcm_substream *substream,
 	struct davinci_vcif_dev *dev = snd_soc_dai_get_drvdata(dai);
 
 	snd_soc_dai_set_dma_data(dai, substream, dev->dma_params);
+
 	return 0;
 }
 
@@ -234,6 +261,13 @@ static int davinci_vcif_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(&pdev->dev, davinci_vcif_dev);
 
+	davinci_cfg_reg(DM365_INT_VCIF);
+	ret = request_irq(IRQ_MBXINT, davinci_vcif_irq_handler, 0, "vcif", davinci_vcif_dev);
+	if (ret != 0) {
+		dev_err(&pdev->dev, "voicecodec: request_irq failed: %d\n", ret);
+		return ret;
+	}
+	
 	ret = snd_soc_register_dai(&pdev->dev, &davinci_vcif_dai);
 	if (ret != 0) {
 		dev_err(&pdev->dev, "could not register dai\n");
