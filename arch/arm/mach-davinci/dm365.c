@@ -921,7 +921,8 @@ static u8 dm365_default_priorities[DAVINCI_N_AINTC_IRQ] = {
 	[IRQ_USBINT]			= 4,
 	[IRQ_DM365_RTOINT]		= 7,
 	[IRQ_DM365_TINT5]		= 7,
-	[IRQ_DM365_TINT6]		= 5,
+//	[IRQ_DM365_TINT6]		= 5,
+	[IRQ_DM365_TINT6]		= 0,
 	[IRQ_CCINT0]			= 5,
 	[IRQ_CCERRINT]			= 5,
 	[IRQ_TCERRINT0]			= 5,
@@ -983,7 +984,7 @@ dm365_queue_tc_mapping[][2] = {
 	{-1, -1},
 };
 
-static const s8
+static /*const*/ s8
 dm365_queue_priority_mapping[][2] = {
 	/* {event queue no, Priority} */
 	{0, 7},
