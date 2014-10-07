@@ -188,14 +188,13 @@ static void davinci_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 	dma_pos = runtime->dma_addr + dma_offset;
 	fifo_level = prtd->params->fifo_level;
 
-	pr_debug("davinci_pcm: audio_set_dma_params_play channel = %d "
-		"dma_ptr = %x period_size=%x\n", prtd->asp_link[0], dma_pos,
-		period_size);
-
 	data_type = prtd->params->data_type;
 	count = period_size / data_type;
 	if (fifo_level)
 		count /= fifo_level;
+
+	pr_debug("davinci_pcm: dma_ptr=%x period_size=%x fifo_level=%x\n", 
+			dma_pos, period_size, fifo_level);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		src = dma_pos;
@@ -214,6 +213,9 @@ static void davinci_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 	}
 
 	acnt = prtd->params->acnt;
+	
+	edma_pause(prtd->asp_link[0]);
+
 	edma_set_src(prtd->asp_link[0], src, INCR, W8BIT);
 	edma_set_dest(prtd->asp_link[0], dst, INCR, W8BIT);
 
@@ -227,16 +229,21 @@ static void davinci_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 		edma_set_transfer_params(prtd->asp_link[0], acnt, fifo_level,
 							count, fifo_level,
 							ABSYNC);
+	edma_resume(prtd->asp_link[0]);
 }
 
 static void davinci_pcm_dma_irq(unsigned link, u16 ch_status, void *data)
 {
 	struct snd_pcm_substream *substream = data;
 	struct davinci_runtime_data *prtd = substream->runtime->private_data;
+	dma_addr_t src, dst;
 
 	print_buf_info(prtd->ram_channel, "i ram_channel");
 	pr_debug("davinci_pcm: link=%d, status=0x%x\n", link, ch_status);
 
+	if (unlikely(ch_status == DMA_CC_ERROR)) {
+		pr_info("davinci_pcm: dma cc error\n");
+	}
 	if (unlikely(ch_status != DMA_COMPLETE))
 		return;
 

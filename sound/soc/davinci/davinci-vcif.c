@@ -106,9 +106,11 @@ static int davinci_vcif_hw_params(struct snd_pcm_substream *substream,
 	/* General line settings */
 	writel(DAVINCI_VC_CTRL_MASK, davinci_vc->base + DAVINCI_VC_CTRL);
 
-	writel(DAVINCI_VC_INT_MASK, davinci_vc->base + DAVINCI_VC_INTCLR);
+	writel(DAVINCI_VC_INT_RERRUDR_MASK | DAVINCI_VC_INT_RERROVF_MASK,
+			davinci_vc->base + DAVINCI_VC_INTCLR);
 
-	writel(DAVINCI_VC_INT_MASK, davinci_vc->base + DAVINCI_VC_INTEN);
+	writel(DAVINCI_VC_INT_RERRUDR_MASK | DAVINCI_VC_INT_RERROVF_MASK,
+			davinci_vc->base + DAVINCI_VC_INTEN);
 
 	w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
 
@@ -162,7 +164,8 @@ static irqreturn_t davinci_vcif_irq_handler(int irq, void *data)
 	pr_debug("vc intstatus=0x%x: rdy=%d, ovf=%d, udr=%d\n", status,
 			!!(status & 0x1), !!(status & 0x2), !!(status & 0x4));
 
-	if (status & (DAVINCI_VC_INT_RERRUDR_MASK)) {
+	if (status & (DAVINCI_VC_INT_RERRUDR_MASK | DAVINCI_VC_INT_RERROVF_MASK)) {
+		pr_warn("vc overflow or underflow occured, resetting fifo\n");
 		ctrl = readl(davinci_vc->base + DAVINCI_VC_CTRL);
 		MOD_REG_BIT(ctrl, DAVINCI_VC_CTRL_RFIFOCL, 1);
 		writel(ctrl, davinci_vc->base + DAVINCI_VC_CTRL);
@@ -170,6 +173,9 @@ static irqreturn_t davinci_vcif_irq_handler(int irq, void *data)
 		ctrl = readl(davinci_vc->base + DAVINCI_VC_CTRL);
 		MOD_REG_BIT(ctrl, DAVINCI_VC_CTRL_RFIFOCL, 0);
 		writel(ctrl, davinci_vc->base + DAVINCI_VC_CTRL);
+
+		writel(DAVINCI_VC_INT_RERRUDR_MASK | DAVINCI_VC_INT_RERROVF_MASK,
+				davinci_vc->base + DAVINCI_VC_INTCLR);
 	}
 
 	return IRQ_HANDLED;
