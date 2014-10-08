@@ -746,6 +746,8 @@ INT_CFG(DM365,  INT_IMX1_ENABLE,     24,    1,    1,     false)
 INT_CFG(DM365,  INT_IMX1_DISABLE,    24,    1,    0,     false)
 INT_CFG(DM365,  INT_NSF_ENABLE,      25,    1,    1,     false)
 INT_CFG(DM365,  INT_NSF_DISABLE,     25,    1,    0,     false)
+INT_CFG(DM365,  INT_VCIF_ENABLE,     7,     1,    1,     false)
+INT_CFG(DM365,  INT_VCIF_DISABLE,    7,     1,    0,     false)
 
 EVT_CFG(DM365,	EVT2_ASP_TX,         0,     1,    0,     false)
 EVT_CFG(DM365,	EVT3_ASP_RX,         1,     1,    0,     false)
@@ -1625,6 +1627,7 @@ void __init dm365_init_vc(struct snd_platform_data *pdata)
 {
 	davinci_cfg_reg(DM365_EVT2_VC_TX);
 	davinci_cfg_reg(DM365_EVT3_VC_RX);
+	davinci_cfg_reg(DM365_INT_VCIF_ENABLE);
 	dm365_vc_device.dev.platform_data = pdata;
 	platform_device_register(&dm365_vc_device);
 }
