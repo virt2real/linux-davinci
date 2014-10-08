@@ -403,4 +403,4 @@ module_init(adc_init_module);
 module_exit(adc_exit_module);
 MODULE_DESCRIPTION("Virt2real ADC driver module version 1.1");
 MODULE_AUTHOR("Shlomo Kut,,, (shl...@infodraw.com). Features added by Gol.");
-MODULE_LICENSE("GPL2");
+MODULE_LICENSE("GPL v2");
