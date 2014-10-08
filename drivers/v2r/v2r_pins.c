@@ -1595,4 +1595,4 @@ module_exit(pins_exit_module);
 MODULE_DESCRIPTION("Virt2real CON driver module version 0.3");
 MODULE_AUTHOR("Alexandr Shadrin");
 MODULE_AUTHOR("Gol (gol@g0l.ru)");
-MODULE_LICENSE("GPL2");
+MODULE_LICENSE("GPL v2");
