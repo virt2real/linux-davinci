@@ -331,7 +331,7 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	 * raw capture this is 1
 	 */
 #ifdef CONFIG_VIDEO_TVP5150
-	horz_start = (image_win->left << (ppc - 1)) + 32;
+	horz_start = (image_win->left << (ppc - 1)); // 0x11-0x14 tvp5150 regs will be better (was + 32);
 #else
 	horz_start = ((image_win->left) << (ppc - 1));
 #endif
@@ -341,7 +341,7 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	regw(horz_start & START_PX_HOR_MASK, SPH);
 	regw(horz_nr_pixels & NUM_PX_HOR_MASK, LNH);
 #ifdef CONFIG_VIDEO_TVP5150	
-	vert_start = image_win->top+100;
+	vert_start = image_win->top + 52; // was +100;
 	frm_fmt = CCDC_FRMFMT_INTERLACED;
 #else
 	vert_start = image_win->top;

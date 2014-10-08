@@ -716,7 +716,7 @@ enum ccdc_data_pack {
 };
 
 #define CCDC_WIN_NTSC				{0, 0, 720, 480}
-#define CCDC_WIN_PAL				{0, 0, 720, 480}
+#define CCDC_WIN_PAL				{0, 0, 720, 576}
 #define CCDC_WIN_VGA				{0, 0, 640, 480}
 #define ISP5_CCDCMUX				0x20
 #endif

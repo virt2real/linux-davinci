@@ -143,9 +143,9 @@ struct prev_cgs dm365_cgs_defaults = {
 };
 
 #ifdef CONFIG_VIDEO_TVP5150
-	#define  WIDTH_I 640
+	#define  WIDTH_I 720//640
 	#define  HEIGHT_I 576//480
-	#define  WIDTH_O 640
+	#define  WIDTH_O 720//
 	#define  HEIGHT_O 576//480
 #else
 	#define  WIDTH_I 640
