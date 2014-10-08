@@ -713,7 +713,7 @@ MUX_CFG(DM365,	GPIO90,		1,    4,    3,    0,	 false)
 MUX_CFG(DM365,	RTO0,		1,    4,    3,    3,	 false)
 MUX_CFG(DM365,	RTO1,		1,    6,    3,    3,	 false)
 MUX_CFG(DM365,	RTO2,		1,    8,    3,    3,	 false)
-MUX_CFG(DM365,	RTO3,		1,    10,    3,    3,	 false)
+MUX_CFG(DM365,	RTO3,		1,    10    3,    3,	 false)
 //end added by dlinyj
 MUX_CFG(DM365,	GPIO91,		1,    2,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO92,		1,    0,    3,    0,	 false)
