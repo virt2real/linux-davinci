@@ -403,12 +403,6 @@ enum davinci_dm365_index {
 
 	DM365_GPIO64_57,
 
-	/*rto*/
-	DM365_RTO0,
-	DM365_RTO1,
-	DM365_RTO2,
-	DM365_RTO3,
-
 	/* Video */
 	DM365_EXTCLK,
 	DM365_VOUT_FIELD,

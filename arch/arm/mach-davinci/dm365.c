@@ -706,15 +706,7 @@ MUX_CFG(DM365,	GPIO86,		1,   12,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO87,		1,   10,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO88,		1,    8,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO89,		1,    6,    3,    0,	 false)
-
 MUX_CFG(DM365,	GPIO90,		1,    4,    3,    0,	 false)
-//added by dlinyj
-//(soc, desc, muxreg, mode_offset, mode_mask, mux_mode, dbg)
-MUX_CFG(DM365,	RTO0,		1,    4,    3,    3,	 false)
-MUX_CFG(DM365,	RTO1,		1,    6,    3,    3,	 false)
-MUX_CFG(DM365,	RTO2,		1,    8,    3,    3,	 false)
-MUX_CFG(DM365,	RTO3,		1,    10    3,    3,	 false)
-//end added by dlinyj
 MUX_CFG(DM365,	GPIO91,		1,    2,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO92,		1,    0,    3,    0,	 false)
 MUX_CFG(DM365,	GPIO100,	0,    6,    3,    1,	 false)
