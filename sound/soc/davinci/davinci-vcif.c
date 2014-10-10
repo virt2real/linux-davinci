@@ -49,6 +49,10 @@
 	(DAVINCI_VC_INT_RERRUDR_MASK | \
 	 DAVINCI_VC_INT_RERROVF_MASK)
 
+#define DAVINCI_VC_INT_WERR_MASK \
+	(DAVINCI_VC_INT_WERRUDR_MASK | \
+	 DAVINCI_VC_INT_WERROVF_MASK)
+
 struct davinci_vcif_dev {
 	struct davinci_vc *davinci_vc;
 	struct davinci_pcm_dma_params	dma_params[2];
@@ -99,7 +103,13 @@ static void davinci_vcif_interrupts(struct snd_pcm_substream *substream,
 			snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	struct davinci_vc *davinci_vc = davinci_vcif_dev->davinci_vc;
 
-	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		writel(DAVINCI_VC_INT_WERR_MASK,
+				davinci_vc->base + DAVINCI_VC_INTCLR);
+		writel(enable ? DAVINCI_VC_INT_WERR_MASK : 0,
+				davinci_vc->base + DAVINCI_VC_INTEN);
+	}
+	else {
 		writel(DAVINCI_VC_INT_RERR_MASK,
 				davinci_vc->base + DAVINCI_VC_INTCLR);
 		writel(enable ? DAVINCI_VC_INT_RERR_MASK : 0,
@@ -173,8 +183,23 @@ static irqreturn_t davinci_vcif_irq_handler(int irq, void *data)
 
 	w = readl(davinci_vc->base + DAVINCI_VC_INTSTATUS);
 
-	if (w & DAVINCI_VC_INT_RERR_MASK) {
-		pr_debug("vc overflow or underflow occured, resetting fifo\n");
+	if (w & DAVINCI_VC_INT_WERR_MASK) {
+		pr_debug("vc write overflow or underflow occured, resetting fifo\n");
+
+		w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
+		MOD_REG_BIT(w, DAVINCI_VC_CTRL_WFIFOCL, 1);
+		writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
+
+		w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
+		MOD_REG_BIT(w, DAVINCI_VC_CTRL_WFIFOCL, 0);
+		writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
+
+		writel(DAVINCI_VC_INT_WERR_MASK,
+				davinci_vc->base + DAVINCI_VC_INTCLR);
+
+	}
+	else if (w & DAVINCI_VC_INT_RERR_MASK) {
+		pr_debug("vc read overflow or underflow occured, resetting fifo\n");
 
 		w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
 		MOD_REG_BIT(w, DAVINCI_VC_CTRL_RFIFOCL, 1);
