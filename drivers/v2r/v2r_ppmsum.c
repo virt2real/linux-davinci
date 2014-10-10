@@ -56,9 +56,16 @@
 
 
 #include <mach/common.h>
+
+// Prototypes
+static void start_timer_interrupts(void);
+static void stop_timer_interrupts(void);
+void set_timer3(unsigned long val);
+static void dma_set_buffer_data(void);
+static void dma_print_times_data (void);
+static void dma_start(void);
+static void dma_stop(void);
 #endif //#if !defined (____X86_____)
-
-
 
 
 //Timer registers base address. Initially it is 0, but during initialization it gets its value
@@ -66,12 +73,14 @@ static volatile unsigned long* TMR3_BASE = 0x00000000;
 static int TMR3_IRQ = 0x00000000;
 static volatile unsigned long* RTO_BASE = 0x00000000;
 
+static int stop_flag=0;
+
 /*
 //Driver defines
 #define MAX_PIN_NUMBER 88 //Number of connections to use on this platform
 #define MAX_PWM_NUMBER 8 //Maximum PWM ports to use at this platform
 #define GPIO_CONF_REGS_NUMBER 6//Number of GPIO configuration registers plus two
-#define TIMER_FREQ 24000 //*1000Hz
+#define TIMER_FREQ 24000 //1000Hz
 #define DEFAULT_PERIOD 20 //ms
 */
 #define TRUE 1
@@ -221,7 +230,8 @@ static struct rto_dma_dev_str rto_dma_dev;
 #define DEF_CH5		60000
 #define DEF_CH6		70000
 #define DEF_CH7		80000
-#define DEF_PULSE	120
+//#define DEF_PULSE	120 //10 ns
+#define DEF_PULSE	9480 //420 mkS
 
 struct ppmsum_str {
 	unsigned long frame; 
@@ -243,15 +253,6 @@ static int ns=0;
 module_param_named( ns, ns, int, 0 ); 
 
 
-// Prototypes
-
-static void start_timer_interrupts(void);
-static void set_dma_data(void);
-static void print_dma_data (void);
-static void stop_timer_interrupts(void);
-void set_timer3(unsigned long val);
-
-
 //#define TIMER_FREQ_HZ 24000000
 #define TIMER_FREQ_kHz 24000
 #define TIMER_FREQ_MHz 24
@@ -259,18 +260,19 @@ static unsigned long convert_ns_to_timer (unsigned long ns) {
 	return TIMER_FREQ_MHz*ns/1000;
 }
 
+/*
 static unsigned long convert_ms_to_timer (unsigned long ms) {
 	return (unsigned long) TIMER_FREQ_MHz*ms;;
 }
-
+*/
 static unsigned long convert_timer_to_ns (unsigned long ticks) {
-	return ticks/TIMER_FREQ_kHz*1000;
+	return ticks*1000/TIMER_FREQ_kHz;
 }
-
+/*
 static unsigned long convert_timer_to_ms (unsigned long ticks) {
 	return ticks/TIMER_FREQ_kHz;
 }
-
+*/
 
 static char** split(const char* str, char delimiter){
 	int input_len = strlen(str);
@@ -362,13 +364,16 @@ ch7=<value>
 
 If <value> == 0, the channel is not being used
 set frame time in the nanosecond:
-frame= <value>
+frame=<value>
+
+set pulse
+pulse=<value> 
+
 
 ppmsum {
 	unsigned long frame;
 	unsigned long ch[8];
 	unsigned long pulse;
-	unsigned long endframe;
 };
 
 
@@ -379,19 +384,22 @@ int process_command(char** data){
 	int i;
 	for (i=0;;i++) {
 		if (!data[i]) {
-			print_dma_data();
 			return 0;
 		}
 		if (is_equal_string(data[i], "start")){
 			pr_debug("Start PPMSUM\n");
 #if !defined (____X86_____)
-			start_timer_interrupts();
+			//start_timer_interrupts();
+			dma_start();
 #endif
 			continue;
 		}
 		if (is_equal_string(data[i], "stop")){
 			pr_debug("Stop PPMSUM\n");
+#if !defined (____X86_____)
 			//stop_timer_interrupts();
+			dma_stop();
+#endif
 			continue;
 		}
 		// ch#=
@@ -399,9 +407,9 @@ int process_command(char** data){
 		if (strstr(data[i], "ch")!=NULL) {
 			pr_debug("Set ch\n");
 			if ((data[i][2] >='0') && (data[i][2] <'8')) {
-				char position=data[i][2]-'0';
+				int position=(int)(data[i][2]-'0');
 				pr_debug("Position=%d\n",(int)position);
-				char tmpbuf[]="ch*=";
+				char tmpbuf[4] = "ch*=";
 				tmpbuf[2]=data[i][2];
 				int tmp_int=starts_with(data[i], tmpbuf);
 				if (tmp_int >0) {
@@ -413,8 +421,7 @@ int process_command(char** data){
 				} else {
 					printk("Channel time can not be == 0 !!!\n");
 				}
-				pr_debug("ch %d set to %d", (int)position, ppmsum.ch[position]);
-				set_dma_data();
+				pr_debug("ch %d set to %ld", (int)position, ppmsum.ch[position]);
 				continue;
 			} else {
 				pr_debug("error ch number\n");
@@ -422,6 +429,23 @@ int process_command(char** data){
 			}
 			
 		}
+		if (strstr(data[i], "pulse=")!=NULL) {
+			int tmp_int=starts_with(data[i], "pulse=");
+			if (tmp_int >0) {
+				if (ns) {
+					ppmsum.pulse=convert_ns_to_timer(tmp_int);
+				} else {
+					ppmsum.pulse=tmp_int;
+				}
+			} else {
+				printk("Pulse can not be == 0!!!\n");
+			}
+		}
+#if !defined (____X86_____)
+		if (strstr(data[i], "print")!=NULL) {
+			dma_print_times_data();
+		}
+#endif
 	}
 /*
 	if (is_equal_string(data[0], "start")){
@@ -464,6 +488,8 @@ int process_command(char** data){
 
 static void start_timer_interrupts(void){
 	volatile TIMER_REGS* tptr = (volatile TIMER_REGS*)TMR3_BASE;
+	volatile davinci_rto* rptr = (volatile davinci_rto*)RTO_BASE;
+	
 	pr_debug("Start timer interrupts %x\n", (unsigned int)TMR3_BASE);
 	if (!TMR3_BASE) return;//if timer3 base value not set we cant do any
 	//set_timer3(65535);
@@ -473,23 +499,19 @@ static void start_timer_interrupts(void){
 	tptr->intctl_stat = 0;//Interrupts are disabled
 	tptr->tcr = MD12_CONT_RELOAD;//MD12_CONT;//SET CONTINIOUS MODE - ENABLE TIMER
 	tptr->tgcr = TIMMOD_DUAL_UNCHAINED|BW_COMPATIBLE;
-	
-	//tptr->tgcr = TIMMOD_DUAL_UNCHAINED;
-	
 	tptr->tgcr |= (TIM12RS);//out from reset
 	tptr->intctl_stat = CMP_INT_EN12;//Interrupts are enabled
-	//tptr->intctl_stat = 0;//Interrupts are enabled
 	tptr->tcr = MD12_CONT_RELOAD;//MD12_CONT;//SET CONTINIOUS MODE - ENABLE TIMER
 	//once the timer starts it generates interrupt so we load correct prd value and so on
-	
 	tptr->intctl_stat |= CMP_INT_STAT12;
-	
-	schedule_timeout_interruptible(msecs_to_jiffies(100));
-	volatile davinci_rto* rptr = (volatile davinci_rto*)RTO_BASE;
+
+	schedule_timeout_interruptible(msecs_to_jiffies(100)); //delay 100ms
 	rptr->ctrl_status  |= OPPATERNDATA_RTO0;
 }
 static void stop_timer_interrupts(void){
 	volatile TIMER_REGS* tptr = (volatile TIMER_REGS*)TMR3_BASE;
+	volatile davinci_rto* rptr = (volatile davinci_rto*)RTO_BASE;
+
 	pr_debug("Stop timer interrupts %x\n", (unsigned int)TMR3_BASE);
 	if (!TMR3_BASE) return;//if timer3 base value not set we cant do any
 	tptr->intctl_stat = 0;//Disable interrupts
@@ -500,7 +522,6 @@ static void stop_timer_interrupts(void){
 	//Now timer is in reset state and in its initial state
 
 //stop !!!!
-	volatile davinci_rto* rptr = (volatile davinci_rto*)RTO_BASE;
 	rptr->ctrl_status  &=~OPPATERNDATA_RTO0;
 	
 }
@@ -531,29 +552,8 @@ ppmsum {
 };
 */
 
-/*
-static void set_dma_data (void) {
-	pr_debug("set_dma_data\n");
-	
-	int i;
-	unsigned long *pbuf = (unsigned long *)rto_dma_dev.timer_table;
-		for (i=0;i<8;i++) {
-			pbuf[i*2]=ppmsum.pulse;
-			pr_debug("pbuf[%d]=%d\n",i*2,ppmsum.pulse);
-			
-			pbuf[i*2+1]=ppmsum.ch[i]-ppmsum.pulse;
-			pr_debug("pbuf[%d]=%d\n",i*2+1,pbuf[i*2+1]);
-		}
-		pbuf[16]=ppmsum.pulse;
-		pr_debug("pbuf[16]=%d\n",pbuf[16]);
-		pbuf[17]=ppmsum.endframe;
-		pr_debug("pbuf[17]=%d\n",pbuf[17]);
-}
-*/
-
-static void set_dma_data (void) {
-	pr_debug("set_dma_data\n");
-	
+static void dma_set_buffer_data (void) {
+	//pr_debug("dma_set_buffer_data\n");
 	int i;
 	unsigned long sum_chan=0;
 	unsigned long *pbuf = (unsigned long *)rto_dma_dev.timer_table;
@@ -567,29 +567,35 @@ static void set_dma_data (void) {
 		pbuf[ch_count*2+1]=ppmsum.frame-(sum_chan+ppmsum.pulse);
 }
 
-static void print_dma_data (void) {
+static void dma_print_times_data (void) {
 	unsigned long *pbuf = (unsigned long *)rto_dma_dev.timer_table;
 	int i;
-	for (i=0;i<ch_count;i++) {
-		pr_debug("pbuf[%d]=%ld\n",i*2,pbuf[i*2]);
-		pr_debug("pbuf[%d]=%ld\n",i*2+1,pbuf[i*2+1]);
-	}
-	pr_debug("pbuf[%d]=%d\n",ch_count*2,pbuf[ch_count*2]);
-	pr_debug("pbuf[%d]=%d\n",ch_count*2+1,pbuf[ch_count*2+1]);
+
 	unsigned int sum=0;
 	for (i=0;i<(ch_count*2+2);i++) {
 		sum+=pbuf[i];
 	}
-	pr_debug("sum=%d frame= %d\n",sum,ppmsum.frame);
+
+	for (i=0;i<ch_count;i++) {
+		printk("pbuf[%d]=%ld\t\t(%ld\tns)\n",i*2,pbuf[i*2], convert_timer_to_ns(pbuf[i*2]));
+		printk("pbuf[%d]=%ld\t\t(%ld\tns)\n",i*2+1,pbuf[i*2+1],convert_timer_to_ns(pbuf[i*2+1]));
+	}
+	printk("pbuf[%d]=%ld\t\t(%ld\tns)\n",ch_count*2,pbuf[ch_count*2],convert_timer_to_ns(pbuf[ch_count*2]));
+	printk("pbuf[%d]=%ld\t\t(%ld\tns)\n",ch_count*2+1,pbuf[ch_count*2+1], convert_timer_to_ns(pbuf[ch_count*2+1]));
+
+	printk("sum=%d frame= %ld (%ld\tns)\n",sum,ppmsum.frame,convert_timer_to_ns(ppmsum.frame));
 }
 
 
 
-static void tx_dma_rto (void) {
+static void dma_release_rto (void) {
+	stop_flag=1;
+	schedule_timeout_interruptible(msecs_to_jiffies(25));
 	dma_release_channel (rto_dma_dev.dma_tx);
+	kfree(rto_dma_dev.timer_table);
 }
 
-static void davinci_rto_dma_tx_callback(void *data);
+static void dma_rto_tx_callback(void *data);
 
 static inline struct dma_async_tx_descriptor *device_prep_dma_cyclic(
 	struct dma_chan *chan, dma_addr_t buf_addr, size_t buf_len,
@@ -599,6 +605,7 @@ static inline struct dma_async_tx_descriptor *device_prep_dma_cyclic(
 			period_len, dir,DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 }
 
+/*
 static void davinci_rto_transer(void) {
 	//dma_cap_mask_t mask;
 	struct dma_slave_config dma_tx_conf = {
@@ -620,20 +627,22 @@ static void davinci_rto_transer(void) {
 	txdesc = dmaengine_prep_slave_sg(rto_dma_dev.dma_tx,
 				&sg_tx, 1, DMA_MEM_TO_DEV,
 				DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
-	txdesc->callback = davinci_rto_dma_tx_callback;
+	txdesc->callback = dma_rto_tx_callback;
 	txdesc->callback_param = NULL;
 	dmaengine_submit(txdesc);
 	dma_async_issue_pending(rto_dma_dev.dma_tx);
 }
+*/
 
-static void davinci_rto_dma_tx_callback(void *data)
+static void dma_rto_tx_callback(void *data)
 {
-//	printk ("Callback!!!!!!!!!!!!!!!!!!!!!\n");
-//	printk ("*");
-//	davinci_rto_transer();
+	if (stop_flag) {
+		dmaengine_terminate_all(rto_dma_dev.dma_tx);
+	} else {
+		dma_set_buffer_data();
+	}
 }
 
-//static void init_dma_rto (struct device *dev) {
 static void init_dma_rto (void) {
 	dma_cap_mask_t mask;
 	struct dma_slave_config dma_tx_conf = {
@@ -661,8 +670,8 @@ static void init_dma_rto (void) {
 	//rto_dma_dev.len_timer_table=18*sizeof(unsigned long);//should be 16
 	rto_dma_dev.len_timer_table=(2*ch_count+2)*sizeof(unsigned long);//should be 16
 	rto_dma_dev.timer_table= kzalloc(rto_dma_dev.len_timer_table, GFP_KERNEL);
-	set_dma_data();
-	print_dma_data();
+	dma_set_buffer_data();
+	dma_print_times_data();
 	
 	
 	/*
@@ -677,9 +686,9 @@ static void init_dma_rto (void) {
 	rto_dma_dev.tx_dma = dma_map_single(rto_dma_dev.devptr, rto_dma_dev.timer_table,
 				rto_dma_dev.len_timer_table, DMA_FROM_DEVICE);
 	if (!rto_dma_dev.tx_dma) {
-		pr_debug ("Not Nulll dma_map_single\n");
+		pr_debug ("Null dma_map_single!!!\n");
 	} else {
-		pr_debug ("Nulll dma_map_single!!!\n");
+		pr_debug ("Not Null dma_map_single\n");
 	}
 
 	sg_dma_address(&sg_tx) = rto_dma_dev.tx_dma;
@@ -694,11 +703,21 @@ static void init_dma_rto (void) {
 									rto_dma_dev.len_timer_table, DMA_MEM_TO_DEV);
 #endif
 	if (!txdesc) printk("ERROR dmaengine_prep_slave_sg\n");
-	txdesc->callback = davinci_rto_dma_tx_callback;
+	txdesc->callback = dma_rto_tx_callback;
 	txdesc->callback_param = NULL;
 
 	dmaengine_submit(txdesc);
 	dma_async_issue_pending(rto_dma_dev.dma_tx);
+}
+
+static void dma_start (void) {
+	//init_dma_rto();
+	start_timer_interrupts();
+}
+
+static void dma_stop (void) {
+	dma_release_rto();
+	stop_timer_interrupts();
 }
 
 //Initial rto settings
@@ -709,7 +728,6 @@ static void init_rto(void){
 	rptr->ctrl_status  = SELECTBIT_RTO12 | DETECTBIT_FE_RTO | OUTPUTEMODE_RTO_TOGGLE | OPMASKDATA_RTO0;
 	rptr->ctrl_status |= ENABLE_RTO;
 	init_dma_rto();
-	//tx_dma_rto();
 }
 
 void set_timer3(unsigned long val){
@@ -718,7 +736,7 @@ void set_timer3(unsigned long val){
 	//Set next time time for timer to generate interrupt
 	tptr->rel12 = val;
 }
-
+/*
 static int irq_timer3(void){
 	volatile TIMER_REGS* tptr = (volatile TIMER_REGS*)TMR3_BASE;
 	if (!TMR3_BASE) return 0;//if timer3 base value not set we cant do any
@@ -729,6 +747,7 @@ static int irq_timer3(void){
 		return 0;
 	}
 }
+*/
 
 #if 0
 #define DAVINCI_ARM_INTC_BASE 0x01C48000
@@ -775,17 +794,9 @@ void fiq_handler(void){
 
 static struct fiq_handler fh = {  name: "fiq-testing" };
 
-//#define ___ASM_EXT___
 static int register_fiq (int irq)
  {  
 	struct pt_regs regs;
-#if defined ( ___ASM_EXT___)
-	void *fiqhandler_start;  
-	unsigned int fiqhandler_length;    
-	extern unsigned char gpio_intr_start, gpio_intr_end;  
-	fiqhandler_start = &gpio_intr_start;  
-	fiqhandler_length = &gpio_intr_end - &gpio_intr_start;
-#endif
 	 if (claim_fiq(&fh))  
 	{   
 		printk("couldn't claim FIQ.\n");   
@@ -793,67 +804,22 @@ static int register_fiq (int irq)
 	}
 	pr_debug("Claim FIQ!\n");
 	regs.ARM_r2 = 0xfec48000;
-#if defined (___ASM_EXT___)
-	set_fiq_handler(fiqhandler_start, fiqhandler_length);  
-	set_fiq_regs(&regs);  
-#else
+	//set_fiq_handler(fiqhandler_start, fiqhandler_length);  
 	set_fiq_handler(fiq_handler,0x100);
 	set_fiq_regs(&regs);
-#endif
 	enable_fiq(irq);  
 	return 0;
 }
 
-
+/*
 static irqreturn_t timer3_interrupt(int irq, void *dev_id){
 	volatile TIMER_REGS* tptr = (volatile TIMER_REGS*)TMR3_BASE;
 	tptr->intctl_stat |= CMP_INT_STAT12;
 	if (tptr->intctl_stat & CMP_INT_STAT12){//If our interrupt
 		tptr->intctl_stat |= CMP_INT_STAT12;//clear status bit
 	}
-	static int status=0;
-	static int pos_ch=0;
 	int handled = 0;
 	if (irq_timer3()){//Our interrupt must be processed
-		//pr_debug("--->>>\n");
-		/*
-		volatile davinci_rto* rptr = (volatile davinci_rto*)RTO_BASE;
-		if (status) {
-			rptr->ctrl_status  |= OPPATERNDATA_RTO0;
-			set_timer3(120); // !!!!!!!!!!!!!!!!!!!
-			status=0;
-		} else {
-			rptr->ctrl_status  &= ~OPPATERNDATA_RTO0;
-			set_timer3(30720);
-			status=1;
-		}
-		*/
-		//set_timer3(65536);
-		
-		/*
-		//using structure
-		if(pos_ch<8) {
-			if (status) {
-				set_timer3(ppmsum.ch[pos_ch]);
-				pos_ch++;
-				status=0;
-			} else {
-				set_timer3(ppmsum.pulse);
-				status++;
-			}
-		} else {
-			if (status) {
-				set_timer3(ppmsum.frame - (ppmsum.ch[0]+ppmsum.ch[1]+ppmsum.ch[2]+\
-					ppmsum.ch[3]+ppmsum.ch[4]+ppmsum.ch[5]+ppmsum.ch[6]+ppmsum.ch[7]+8*ppmsum.pulse));
-				pos_ch=0;
-				status=0;
-			} else {
-				set_timer3(ppmsum.pulse);
-				status++;
-			}
-
-		}
-		*/
 		handled = IRQ_HANDLED;
 	} else {
 		handled = IRQ_NONE;
@@ -861,57 +827,16 @@ static irqreturn_t timer3_interrupt(int irq, void *dev_id){
 	//pr_debug("IRQ!!!\n");
 	return IRQ_RETVAL(handled);
 }
+*/
+
 
 //Method to say Linux that we need this interrupt
 static int timer3_irq_chain(unsigned int irq){
 	int ret = 0;
 	//ret = request_irq(irq, timer3_interrupt, 0, "timer3", 0);
 	ret = register_fiq(irq);
-	//disable_irq(irq);
 	pr_debug("Chain interrupt returned %x\n", ret);
 	return ret;
-}
-
-static int __init rtodrv_probe(struct platform_device *pdev){
-	struct resource			*res;
-	struct resource			*res_irq;
-	void __iomem			*vaddr;
-	volatile unsigned char* memptr = 0;
-	struct clk* clock = 0;
-	rto_dma_dev.devptr = &pdev->dev;
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	clock = clk_get(&pdev->dev, "timer3");//Enable clock for timer3
-	clk_enable(clock);
-	pr_debug("TIMER3 res: %x, %x\n", res->start, res->end);
-	rto_dma_dev.pbase=(void*)res->start+REL12_OFFSET; // !!!
-	
-	vaddr = ioremap(res->start, res->end - res->start);
-	memptr = (volatile unsigned char*)vaddr;
-	pr_debug("TIMER3 remap address: %x\n", (unsigned int)vaddr);
-	TMR3_BASE = (volatile unsigned long*)vaddr;
-	res_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-	pr_debug("TIMER3 IRQ: %x\n", (unsigned int)res_irq->start);
-	TMR3_IRQ = res_irq->start;
-	init_timer_3();
-	pr_debug("Timer 3 is inited\n");
-	timer3_irq_chain(TMR3_IRQ);
-	pr_debug("Timer interrupts %d is chained\n", TMR3_IRQ);
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	clock = clk_get(&pdev->dev, "rto");//Enable clock for rto
-	clk_enable(clock);
-	pr_debug("RTO res: %x, %x\n", res->start, res->end);
-	vaddr = ioremap(res->start, res->end - res->start);
-	memptr = (volatile unsigned char*)vaddr;
-	pr_debug("RTO remap address: %x\n", (unsigned int)vaddr);
-	RTO_BASE = (volatile unsigned long*)vaddr;
-	//
-	//davinci_fiq0_regs = ioremap(DAVINCI_ARM_INTC_BASE, SZ_4K);
-	//pr_debug("interrupt remap address: %x\n", (unsigned int)davinci_fiq0_regs);
-	//
-	davinci_cfg_reg(DM365_RTO0);
-	init_rto();
-	return 0;	
 }
 
 #endif // !defined (____X86_____)
@@ -933,7 +858,14 @@ static char *info_str =
 	"\n"
 	"If <value> == 0, the channel is not being used\n"
 	"set frame time in the nanosecond:\n"
-	"frame=<value>\n"; //infostr
+	"frame=<value>\n"
+	"set pulse\n"
+	"pulse=<value>\n"
+	"show current times:\n"
+	"print\n"; //infostr
+	
+	
+	
 static ssize_t dev_read( struct file * file, char * buf,
 						size_t count, loff_t *ppos ) {
 	int len = strlen( info_str );
@@ -943,12 +875,6 @@ static ssize_t dev_read( struct file * file, char * buf,
 	}
 	if( copy_to_user( buf, info_str, len ) ) return -EINVAL;
 	*ppos = len;
-/*	
-#if !defined (____X86_____)
-	pr_debug("ppmsum module init\n");
-	start_timer_interrupts();
-#endif
-*/
 	return len;
 }
 
@@ -999,9 +925,6 @@ static ssize_t dev_write( struct file *file, const char *buf, size_t count, loff
 out:
  // 	mutex_unlock(&dev->v2rswpwm_mutex);//Unlocking the mutex
 	return retval;
-	
-	
-	//return count;
 }
 
 static ssize_t  dev_open (struct inode *inode, struct file *filp){
@@ -1009,9 +932,6 @@ static ssize_t  dev_open (struct inode *inode, struct file *filp){
 //	unsigned int mj = imajor(inode);//get major number
 //	unsigned int mn = iminor(inode);//get minor number
 	pr_debug("open\n");
-	//inittimer();
-	//pr_debug("v2rswpwm module init\n");
-	//start_timer_interrupts();
 	return 0;
 }
 
@@ -1035,6 +955,49 @@ static struct miscdevice ppmsum_dev = {
 	&ppmsum_fops
 };
 
+#if !defined (____X86_____)
+static int __init rtodrv_probe(struct platform_device *pdev){
+	struct resource			*res;
+	struct resource			*res_irq;
+	void __iomem			*vaddr;
+	volatile unsigned char* memptr = 0;
+	struct clk* clock = 0;
+	rto_dma_dev.devptr = &pdev->dev;
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	clock = clk_get(&pdev->dev, "timer3");//Enable clock for timer3
+	clk_enable(clock);
+	pr_debug("TIMER3 res: %x, %x\n", res->start, res->end);
+	rto_dma_dev.pbase=(void*)res->start+REL12_OFFSET; // !!!
+	
+	vaddr = ioremap(res->start, res->end - res->start);
+	memptr = (volatile unsigned char*)vaddr;
+	pr_debug("TIMER3 remap address: %x\n", (unsigned int)vaddr);
+	TMR3_BASE = (volatile unsigned long*)vaddr;
+	res_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+	pr_debug("TIMER3 IRQ: %x\n", (unsigned int)res_irq->start);
+	TMR3_IRQ = res_irq->start;
+	init_timer_3();
+	pr_debug("Timer 3 is inited\n");
+	timer3_irq_chain(TMR3_IRQ);
+	pr_debug("Timer interrupts %d is chained\n", TMR3_IRQ);
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	clock = clk_get(&pdev->dev, "rto");//Enable clock for rto
+	clk_enable(clock);
+	pr_debug("RTO res: %x, %x\n", res->start, res->end);
+	vaddr = ioremap(res->start, res->end - res->start);
+	memptr = (volatile unsigned char*)vaddr;
+	pr_debug("RTO remap address: %x\n", (unsigned int)vaddr);
+	RTO_BASE = (volatile unsigned long*)vaddr;
+	//
+	//davinci_fiq0_regs = ioremap(DAVINCI_ARM_INTC_BASE, SZ_4K);
+	//pr_debug("interrupt remap address: %x\n", (unsigned int)davinci_fiq0_regs);
+	//
+	davinci_cfg_reg(DM365_RTO0);
+	init_rto();
+	return 0;	
+}
+#endif
 
 static int __init dev_init( void ) {
 	int ret;
@@ -1051,6 +1014,12 @@ static int __init dev_init( void ) {
 }
 
 static void __exit dev_exit( void ) {
+	dma_release_rto();
+	stop_timer_interrupts();
+	disable_fiq(TMR3_IRQ);  
+	release_fiq(&fh);
+
+	platform_driver_unregister(&davinci_rto_driver);
 	misc_deregister( &ppmsum_dev );
 	pr_debug("exit\n");
 }
