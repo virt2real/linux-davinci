@@ -58,23 +58,62 @@ struct davinci_vcif_dev {
 	struct davinci_pcm_dma_params	dma_params[2];
 };
 
+static inline void davinci_vc_write_fifo_clear(struct davinci_vc *vc)
+{
+	uint32_t w;
+
+	w = readl(vc->base + DAVINCI_VC_CTRL);
+	MOD_REG_BIT(w, DAVINCI_VC_CTRL_WFIFOCL, 1);
+	writel(w, vc->base + DAVINCI_VC_CTRL);
+
+	w = readl(vc->base + DAVINCI_VC_CTRL);
+	MOD_REG_BIT(w, DAVINCI_VC_CTRL_WFIFOCL, 0);
+	writel(w, vc->base + DAVINCI_VC_CTRL);
+}
+
+static inline void davinci_vc_read_fifo_clear(struct davinci_vc *vc)
+{
+	uint32_t w;
+
+	w = readl(vc->base + DAVINCI_VC_CTRL);
+	MOD_REG_BIT(w, DAVINCI_VC_CTRL_RFIFOCL, 1);
+	writel(w, vc->base + DAVINCI_VC_CTRL);
+
+	w = readl(vc->base + DAVINCI_VC_CTRL);
+	MOD_REG_BIT(w, DAVINCI_VC_CTRL_RFIFOCL, 0);
+	writel(w, vc->base + DAVINCI_VC_CTRL);
+}
+
+static inline void davinci_vc_reset_dac(struct davinci_vc *vc, bool val)
+{
+	uint32_t w;
+
+	w = readl(vc->base + DAVINCI_VC_CTRL);
+	MOD_REG_BIT(w, DAVINCI_VC_CTRL_RSTDAC, val);
+	writel(w, vc->base + DAVINCI_VC_CTRL);
+}
+
+static inline void davinci_vc_reset_adc(struct davinci_vc *vc, bool val)
+{
+	uint32_t w;
+
+	w = readl(vc->base + DAVINCI_VC_CTRL);
+	MOD_REG_BIT(w, DAVINCI_VC_CTRL_RSTADC, val);
+	writel(w, vc->base + DAVINCI_VC_CTRL);
+}
+
+
 static void davinci_vcif_start(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct davinci_vcif_dev *davinci_vcif_dev =
 			snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	struct davinci_vc *davinci_vc = davinci_vcif_dev->davinci_vc;
-	u32 w;
-
-	/* Start the sample generator and enable transmitter/receiver */
-	w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_RSTDAC, 0);
+		davinci_vc_reset_dac(davinci_vc, 0);
 	else
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_RSTADC, 0);
-
-	writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
+		davinci_vc_reset_adc(davinci_vc, 0);
 }
 
 static void davinci_vcif_stop(struct snd_pcm_substream *substream)
@@ -83,16 +122,11 @@ static void davinci_vcif_stop(struct snd_pcm_substream *substream)
 	struct davinci_vcif_dev *davinci_vcif_dev =
 			snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	struct davinci_vc *davinci_vc = davinci_vcif_dev->davinci_vc;
-	u32 w;
 
-	/* Reset transmitter/receiver and sample rate/frame sync generators */
-	w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_RSTDAC, 1);
+		davinci_vc_reset_dac(davinci_vc, 1);
 	else
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_RSTADC, 1);
-
-	writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
+		davinci_vc_reset_adc(davinci_vc, 1);
 }
 
 static void davinci_vcif_interrupts(struct snd_pcm_substream *substream,
@@ -186,13 +220,9 @@ static irqreturn_t davinci_vcif_irq_handler(int irq, void *data)
 	if (w & DAVINCI_VC_INT_WERR_MASK) {
 		pr_debug("vc write overflow or underflow occured, resetting fifo\n");
 
-		w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_WFIFOCL, 1);
-		writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
-
-		w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_WFIFOCL, 0);
-		writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
+		davinci_vc_reset_dac(davinci_vc, 1);
+		davinci_vc_write_fifo_clear(davinci_vc);
+		davinci_vc_reset_dac(davinci_vc, 0);
 
 		writel(DAVINCI_VC_INT_WERR_MASK,
 				davinci_vc->base + DAVINCI_VC_INTCLR);
@@ -201,13 +231,7 @@ static irqreturn_t davinci_vcif_irq_handler(int irq, void *data)
 	else if (w & DAVINCI_VC_INT_RERR_MASK) {
 		pr_debug("vc read overflow or underflow occured, resetting fifo\n");
 
-		w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_RFIFOCL, 1);
-		writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
-
-		w = readl(davinci_vc->base + DAVINCI_VC_CTRL);
-		MOD_REG_BIT(w, DAVINCI_VC_CTRL_RFIFOCL, 0);
-		writel(w, davinci_vc->base + DAVINCI_VC_CTRL);
+		davinci_vc_read_fifo_clear(davinci_vc);
 
 		writel(DAVINCI_VC_INT_RERR_MASK,
 				davinci_vc->base + DAVINCI_VC_INTCLR);
