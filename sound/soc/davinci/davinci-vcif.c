@@ -56,6 +56,7 @@
 struct davinci_vcif_dev {
 	struct davinci_vc *davinci_vc;
 	struct davinci_pcm_dma_params	dma_params[2];
+	struct timer_list playback_reset_timer;
 };
 
 static inline void davinci_vc_write_fifo_clear(struct davinci_vc *vc)
@@ -240,9 +241,28 @@ static irqreturn_t davinci_vcif_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void davinci_vcif_arm_timer(struct timer_list *timer)
+{
+	timer->expires = jiffies + msecs_to_jiffies(5000);
+	add_timer(timer);
+}
+
+static void davinci_vcif_playback_reset_cb(unsigned long data)
+{
+	struct davinci_vcif_dev *davinci_vcif_dev = (struct davinci_vcif_dev *)data;
+	struct davinci_vc *davinci_vc = davinci_vcif_dev->davinci_vc;
+
+	davinci_vc_reset_dac(davinci_vc, 1);
+	davinci_vc_write_fifo_clear(davinci_vc);
+	davinci_vc_reset_dac(davinci_vc, 0);
+	
+	davinci_vcif_arm_timer(&davinci_vcif_dev->playback_reset_timer);
+}
+
 static int davinci_vcif_trigger(struct snd_pcm_substream *substream, int cmd,
 				struct snd_soc_dai *dai)
 {
+	struct davinci_vcif_dev *davinci_vcif_dev = snd_soc_dai_get_drvdata(dai);
 	int ret = 0;
 
 	switch (cmd) {
@@ -251,12 +271,16 @@ static int davinci_vcif_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 		davinci_vcif_start(substream);
 		davinci_vcif_interrupts(substream, 1);
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+			davinci_vcif_arm_timer(&davinci_vcif_dev->playback_reset_timer);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		davinci_vcif_interrupts(substream, 0);
 		davinci_vcif_stop(substream);
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+			del_timer_sync(&davinci_vcif_dev->playback_reset_timer);
 		break;
 	default:
 		ret = -EINVAL;
@@ -312,6 +336,10 @@ static int davinci_vcif_probe(struct platform_device *pdev)
 			"could not allocate memory for private data\n");
 		return -ENOMEM;
 	}
+
+	init_timer(&davinci_vcif_dev->playback_reset_timer);
+	davinci_vcif_dev->playback_reset_timer.data = (unsigned long)davinci_vcif_dev;
+	davinci_vcif_dev->playback_reset_timer.function = davinci_vcif_playback_reset_cb;
 
 	/* DMA tx params */
 	davinci_vcif_dev->davinci_vc = davinci_vc;
