@@ -717,6 +717,7 @@ enum ccdc_data_pack {
 
 #define CCDC_WIN_NTSC				{0, 0, 720, 480}
 #define CCDC_WIN_VGA				{0, 0, 640, 480}
+#define CCDC_WIN_HD			    	{0, 0, 1280, 720}
 #define ISP5_CCDCMUX				0x20
 #endif
 #endif
