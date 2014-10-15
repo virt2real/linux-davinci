@@ -141,11 +141,16 @@ struct prev_car dm365_car_defaults = {
 struct prev_cgs dm365_cgs_defaults = {
 	.en = 0,
 };
-
+/*
 #define  WIDTH_I 640
 #define  HEIGHT_I 480
 #define  WIDTH_O 640
 #define  HEIGHT_O 480
+*/
+#define  WIDTH_I 1280
+#define  HEIGHT_I 720
+#define  WIDTH_O 1280
+#define  HEIGHT_O 720
 
 /* default ipipeif settings */
 struct ipipeif_5_1 ipipeif_5_1_defaults = {
