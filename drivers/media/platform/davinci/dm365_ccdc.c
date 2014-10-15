@@ -322,13 +322,17 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	 * output to SDRAM. example, for ycbcr, it is one y and one c, so 2.
 	 * raw capture this is 1
 	 */
-	horz_start = image_win->left << (ppc - 1);
+	horz_start = ((image_win->left) << (ppc - 1));
 	horz_nr_pixels = ((image_win->width) << (ppc - 1)) - 1;
 
 	/* Writing the horizontal info into the registers */
 	regw(horz_start & START_PX_HOR_MASK, SPH);
 	regw(horz_nr_pixels & NUM_PX_HOR_MASK, LNH);
+#ifdef CONFIG_VIDEO_ADV7611
+	vert_start = image_win->top + 30;
+#else
 	vert_start = image_win->top;
+#endif
 
 	if (frm_fmt == CCDC_FRMFMT_INTERLACED) {
 		vert_nr_lines = (image_win->height >> 1) - 1;
@@ -1327,6 +1331,10 @@ static int ccdc_config_ycbcr(int mode)
 		ccdcfg |= CCDC_DATA_PACK8;
 		ccdcfg |= CCDC_YCINSWP_YCBCR;
 #endif
+#ifdef CONFIG_VIDEO_ADV7611
+		regw(3, REC656IF);
+#endif
+		
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
 			return -EINVAL;

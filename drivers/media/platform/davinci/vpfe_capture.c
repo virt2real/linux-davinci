@@ -1680,6 +1680,10 @@ static int vpfe_s_fmt_vid_cap(struct file *file, void *priv,
 		if (vpfe_dev->current_subdev->is_camera)
 			ret = vpfe_config_ccdc_image_format(vpfe_dev);
 
+#ifdef CONFIG_VIDEO_ADV7611
+		/* Workaround for 2x1 decimated video stream */
+		vpfe_dev->crop.width >>= 1;
+#endif
 		if (!ret)
 			ret = vpfe_config_imp_image_format(vpfe_dev);
 	}
