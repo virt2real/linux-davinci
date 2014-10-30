@@ -9,4 +9,4 @@ obj-$(CONFIG_V2R_EXTPWM)	+= v2r_extpwm.o
 obj-$(CONFIG_V2R_GPIOEVENT)	+= gpio-event-drv.o
 obj-$(CONFIG_V2R_PPM)		+= v2r_ppm.o
 obj-$(CONFIG_V2R_PPMSUM)	+= v2r_ppmsum.o
-obj-$(CONFIG_V2R_IR_SEND)	+= v2r_ir_send.c
+obj-$(CONFIG_V2R_IR_SEND)	+= v2r_ir_send.o
