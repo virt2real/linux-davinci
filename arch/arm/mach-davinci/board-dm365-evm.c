@@ -117,7 +117,7 @@ static struct vpfe_subdev_info vpfe_sub_devs[] = {
                 .num_inputs = ARRAY_SIZE(adv7611_inputs),
                 .inputs = adv7611_inputs,
                 .ccdc_if_params = {
-			.if_type = VPFE_YCBCR_SYNC_8,
+			.if_type = VPFE_YCBCR_SYNC_16,
                         .hdpol = VPFE_PINPOL_POSITIVE,
                         .vdpol = VPFE_PINPOL_POSITIVE,
                 },
@@ -165,19 +165,19 @@ static void dm365_camera_configure(void){
 
 static void dm365_adv7611_configure(void){
 	u8 result = 0;
+    davinci_cfg_reg(DM365_GPIO93);//Configure GPIO93 as GPIO, NOT EXTCLK
+    gpio_request(93, "HDMI_RESET");
+    gpio_direction_output(93, 0);//SET RESET LOW
 	printk(KERN_INFO "Camera Power set ON\n");
 	result = davinci_rtcss_read(0x00);
 	result |= (1<<2);
 	davinci_rtcss_write(result, 0x00);
-	
-	davinci_cfg_reg(DM365_CAM_OFF);
-        gpio_request(98, "CAMERA_OFF");
-        gpio_direction_output(98, 1);
-        davinci_cfg_reg(DM365_CAM_RESET);
-        gpio_request(99, "CAMERA_RESET");
-        gpio_direction_output(99, 1);
-        davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
-        davinci_cfg_reg(DM365_EXTCLK);
+	printk(KERN_INFO "Camera Power set ON=2\n");
+    gpio_direction_output(93, 1);//SET RESET HIGH
+	printk(KERN_INFO "Camera RESET completed\n");
+    davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
+	davinci_cfg_reg(DM365_VIN_YIN4_7_EN);//set 16 bit port
+	davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
 }
 
 /* software PWM */

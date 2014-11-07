@@ -174,7 +174,7 @@ struct ipipeif_5_1 ipipeif_5_1_defaults = {
 #ifdef CONFIG_VIDEO_YCBCR
 	.pix_order = IPIPEIF_Y_CBCR,
 	.isif_port = {
-		.if_type = VPFE_YCBCR_SYNC_8,
+		.if_type = VPFE_YCBCR_SYNC_16,
 		.hdpol = VPFE_PINPOL_POSITIVE,
 		.vdpol =VPFE_PINPOL_POSITIVE
 	},

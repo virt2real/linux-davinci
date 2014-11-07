@@ -55,7 +55,7 @@ int ipipeif_set_address(struct ipipeif *params, unsigned int address)
 	unsigned int utemp, utemp1;
 #ifdef CONFIG_VIDEO_YCBCR
 	//TODO
-	if(params->source != 0 || (params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_8)) {
+	if(params->source != 0 || (params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_16)) {
 #else
 	if (params->source != 0) {
 #endif
@@ -94,7 +94,7 @@ int ipipeif_hw_setup(struct ipipeif *params)
 	enum vpfe_hw_if_type isif_port_if;
 #ifdef CONFIG_VIDEO_YCBCR
 	//TODO
-	if(params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_8)
+	if(params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_16)
 	{
 		regw_if(params->glob_hor_size, IPIPEIF_PPLN);
 		regw_if(params->glob_ver_size, IPIPEIF_LPFR);
@@ -130,7 +130,7 @@ int ipipeif_hw_setup(struct ipipeif *params)
 	}
 #ifdef CONFIG_VIDEO_YCBCR
 	//TODO
-	if(params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_8)
+	if(params->var.if_5_1.isif_port.if_type == VPFE_YCBCR_SYNC_16)
 	{
 		utemp &= ~(3<<2);
 		utemp |= (3<<2);

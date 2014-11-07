@@ -459,7 +459,7 @@ static int vpfe_config_ccdc_image_format(struct vpfe_device *vpfe_dev)
 	if (vpfe_dev->imp_chained) {
 		if (vpfe_dev->current_subdev->is_camera){
 #ifdef CONFIG_VIDEO_YCBCR
-			if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+			if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16)
 			{
 				pix_fmt = V4L2_PIX_FMT_YUYV;
 			}
@@ -605,7 +605,7 @@ static int vpfe_set_format_in_sensor(struct vpfe_device *vpfe_dev,
 
 	memset(&sd_fmt, 0, sizeof(sd_fmt));
 #ifdef CONFIV_VIDEO_YCBCR
-	if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+	if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16)
 	{
 		sd_fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		sd_fmt.fmt.pix.colorspace = V4L2_COLORSPACE_JPEG;
@@ -856,7 +856,7 @@ static irqreturn_t vpfe_isr(int irq, void *dev_id)
 					vpfe_dev->skip_frame_count_init;
 #ifdef CONFIG_VIDEO_YCBCR
 				//TODO
-				if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+				if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16)
 				{
 					ipipeif_set_enable(1,0);
 				}
@@ -866,7 +866,7 @@ static irqreturn_t vpfe_isr(int irq, void *dev_id)
 			} else {
 #ifdef CONFIG_VIDEO_YCBCR
 				//TODO
-				if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+				if(vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16)
 				{
 					ipipeif_set_enable(0,0);
 				}
@@ -1516,7 +1516,7 @@ static int vpfe_config_imp_image_format(struct vpfe_device *vpfe_dev)
 
 	/* first setup input and output pixel formats */
 #ifdef CONFIG_VIDEO_YCBCR
-	if (sdinfo->is_camera && sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+	if (sdinfo->is_camera && sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16)
 		imp_pix = IMP_YUYV;
 	//TODO
 	else
@@ -1682,7 +1682,7 @@ static int vpfe_s_fmt_vid_cap(struct file *file, void *priv,
 
 #ifdef CONFIG_VIDEO_ADV7611
 		/* Workaround for 2x1 decimated video stream */
-		vpfe_dev->crop.width >>= 1;
+		//vpfe_dev->crop.width >>= 1;
 #endif
 		if (!ret)
 			ret = vpfe_config_imp_image_format(vpfe_dev);
@@ -2266,7 +2266,7 @@ static void vpfe_start_capture(struct vpfe_device *vpfe_dev)
 {
 	if (ccdc_dev->hw_ops.enable_out_to_sdram)
 #ifdef CONFIG_VIDEO_YCBCR
-	ccdc_dev->hw_ops.enable_out_to_sdram((!vpfe_dev->imp_chained || (vpfe_dev->imp_chained && (vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8))));
+	ccdc_dev->hw_ops.enable_out_to_sdram((!vpfe_dev->imp_chained || (vpfe_dev->imp_chained && (vpfe_dev->current_subdev->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16))));
 #else
 	ccdc_dev->hw_ops.enable_out_to_sdram(!vpfe_dev->imp_chained);
 #endif
@@ -2343,7 +2343,7 @@ static int vpfe_streamon(struct file *file, void *priv,
 	addr = videobuf_to_dma_contig(vpfe_dev->cur_frm);
 #ifdef CONFIG_VIDEO_YCBCR
 	//TODO
-	if(sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+	if(sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16)
 	{
 		ipipif_dma_size = (vpfe_dev->fmt.fmt.pix.width*vpfe_dev->fmt.fmt.pix.height)*2;
 		ipipif_dma_addr_cpu = dma_alloc_coherent(vpfe_dev->pdev,ipipif_dma_size,&ipipif_dma_addr_phys,GFP_KERNEL);
@@ -2389,7 +2389,7 @@ static int vpfe_streamon(struct file *file, void *priv,
 	}
 #ifdef CONFIG_VIDEO_YCBCR
 	//TODO
-	if(sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_8)
+	if(sdinfo->ccdc_if_params.if_type == VPFE_YCBCR_SYNC_16)
 	{
 		imp_hw_if->set_ipipif_addr(vpfe_dev->pdev, NULL,addr_ipipeif);
 	}

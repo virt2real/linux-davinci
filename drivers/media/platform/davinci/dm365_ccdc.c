@@ -87,7 +87,7 @@ struct ccdc_oper_config {
 static struct ccdc_oper_config ccdc_cfg = {
 #ifdef CONFIG_VIDEO_YCBCR
 		.ycbcr = {
-			.pix_fmt = CCDC_PIXFMT_YCBCR_8BIT,
+			.pix_fmt = CCDC_PIXFMT_YCBCR_16BIT,
 			.frm_fmt = CCDC_FRMFMT_PROGRESSIVE,
 			.win = CCDC_WIN_VGA,
 			.fid_pol = VPFE_PINPOL_POSITIVE,
@@ -322,7 +322,7 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	 * output to SDRAM. example, for ycbcr, it is one y and one c, so 2.
 	 * raw capture this is 1
 	 */
-	horz_start = ((image_win->left) << (ppc - 1));
+	horz_start = ((image_win->left) << (ppc - 1));// + 200 ;To set shift for non BT.656 mode
 	horz_nr_pixels = ((image_win->width) << (ppc - 1)) - 1;
 
 	/* Writing the horizontal info into the registers */
@@ -1297,7 +1297,7 @@ static int ccdc_config_ycbcr(int mode)
 	case VPFE_BT656:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -1;
+			//return -1;
 		}
 		modeset |=
 			((VPFE_PINPOL_NEGATIVE & CCDC_VD_POL_MASK)
@@ -1308,7 +1308,7 @@ static int ccdc_config_ycbcr(int mode)
 	case VPFE_BT656_10BIT:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -1;
+			//return -1;
 		}
 		/* setup BT.656, embedded sync  */
 		regw(3, REC656IF);
@@ -1337,14 +1337,16 @@ static int ccdc_config_ycbcr(int mode)
 		
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -EINVAL;
+			//return -EINVAL;
 		}
 		break;
 	case VPFE_YCBCR_SYNC_16:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_16BIT) {
-			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -EINVAL;
+			dev_dbg(dev, "Invalid pix_fmt(input mode2)\n");
+			//return -EINVAL;
 		}
+		ccdcfg |= CCDC_YCINSWP_YCBCR;//|CCDC_BW656_ENABLE;
+		//regw(1, REC656IF);
 		break;
 	default:
 		/* should never come here */
