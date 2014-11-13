@@ -283,7 +283,7 @@ struct edma_soc_info {
 	const s8	(*rsv_chans)[2];
 	const s16	(*rsv_slots)[2];
 	const s8	(*queue_tc_mapping)[2];
-	const s8	(*queue_priority_mapping)[2];
+	/*const*/ s8	(*queue_priority_mapping)[2];
 };
 
 #endif

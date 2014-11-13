@@ -24,6 +24,8 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/edma.h>
+
 
 #include <linux/platform_data/edma.h>
 
@@ -95,7 +97,13 @@
 #define PARM_OFFSET(param_no)	(EDMA_PARM + ((param_no) << 5))
 
 #define EDMA_DCHMAP	0x0100  /* 64 registers */
-#define CHMAP_EXIST	BIT(24)
+
+/* CCCFG register */
+#define GET_NUM_DMACH(x)	(x & 0x7) /* bits 0-2 */
+#define GET_NUM_PAENTRY(x)	((x & 0x7000) >> 12) /* bits 12-14 */
+#define GET_NUM_EVQUE(x)	((x & 0x70000) >> 16) /* bits 16-18 */
+#define GET_NUM_REGN(x)		((x & 0x300000) >> 20) /* bits 20-21 */
+#define CHMAP_EXIST		BIT(24)
 
 #define EDMA_MAX_DMACH           64
 #define EDMA_MAX_PARAMENTRY     512
@@ -392,7 +400,7 @@ static irqreturn_t dma_irq_handler(int irq, void *data)
 					BIT(slot));
 			if (edma_cc[ctlr]->intr_data[channel].callback)
 				edma_cc[ctlr]->intr_data[channel].callback(
-					channel, DMA_COMPLETE,
+					channel, EDMA_DMA_COMPLETE,
 					edma_cc[ctlr]->intr_data[channel].data);
 		}
 	} while (sh_ipr);
@@ -447,7 +455,7 @@ static irqreturn_t dma_ccerr_handler(int irq, void *data)
 								callback) {
 						edma_cc[ctlr]->intr_data[k].
 						callback(k,
-						DMA_CC_ERROR,
+						EDMA_DMA_CC_ERROR,
 						edma_cc[ctlr]->intr_data
 						[k].data);
 					}
@@ -966,21 +974,17 @@ EXPORT_SYMBOL(edma_set_dest);
  * Returns current source and destination addresses for a particular
  * parameter RAM slot.  Its channel should not be active when this is called.
  */
-void edma_get_position(unsigned slot, dma_addr_t *src, dma_addr_t *dst)
+dma_addr_t edma_get_position(unsigned slot, bool dst)
 {
-	struct edmacc_param temp;
-	unsigned ctlr;
+	u32 offs, ctlr = EDMA_CTLR(slot);
 
-	ctlr = EDMA_CTLR(slot);
 	slot = EDMA_CHAN_SLOT(slot);
 
-	edma_read_slot(EDMA_CTLR_CHAN(ctlr, slot), &temp);
-	if (src != NULL)
-		*src = temp.src;
-	if (dst != NULL)
-		*dst = temp.dst;
+	offs = PARM_OFFSET(slot);
+	offs += dst ? PARM_DST : PARM_SRC;
+
+	return edma_read(ctlr, offs);
 }
-EXPORT_SYMBOL(edma_get_position);
 
 /**
  * edma_set_src_index - configure DMA source address indexing
@@ -1228,6 +1232,23 @@ void edma_resume(unsigned channel)
 }
 EXPORT_SYMBOL(edma_resume);
 
+int edma_trigger_channel(unsigned channel)
+{
+	unsigned ctlr;
+	unsigned int mask;
+
+	ctlr = EDMA_CTLR(channel);
+	channel = EDMA_CHAN_SLOT(channel);
+	mask = BIT(channel & 0x1f);
+
+	edma_shadow0_write_array(ctlr, SH_ESR, (channel >> 5), mask);
+
+	pr_debug("EDMA: ESR%d %08x\n", (channel >> 5),
+		 edma_shadow0_read_array(ctlr, SH_ESR, (channel >> 5)));
+	return 0;
+}
+EXPORT_SYMBOL(edma_trigger_channel);
+
 /**
  * edma_start - start dma on a channel
  * @channel: channel being activated
@@ -1368,12 +1389,104 @@ void edma_clear_event(unsigned channel)
 }
 EXPORT_SYMBOL(edma_clear_event);
 
-/*-----------------------------------------------------------------------*/
+/*
+ * edma_assign_channel_eventq - move given channel to desired eventq
+ * Arguments:
+ *	channel - channel number
+ *	eventq_no - queue to move the channel
+ *
+ * Can be used to move a channel to a selected event queue.
+ */
+void edma_assign_channel_eventq(unsigned channel, enum dma_event_q eventq_no)
+{
+	unsigned ctlr;
 
+	ctlr = EDMA_CTLR(channel);
+	channel = EDMA_CHAN_SLOT(channel);
+
+	if (channel >= edma_cc[ctlr]->num_channels)
+		return;
+
+	/* default to low priority queue */
+	if (eventq_no == EVENTQ_DEFAULT)
+		eventq_no = edma_cc[ctlr]->default_queue;
+	if (eventq_no >= edma_cc[ctlr]->num_tc)
+		return;
+
+	map_dmach_queue(ctlr, channel, eventq_no);
+}
+EXPORT_SYMBOL(edma_assign_channel_eventq);
+
+static int edma_setup_from_hw(struct device *dev, struct edma_soc_info *pdata,
+			      struct edma *edma_cc, int cc_id)
+{
+	int i;
+	u32 value, cccfg;
+	s8 (*queue_priority_map)[2];
+	/* Decode the eDMA3 configuration from CCCFG register */
+	cccfg = edma_read(cc_id, EDMA_CCCFG);
+
+	value = GET_NUM_REGN(cccfg);
+	edma_cc->num_region = BIT(value);
+
+	value = GET_NUM_DMACH(cccfg);
+	edma_cc->num_channels = BIT(value + 1);
+
+	value = GET_NUM_PAENTRY(cccfg);
+	edma_cc->num_slots = BIT(value + 4);
+
+	value = GET_NUM_EVQUE(cccfg);
+	edma_cc->num_tc = value + 1;
+
+	dev_dbg(dev, "eDMA3 CC%d HW configuration (cccfg: 0x%08x):\n", cc_id,
+		cccfg);
+	dev_dbg(dev, "num_region: %u\n", edma_cc->num_region);
+	dev_dbg(dev, "num_channel: %u\n", edma_cc->num_channels);
+	dev_dbg(dev, "num_slot: %u\n", edma_cc->num_slots);
+	dev_dbg(dev, "num_tc: %u\n", edma_cc->num_tc);
+
+	/* Nothing need to be done if queue priority is provided */
+	if (pdata->queue_priority_mapping)
+		return 0;
+
+	/*
+	 * Configure TC/queue priority as follows:
+	 * Q0 - priority 0
+	 * Q1 - priority 1
+	 * Q2 - priority 2
+	 * ...
+	 * The meaning of priority numbers: 0 highest priority, 7 lowest
+	 * priority. So Q0 is the highest priority queue and the last queue has
+	 * the lowest priority.
+	 */
+	queue_priority_map = devm_kzalloc(dev,
+					  (edma_cc->num_tc + 1) * sizeof(s8),
+					  GFP_KERNEL);
+	if (!queue_priority_map)
+		return -ENOMEM;
+
+	for (i = 0; i < edma_cc->num_tc; i++) {
+		queue_priority_map[i][0] = i;
+		queue_priority_map[i][1] = i;
+	}
+	queue_priority_map[i][0] = -1;
+	queue_priority_map[i][1] = -1;
+
+	pdata->queue_priority_mapping = queue_priority_map;
+	/* Default queue has the lowest priority */
+	pdata->default_queue = i - 1;
+
+	return 0;
+}
+static struct edma_soc_info *edma_setup_info_from_dt(struct device *dev,
+						      struct device_node *node)
+{
+	return (void*)-ENOSYS;
+}
 static int __init edma_probe(struct platform_device *pdev)
 {
 	struct edma_soc_info	**info = pdev->dev.platform_data;
-	const s8		(*queue_priority_mapping)[2];
+	/*const */s8		(*queue_priority_mapping)[2];
 	const s8		(*queue_tc_mapping)[2];
 	int			i, j, off, ln, found = 0;
 	int			status = -1;
