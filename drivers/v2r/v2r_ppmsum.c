@@ -387,7 +387,7 @@ int process_command(char** data){
 			return 0;
 		}
 		if (is_equal_string(data[i], "start")){
-			pr_debug("Start PPMSUM\n");
+			pr_debug("Start v2r_ppmsum\n");
 #if !defined (____X86_____)
 			//start_timer_interrupts();
 			dma_start();
@@ -395,7 +395,7 @@ int process_command(char** data){
 			continue;
 		}
 		if (is_equal_string(data[i], "stop")){
-			pr_debug("Stop PPMSUM\n");
+			pr_debug("Stop v2r_ppmsum\n");
 #if !defined (____X86_____)
 			//stop_timer_interrupts();
 			dma_stop();
@@ -846,7 +846,7 @@ static int minor = 0;
 module_param( minor, int, S_IRUGO );
 
 static char *info_str = 
-	"ppmsum device driver\nAutor Dolin Sergey aka dlinyj dliny@gmail.com\n"
+	"v2r_ppmsum device driver\nAutor Dolin Sergey aka dlinyj dliny@gmail.com\n"
 	"Comands: \n"
 	"start - start send PPMSUM\n"
 	"stop - stop send PPMSUM\n"
@@ -884,7 +884,7 @@ static ssize_t dev_write( struct file *file, const char *buf, size_t count, loff
 	char *tmp = 0;
 	int nIndex = 0;
 	char** data = 0;
-	pr_debug("ppmsum write\n");
+	pr_debug("v2r_ppmsum write\n");
 //	if (mutex_lock_killable(&dev->v2rswpwm_mutex)) return -EINTR;//Locking the mutex to avoid simultanios accesses from different processes
 
 	if (*ppos !=0) {
@@ -918,7 +918,7 @@ static ssize_t dev_write( struct file *file, const char *buf, size_t count, loff
 		nIndex++;
 	}
 	kfree(data);
-	pr_debug("ppmsum-dev message %s\n", tmp);
+	pr_debug("v2r_ppmsum-dev message %s\n", tmp);
 	kfree(tmp);
 	*ppos = 0;//Set file pointer to zero
 	retval = count;
@@ -951,7 +951,7 @@ static const struct file_operations ppmsum_fops = {
 
 static struct miscdevice ppmsum_dev = {
 	MISC_DYNAMIC_MINOR,    // автоматически выбираемое
-	"ppmsum",
+	"v2r_ppmsum",
 	&ppmsum_fops
 };
 
@@ -1005,7 +1005,7 @@ static int __init dev_init( void ) {
 	if( minor != 0 ) ppmsum_dev.minor = minor;
 	ret = misc_register( &ppmsum_dev );
 	if( ret ) printk( KERN_ERR "=== Unable to register misc device\n" );
-	pr_debug("dev_ init\n");
+	pr_debug("v2r_ppmsum init\n");
 #if !defined (____X86_____)
 	err = platform_driver_probe(&davinci_rto_driver, rtodrv_probe);
 #endif
@@ -1021,7 +1021,7 @@ static void __exit dev_exit( void ) {
 
 	platform_driver_unregister(&davinci_rto_driver);
 	misc_deregister( &ppmsum_dev );
-	pr_debug("exit\n");
+	pr_debug("v2r_ppmsum exit\n");
 }
  
 static int __init dev_init( void );
