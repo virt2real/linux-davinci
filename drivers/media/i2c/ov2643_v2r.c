@@ -24,7 +24,7 @@
 #ifdef CONFIG_V2R_DEBUG
     #define OV2643_DEBUG
 #endif
-#define OV2643_DEBUG
+
 /* OV2643 has 8 I2C registers */
 #define I2C_8BIT			1
 
