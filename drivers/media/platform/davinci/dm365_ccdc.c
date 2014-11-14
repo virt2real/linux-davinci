@@ -87,11 +87,15 @@ struct ccdc_oper_config {
 static struct ccdc_oper_config ccdc_cfg = {
 #ifdef CONFIG_VIDEO_YCBCR
 		.ycbcr = {
+#ifdef CONFIG_V2R_VIDEO_ADV7611
+			.pix_fmt = CCDC_PIXFMT_YCBCR_16BIT,
+#else
 			.pix_fmt = CCDC_PIXFMT_YCBCR_8BIT,
+#endif
 #ifdef CONFIG_V2R_VIDEO_TVP5150
 			.frm_fmt = CCDC_FRMFMT_INTERLACED,//CCDC_FRMFMT_PROGRESSIVE,
 			.win = CCDC_WIN_PAL,
-#else 
+#else
 			.frm_fmt = CCDC_FRMFMT_PROGRESSIVE,
 			.win = CCDC_WIN_VGA,
 #endif
@@ -330,22 +334,21 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	 * output to SDRAM. example, for ycbcr, it is one y and one c, so 2.
 	 * raw capture this is 1
 	 */
-#ifdef CONFIG_V2R_VIDEO_TVP5150
 	horz_start = (image_win->left << (ppc - 1)); // 0x11-0x14 tvp5150 regs will be better (was + 32);
-#else
-	horz_start = ((image_win->left) << (ppc - 1));
-#endif
 	horz_nr_pixels = ((image_win->width) << (ppc - 1)) - 1;
 
 	/* Writing the horizontal info into the registers */
 	regw(horz_start & START_PX_HOR_MASK, SPH);
 	regw(horz_nr_pixels & NUM_PX_HOR_MASK, LNH);
-#ifdef CONFIG_V2R_VIDEO_TVP5150	
+#if defined(CONFIG_V2R_VIDEO_TVP5150)
 	vert_start = image_win->top + 52; // was +100;
 	frm_fmt = CCDC_FRMFMT_INTERLACED;
+#elif defined(CONFIG_V2R_VIDEO_ADV7611)
+	vert_start = image_win->top + 30;
 #else
 	vert_start = image_win->top;
 #endif
+
 	if (frm_fmt == CCDC_FRMFMT_INTERLACED) {
 		vert_nr_lines = (image_win->height >> 1) - 1;
 		vert_start >>= 1;
@@ -1316,7 +1319,7 @@ static int ccdc_config_ycbcr(int mode)
 	case VPFE_BT656:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -1;
+			//return -1;
 		}
 		modeset |=
 			((VPFE_PINPOL_NEGATIVE & CCDC_VD_POL_MASK)
@@ -1327,7 +1330,7 @@ static int ccdc_config_ycbcr(int mode)
 	case VPFE_BT656_10BIT:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -1;
+			//return -1;
 		}
 		/* setup BT.656, embedded sync  */
 		regw(3, REC656IF);
@@ -1350,19 +1353,23 @@ static int ccdc_config_ycbcr(int mode)
 		ccdcfg |= CCDC_DATA_PACK8;
 		ccdcfg |= CCDC_YCINSWP_YCBCR;
 #endif
-#ifdef CONFIG_V2R_VIDEO_TVP5150
+#if defined(CONFIG_V2R_VIDEO_TVP5150) || \
+	defined(CONFIG_V2R_VIDEO_ADV7611)
 		regw(3, REC656IF);
 #endif
+
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -EINVAL;
+			//return -EINVAL;
 		}
 		break;
 	case VPFE_YCBCR_SYNC_16:
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_16BIT) {
-			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
-			return -EINVAL;
+			dev_dbg(dev, "Invalid pix_fmt(input mode2)\n");
+			//return -EINVAL;
 		}
+		ccdcfg |= CCDC_YCINSWP_YCBCR;//|CCDC_BW656_ENABLE;
+		//regw(1, REC656IF);
 		break;
 	default:
 		/* should never come here */

@@ -57,7 +57,6 @@
 //static void __init v2r_parse_cmdline(char * string);
 //#endif
 
-
 static struct i2c_board_info i2c_info[] = {
 
 };
@@ -77,6 +76,13 @@ static struct v4l2_input ov2643_inputs[] = {
 	}
 };
 
+static struct v4l2_input adv7611_inputs[] = {
+        {
+                .index = 0,
+                .name = "Camera",
+                .type = V4L2_INPUT_TYPE_CAMERA,
+        }
+};
 
 static struct v4l2_input tvp5150_inputs[] = {
 	{
@@ -108,8 +114,9 @@ static struct vpfe_subdev_info vpfe_sub_devs[] = {
 			/* this is for PCLK rising edge */
 			.platform_data = (void *)1,
 		},
-	},
+	}
 #ifdef CONFIG_VIDEO_TVP5150
+	,
 	{
 		//Clock for camera????
 		.module_name = "tvp5150",
@@ -127,7 +134,28 @@ static struct vpfe_subdev_info vpfe_sub_devs[] = {
 			/* this is for PCLK rising edge */
 			.platform_data = (void *)1,
 		},
-	},
+	}
+#endif
+#ifdef CONFIG_VIDEO_ADV7611
+	,
+	{
+		//Clock for camera????
+		.module_name = "adv7611",
+		.is_camera = 1,
+		.grp_id = VPFE_SUBDEV_ADV7611,
+		.num_inputs = ARRAY_SIZE(adv7611_inputs),
+		.inputs = adv7611_inputs,
+		.ccdc_if_params = {
+			.if_type = VPFE_YCBCR_SYNC_16,
+			.hdpol = VPFE_PINPOL_POSITIVE,
+			.vdpol = VPFE_PINPOL_POSITIVE,
+		},
+		.board_info = {
+			I2C_BOARD_INFO("adv7611", 0x4c),
+			/* this is for PCLK rising edge */
+			.platform_data = (void *)1,
+		},
+    }
 #endif
 };
 
@@ -144,9 +172,10 @@ static void w1_enable_external_pullup(int enable);
 
 static inline int have_imager(void)
 {
-#if defined(CONFIG_SOC_CAMERA_OV2643) || \
-	defined(CONFIG_SOC_CAMERA_OV2643_MODULE) || \
-	defined (CONFIG_VIDEO_TVP5150)
+#if defined(CONFIG_V2R_VIDEO_OV2643_SD) || \
+	defined(CONFIG_V2R_VIDEO_OV2643_HD) || \
+	defined (CONFIG_V2R_VIDEO_TVP5150) || \
+	defined (CONFIG_V2R_VIDEO_ADV7611)
 	return 1;
 #else
 	return 0;
@@ -174,6 +203,25 @@ static void dm365_tvp5150_configure(void){
 	gpio_direction_output(99, 1);
 	davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
 	davinci_cfg_reg(DM365_EXTCLK);
+}
+#endif
+
+#ifdef CONFIG_V2R_VIDEO_ADV7611
+static void dm365_adv7611_configure(void){
+	u8 result = 0;
+    davinci_cfg_reg(DM365_GPIO93);//Configure GPIO93 as GPIO, NOT EXTCLK
+    gpio_request(93, "HDMI_RESET");
+    gpio_direction_output(93, 0);//SET RESET LOW
+	printk(KERN_INFO "Camera Power set ON\n");
+	result = davinci_rtcss_read(0x00);
+	result |= (1<<2);
+	davinci_rtcss_write(result, 0x00);
+	printk(KERN_INFO "Camera Power set ON=2\n");
+    gpio_direction_output(93, 1);//SET RESET HIGH
+	printk(KERN_INFO "Camera RESET completed\n");
+    davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
+	davinci_cfg_reg(DM365_VIN_YIN4_7_EN);//set 16 bit port
+	davinci_cfg_reg(DM365_VIN_YIN0_3_EN);
 }
 #endif
 
@@ -706,6 +754,8 @@ static __init void dm365_evm_init(void)
 		dm365_camera_configure();
 #elif defined(CONFIG_V2R_VIDEO_TVP5150)
 		dm365_tvp5150_configure();
+#elif defined(CONFIG_V2R_VIDEO_ADV7611)
+        dm365_adv7611_configure();
 #endif
 	}
 

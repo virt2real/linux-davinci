@@ -85,4 +85,5 @@ config V2R_VIDEO_TVP5150
 
 config V2R_VIDEO_ADV7611
 	bool "ADV7611 - HDMI"
+	select VIDEO_ADV7611
 endchoice

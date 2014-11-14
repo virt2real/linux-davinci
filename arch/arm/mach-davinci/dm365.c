@@ -665,13 +665,13 @@ MUX_CFG(DM365,	GPIO76,		2,   0,     0,    0,	 false) // unknown
 MUX_CFG(DM365,	GPIO77,		2,   0,     0,    0,	 false) // unknown
 MUX_CFG(DM365,	GPIO78,		2,   0,     0,    0,	 false) // unknown
 
-MUX_CFG(DM365,	GPIO93,		0,   14,    1,    0,	 false)
-MUX_CFG(DM365,	GPIO94,		0,   13,    1,    0,	 false)
-MUX_CFG(DM365,	GPIO95,		0,   12,    1,    0,	 false)
-MUX_CFG(DM365,	GPIO96,		0,   11,    1,    0,	 false)
-MUX_CFG(DM365,	GPIO97,		0,   10,    1,    0,	 false)
-MUX_CFG(DM365,	GPIO98,		0,   9,    1,    0,	 false)
-MUX_CFG(DM365,	GPIO99,		0,   8,    1,    0,	 false)
+MUX_CFG(DM365,	GPIO93,		0,   14,    2,    1,	 false)
+MUX_CFG(DM365,	GPIO94,		0,   13,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO95,		0,   12,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO96,		0,   11,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO97,		0,   10,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO98,		0,   9,    1,    1,	 false)
+MUX_CFG(DM365,	GPIO99,		0,   8,    1,    1,	 false)
 
 
 
@@ -734,6 +734,9 @@ MUX_CFG(DM365,	VIN_CAM_HD,	0,   12,    1,	  0,	 false)
 MUX_CFG(DM365,  EXTCLK,         0,   14,    0x03, 2,     false)//GPIO93 - CAMERA CLK
 MUX_CFG(DM365,	CAM_OFF,	0,   9,    1,	  1,	 false)
 MUX_CFG(DM365,	CAM_RESET,	0,   8,    1,	  1,	 false)
+MUX_CFG(DM365,	VIN_YIN4_7_EN,	0,   0,     0xff, 0,	 false)//Enable upper 8 bits of the camera interface
+MUX_CFG(DM365,	VIN_YIN0_3_EN,	0,   8,     0xf,  0,	 false)
+
 
 INT_CFG(DM365,  INT_EDMA_CC,         2,     1,    1,     false)
 INT_CFG(DM365,  INT_EDMA_TC0_ERR,    3,     1,    1,     false)
