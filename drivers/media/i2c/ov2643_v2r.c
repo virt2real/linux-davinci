@@ -19,6 +19,7 @@
 #include <media/v4l2-common.h>
 #include <media/v4l2-chip-ident.h>
 #include <media/davinci/videohd.h>
+#include <mach/v2r_video.h>
 
 
 #ifdef CONFIG_V2R_DEBUG
@@ -133,8 +134,8 @@
 
 
 //The rest values will be declared later
-#define OV2643_IMAGE_WIDTH	1280
-#define OV2643_IMAGE_HEIGHT	720
+#define OV2643_IMAGE_WIDTH	V2R_VIDEO_W
+#define OV2643_IMAGE_HEIGHT	V2R_VIDEO_H
 
 #define SENSOR_DETECTED		1
 #define SENSOR_NOT_DETECTED	0
@@ -235,7 +236,7 @@ module_param(debug, bool, 0644);
 MODULE_PARM_DESC(debug, "Debug level (0-1)");
 
 const static struct ov2643_reg initial_list[] = {
-/*
+#ifdef CONFIG_V2R_VIDEO_OV2643_SD
 		{0x12, 0x80}, //reset
 		{0xff, 0x64}, //delay 100ms
 		{0x13, 0xff},
@@ -276,7 +277,7 @@ const static struct ov2643_reg initial_list[] = {
 
 		//common part except 0x3d,0xde
 		{0x14, 0x87}, //band filter bit7: 1:50Hz 0:60Hz bit4:
-		{0x15, 0x47},
+		{0x15, 0x42},
 		{0x3c, 0xa4},
 		{0x18, 0x78},//set to default then set to csi_ae value to wake up quickly
 		{0x19, 0x68},//
@@ -368,8 +369,8 @@ const static struct ov2643_reg initial_list[] = {
 		{0xb8, 0x08},
 		{0xbf, 0x0c},
 		{0xc0, 0x3e},
-		{0xa3, 0x00},
-		{0xa4, 0xff},
+		{0xa3, 0x0a},
+		{0xa4, 0x0f},
 		{0xa5, 0x09},//denoise threshold
 		{0xa6, 0x16},
 		{0x9f, 0x0a},
@@ -377,7 +378,7 @@ const static struct ov2643_reg initial_list[] = {
 		{0xa7, 0x0a},
 		{0xa8, 0x0f},
 		{0xa1, 0x18},//0xa1,0x10,
-		{0xa2, 0x11},//0xa2,0x04,
+		{0xa2, 0x10},//0xa2,0x04,
 		{0xa9, 0x00},//0xa9,0x04,
 		{0xaa, 0xa6},
 		//;awb
@@ -409,8 +410,7 @@ const static struct ov2643_reg initial_list[] = {
 		{0x94, 0x20},
 		{0x95, 0x10},
 		{0x96, 0x18},
-		{0xff, 250},//delay 255ms
-*/
+#else	/* ! CONFIG_V2R_VIDEO_OV2643_SD */
 		//Set 1280x720 mode
 		//;pclk=72mhz,30fps/pclk=36mhz,15fps
 		//0x12,0x80,
@@ -456,6 +456,7 @@ const static struct ov2643_reg initial_list[] = {
 		{0xde, 0x7c},
 		{0x3d, 0x08},
 		{0x0d, 0x20},
+#endif
 		{0xff, 0x250},//delay 255ms
 		{0xff, 0xff}	/* END MARKER */
 };

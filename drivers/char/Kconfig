@@ -659,7 +659,6 @@ config IMP_RESIZER
 	   at the output of the previewer hardware. This can also work in
 	   continuous and single shot mode similar to the previewer.
 
-
 config IMP_DEBUG
 	depends on (DM355_IPIPE || DM365_IPIPE)
 	bool "IMP Debug support"

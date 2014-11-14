@@ -18,6 +18,7 @@
  *
  **************************************************************************/
 #include <media/davinci/dm365_ipipe.h>
+#include <mach/v2r_video.h>
 /* Defaults for lutdpc */
 struct prev_lutdpc dm365_lutdpc_defaults = {
 	.en = 0
@@ -141,16 +142,10 @@ struct prev_car dm365_car_defaults = {
 struct prev_cgs dm365_cgs_defaults = {
 	.en = 0,
 };
-/*
-#define  WIDTH_I 640
-#define  HEIGHT_I 480
-#define  WIDTH_O 640
-#define  HEIGHT_O 480
-*/
-#define  WIDTH_I 1280
-#define  HEIGHT_I 720
-#define  WIDTH_O 1280
-#define  HEIGHT_O 720
+#define  WIDTH_I V2R_VIDEO_W
+#define  HEIGHT_I V2R_VIDEO_H
+#define  WIDTH_O V2R_VIDEO_W
+#define  HEIGHT_O V2R_VIDEO_H
 
 /* default ipipeif settings */
 struct ipipeif_5_1 ipipeif_5_1_defaults = {
@@ -371,10 +366,19 @@ struct prev_continuous_config dm365_prev_cont_config_defs = {
 		.gain = 512,
 		.clip = 4095,
 		//YCBCR
+#if defined(CONFIG_V2R_VIDEO_OV2643_HD)
 		.colp_olop = IPIPE_GREEN_BLUE,
 		.colp_olep = IPIPE_BLUE,
 		.colp_elop = IPIPE_RED,
 		.colp_elep = IPIPE_GREEN_RED,
+#elif defined(CONFIG_V2R_VIDEO_OV2643_SD)
+		.colp_olop = IPIPE_GREEN_RED,
+		.colp_olep = IPIPE_RED,
+		.colp_elop = IPIPE_BLUE,
+		.colp_elep = IPIPE_GREEN_BLUE,
+#else
+#error TODO
+#endif
 	},
 };
 
