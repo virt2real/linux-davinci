@@ -366,18 +366,16 @@ struct prev_continuous_config dm365_prev_cont_config_defs = {
 		.gain = 512,
 		.clip = 4095,
 		//YCBCR
-#if defined(CONFIG_V2R_VIDEO_OV2643_HD)
+#ifdef CONFIG_V2R_VIDEO_OV2643_HD
 		.colp_olop = IPIPE_GREEN_BLUE,
 		.colp_olep = IPIPE_BLUE,
 		.colp_elop = IPIPE_RED,
 		.colp_elep = IPIPE_GREEN_RED,
-#elif defined(CONFIG_V2R_VIDEO_OV2643_SD)
+#else
 		.colp_olop = IPIPE_GREEN_RED,
 		.colp_olep = IPIPE_RED,
 		.colp_elop = IPIPE_BLUE,
 		.colp_elep = IPIPE_GREEN_BLUE,
-#else
-#error TODO
 #endif
 	},
 };

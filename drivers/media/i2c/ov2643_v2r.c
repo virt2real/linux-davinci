@@ -867,9 +867,9 @@ static int ov2643_probe(struct i2c_client *client, const struct i2c_device_id *i
 	if (!ov2643) return -ENOMEM;
 	ret = ov2643_detect(client);
 	if (ret){
-#ifdef OV2643_DEBUG
+//#ifdef OV2643_DEBUG
 		printk("ov2643 detection failed\r\n");
-#endif
+//#endif
 		goto clean;
 	}
 	//Filling  ov2643 data stucture

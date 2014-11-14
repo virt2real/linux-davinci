@@ -88,12 +88,20 @@ static struct ccdc_oper_config ccdc_cfg = {
 #ifdef CONFIG_VIDEO_YCBCR
 		.ycbcr = {
 			.pix_fmt = CCDC_PIXFMT_YCBCR_8BIT,
+#ifdef CONFIG_V2R_VIDEO_TVP5150
+			.frm_fmt = CCDC_FRMFMT_INTERLACED,//CCDC_FRMFMT_PROGRESSIVE,
+			.win = CCDC_WIN_PAL,
+#else 
 			.frm_fmt = CCDC_FRMFMT_PROGRESSIVE,
 			.win = CCDC_WIN_VGA,
+#endif
 			.fid_pol = VPFE_PINPOL_POSITIVE,
 			.vd_pol = VPFE_PINPOL_POSITIVE,
 			.hd_pol = VPFE_PINPOL_POSITIVE,
 			.pix_order = CCDC_PIXORDER_YCBYCR,
+#ifdef CONFIG_V2R_VIDEO_TVP5150
+			.buf_type = CCDC_BUFTYPE_FLD_INTERLEAVED,
+#endif
 		},
 #else
 	.ycbcr = {
@@ -322,14 +330,22 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	 * output to SDRAM. example, for ycbcr, it is one y and one c, so 2.
 	 * raw capture this is 1
 	 */
-	horz_start = image_win->left << (ppc - 1);
+#ifdef CONFIG_V2R_VIDEO_TVP5150
+	horz_start = (image_win->left << (ppc - 1)); // 0x11-0x14 tvp5150 regs will be better (was + 32);
+#else
+	horz_start = ((image_win->left) << (ppc - 1));
+#endif
 	horz_nr_pixels = ((image_win->width) << (ppc - 1)) - 1;
 
 	/* Writing the horizontal info into the registers */
 	regw(horz_start & START_PX_HOR_MASK, SPH);
 	regw(horz_nr_pixels & NUM_PX_HOR_MASK, LNH);
+#ifdef CONFIG_V2R_VIDEO_TVP5150	
+	vert_start = image_win->top + 52; // was +100;
+	frm_fmt = CCDC_FRMFMT_INTERLACED;
+#else
 	vert_start = image_win->top;
-
+#endif
 	if (frm_fmt == CCDC_FRMFMT_INTERLACED) {
 		vert_nr_lines = (image_win->height >> 1) - 1;
 		vert_start >>= 1;
@@ -1281,13 +1297,20 @@ static int ccdc_config_ycbcr(int mode)
 	dev_dbg(dev, "\nStarting ccdc_config_ycbcr...");
 
 	/* configure pixel format or input mode */
+#ifdef CONFIG_V2R_VIDEO_TVP5150
+	modeset = modeset | ((params->pix_fmt & CCDC_INPUT_MASK)<< CCDC_INPUT_SHIFT) |
+	((1/*params->frm_fmt*/ & CCDC_FRM_FMT_MASK) << CCDC_FRM_FMT_SHIFT) |
+	(((params->fid_pol & CCDC_FID_POL_MASK) << CCDC_FID_POL_SHIFT))	|
+	(((params->hd_pol & CCDC_HD_POL_MASK) << CCDC_HD_POL_SHIFT)) |
+	(((params->vd_pol & CCDC_VD_POL_MASK) << CCDC_VD_POL_SHIFT));
+#else
 	modeset = modeset | ((params->pix_fmt & CCDC_INPUT_MASK)
 		<< CCDC_INPUT_SHIFT) |
 	((params->frm_fmt & CCDC_FRM_FMT_MASK) << CCDC_FRM_FMT_SHIFT) |
 	(((params->fid_pol & CCDC_FID_POL_MASK) << CCDC_FID_POL_SHIFT))	|
 	(((params->hd_pol & CCDC_HD_POL_MASK) << CCDC_HD_POL_SHIFT)) |
 	(((params->vd_pol & CCDC_VD_POL_MASK) << CCDC_VD_POL_SHIFT));
-
+#endif
 	/* pack the data to 8-bit CCDCCFG */
 	switch (ccdc_cfg.if_type) {
 	case VPFE_BT656:
@@ -1326,6 +1349,9 @@ static int ccdc_config_ycbcr(int mode)
 #else
 		ccdcfg |= CCDC_DATA_PACK8;
 		ccdcfg |= CCDC_YCINSWP_YCBCR;
+#endif
+#ifdef CONFIG_V2R_VIDEO_TVP5150
+		regw(3, REC656IF);
 #endif
 		if (params->pix_fmt != CCDC_PIXFMT_YCBCR_8BIT) {
 			dev_dbg(dev, "Invalid pix_fmt(input mode)\n");
