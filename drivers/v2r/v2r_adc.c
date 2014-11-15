@@ -22,7 +22,7 @@ void *dm365_adc_base;
 //static spinlock_t adc_lock = SPIN_LOCK_UNLOCKED;
 DEFINE_SPINLOCK(adc_lock); // changed by Gol
 
-static int mode = 0; // 0 - default mode value
+static int mode = 1; // 1 - default mode value (free-run)
 static int divider = 1; // frequency divider
 
 /* set mode function */
