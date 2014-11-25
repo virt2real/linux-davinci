@@ -28,6 +28,10 @@
 
 #include "ks8851.h"
 
+#include <mach/mux.h>
+#include <mach/gpio.h>
+#define GPIO_RESET 78
+
 /**
  * struct ks8851_rxctrl - KS8851 driver rx control
  * @mchash: Multicast hash-table data.
@@ -338,6 +342,13 @@ static unsigned ks8851_rdreg32(struct ks8851_net *ks, unsigned reg)
  */
 static void ks8851_soft_reset(struct ks8851_net *ks, unsigned op)
 {
+	unsigned rxqcr;
+	gpio_direction_output(GPIO_RESET, 0);
+	mdelay(1);
+	gpio_set_value(GPIO_RESET, 1);
+	mdelay(1);
+	gpio_set_value(GPIO_RESET, 0);
+	mdelay(1);
 	ks8851_wrreg16(ks, KS_GRR, op);
 	mdelay(1);	/* wait a short time to effect reset */
 	ks8851_wrreg16(ks, KS_GRR, 0);
