@@ -30,7 +30,7 @@
 #include <linux/spi/spi_bitbang.h>
 #include <linux/slab.h>
 
-#include <mach/spi.h>
+#include <linux/platform_data/spi-davinci.h>
 #include <mach/edma.h>
 
 #define SPI_NO_RESOURCE		((resource_size_t)-1)
@@ -509,6 +509,11 @@ static void davinci_spi_dma_callback(unsigned lch, u16 status, void *data)
 		if (lch == dma->tx_channel)
 			dspi->wcount = 0;
 	}
+	if (status == DMA_CC_ERROR) {
+		pr_info("dma cc_error ch=%d\n", lch, status);
+		if (lch == dma->rx_channel)
+			dspi->rcount = 0;
+	}
 
 	if ((!dspi->wcount && !dspi->rcount) || (status != DMA_COMPLETE))
 		complete(&dspi->done);
@@ -799,7 +804,7 @@ rx_dma_failed:
  * It will invoke spi_bitbang_start to create work queue so that client driver
  * can register transfer method to work queue.
  */
-static int __devinit davinci_spi_probe(struct platform_device *pdev)
+static int davinci_spi_probe(struct platform_device *pdev)
 {
 	struct spi_master *master;
 	struct davinci_spi *dspi;
@@ -984,7 +989,7 @@ err:
  * It will also call spi_bitbang_stop to destroy the work queue which was
  * created by spi_bitbang_start.
  */
-static int __devexit davinci_spi_remove(struct platform_device *pdev)
+static int davinci_spi_remove(struct platform_device *pdev)
 {
 	struct davinci_spi *dspi;
 	struct spi_master *master;
@@ -1012,7 +1017,7 @@ static struct platform_driver davinci_spi_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe = davinci_spi_probe,
-	.remove = __devexit_p(davinci_spi_remove),
+	.remove = davinci_spi_remove,
 };
 module_platform_driver(davinci_spi_driver);
 
