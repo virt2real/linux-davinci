@@ -144,6 +144,13 @@ static int msg_enable;
 /* turn register number and byte-enable mask into data for start of packet */
 #define MK_OP(_byteen, _reg) (BYTE_EN(_byteen) | (_reg)  << (8+2) | (_reg) >> 6)
 
+int spi_sync_robust(struct spi_device *spi, struct spi_message *message)
+{
+	int cnt = 0, ret = 0;
+	for (; (ret = spi_sync(spi, message)) < 0 && cnt < 3; cnt++);
+	return ret;
+}
+
 /* SPI register read/write calls.
  *
  * All these calls issue SPI transactions to access the chip's registers. They
@@ -159,7 +166,7 @@ static int msg_enable;
  *
  * Issue a write to put the value @val into the register specified in @reg.
  */
-static void ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
+static int ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
 {
 	struct spi_transfer *xfer = &ks->spi_xfer1;
 	struct spi_message *msg = &ks->spi_msg1;
@@ -173,9 +180,10 @@ static void ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
 	xfer->rx_buf = NULL;
 	xfer->len = 4;
 
-	ret = spi_sync(ks->spidev, msg);
+	ret = spi_sync_robust(ks->spidev, msg);
 	if (ret < 0)
-		netdev_err(ks->netdev, "spi_sync() failed\n");
+		netdev_err(ks->netdev, "%s(%x, %x): spi_sync() failed\n", __func__, reg, val);
+	return ret;
 }
 
 /**
@@ -205,7 +213,7 @@ static void ks8851_wrreg8(struct ks8851_net *ks, unsigned reg, unsigned val)
 
 	ret = spi_sync(ks->spidev, msg);
 	if (ret < 0)
-		netdev_err(ks->netdev, "spi_sync() failed\n");
+		netdev_err(ks->netdev, "%s(%x, %x): spi_sync() failed\n", __func__, reg, val);
 }
 
 /**
@@ -717,7 +725,7 @@ static inline unsigned calc_txlen(unsigned len)
  * needs, such as IRQ on completion. Send the header and the packet data to
  * the device.
  */
-static void ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
+static int ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
 {
 	struct spi_transfer *xfer = ks->spi_xfer2;
 	struct spi_message *msg = &ks->spi_msg2;
@@ -750,6 +758,7 @@ static void ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
 	ret = spi_sync(ks->spidev, msg);
 	if (ret < 0)
 		netdev_err(ks->netdev, "%s: spi_sync() failed\n", __func__);
+	return ret;
 }
 
 /**
@@ -779,6 +788,7 @@ static void ks8851_tx_work(struct work_struct *work)
 	struct ks8851_net *ks = container_of(work, struct ks8851_net, tx_work);
 	struct sk_buff *txb;
 	bool last = skb_queue_empty(&ks->txq);
+	int ret, cnt;
 
 	mutex_lock(&ks->lock);
 
@@ -787,11 +797,13 @@ static void ks8851_tx_work(struct work_struct *work)
 		last = skb_queue_empty(&ks->txq);
 
 		if (txb != NULL) {
-			ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr | RXQCR_SDA);
-			ks8851_wrpkt(ks, txb, last);
-			ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr);
-			ks8851_wrreg16(ks, KS_TXQCR, TXQCR_METFE);
-
+			cnt = 0;
+			do {
+				ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr | RXQCR_SDA);
+				ret = ks8851_wrpkt(ks, txb, last);
+				ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr);
+				ks8851_wrreg16(ks, KS_TXQCR, TXQCR_METFE);
+			} while (ret < 0 && cnt++ < 3);
 			ks8851_done_tx(ks, txb);
 		}
 	}
