@@ -138,6 +138,7 @@ struct davinci_spi {
 	u8			rx_tmp_buf[SPI_TMP_BUFSZ];
 	int			rcount;
 	int			wcount;
+	int			rerror;
 	struct davinci_spi_dma	dma;
 	struct davinci_spi_platform_data *pdata;
 
@@ -510,12 +511,11 @@ static void davinci_spi_dma_callback(unsigned lch, u16 status, void *data)
 			dspi->wcount = 0;
 	}
 	if (status == DMA_CC_ERROR) {
-		pr_info("dma cc_error ch=%d\n", lch, status);
-		if (lch == dma->rx_channel)
-			dspi->rcount = 0;
+		dspi->rerror = 1;
+		pr_info("dma cc_error ch=%d\n", lch);
 	}
 
-	if ((!dspi->wcount && !dspi->rcount) || (status != DMA_COMPLETE))
+	if (!dspi->wcount && (!dspi->rcount || dspi->rerror))
 		complete(&dspi->done);
 }
 
@@ -553,6 +553,7 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	dspi->rx = t->rx_buf;
 	dspi->wcount = t->len / data_type;
 	dspi->rcount = dspi->wcount;
+	dspi->rerror = 0;
 
 	spidat1 = ioread32(dspi->base + SPIDAT1);
 
