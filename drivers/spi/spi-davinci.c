@@ -17,6 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+//#define DEBUG
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
@@ -538,6 +539,7 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	struct davinci_spi_platform_data *pdata;
 	unsigned uninitialized_var(rx_buf_count);
 	struct device *sdev;
+	u8 io_type;
 
 	dspi = spi_master_get_devdata(spi->master);
 	pdata = dspi->pdata;
@@ -560,12 +562,25 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	clear_io_bits(dspi->base + SPIGCR1, SPIGCR1_POWERDOWN_MASK);
 	set_io_bits(dspi->base + SPIGCR1, SPIGCR1_SPIENA_MASK);
 
-	INIT_COMPLETION(dspi->done);
+	io_type = spicfg->io_type;
+	/* If the transfer is short, it's actually faster to do PIO rather than
+	 * DMA. Need fine-tuning maybe.
+	 * TODO: refactor this spaghetti ><
+	 */
+	if (dspi->wcount < 16) {
+		dev_dbg(sdev, "use pio\n", dspi->wcount, dspi->rcount);
+		io_type = SPI_IO_TYPE_POLL;
+	}
+	else
+		dev_dbg(sdev, "use dma\n");
 
-	if (spicfg->io_type == SPI_IO_TYPE_INTR)
+	if (io_type != SPI_IO_TYPE_POLL)
+		INIT_COMPLETION(dspi->done);
+
+	if (io_type == SPI_IO_TYPE_INTR)
 		set_io_bits(dspi->base + SPIINT, SPIINT_MASKINT);
 
-	if (spicfg->io_type != SPI_IO_TYPE_DMA) {
+	if (io_type != SPI_IO_TYPE_DMA) {
 		/* start the transfer */
 		dspi->wcount--;
 		tx_data = dspi->get_tx(dspi);
@@ -681,7 +696,7 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	}
 
 	/* Wait for the transfer to complete */
-	if (spicfg->io_type != SPI_IO_TYPE_POLL) {
+	if (io_type != SPI_IO_TYPE_POLL) {
 		wait_for_completion_interruptible(&(dspi->done));
 	} else {
 		while (dspi->rcount > 0 || dspi->wcount > 0) {
@@ -693,7 +708,7 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	}
 
 	clear_io_bits(dspi->base + SPIINT, SPIINT_MASKALL);
-	if (spicfg->io_type == SPI_IO_TYPE_DMA) {
+	if (io_type == SPI_IO_TYPE_DMA) {
 
 		if (t->tx_buf)
 			dma_unmap_single(&spi->dev, t->tx_dma, t->len,
