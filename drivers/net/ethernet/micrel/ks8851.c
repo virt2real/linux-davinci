@@ -484,13 +484,13 @@ static void ks8851_dbg_dumpkkt(struct ks8851_net *ks, u8 *rxpkt)
  */
 static void ks8851_rx_pkts(struct ks8851_net *ks)
 {
-	struct sk_buff *skb = NULL;
+	struct sk_buff *skb;
 	unsigned rxh;
 	unsigned rxfc;
 	unsigned rxlen;
 	unsigned rxstat;
+	void *rxpkt;
 	int ret = 0;
-	u8 *rxpkt = NULL;
 
 	rxfc = ks8851_rdreg8(ks, KS_RXFC);
 	netif_dbg(ks, rx_status, ks->netdev,
@@ -531,8 +531,7 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 
 			rxlen -= 4;
 			rxalign = ALIGN(rxlen, 4);
-			if (!skb)
-				skb = netdev_alloc_skb_ip_align(ks->netdev, rxalign);
+			skb = netdev_alloc_skb_ip_align(ks->netdev, rxalign);
 			if (skb) {
 
 				/* 4 bytes of status header + 4 bytes of
@@ -540,9 +539,7 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 				 * header, so that they are copied,
 				 * but ignored.
 				 */
-
-				if (!rxpkt)		/* get pointer to buffer in skb, if not have */
-					rxpkt = skb_put(skb, rxlen) - 8;
+				rxpkt = skb_put(skb, rxlen) - 8;
 
 				ret = ks8851_rdfifo(ks, rxpkt, rxalign + 8);
 				if (!ret) {
@@ -551,18 +548,14 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 					
 					ks->netdev->stats.rx_packets++;
 					ks->netdev->stats.rx_bytes += rxlen;
-
-					/* skb nicely done, we need a new one */
-					skb = NULL;
-					rxpkt = NULL;
+				}
+				else {
+					dev_kfree_skb(skb);
 				}
 			}
 		}
 		ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr);
 	}
-	/* if we still have unused skb, free it */
-	if (skb)
-		kfree_skb(skb);
 }
 
 /**
