@@ -995,12 +995,15 @@ static int davinci_spi_remove(struct platform_device *pdev)
 	struct davinci_spi *dspi;
 	struct spi_master *master;
 	struct resource *r;
+	struct davinci_spi_dma *dma;
 
 	master = dev_get_drvdata(&pdev->dev);
 	dspi = spi_master_get_devdata(master);
+	dma = &dspi->dma;
 
 	spi_bitbang_stop(&dspi->bitbang);
-
+	edma_free_channel(dma->tx_channel);
+	edma_free_channel(dma->rx_channel);
 	clk_disable(dspi->clk);
 	clk_put(dspi->clk);
 	spi_master_put(master);
