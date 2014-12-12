@@ -699,7 +699,7 @@ static int v2r_set_pwctr(int number, int value) {
 	if (value)
 		result |= 1 << number;
 	else
-		result &= !(1 << number);
+		result &= ~(1 << number);
 
 	davinci_rtcss_write(result, 0x00);
 
