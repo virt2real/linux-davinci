@@ -11,7 +11,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#define DEBUG
+//#define DEBUG
 
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -144,13 +144,6 @@ static int msg_enable;
 /* turn register number and byte-enable mask into data for start of packet */
 #define MK_OP(_byteen, _reg) (BYTE_EN(_byteen) | (_reg)  << (8+2) | (_reg) >> 6)
 
-int spi_sync_robust(struct spi_device *spi, struct spi_message *message)
-{
-	int cnt = 0, ret = 0;
-	for (; (ret = spi_sync(spi, message)) < 0 && cnt < 3; cnt++);
-	return ret;
-}
-
 /* SPI register read/write calls.
  *
  * All these calls issue SPI transactions to access the chip's registers. They
@@ -173,6 +166,7 @@ static int ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
 	u16 txb[2];
 	int ret;
 
+	netdev_dbg(ks->netdev, "wr16(0x%x, 0x%x)\n", reg, val);
 	txb[0] = (MK_OP(reg & 2 ? 0xC : 0x03, reg) | KS_SPIOP_WR);
 	txb[1] = (val);
 
@@ -180,9 +174,9 @@ static int ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
 	xfer->rx_buf = NULL;
 	xfer->len = 4;
 
-	ret = spi_sync_robust(ks->spidev, msg);
+	ret = spi_sync(ks->spidev, msg);
 	if (ret < 0)
-		netdev_err(ks->netdev, "%s(%x, %x): spi_sync() failed\n", __func__, reg, val);
+		netdev_dbg(ks->netdev, "%s(%x, %x): spi_sync() failed\n", __func__, reg, val);
 	return ret;
 }
 
@@ -213,26 +207,7 @@ static void ks8851_wrreg8(struct ks8851_net *ks, unsigned reg, unsigned val)
 
 	ret = spi_sync(ks->spidev, msg);
 	if (ret < 0)
-		netdev_err(ks->netdev, "%s(%x, %x): spi_sync() failed\n", __func__, reg, val);
-}
-
-/**
- * ks8851_rx_1msg - select whether to use one or two messages for spi read
- * @ks: The device structure
- *
- * Return whether to generate a single message with a tx and rx buffer
- * supplied to spi_sync(), or alternatively send the tx and rx buffers
- * as separate messages.
- *
- * Depending on the hardware in use, a single message may be more efficient
- * on interrupts or work done by the driver.
- *
- * This currently always returns true until we add some per-device data passed
- * from the platform code to specify which mode is better.
- */
-static inline bool ks8851_rx_1msg(struct ks8851_net *ks)
-{
-	return true;
+		netdev_dbg(ks->netdev, "%s(%x, %x): spi_sync() failed\n", __func__, reg, val);
 }
 
 /**
@@ -245,7 +220,7 @@ static inline bool ks8851_rx_1msg(struct ks8851_net *ks)
  * This is the low level read call that issues the necessary spi message(s)
  * to read data from the register specified in @op.
  */
-static void ks8851_rdreg(struct ks8851_net *ks, unsigned op,
+static int ks8851_rdreg(struct ks8851_net *ks, unsigned op,
 			 u8 *rxb, unsigned rxl)
 {
 	struct spi_transfer *xfer;
@@ -256,35 +231,20 @@ static void ks8851_rdreg(struct ks8851_net *ks, unsigned op,
 
 	txb[0] = (op | KS_SPIOP_RD);
 
-	if (ks8851_rx_1msg(ks)) {
-		msg = &ks->spi_msg1;
-		xfer = &ks->spi_xfer1;
+	msg = &ks->spi_msg1;
+	xfer = &ks->spi_xfer1;
 
-		xfer->tx_buf = txb;
-		xfer->rx_buf = trx;
-		xfer->len = rxl + 2;
-	} else {
-		msg = &ks->spi_msg2;
-		xfer = ks->spi_xfer2;
+	xfer->tx_buf = txb;
+	xfer->rx_buf = trx;
+	xfer->len = rxl + 2;
 
-		xfer->tx_buf = txb;
-		xfer->rx_buf = NULL;
-		xfer->len = 2;
-
-		xfer++;
-		xfer->tx_buf = NULL;
-		xfer->rx_buf = trx;
-		xfer->len = rxl;
-	}
-
-	ret = spi_sync_robust(ks->spidev, msg);
+	ret = spi_sync(ks->spidev, msg);
 	if (ret < 0)
-		netdev_err(ks->netdev, "read: spi_sync() failed\n");
-	else if (ks8851_rx_1msg(ks))
-		memcpy(rxb, trx + 2, rxl);
+		netdev_dbg(ks->netdev, "rdreg: spi_sync() failed\n");
 	else
-		memcpy(rxb, trx, rxl);
+		memcpy(rxb, trx + 2, rxl);
 
+	return ret;
 }
 
 /**
@@ -314,6 +274,7 @@ static unsigned ks8851_rdreg16(struct ks8851_net *ks, unsigned reg)
 	u16 rx = 0;
 
 	ks8851_rdreg(ks, MK_OP(reg & 2 ? 0xC : 0x3, reg), (u8 *)&rx, 2);
+	netdev_dbg(ks->netdev, "rd16(0x%x) = 0x%x\n", reg, rx);
 	return (rx);
 }
 
@@ -351,7 +312,6 @@ static unsigned ks8851_rdreg32(struct ks8851_net *ks, unsigned reg)
  */
 static void ks8851_soft_reset(struct ks8851_net *ks, unsigned op)
 {
-	unsigned rxqcr;
 	gpio_direction_output(GPIO_RESET, 0);
 	mdelay(1);
 	gpio_set_value(GPIO_RESET, 1);
@@ -525,18 +485,16 @@ static void ks8851_dbg_dumpkkt(struct ks8851_net *ks, u8 *rxpkt)
 static void ks8851_rx_pkts(struct ks8851_net *ks)
 {
 	struct sk_buff *skb = NULL;
+	unsigned rxh;
 	unsigned rxfc;
 	unsigned rxlen;
 	unsigned rxstat;
-	unsigned rxcr1;
 	int ret = 0;
 	u8 *rxpkt = NULL;
 
 	rxfc = ks8851_rdreg8(ks, KS_RXFC);
-
 	netif_dbg(ks, rx_status, ks->netdev,
 		  "%s: %d packets\n", __func__, rxfc);
-
 	/* Currently we're issuing a read per packet, but we could possibly
 	 * improve the code by issuing a single read, getting the receive
 	 * header, allocating the packet and then reading the packet data
@@ -548,12 +506,19 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 	 */
 
 	for (; rxfc != 0; rxfc--) {
-		rxstat = ks8851_rdreg16(ks, KS_RXFHSR);
-		rxlen = ks8851_rdreg16(ks, KS_RXFHBCR);
+		rxh = ks8851_rdreg32(ks, KS_RXFHSR);
+		rxstat = rxh & 0xffff;
+		rxlen = (rxh >> 16) & 0xfff;
 
 		netif_dbg(ks, rx_status, ks->netdev,
 				"rx: stat 0x%04x, len 0x%04x\n", rxstat, rxlen);
 
+		if (!(rxstat & RXFSHR_RXFV)) {	/* frame invalid */
+			netif_dbg(ks, rx_status, ks->netdev,
+					"rx: invalid frame\n");
+			continue;
+		}
+			
 		/* set dma read address */
 		ks8851_wrreg16(ks, KS_RXFDPR, RXFDPR_RXFPAI | 0x00);
 
@@ -581,12 +546,9 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 
 				ret = ks8851_rdfifo(ks, rxpkt, rxalign + 8);
 				if (!ret) {
-					if (netif_msg_pktdata(ks))
-						ks8851_dbg_dumpkkt(ks, rxpkt);
-
 					skb->protocol = eth_type_trans(skb, ks->netdev);
 					netif_rx_ni(skb);
-
+					
 					ks->netdev->stats.rx_packets++;
 					ks->netdev->stats.rx_bytes += rxlen;
 
@@ -596,13 +558,7 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 				}
 			}
 		}
-
 		ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr);
-		if (ret) {
-			rxcr1 = ks8851_rdreg16(ks, KS_RXCR1);
-			ks8851_wrreg16(ks, KS_RXCR1, rxcr1 | RXCR1_FRXQ);
-			ks8851_wrreg16(ks, KS_RXCR1, rxcr1);
-		}
 	}
 	/* if we still have unused skb, free it */
 	if (skb)
@@ -663,15 +619,26 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 		 * system */
 		ks->tx_space = ks8851_rdreg16(ks, KS_TXMIR);
 
-		//netif_dbg(ks, intr, ks->netdev,
-		//	  "%s: txspace %d\n", __func__, ks->tx_space);
+		netif_dbg(ks, intr, ks->netdev,
+			  "%s: txspace %d\n", __func__, ks->tx_space);
 	}
 
 	if (status & IRQ_RXI)
 		handled |= IRQ_RXI;
 
+	if (status & IRQ_RXOI) {
+		struct ks8851_rxctrl *rxc = &ks->rxctrl;
+
+		netdev_err(ks->netdev, "%s: rx overrun\n", __func__);
+
+		ks8851_wrreg16(ks, KS_RXCR1, rxc->rxcr1 | RXCR1_FRXQ);
+		ks8851_wrreg16(ks, KS_RXCR1, rxc->rxcr1);
+
+		handled |= IRQ_RXOI;
+	}
+
 	if (status & IRQ_SPIBEI) {
-		dev_err(&ks->spidev->dev, "%s: spi bus error\n", __func__);
+		netdev_err(ks->netdev, "%s: spi bus error\n", __func__);
 		handled |= IRQ_SPIBEI;
 	}
 
@@ -769,10 +736,9 @@ static int ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
 	xfer->len = ALIGN(txp->len, 4);
 
 	ret = spi_sync(ks->spidev, msg);
-	if (ret < 0) {
-		netdev_err(ks->netdev, "%s: spi_sync() failed\n", __func__);
-		BUG();
-	}
+	if (ret < 0)
+		netdev_dbg(ks->netdev, "%s: spi_sync() failed\n", __func__);
+	netif_dbg(ks, tx_queued, ks->netdev, "%s: done\n", __func__);
 	return ret;
 }
 
