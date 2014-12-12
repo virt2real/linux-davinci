@@ -434,7 +434,7 @@ static struct spi_board_info ksz8851_snl_info[] __initdata = {
 		.modalias	= "ks8851",
 		.bus_num	= 3,
 		.chip_select	= 0,
-		.max_speed_hz	= 24000000,
+		.max_speed_hz	= 40000000,
 		.controller_data = &ksz8851_mcspi_config,
 		.irq		= IRQ_DM365_GPIO0
      }
