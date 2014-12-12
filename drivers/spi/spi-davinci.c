@@ -552,7 +552,7 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	dspi->tx = t->tx_buf;
 	dspi->rx = t->rx_buf;
 	dspi->wcount = t->len / data_type;
-	dspi->rcount = dspi->wcount;
+	dspi->rcount = (t->rx_buf ? dspi->wcount : 0);
 	dspi->rerror = 0;
 
 	spidat1 = ioread32(dspi->base + SPIDAT1);
@@ -648,36 +648,34 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 		if (t->rx_buf) {
 			rx_buf = t->rx_buf;
 			rx_buf_count = t->len;
-		} else {
-			rx_buf = dspi->rx_tmp_buf;
-			rx_buf_count = sizeof(dspi->rx_tmp_buf);
-		}
 
-		t->rx_dma = dma_map_single(&spi->dev, rx_buf, rx_buf_count,
-							DMA_FROM_DEVICE);
-		if (dma_mapping_error(&spi->dev, t->rx_dma)) {
-			dev_dbg(sdev, "Couldn't DMA map a %d bytes RX buffer\n",
-								rx_buf_count);
-			if (t->tx_buf)
-				dma_unmap_single(&spi->dev, t->tx_dma, t->len,
-								DMA_TO_DEVICE);
-			return -ENOMEM;
-		}
+			t->rx_dma = dma_map_single(&spi->dev, t->rx_buf, t->len,
+					DMA_FROM_DEVICE);
+			if (dma_mapping_error(&spi->dev, t->rx_dma)) {
+				dev_dbg(sdev, "Couldn't DMA map a %d bytes RX buffer\n",
+						t->len);
+				if (t->tx_buf)
+					dma_unmap_single(&spi->dev, t->tx_dma, t->len,
+							DMA_TO_DEVICE);
+				return -ENOMEM;
+			}
 
-		param.opt = TCINTEN | EDMA_TCC(dma->rx_channel);
-		param.src = rx_reg;
-		param.a_b_cnt = b << 16 | data_type;
-		param.dst = t->rx_dma;
-		param.src_dst_bidx = (t->rx_buf ? data_type : 0) << 16;
-		param.link_bcntrld = 0xffffffff;
-		param.src_dst_cidx = (t->rx_buf ? data_type : 0) << 16;
-		param.ccnt = c;
-		edma_write_slot(dma->rx_channel, &param);
+			param.opt = TCINTEN | EDMA_TCC(dma->rx_channel);
+			param.src = rx_reg;
+			param.a_b_cnt = b << 16 | data_type;
+			param.dst = t->rx_dma;
+			param.src_dst_bidx = data_type << 16;
+			param.link_bcntrld = 0xffffffff;
+			param.src_dst_cidx = data_type << 16;
+			param.ccnt = c;
+			edma_write_slot(dma->rx_channel, &param);
+		}
 
 		if (pdata->cshold_bug)
 			iowrite16(spidat1 >> 16, dspi->base + SPIDAT1 + 2);
 
-		edma_start(dma->rx_channel);
+		if (t->rx_buf)
+			edma_start(dma->rx_channel);
 		edma_start(dma->tx_channel);
 		set_io_bits(dspi->base + SPIINT, SPIINT_DMA_REQ_EN);
 	}
@@ -700,9 +698,9 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 		if (t->tx_buf)
 			dma_unmap_single(&spi->dev, t->tx_dma, t->len,
 								DMA_TO_DEVICE);
-
-		dma_unmap_single(&spi->dev, t->rx_dma, rx_buf_count,
-							DMA_FROM_DEVICE);
+		if (t->rx_buf)
+			dma_unmap_single(&spi->dev, t->rx_dma, rx_buf_count,
+								DMA_FROM_DEVICE);
 
 		clear_io_bits(dspi->base + SPIINT, SPIINT_DMA_REQ_EN);
 	}
