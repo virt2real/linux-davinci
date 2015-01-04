@@ -66,3 +66,10 @@ config V2R_PPMSUM
 	default n
 	---help---
 	Virt2real PPMSUM driver output. Not stable, FOR TESTING ONLY!
+
+config V2R_IRSEND
+	depends on V2R_DRIVERS
+	tristate "irsend driver"
+	default n
+	---help---
+	Virt2real IR send driver, based on RTO subsystem.
