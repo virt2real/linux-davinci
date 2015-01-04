@@ -104,7 +104,7 @@ static int rto_channel = 0;
 module_param_named(channel, rto_channel, int, 0);
 
 /* IR pulse frequency */
-static int pulsefreq = 0;
+static int pulsefreq = 38000; // 38 kHz
 module_param_named(freq, pulsefreq, int, 0);
 
 
@@ -482,9 +482,9 @@ static unsigned int ir_data_send (void) {
 		printk("%d %ld\n", i, convert_timer_to_ms(array_of_pulses[i]));
 	}
 */	
-	array_of_pulses[j]=convert_ms_to_timer(2000);
+	array_of_pulses[j] = convert_ms_to_timer(2000);
 	rto_dma_dev.len_timer_table--;
-	rto_dma_dev.timer_table=(void *)(&array_of_pulses[1]);
+	rto_dma_dev.timer_table = (void *)(&array_of_pulses[1]);
 	first_value=array_of_pulses[0];
 
 	return summ_all_pulses;
@@ -588,12 +588,11 @@ static int __init rtodrv_probe(struct platform_device *pdev){
 	pr_debug("%s: RTO remap address: %x\n", DEVICE_NAME, (unsigned int)vaddr);
 	RTO_BASE = (volatile unsigned long*)vaddr;
 
-	if (pulsefreq) {
-		// TODO: calculate SN_PULSE from real freq
-		SN_PULSE = pulsefreq;
-	}
+	/* calculate SN_PULSE from real Hz frequency */
+	SN_PULSE = 500000000 / pulsefreq;
+
 	printk("%s: using RTO channel %d\n", DEVICE_NAME, rto_channel);
-	printk("%s: IR freq = %d Hz\n", DEVICE_NAME, SN_PULSE);
+	printk("%s: IR freq = %d Hz\n", DEVICE_NAME, pulsefreq);
 
 	//davinci_fiq0_regs = ioremap(DAVINCI_ARM_INTC_BASE, SZ_4K);
 	//pr_debug("interrupt remap address: %x\n", (unsigned int)davinci_fiq0_regs);
