@@ -8,3 +8,4 @@ obj-$(CONFIG_V2R_SWPWM)		+= v2r_sw_pwm.o
 obj-$(CONFIG_V2R_EXTPWM)        += v2r_extpwm.o
 obj-$(CONFIG_V2R_GPIOEVENT)     += gpio-event-drv.o
 obj-$(CONFIG_V2R_PPMSUM)     	+= v2r_ppmsum.o
+obj-$(CONFIG_V2R_IRSEND)     	+= v2r_irsend.o
