@@ -32,7 +32,7 @@
 #include <linux/slab.h>
 
 #include <linux/platform_data/spi-davinci.h>
-#include <mach/edma.h>
+#include <linux/platform_data/edma.h>
 
 #define SPI_NO_RESOURCE		((resource_size_t)-1)
 
@@ -505,13 +505,13 @@ static void davinci_spi_dma_callback(unsigned lch, u16 status, void *data)
 
 	edma_stop(lch);
 
-	if (status == DMA_COMPLETE) {
+	if (status == EDMA_DMA_COMPLETE) {
 		if (lch == dma->rx_channel)
 			dspi->rcount = 0;
 		if (lch == dma->tx_channel)
 			dspi->wcount = 0;
 	}
-	if (status == DMA_CC_ERROR) {
+	if (status == EDMA_DMA_CC_ERROR) {
 		dspi->rerror = 1;
 		pr_info("dma cc_error ch=%d\n", lch);
 	}
@@ -568,7 +568,7 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	 * TODO: refactor this spaghetti ><
 	 */
 	if (dspi->wcount < 16) {
-		dev_dbg(sdev, "use pio\n", dspi->wcount, dspi->rcount);
+		dev_dbg(sdev, "use pio\n");
 		io_type = SPI_IO_TYPE_POLL;
 	}
 	else
