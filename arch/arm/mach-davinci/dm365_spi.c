@@ -18,6 +18,7 @@
 #include <linux/ioport.h>
 #include <linux/spi/spi.h>
 #include <mach/mux.h>
+#include <mach/irqs.h>
 
 #include "dm365_spi.h"
 
@@ -98,6 +99,7 @@ static struct resource davinci_spi_resources[spirsrc_evqdma + 1][5] = {
 		},
 		[spirsrc_irq] = {
 			.flags	= IORESOURCE_IRQ,
+			.start	= IRQ_DM365_SPIINT3_0
 		},
 		[spirsrc_rxdma] = {
 			.flags	= IORESOURCE_DMA
