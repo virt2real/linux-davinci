@@ -12,6 +12,12 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 //#define DEBUG
+//#define DEBUG_REGS
+#ifdef DEBUG_REGS
+#define dbg_reg(netdev, ...) netdev_dbg(netdev, __VA_ARGS__)
+#else
+#define dbg_reg(netdev, ...)
+#endif
 
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -166,7 +172,7 @@ static int ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
 	u16 txb[2];
 	int ret;
 
-	netdev_dbg(ks->netdev, "wr16(0x%x, 0x%x)\n", reg, val);
+	dbg_reg(ks->netdev, "wr16(0x%x, 0x%x)\n", reg, val);
 	txb[0] = (MK_OP(reg & 2 ? 0xC : 0x03, reg) | KS_SPIOP_WR);
 	txb[1] = (val);
 
@@ -274,7 +280,7 @@ static unsigned ks8851_rdreg16(struct ks8851_net *ks, unsigned reg)
 	u16 rx = 0;
 
 	ks8851_rdreg(ks, MK_OP(reg & 2 ? 0xC : 0x3, reg), (u8 *)&rx, 2);
-	netdev_dbg(ks->netdev, "rd16(0x%x) = 0x%x\n", reg, rx);
+	dbg_reg(ks->netdev, "rd16(0x%x) = 0x%x\n", reg, rx);
 	return (rx);
 }
 
@@ -514,8 +520,8 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 				"rx: stat 0x%04x, len 0x%04x\n", rxstat, rxlen);
 
 		if (!(rxstat & RXFSHR_RXFV)) {	/* frame invalid */
-			netif_dbg(ks, rx_status, ks->netdev,
-					"rx: invalid frame\n");
+			netif_err(ks, rx_status, ks->netdev,
+					"rx: invalid frame stat=0x%x\n", rxstat);
 			continue;
 		}
 			
