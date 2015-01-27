@@ -113,7 +113,7 @@ struct ks8851_net {
 	struct mutex		lock;
 	spinlock_t		statelock;
 
-	union ks8851_tx_hdr	txh ____cacheline_aligned;
+	u8			txh[8] ____cacheline_aligned;
 	u8			rxd[8];
 	u8			txd[8];
 
@@ -703,24 +703,18 @@ static int ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
 {
 	struct spi_transfer *xfer = ks->spi_xfer2;
 	struct spi_message *msg = &ks->spi_msg2;
-	unsigned fid = 0;
 	int ret;
 
 	netif_dbg(ks, tx_queued, ks->netdev, "%s: skb %p, %d@%p, irq %d\n",
 		  __func__, txp, txp->len, txp->data, irq);
 
-	fid = ks->fid++;
-	fid &= TXFR_TXFID_MASK;
+	ks->txh[0] = KS_SPIOP_TXFIFO;
+	*(uint16_t*)(ks->txh+1) =
+		((ks->fid++) & TXFR_TXFID_MASK) |
+		(irq ? TXFR_TXIC : 0);
+	*(uint16_t*)(ks->txh+3) = txp->len & 0xFFFF;
 
-	if (irq)
-		fid |= TXFR_TXIC;	/* irq on completion */
-
-	/* start header at txb[1] to align txw entries */
-	ks->txh.txb[1] = KS_SPIOP_TXFIFO;
-	ks->txh.txw[1] = (fid);
-	ks->txh.txw[2] = (txp->len);
-
-	xfer->tx_buf = &ks->txh.txb[1];
+	xfer->tx_buf = ks->txh;
 	xfer->rx_buf = NULL;
 	xfer->len = 5;
 
