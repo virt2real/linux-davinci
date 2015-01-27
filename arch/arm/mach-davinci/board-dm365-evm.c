@@ -388,6 +388,7 @@ __init static void dm365_usb_configure(void)
 static void dm365_ks8851_init(void){
 	gpio_request(0, "KSZ8851");
 	gpio_direction_input(0);
+	davinci_cfg_reg(DM365_INT_SPI3);
 	davinci_cfg_reg(DM365_EVT18_SPI3_TX);
 	davinci_cfg_reg(DM365_EVT19_SPI3_RX);
 }

@@ -563,16 +563,16 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	set_io_bits(dspi->base + SPIGCR1, SPIGCR1_SPIENA_MASK);
 
 	io_type = spicfg->io_type;
-	/* If the transfer is short, it's actually faster to do PIO rather than
-	 * DMA. Need fine-tuning maybe.
-	 * TODO: refactor this spaghetti ><
+	/* Achtung, kludge!
+	 * - The fastest way to transfer a few bytes is polling
+	 * - The most reliable and not very CPU-abusive way to receive anything
+	 *   is IRQs
+	 * - Finally, DMA is used only for long unidirectional writes
 	 */
-	if (dspi->wcount < 16) {
-		dev_dbg(sdev, "use pio\n");
+	if (dspi->wcount < 8)
 		io_type = SPI_IO_TYPE_POLL;
-	}
-	else
-		dev_dbg(sdev, "use dma\n");
+	else if (t->rx_buf)
+		io_type = SPI_IO_TYPE_INTR;
 
 	if (io_type != SPI_IO_TYPE_POLL)
 		INIT_COMPLETION(dspi->done);
@@ -591,7 +591,6 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 		struct davinci_spi_dma *dma;
 		unsigned long tx_reg, rx_reg;
 		struct edmacc_param param;
-		void *rx_buf;
 		int b, c;
 
 		dma = &dspi->dma;
@@ -661,7 +660,6 @@ static int davinci_spi_bufs(struct spi_device *spi, struct spi_transfer *t)
 		 */
 
 		if (t->rx_buf) {
-			rx_buf = t->rx_buf;
 			rx_buf_count = t->len;
 
 			t->rx_dma = dma_map_single(&spi->dev, t->rx_buf, t->len,
@@ -825,7 +823,7 @@ static int davinci_spi_probe(struct platform_device *pdev)
 	struct davinci_spi_platform_data *pdata;
 	struct resource *r, *mem;
 	resource_size_t dma_rx_chan = SPI_NO_RESOURCE;
-	resource_size_t	dma_tx_chan = SPI_NO_RESOURCE;
+	resource_size_t dma_tx_chan = SPI_NO_RESOURCE;
 	int i = 0, ret = 0;
 	u32 spipc0;
 
