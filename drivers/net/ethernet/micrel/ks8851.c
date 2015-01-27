@@ -626,12 +626,7 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 		handled |= IRQ_RXI;
 
 	if (status & IRQ_RXOI) {
-		struct ks8851_rxctrl *rxc = &ks->rxctrl;
-
 		netdev_err(ks->netdev, "%s: rx overrun\n", __func__);
-
-		ks8851_wrreg16(ks, KS_RXCR1, rxc->rxcr1 | RXCR1_FRXQ);
-		ks8851_wrreg16(ks, KS_RXCR1, rxc->rxcr1);
 
 		handled |= IRQ_RXOI;
 	}
