@@ -117,6 +117,7 @@ struct ks8851_net {
 	u8			rxd[8];
 	u8			txd[8];
 
+
 	u32			msg_enable ____cacheline_aligned;
 	u16			tx_space;
 	u8			fid;
@@ -138,6 +139,10 @@ struct ks8851_net {
 	struct spi_message	spi_msg2;
 	struct spi_transfer	spi_xfer1;
 	struct spi_transfer	spi_xfer2[2];
+
+	struct spi_message	msg_send_pkt;
+	struct spi_transfer	xfer_send_pkt[5];
+	u8 buf_send_pkt[20] ____cacheline_aligned;
 
 	struct eeprom_93cx6	eeprom;
 };
@@ -165,20 +170,65 @@ static int msg_enable;
  *
  * Issue a write to put the value @val into the register specified in @reg.
  */
+static void fill_xfer(struct spi_transfer *xfer, u8 *tx, u8 *rx, u16 len, u8 cs_change) {
+	xfer->tx_buf = tx;
+	xfer->rx_buf = rx;
+	xfer->len = len;
+	xfer->cs_change = cs_change;
+}
+#define XFER_TX(xfer, ptr, cs_change, buf_func, ...) \
+	do { \
+		u8 __len = buf_func(ptr, ##__VA_ARGS__); \
+		fill_xfer(xfer++, ptr, NULL, __len, cs_change); \
+		ptr += __len; \
+	} while (0)
+
+static inline u8 wrreg16_buf(u8 *buf, unsigned reg, unsigned val)
+{
+	u16 *b = (u16*)buf;
+	b[0] = (MK_OP(reg & 2 ? 0xC : 0x03, reg) | KS_SPIOP_WR);
+	b[1] = (val);
+	return 4;
+}
+
+static inline u8 txpkt_header_buf(u8 *buf, u16 control, u16 len)
+{
+	buf[0] = KS_SPIOP_TXFIFO;
+	*(uint16_t*)(buf+1) = control;
+	*(uint16_t*)(buf+3) = len;
+	return 5;
+}
+
+static inline void build_msg_send_pkt(struct ks8851_net *ks)
+{
+	struct spi_transfer *xfer = &ks->xfer_send_pkt[0];
+	u8 *ptr = ks->buf_send_pkt;
+	u16 rxqcr =
+		(RXQCR_RXFCTE |  /* IRQ on frame count exceeded */
+		RXQCR_RXDBCTE | /* IRQ on byte count exceeded */
+		RXQCR_RXDTTE);  /* IRQ on time exceeded */
+
+	XFER_TX(xfer, ptr, 1, wrreg16_buf, KS_RXQCR, rxqcr | RXQCR_SDA);
+	XFER_TX(xfer, ptr, 0, txpkt_header_buf, 0, 0);
+
+	xfer++;	// xfer with packet body, will fill it later
+	xfer->cs_change = 1;
+
+	XFER_TX(xfer, ptr, 1, wrreg16_buf, KS_RXQCR, rxqcr);
+	XFER_TX(xfer, ptr, 0, wrreg16_buf, KS_TXQCR, TXQCR_METFE);
+
+	spi_message_init_with_transfers(&ks->msg_send_pkt, ks->xfer_send_pkt, 5);
+}
+
 static int ks8851_wrreg16(struct ks8851_net *ks, unsigned reg, unsigned val)
 {
 	struct spi_transfer *xfer = &ks->spi_xfer1;
 	struct spi_message *msg = &ks->spi_msg1;
-	u16 txb[2];
+	u8 txb[4], *ptr = txb;
 	int ret;
 
 	dbg_reg(ks->netdev, "wr16(0x%x, 0x%x)\n", reg, val);
-	txb[0] = (MK_OP(reg & 2 ? 0xC : 0x03, reg) | KS_SPIOP_WR);
-	txb[1] = (val);
-
-	xfer->tx_buf = txb;
-	xfer->rx_buf = NULL;
-	xfer->len = 4;
+	XFER_TX(xfer, ptr, 0, wrreg16_buf, reg, val);
 
 	ret = spi_sync(ks->spidev, msg);
 	if (ret < 0)
@@ -701,28 +751,27 @@ static inline unsigned calc_txlen(unsigned len)
  */
 static int ks8851_wrpkt(struct ks8851_net *ks, struct sk_buff *txp, bool irq)
 {
-	struct spi_transfer *xfer = ks->spi_xfer2;
-	struct spi_message *msg = &ks->spi_msg2;
+	struct spi_message *msg = &ks->msg_send_pkt;
+	struct spi_transfer *xfer = ks->xfer_send_pkt + 2;
+	u8 *buf = ks->buf_send_pkt;
 	int ret;
 
 	netif_dbg(ks, tx_queued, ks->netdev, "%s: skb %p, %d@%p, irq %d\n",
 		  __func__, txp, txp->len, txp->data, irq);
 
-	ks->txh[0] = KS_SPIOP_TXFIFO;
-	*(uint16_t*)(ks->txh+1) =
+	// update packet header:
+	// control
+	*(u16 *)(buf+5) =
 		((ks->fid++) & TXFR_TXFID_MASK) |
 		(irq ? TXFR_TXIC : 0);
-	*(uint16_t*)(ks->txh+3) = txp->len & 0xFFFF;
+	// length
+	*(u16 *)(buf+7) = txp->len & 0xFFFF;
 
-	xfer->tx_buf = ks->txh;
-	xfer->rx_buf = NULL;
-	xfer->len = 5;
+	// update xfer with packet data
+	fill_xfer(xfer, txp->data, NULL, ALIGN(txp->len, 4), 1);
 
-	xfer++;
-	xfer->tx_buf = txp->data;
-	xfer->rx_buf = NULL;
-	xfer->len = ALIGN(txp->len, 4);
-
+//	print_hex_dump_debug("pkt head: ", DUMP_PREFIX_NONE, 16, 1, buf, 9, 0);
+//	print_hex_dump_debug("pkt tail: ", DUMP_PREFIX_NONE, 16, 1, buf+9, 8, 0);
 	ret = spi_sync(ks->spidev, msg);
 	if (ret < 0)
 		netdev_dbg(ks->netdev, "%s: spi_sync() failed\n", __func__);
@@ -765,10 +814,7 @@ static void ks8851_tx_work(struct work_struct *work)
 		last = skb_queue_empty(&ks->txq);
 
 		if (txb != NULL) {
-			ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr | RXQCR_SDA);
 			ks8851_wrpkt(ks, txb, last);
-			ks8851_wrreg16(ks, KS_RXQCR, ks->rc_rxqcr);
-			ks8851_wrreg16(ks, KS_TXQCR, TXQCR_METFE);
 			ks8851_done_tx(ks, txb);
 		}
 	}
@@ -1430,6 +1476,9 @@ static int ks8851_probe(struct spi_device *spi)
 	spi_message_init(&ks->spi_msg2);
 	spi_message_add_tail(&ks->spi_xfer2[0], &ks->spi_msg2);
 	spi_message_add_tail(&ks->spi_xfer2[1], &ks->spi_msg2);
+
+
+	build_msg_send_pkt(ks);
 
 	/* setup EEPROM state */
 
