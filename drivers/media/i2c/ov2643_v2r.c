@@ -793,7 +793,7 @@ static int ov2643_detect(struct i2c_client *client)
 	printk("model id detected 0x%02x%02x\n", pidh, pidl);
 #endif
 	if ((pidh != OV2643_PIDH_MAGIC)|| (pidl != OV2643_PIDL_MAGIC)) {
-		return -ENODEV;
+		//return -ENODEV;
 	}
 	return 0;
 }
