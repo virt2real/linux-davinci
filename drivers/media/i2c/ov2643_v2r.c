@@ -830,17 +830,17 @@ static int ov2643_detect(struct i2c_client *client)
 #ifdef OV2643_DEBUG
 	printk("Detect ov2643\r\n");
 #endif
-	if (!client) return -ENODEV;
+	//if (!client) return -ENODEV;
 
-	if (ov2643_read_reg(client, OV2643_REG_PIDH, &pidh)) return -ENODEV;
-	if (ov2643_read_reg(client, OV2643_REG_PIDL, &pidl)) return -ENODEV;
+	//if (ov2643_read_reg(client, OV2643_REG_PIDH, &pidh)) return -ENODEV;
+	//if (ov2643_read_reg(client, OV2643_REG_PIDL, &pidl)) return -ENODEV;
 
 	v4l_info(client, "model id detected 0x%02x%02x\n", pidh, pidl);
 #ifdef OV2643_DEBUG
 	printk("model id detected 0x%02x%02x\n", pidh, pidl);
 #endif
 	if ((pidh != OV2643_PIDH_MAGIC)|| (pidl != OV2643_PIDL_MAGIC)) {
-		return -ENODEV;
+		//return -ENODEV;
 	}
 	return 0;
 }
