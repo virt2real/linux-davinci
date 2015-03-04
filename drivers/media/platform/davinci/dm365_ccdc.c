@@ -329,7 +329,8 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	regw(horz_start & START_PX_HOR_MASK, SPH);
 	regw(horz_nr_pixels & NUM_PX_HOR_MASK, LNH);
 #ifdef CONFIG_VIDEO_ADV7611
-	vert_start = image_win->top + 30;
+	//vert_start = image_win->top + 30;
+	vert_start = image_win->top + 42;
 #else
 	vert_start = image_win->top;
 #endif
