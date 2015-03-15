@@ -360,7 +360,7 @@ static void edma_callback(unsigned ch_num, u16 ch_status, void *data)
 	edma_stop(echan->ch_num);
 
 	switch (ch_status) {
-	case DMA_COMPLETE:
+	case EDMA_DMA_COMPLETE:
 		dev_dbg(dev, "transfer complete on channel %d\n", ch_num);
 
 		spin_lock_irqsave(&echan->vchan.lock, flags);
@@ -374,7 +374,7 @@ static void edma_callback(unsigned ch_num, u16 ch_status, void *data)
 		spin_unlock_irqrestore(&echan->vchan.lock, flags);
 
 		break;
-	case DMA_CC_ERROR:
+	case EDMA_DMA_CC_ERROR:
 		dev_dbg(dev, "transfer error on channel %d\n", ch_num);
 		break;
 	default:
