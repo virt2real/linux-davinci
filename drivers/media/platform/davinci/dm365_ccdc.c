@@ -34,6 +34,9 @@
 #include "dm365_ccdc_regs.h"
 #include "ccdc_hw_device.h"
 
+static u32 top_offset = 30;
+module_param (top_offset, uint, S_IRUGO);
+
 static struct device *dev;
 
 /* Defauts for module configuation paramaters */
@@ -329,8 +332,7 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	regw(horz_start & START_PX_HOR_MASK, SPH);
 	regw(horz_nr_pixels & NUM_PX_HOR_MASK, LNH);
 #ifdef CONFIG_VIDEO_ADV7611
-	vert_start = image_win->top + 30; // no bottom black field, tested on gopro
-	//vert_start = image_win->top + 42; // no bottom black field tested on win notebook
+	vert_start = image_win->top + top_offset; // default top_offset = 30
 #else
 	vert_start = image_win->top;
 #endif
