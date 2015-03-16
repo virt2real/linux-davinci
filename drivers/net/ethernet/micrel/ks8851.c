@@ -148,6 +148,7 @@ struct ks8851_net {
 };
 
 static int msg_enable;
+static char * hwaddr_string = NULL;
 
 /* shift for byte-enable data */
 #define BYTE_EN(_x)	((_x) << 2)
@@ -451,6 +452,29 @@ static void ks8851_read_mac_addr(struct net_device *dev)
 }
 
 /**
+ * ks8851_parse_mac_address - parse mac address from cmdline and write to device
+ * @str: pointer to mac string in cmdline
+ * @dev: The device structure
+ */
+static void ks8851_parse_mac_address(char * str, struct net_device *dev) {
+    int i;
+    char tmp[3];
+    int res = 0;
+
+	printk("set ks8851 fixed hwaddr %s\n", hwaddr_string);
+
+    for (i = 0; i < 6; i++) {
+		memcpy(tmp, str + i * 2, 2);
+		tmp[2] = 0;
+		kstrtoint(tmp, 16, &res);
+		dev->dev_addr[i] = res;
+    }
+
+	ks8851_write_mac_addr(dev);
+}
+
+
+/**
  * ks8851_init_mac - initialise the mac address
  * @ks: The device structure
  *
@@ -463,6 +487,12 @@ static void ks8851_init_mac(struct ks8851_net *ks)
 {
 	struct net_device *dev = ks->netdev;
     printk("Init mac address\r\n");
+
+	/* if hwaddr is set in cmdline */
+	if (hwaddr_string) { 
+		ks8851_parse_mac_address(hwaddr_string, dev);
+		return;
+	} else
 	/* first, try reading what we've got already */
 	if (ks->rc_ccr & CCR_EEPROM) {
 		ks8851_read_mac_addr(dev);
@@ -1612,6 +1642,8 @@ module_exit(ks8851_exit);
 MODULE_DESCRIPTION("KS8851 Network driver");
 MODULE_AUTHOR("Ben Dooks <ben@simtec.co.uk>");
 MODULE_LICENSE("GPL");
+
+module_param_named(hwaddr, hwaddr_string, charp, 0000);
 
 module_param_named(message, msg_enable, int, 0);
 MODULE_PARM_DESC(message, "Message verbosity level (0=none, 31=all)");
