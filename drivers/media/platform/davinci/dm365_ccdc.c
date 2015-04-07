@@ -322,7 +322,7 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	 * output to SDRAM. example, for ycbcr, it is one y and one c, so 2.
 	 * raw capture this is 1
 	 */
-	horz_start = ((image_win->left) << (ppc - 1));// + 200 ;To set shift for non BT.656 mode
+	horz_start = ((image_win->left) << (ppc - 1));// + 200 ;//To set shift for non BT.656 mode
 	horz_nr_pixels = ((image_win->width) << (ppc - 1)) - 1;
 
 	/* Writing the horizontal info into the registers */
@@ -1346,7 +1346,7 @@ static int ccdc_config_ycbcr(int mode)
 			//return -EINVAL;
 		}
 		ccdcfg |= CCDC_YCINSWP_YCBCR;//|CCDC_BW656_ENABLE;
-		//regw(1, REC656IF);
+		regw(3, REC656IF);
 		break;
 	default:
 		/* should never come here */
