@@ -142,10 +142,10 @@ struct prev_cgs dm365_cgs_defaults = {
 	.en = 0,
 };
 
-#define  WIDTH_I 1280
-#define  HEIGHT_I 720
-#define  WIDTH_O 1280
-#define  HEIGHT_O 720
+#define  WIDTH_I 1920
+#define  HEIGHT_I 1088
+#define  WIDTH_O 1920
+#define  HEIGHT_O 1088
 
 /* default ipipeif settings */
 struct ipipeif_5_1 ipipeif_5_1_defaults = {
