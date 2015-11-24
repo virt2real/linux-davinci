@@ -34,6 +34,12 @@
 #include "dm365_ccdc_regs.h"
 #include "ccdc_hw_device.h"
 
+static u32 top_offset = 52;
+module_param (top_offset, uint, S_IRUGO);
+
+static u32 left_offset = 0;
+module_param (left_offset, uint, S_IRUGO);
+
 static struct device *dev;
 
 /* Defauts for module configuation paramaters */
@@ -331,7 +337,7 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	 * raw capture this is 1
 	 */
 #ifdef CONFIG_VIDEO_TVP5150
-	horz_start = (image_win->left << (ppc - 1)); // 0x11-0x14 tvp5150 regs will be better (was + 32);
+	horz_start = (image_win->left << (ppc - 1)) + left_offset; // 0x11-0x14 tvp5150 regs will be better (was + 32);
 #else
 	horz_start = ((image_win->left) << (ppc - 1));
 #endif
@@ -341,7 +347,7 @@ static void ccdc_setwin(struct v4l2_rect *image_win,
 	regw(horz_start & START_PX_HOR_MASK, SPH);
 	regw(horz_nr_pixels & NUM_PX_HOR_MASK, LNH);
 #ifdef CONFIG_VIDEO_TVP5150	
-	vert_start = image_win->top + 52; // was +100;
+	vert_start = image_win->top + top_offset; // 52; // was +100;
 	frm_fmt = CCDC_FRMFMT_INTERLACED;
 #else
 	vert_start = image_win->top;
