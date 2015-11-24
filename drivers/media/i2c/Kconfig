@@ -188,6 +188,15 @@ config VIDEO_ADV7604
 	  To compile this driver as a module, choose M here: the
 	  module will be called adv7604.
 
+config VIDEO_ADV7611
+        tristate "Analog Devices ADV7611 decoder"
+        depends on VIDEO_V4L2 && I2C && VIDEO_V4L2_SUBDEV_API
+        ---help---
+          Support for the Analog Devices ADV7611 video decoder.
+
+          To compile this driver as a module, choose M here: the
+          module will be called adv7611.	  
+
 config VIDEO_BT819
 	tristate "BT819A VideoStream decoder"
 	depends on VIDEO_V4L2 && I2C
