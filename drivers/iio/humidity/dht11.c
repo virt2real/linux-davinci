@@ -234,6 +234,7 @@ MODULE_DEVICE_TABLE(of, dht11_dt_ids);
 static int dht11_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct dht11_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct device_node *node = dev->of_node;
 	struct dht11 *dht11;
 	struct iio_dev *iio;
@@ -247,10 +248,20 @@ static int dht11_probe(struct platform_device *pdev)
 
 	dht11 = iio_priv(iio);
 	dht11->dev = dev;
+	
+	if (pdata) {
+		dht11->gpio = pdata->gpio;
+	}
+	else if (node) {
+		dht11->gpio = ret = of_get_gpio(node, 0);
+		if (ret < 0)
+			return ret;
+	}
+	else {
+		dev_err(&pdev->dev, "neither platform data nor Device Tree node available\n");
+		return -EINVAL;
+	}
 
-	dht11->gpio = ret = of_get_gpio(node, 0);
-	if (ret < 0)
-		return ret;
 	ret = devm_gpio_request_one(dev, dht11->gpio, GPIOF_IN, pdev->name);
 	if (ret)
 		return ret;
