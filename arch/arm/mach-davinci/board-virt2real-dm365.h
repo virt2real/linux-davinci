@@ -3,6 +3,7 @@ static void v2r_parse_cmdline(char * string);
 #endif
 
 bool w1_run; // 1-wire init flag
+bool dht11_run; // DHT11 init flag
 bool lan0_run; // LAN init flag
 bool lan1_run; // EMAC LAN init flag
 bool lan1_mac_run; // EMAC LAN set MAC flag

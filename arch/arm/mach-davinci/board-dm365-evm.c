@@ -40,6 +40,7 @@
 #include <linux/platform_data/mtd-davinci.h>
 #include <linux/platform_data/keyscan-davinci.h>
 #include <linux/platform_data/usb-davinci.h>
+#include <linux/platform_data/dht11.h>
 #include <mach/time.h>
 #include <mach/gpio.h>
 #include <mach/rto.h>
@@ -530,6 +531,30 @@ static void w1_gpio_init(void) {
 /* end 1-wire init block */
 
 
+/* DHT11 init block */
+
+static struct dht11_platform_data dht11_pdata = {
+	.gpio		= 33,
+};
+
+static struct platform_device dht11_device = {
+	.name			= "dht11",
+	.id			= -1,
+	.dev.platform_data	= &dht11_pdata,
+};
+
+static void dht11_init(void) {
+	int err;
+	err = platform_device_register(&dht11_device);
+	if (err)
+		printk(KERN_INFO "Failed to register w1-gpio\n");
+	else
+		printk(KERN_INFO "w1-gpio conected to GPIO%d\n", dht11_pdata.gpio);
+}
+
+
+/* end 1-wire init block */
+
 /* LED triggers block */
 
 #if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
@@ -636,6 +661,7 @@ static __init void dm365_evm_init(void)
 	struct clk *aemif_clk;
 
 	w1_run = 0;
+	dht11_run = 0;
 	lan0_run = 0;
 	lan1_run = 0;
 	lan1_mac_run = 0;
@@ -716,6 +742,10 @@ static __init void dm365_evm_init(void)
 	// try to init 1-Wire
 	if (w1_run) 
 		w1_gpio_init(); // run 1-wire master
+
+	// try to init DHT11
+	if (dht11_run)
+		dht11_init();
 
 	// try to init SPI0
 	if (spi0_run) 
@@ -914,7 +944,6 @@ static void v2r_parse_cmdline(char * string)
 		w1_gpio_pdata.pin = temp;
 		printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp);
 		w1_run = 1;
-		
 	    }
 
 	    if (!strcmp(param_name, "1wirepullup")) {
@@ -923,6 +952,16 @@ static void v2r_parse_cmdline(char * string)
 		w1_gpio_pdata.ext_pullup_enable_pin = temp;
 		printk(KERN_INFO "Use 1-wire pullup resistor on GPIO%d\n", temp);
 	    }
+
+
+		if (!strcmp(param_name, "dht11")) {
+		int temp;
+		kstrtoint(param_value, 10, &temp);
+		dht11_pdata.gpio = temp;
+		printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp);
+		dht11_run = 1;
+	    }
+
 
 	    if (!strcmp(param_name, "camera")) {
 		if (!strcmp(param_value, "ov2643")) {
