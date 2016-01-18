@@ -35,6 +35,7 @@
 #include <linux/of_gpio.h>
 
 #include <linux/iio/iio.h>
+#include <linux/platform_data/dht11.h>
 
 #define DRIVER_NAME	"dht11"
 
@@ -220,9 +221,9 @@ static irqreturn_t dht11_handle_irq(int irq, void *data)
 
 static const struct iio_chan_spec dht11_chan_spec[] = {
 	{ .type = IIO_TEMP,
-		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED), },
+		.info_mask = BIT(IIO_CHAN_INFO_PROCESSED), },
 	{ .type = IIO_HUMIDITYRELATIVE,
-		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED), }
+		.info_mask = BIT(IIO_CHAN_INFO_PROCESSED), }
 };
 
 static const struct of_device_id dht11_dt_ids[] = {
