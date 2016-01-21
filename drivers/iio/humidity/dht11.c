@@ -66,6 +66,7 @@ struct dht11 {
 	struct mutex			lock;
 
 	s64				timestamp;
+	int				error;
 	int				temperature;
 	int				humidity;
 
@@ -102,7 +103,6 @@ static int dht11_decode(struct dht11 *dht11)
 	if (((hum_int + hum_dec + temp_int + temp_dec) & 0xff) != checksum)
 		return -EIO;
 
-	dht11->timestamp = iio_get_time_ns();
 	if (hum_int < 20) {  /* DHT22 */
 		dht11->temperature = (((temp_int & 0x7f) << 8) + temp_dec) *
 					((temp_int & 0x80) ? -100 : 100);
@@ -148,6 +148,8 @@ static int dht11_read_raw(struct iio_dev *iio_dev,
 
 	mutex_lock(&dht11->lock);
 	if (dht11->timestamp + DHT11_DATA_VALID_TIME < iio_get_time_ns()) {
+		dht11->timestamp = iio_get_time_ns();
+
 		reinit_completion(&dht11->completion);
 
 		ret = gpio_direction_output(dht11->gpio, 0);
@@ -177,6 +179,13 @@ static int dht11_read_raw(struct iio_dev *iio_dev,
 		ret = dht11_decode(dht11);
 		if (ret)
 			goto err;
+
+		dht11->error = 0;
+	}
+
+	if (dht11->error) {
+		ret = dht11->error;
+		goto err;
 	}
 
 	ret = IIO_VAL_INT;
@@ -187,6 +196,8 @@ static int dht11_read_raw(struct iio_dev *iio_dev,
 	else
 		ret = -EINVAL;
 err:
+	if (ret < 0)
+		dht11->error = ret;
 	dht11->num_edges = -1;
 	mutex_unlock(&dht11->lock);
 	return ret;
