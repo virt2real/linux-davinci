@@ -238,6 +238,8 @@ static int dht11_probe(struct platform_device *pdev)
 
 	dht11 = iio_priv(iio);
 	dht11->dev = dev;
+	dht11->timestamp = iio_get_time_ns() - DHT11_DATA_VALID_TIME - 1;
+	dht11->num_edges = -1;
 	
 	if (pdata) {
 		dht11->gpio = pdata->gpio;
@@ -256,19 +258,21 @@ static int dht11_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	ret = gpio_direction_input(dht11->gpio);
+	if (ret)
+		return ret;
+
 	dht11->irq = gpio_to_irq(dht11->gpio);
 	if (dht11->irq < 0) {
 		dev_err(dev, "GPIO %d has no interrupt\n", dht11->gpio);
 		return -EINVAL;
 	}
+
 	ret = devm_request_irq(dev, dht11->irq, dht11_handle_irq,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+				IRQF_TRIGGER_FALLING,
 				pdev->name, iio);
 	if (ret)
 		return ret;
-
-	dht11->timestamp = iio_get_time_ns() - DHT11_DATA_VALID_TIME - 1;
-	dht11->num_edges = -1;
 
 	platform_set_drvdata(pdev, iio);
 
