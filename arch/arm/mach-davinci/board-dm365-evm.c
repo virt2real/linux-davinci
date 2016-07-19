@@ -65,8 +65,8 @@ static struct i2c_board_info i2c_info[] = {
 static struct davinci_i2c_platform_data i2c_pdata = {
 	.bus_freq	= 100	/* kHz */, //was 400
 	.bus_delay	= 0	/* usec */,
-	.sda_pin        = 21,
-	.scl_pin        = 20,
+	.sda_pin	= 21,
+	.scl_pin	= 20,
 };
 
 /* Input available at the ov7690 */
@@ -80,11 +80,11 @@ static struct v4l2_input ov2643_inputs[] = {
 };
 
 static struct v4l2_input adv7611_inputs[] = {
-        {
-                .index = 0,
-                .name = "Camera",
-                .type = V4L2_INPUT_TYPE_CAMERA,
-        }
+	{
+		.index = 0,
+		.name = "Camera",
+		.type = V4L2_INPUT_TYPE_CAMERA,
+	}
 };
 
 static struct vpfe_subdev_info vpfe_sub_devs[] = {
@@ -112,33 +112,33 @@ static struct vpfe_subdev_info vpfe_sub_devs[] = {
 	},
 #ifdef CONFIG_VIDEO_ADV7611
 	{
-                //Clock for camera????
-                .module_name = "adv7611",
-                .is_camera = 1,
-                .grp_id = VPFE_SUBDEV_ADV7611,
-                .num_inputs = ARRAY_SIZE(adv7611_inputs),
-                .inputs = adv7611_inputs,
-                .ccdc_if_params = {
+		//Clock for camera????
+		.module_name = "adv7611",
+		.is_camera = 1,
+		.grp_id = VPFE_SUBDEV_ADV7611,
+		.num_inputs = ARRAY_SIZE(adv7611_inputs),
+		.inputs = adv7611_inputs,
+		.ccdc_if_params = {
 			.if_type = VPFE_YCBCR_SYNC_8,
-                        .hdpol = VPFE_PINPOL_POSITIVE,
-                        .vdpol = VPFE_PINPOL_POSITIVE,
-                },
-                .board_info = {
-                        I2C_BOARD_INFO("adv7611", 0x4c),
-                        /* this is for PCLK rising edge */
-                        .platform_data = (void *)1,
-                },
-        }
+			.hdpol = VPFE_PINPOL_POSITIVE,
+			.vdpol = VPFE_PINPOL_POSITIVE,
+		},
+		.board_info = {
+			I2C_BOARD_INFO("adv7611", 0x4c),
+			/* this is for PCLK rising edge */
+			.platform_data = (void *)1,
+		},
+	}
 #endif
 };
 
 static struct vpfe_config vpfe_cfg = {
-       .num_subdevs = ARRAY_SIZE(vpfe_sub_devs),
-       .sub_devs = vpfe_sub_devs,
-       .card_name = "DM365 Leopard",
-       .ccdc = "DM365 ISIF",
-       .num_clocks = 1,
-       .clocks = {"vpss_master"},
+	.num_subdevs = ARRAY_SIZE(vpfe_sub_devs),
+	.sub_devs = vpfe_sub_devs,
+	.card_name = "DM365 Leopard",
+	.ccdc = "DM365 ISIF",
+	.num_clocks = 1,
+	.clocks = {"vpss_master"},
 };
 
 static void w1_enable_external_pullup(int enable);
@@ -172,13 +172,13 @@ static void dm365_adv7611_configure(void){
 	davinci_rtcss_write(result, 0x00);
 	
 	davinci_cfg_reg(DM365_CAM_OFF);
-        gpio_request(98, "CAMERA_OFF");
-        gpio_direction_output(98, 1);
-        davinci_cfg_reg(DM365_CAM_RESET);
-        gpio_request(99, "CAMERA_RESET");
-        gpio_direction_output(99, 1);
-        davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
-        davinci_cfg_reg(DM365_EXTCLK);
+	gpio_request(98, "CAMERA_OFF");
+	gpio_direction_output(98, 1);
+	davinci_cfg_reg(DM365_CAM_RESET);
+	gpio_request(99, "CAMERA_RESET");
+	gpio_direction_output(99, 1);
+	davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
+	davinci_cfg_reg(DM365_EXTCLK);
 }
 
 /* software PWM */
@@ -222,18 +222,18 @@ static struct resource davinci_rto_resources[] = {
 		.flags = IORESOURCE_IRQ,
 	},
 	{
-	        .start    =  0,
-	        .end    =  0,
-	        .flags    = IORESOURCE_DMA,
+		.start	  =  0,
+		.end	=  0,
+		.flags	  = IORESOURCE_DMA,
 	 }
 
 };
 
 static struct platform_device davinci_rto_device = {
-    .name = "davinci_rto_driver",
-    .id = -1,
-    .num_resources = ARRAY_SIZE(davinci_rto_resources),
-    .resource = davinci_rto_resources
+	.name = "davinci_rto_driver",
+	.id = -1,
+	.num_resources = ARRAY_SIZE(davinci_rto_resources),
+	.resource = davinci_rto_resources
 };
 //#endif
 /* end software PWM */
@@ -492,7 +492,7 @@ static struct davinci_spi_unit_desc dm365_evm_spi_udesc_KSZ8851 = {
 	.dma_rx_chan	= 19,
 	.dma_evtq	= EVENTQ_3,
 	.pdata		= {
-		.version 	= SPI_VERSION_1,
+		.version	= SPI_VERSION_1,
 		.num_chipselect = 2,
 		.intr_line = 0,
 		.chip_sel = 0,
@@ -524,7 +524,7 @@ static struct spi_board_info v2rdac_info[] __initdata = {
 static struct davinci_spi_unit_desc v2rdac_spi_udesc = {
 	.spi_hwunit  = 0,
 	.chipsel  = BIT(1),
-	.irq    = IRQ_DM365_SPIINT0_0,
+	.irq	= IRQ_DM365_SPIINT0_0,
 	.dma_tx_chan  = 16,
 	.dma_rx_chan  = 17,
 	.dma_evtq  = EVENTQ_3,
@@ -578,68 +578,68 @@ static void w1_gpio_init(void) {
 #if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
 
 static struct gpio_led v2r_led[] = {
-    {
-	.name = "v2r:red:user",
-	.default_trigger = "none",
-	.gpio = 74,
-	.active_low = 0,
-    },
-    {
-	.name = "v2r:green:user",
-	.default_trigger = "none",
-	.gpio = 73,
-	.active_low = 0,
-    },
-    {
-	.name = "lan:green:user",
-	.default_trigger = "none",
-	.gpio = 85,
-	.active_low = 0,
-    },
-    {
-	.name = "lan:yellow:user",
-	.default_trigger = "none",
-	.gpio = 86,
-	.active_low = 0,
-    },
+	{
+		.name = "v2r:red:user",
+		.default_trigger = "none",
+		.gpio = 74,
+		.active_low = 0,
+	},
+	{
+		.name = "v2r:green:user",
+		.default_trigger = "none",
+		.gpio = 73,
+		.active_low = 0,
+	},
+	{
+		.name = "lan:green:user",
+		.default_trigger = "none",
+		.gpio = 85,
+		.active_low = 0,
+	},
+	{
+		.name = "lan:yellow:user",
+		.default_trigger = "none",
+		.gpio = 86,
+		.active_low = 0,
+	},
 
-    {
-	.name = "debug:red:user",
-	.default_trigger = "none",
-	.gpio = 49,
-	.active_low = 0,
-    },
-    {
-	.name = "debug:green:user",
-	.default_trigger = "none",
-	.gpio = 47,
-	.active_low = 0,
-    },
-    {
-	.name = "debug:blue:user",
-	.default_trigger = "none",
-	.gpio = 46,
-	.active_low = 0,
-    },
-    {
-	.name = "debug:yellow:user",
-	.default_trigger = "none",
-	.gpio = 44,
-	.active_low = 0,
-    },
+	{
+		.name = "debug:red:user",
+		.default_trigger = "none",
+		.gpio = 49,
+		.active_low = 0,
+	},
+	{
+		.name = "debug:green:user",
+		.default_trigger = "none",
+		.gpio = 47,
+		.active_low = 0,
+	},
+	{
+		.name = "debug:blue:user",
+		.default_trigger = "none",
+		.gpio = 46,
+		.active_low = 0,
+	},
+	{
+		.name = "debug:yellow:user",
+		.default_trigger = "none",
+		.gpio = 44,
+		.active_low = 0,
+	},
 };
 
 static struct gpio_led_platform_data v2r_led_data = {
-    .num_leds = ARRAY_SIZE(v2r_led),
-    .leds = v2r_led
+	.num_leds = ARRAY_SIZE(v2r_led),
+	.leds = v2r_led
 };
 
 static struct platform_device v2r_led_dev = {
-    .name = "leds-gpio",
-    .id	 = -1,
-    .dev = {
-        .platform_data	= &v2r_led_data,
-    },
+	.name = "leds-gpio",
+	.id	 = -1,
+	.dev = {
+		.platform_data	= &v2r_led_data,
+	},
 };
 
 static void led_init(void) {
@@ -707,15 +707,15 @@ static __init void dm365_evm_init(void)
 	// try to init camera
 	if (camera_run) {
 #if defined(CONFIG_SOC_CAMERA_OV2643) || defined(CONFIG_SOC_CAMERA_OV2643_MODULE)
-            dm365_camera_configure();
+		dm365_camera_configure();
 #elif defined CONFIG_VIDEO_ADV7611
-            dm365_adv7611_configure();
+	    dm365_adv7611_configure();
 #endif
 	}
 	// set up UART1 GPIO
 	if (uart1_run) {
-	    davinci_cfg_reg(DM365_UART1_RXD);
-	    davinci_cfg_reg(DM365_UART1_TXD);
+		davinci_cfg_reg(DM365_UART1_RXD);
+		davinci_cfg_reg(DM365_UART1_TXD);
 	}
 
 	// try to init UARTs
@@ -742,24 +742,24 @@ static __init void dm365_evm_init(void)
 
 	// try to init LAN module
 	if (lan0_run) {
-	    dm365_ks8851_init();
-	    davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info), ksz8851_snl_info);
+		dm365_ks8851_init();
+		davinci_init_spi(&dm365_evm_spi_udesc_KSZ8851, ARRAY_SIZE(ksz8851_snl_info), ksz8851_snl_info);
 	}
 
 	// try to init EMAC LAN
 	if (lan1_run) {
 		if (lan1_mac_run) {
-		    soc_info->emac_pdata->mac_addr[0] = lan1_mac[0];
-		    soc_info->emac_pdata->mac_addr[1] = lan1_mac[1];
-		    soc_info->emac_pdata->mac_addr[2] = lan1_mac[2];
-		    soc_info->emac_pdata->mac_addr[3] = lan1_mac[3];
-		    soc_info->emac_pdata->mac_addr[4] = lan1_mac[4];
-		    soc_info->emac_pdata->mac_addr[5] = lan1_mac[5];
+			soc_info->emac_pdata->mac_addr[0] = lan1_mac[0];
+			soc_info->emac_pdata->mac_addr[1] = lan1_mac[1];
+			soc_info->emac_pdata->mac_addr[2] = lan1_mac[2];
+			soc_info->emac_pdata->mac_addr[3] = lan1_mac[3];
+			soc_info->emac_pdata->mac_addr[4] = lan1_mac[4];
+			soc_info->emac_pdata->mac_addr[5] = lan1_mac[5];
 		}
 
 		soc_info->emac_pdata->phy_id = DM365_EVM_PHY_ID;
 		dm365evm_emac_configure();
-	} 
+	}
 
 	// try to init 1-Wire
 	if (w1_run) 
@@ -778,16 +778,16 @@ static __init void dm365_evm_init(void)
 
 	// try to init wlan
 	if (wlan_run) {
-	    gpio_request(59, "wlan-pwdn");
-	    gpio_direction_output(59, 1);
-	    msleep(20);
-	    gpio_request(59, "wlan-reset");
-	    gpio_direction_output(60, 1);
-	    msleep(20);
-	    gpio_direction_output(60, 0);
-	    msleep(1000);
-	    gpio_direction_output(60, 1);
-	    davinci_setup_mmc(1, &dm365evm_mmc1_config);
+		gpio_request(59, "wlan-pwdn");
+		gpio_direction_output(59, 1);
+		msleep(20);
+		gpio_request(59, "wlan-reset");
+		gpio_direction_output(60, 1);
+		msleep(20);
+		gpio_direction_output(60, 0);
+		msleep(1000);
+		gpio_direction_output(60, 1);
+		davinci_setup_mmc(1, &dm365evm_mmc1_config);
 	}
 
 	// set USB prioruty, 
@@ -804,205 +804,205 @@ static __init void dm365_evm_init(void)
 static void v2r_parse_cmdline(char * string)
 {
 
-    char *p;
-    char *temp_string;
-    char *temp_param;
-    char *param_name;
-    char *param_value;
-    printk(KERN_INFO "Parse kernel cmdline:\n");
-    temp_string = kstrdup(string, GFP_KERNEL);
+	char *p;
+	char *temp_string;
+	char *temp_param;
+	char *param_name;
+	char *param_value;
+	printk(KERN_INFO "Parse kernel cmdline:\n");
+	temp_string = kstrdup(string, GFP_KERNEL);
 
-    do
-    {
-	p = strsep(&temp_string, " ");
-	if (p) {
-	    // split param string into two parts
-	    temp_param = kstrdup(p, GFP_KERNEL);
-	    param_name = strsep(&temp_param, "=");
-	    if (!param_name) continue;
-	    //printk(KERN_INFO "%s\n", temp_value);
-	    param_value = strsep(&temp_param, " ");
-	    if (!param_value) continue;
-	    //printk(KERN_INFO "%s\n", param_value);
-	    //printk (KERN_INFO "param %s = %s\n", param_name, param_value);
-	    
-	    // i'd like to use switch, but fig tam
-	    
-	    if (!strcmp(param_name, "pwrled")) {
-		if (!strcmp(param_value, "on")) {
-		    // turn on blue led
-		    u8 result = 0;
-		    printk(KERN_INFO "Power LED set ON\n");
-		    result = davinci_rtcss_read(0x00);
-		    result |= (1<<3);
-		    davinci_rtcss_write(result, 0x00);
+	do
+	{
+		p = strsep(&temp_string, " ");
+		if (p) {
+			// split param string into two parts
+			temp_param = kstrdup(p, GFP_KERNEL);
+			param_name = strsep(&temp_param, "=");
+			if (!param_name) continue;
+			//printk(KERN_INFO "%s\n", temp_value);
+			param_value = strsep(&temp_param, " ");
+			if (!param_value) continue;
+			//printk(KERN_INFO "%s\n", param_value);
+			//printk (KERN_INFO "param %s = %s\n", param_name, param_value);
+
+			// i'd like to use switch, but fig tam
+
+			if (!strcmp(param_name, "pwrled")) {
+				if (!strcmp(param_value, "on")) {
+					// turn on blue led
+					u8 result = 0;
+					printk(KERN_INFO "Power LED set ON\n");
+					result = davinci_rtcss_read(0x00);
+					result |= (1<<3);
+					davinci_rtcss_write(result, 0x00);
+				}
+			}
+
+#if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
+			if (!strcmp(param_name, "redled")) {
+				v2r_led[0].default_trigger = param_value;
+				led_run = 1;
+			}
+
+			if (!strcmp(param_name, "greenled")) {
+				v2r_led[1].default_trigger = param_value;
+				led_run = 1;
+			}
+
+			if (!strcmp(param_name, "led1")) {
+				v2r_led[2].default_trigger = param_value;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led2")) {
+				v2r_led[3].default_trigger = param_value;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led3")) {
+				v2r_led[4].default_trigger = param_value;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led4")) {
+				v2r_led[5].default_trigger = param_value;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led5")) {
+				v2r_led[6].default_trigger = param_value;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led6")) {
+				v2r_led[7].default_trigger = param_value;
+				led_run = 1;
+			}
+
+			if (!strcmp(param_name, "led1gpio")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				v2r_led[2].gpio = (u8)temp;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led2gpio")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				v2r_led[3].gpio = (u8)temp;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led3gpio")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				v2r_led[4].gpio = (u8)temp;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led4gpio")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				v2r_led[5].gpio = (u8)temp;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led5gpio")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				v2r_led[6].gpio = (u8)temp;
+				led_run = 1;
+			}
+			if (!strcmp(param_name, "led6gpio")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				v2r_led[7].gpio = (u8)temp;
+				led_run = 1;
+			}
+
+#endif
+
+			if (!strcmp(param_name, "wifi")) {
+				if (!strcmp(param_value, "on")) {
+					printk(KERN_INFO "Wi-Fi board enabled\n");
+					wlan_run = 1;
+				}
+			}
+
+			if (!strcmp(param_name, "lan0")) {
+				if (!strcmp(param_value, "on")) {
+					printk(KERN_INFO "LAN enabled\n");
+					lan0_run = 1;
+				}
+			}
+
+			if (!strcmp(param_name, "lan1")) {
+				if (!strcmp(param_value, "on")) {
+					printk(KERN_INFO "EMAC LAN enabled\n");
+					lan1_run = 1;
+				}
+			}
+
+			if (!strcmp(param_name, "lan1hwaddr")) {
+
+				ParseMACaddr(param_value);
+				lan1_mac_run = 1;
+			}
+
+			if (!strcmp(param_name, "spi0")) {
+				if (!strcmp(param_value, "on")) {
+					printk(KERN_INFO "SPI0 enabled\n");
+					spi0_run = 1;
+				}
+			}
+
+			if (!strcmp(param_name, "uart1")) {
+				if (!strcmp(param_value, "on")) {
+					printk(KERN_INFO "UART1 enabled\n");
+					uart1_run = 1;
+				}
+			}
+
+
+			if (!strcmp(param_name, "1wire")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				w1_gpio_pdata.pin = temp;
+				printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp);
+				w1_run = 1;
+				
+			}
+
+			if (!strcmp(param_name, "1wirepullup")) {
+				int temp;
+				kstrtoint(param_value, 10, &temp);
+				w1_gpio_pdata.ext_pullup_enable_pin = temp;
+				printk(KERN_INFO "Use 1-wire pullup resistor on GPIO%d\n", temp);
+			}
+
+			if (!strcmp(param_name, "camera")) {
+				if (!strcmp(param_value, "ov2643")) {
+					printk(KERN_INFO "Use camera OmniVision OV2643\n");
+					camera_run = 1;
+				}
+				if (!strcmp(param_value, "ov5642")) {
+					printk(KERN_INFO "Use camera OmniVision OV5642\n");
+					camera_run = 1;
+				}
+				if (!strcmp(param_value, "ov7675")) {
+					printk(KERN_INFO "Use camera OmniVision OV7675\n");
+					camera_run = 1;
+				}
+				if (!strcmp(param_value, "ov9710")) {
+					printk(KERN_INFO "Use camera OmniVision OV9710\n");
+					camera_run = 1;
+				}
+			}
+			if (!strcmp(param_name, "ghid")) {
+				if (strchr(param_value, 'k')) {
+					printk("HID gadget keybord enabled\n");
+					ghid_k_run = 1;
+				}
+				if (strchr(param_value, 'm')) {
+					printk("HID gadget mouse enabled\n");
+					ghid_m_run = 1;
+				}
+			}
 		}
-	    }
 
-	    #if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
-	    if (!strcmp(param_name, "redled")) {
-		v2r_led[0].default_trigger = param_value;
-		led_run = 1;
-	    }
-
-	    if (!strcmp(param_name, "greenled")) {
-		v2r_led[1].default_trigger = param_value;
-		led_run = 1;
-	    }
-
-	    if (!strcmp(param_name, "led1")) {
-		v2r_led[2].default_trigger = param_value;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led2")) {
-		v2r_led[3].default_trigger = param_value;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led3")) {
-		v2r_led[4].default_trigger = param_value;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led4")) {
-		v2r_led[5].default_trigger = param_value;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led5")) {
-		v2r_led[6].default_trigger = param_value;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led6")) {
-		v2r_led[7].default_trigger = param_value;
-		led_run = 1;
-	    }
-
-	    if (!strcmp(param_name, "led1gpio")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		v2r_led[2].gpio = (u8)temp;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led2gpio")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		v2r_led[3].gpio = (u8)temp;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led3gpio")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		v2r_led[4].gpio = (u8)temp;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led4gpio")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		v2r_led[5].gpio = (u8)temp;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led5gpio")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		v2r_led[6].gpio = (u8)temp;
-		led_run = 1;
-	    }
-	    if (!strcmp(param_name, "led6gpio")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		v2r_led[7].gpio = (u8)temp;
-		led_run = 1;
-	    }
-
-	    #endif
-
-	    if (!strcmp(param_name, "wifi")) {
-		if (!strcmp(param_value, "on")) {
-		    printk(KERN_INFO "Wi-Fi board enabled\n");
-		    wlan_run = 1;
-		}
-	    }
-
-	    if (!strcmp(param_name, "lan0")) {
-		if (!strcmp(param_value, "on")) {
-		    printk(KERN_INFO "LAN enabled\n");
-		    lan0_run = 1;
-		}
-	    }
-
-	    if (!strcmp(param_name, "lan1")) {
-		if (!strcmp(param_value, "on")) {
-		    printk(KERN_INFO "EMAC LAN enabled\n");
-		    lan1_run = 1;
-		}
-	    }
-
-	    if (!strcmp(param_name, "lan1hwaddr")) {
-
-		ParseMACaddr(param_value);
-		lan1_mac_run = 1;
-	    }
-
-	    if (!strcmp(param_name, "spi0")) {
-		if (!strcmp(param_value, "on")) {
-		    printk(KERN_INFO "SPI0 enabled\n");
-		    spi0_run = 1;
-		}
-	    }
-
-	    if (!strcmp(param_name, "uart1")) {
-		if (!strcmp(param_value, "on")) {
-		    printk(KERN_INFO "UART1 enabled\n");
-		    uart1_run = 1;
-		}
-	    }
-
-
-	    if (!strcmp(param_name, "1wire")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		w1_gpio_pdata.pin = temp;
-		printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp);
-		w1_run = 1;
-		
-	    }
-
-	    if (!strcmp(param_name, "1wirepullup")) {
-		int temp;
-		kstrtoint(param_value, 10, &temp);
-		w1_gpio_pdata.ext_pullup_enable_pin = temp;
-		printk(KERN_INFO "Use 1-wire pullup resistor on GPIO%d\n", temp);
-	    }
-
-	    if (!strcmp(param_name, "camera")) {
-		if (!strcmp(param_value, "ov2643")) {
-		    printk(KERN_INFO "Use camera OmniVision OV2643\n");
-		    camera_run = 1;
-		}
-		if (!strcmp(param_value, "ov5642")) {
-		    printk(KERN_INFO "Use camera OmniVision OV5642\n");
-		    camera_run = 1;
-		}
-		if (!strcmp(param_value, "ov7675")) {
-		    printk(KERN_INFO "Use camera OmniVision OV7675\n");
-		    camera_run = 1;
-		}
-		if (!strcmp(param_value, "ov9710")) {
-		    printk(KERN_INFO "Use camera OmniVision OV9710\n");
-		    camera_run = 1;
-		}
-	    }
-	    if (!strcmp(param_name, "ghid")) {
-		if (strchr(param_value, 'k')) {
-		    printk("HID gadget keybord enabled\n");
-		    ghid_k_run = 1;
-		}
-		if (strchr(param_value, 'm')) {
-		    printk("HID gadget mouse enabled\n");
-		    ghid_m_run = 1;
-		}
-	    }
-	}
-
-    } while(p);
+	} while(p);
 
 }
 
