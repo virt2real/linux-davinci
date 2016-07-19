@@ -50,7 +50,7 @@
 #include "dm365_spi.h"
 
 #include <linux/usb/g_hid.h>
-#include "hid_struct.h" 
+#include "hid_struct.h"
 #include "board-virt2real-dm365.h"
 
 //#ifdef CONFIG_V2R_PARSE_CMDLINE
@@ -153,6 +153,7 @@ static inline int have_imager(void)
 #endif
 }
 
+#if defined(CONFIG_SOC_CAMERA_OV2643) || defined(CONFIG_SOC_CAMERA_OV2643_MODULE)
 static void dm365_camera_configure(void){
 	davinci_cfg_reg(DM365_CAM_OFF);
 	gpio_request(98, "CAMERA_OFF");
@@ -160,26 +161,28 @@ static void dm365_camera_configure(void){
 	davinci_cfg_reg(DM365_CAM_RESET);
 	gpio_request(99, "CAMERA_RESET");
 	gpio_direction_output(99, 1);
-	davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
+	davinci_cfg_reg(DM365_GPIO37); //Disable clk at gpio37
 	davinci_cfg_reg(DM365_EXTCLK);
 }
-
+#elif defined CONFIG_VIDEO_ADV7611
 static void dm365_adv7611_configure(void){
 	u8 result = 0;
-	printk(KERN_INFO "Camera Power set ON\n");
-	result = davinci_rtcss_read(0x00);
-	result |= (1<<2);
-	davinci_rtcss_write(result, 0x00);
-	
 	davinci_cfg_reg(DM365_CAM_OFF);
 	gpio_request(98, "CAMERA_OFF");
 	gpio_direction_output(98, 1);
 	davinci_cfg_reg(DM365_CAM_RESET);
 	gpio_request(99, "CAMERA_RESET");
 	gpio_direction_output(99, 1);
-	davinci_cfg_reg(DM365_GPIO37);//Disable clk at gpio37
+	davinci_cfg_reg(DM365_GPIO37); //Disable clk at gpio37
 	davinci_cfg_reg(DM365_EXTCLK);
+
+	// echo 1 > /proc/v2r_gpio/pwctr2
+	printk(KERN_INFO "ADV7611 Power On\n");
+	result = davinci_rtcss_read(0x00);
+	result |= (1<<2);
+	davinci_rtcss_write(result, 0x00);
 }
+#endif
 
 /* software PWM */
 #ifdef CONFIG_V2R_SWPWM
@@ -225,7 +228,7 @@ static struct resource davinci_rto_resources[] = {
 		.start	  =  0,
 		.end	=  0,
 		.flags	  = IORESOURCE_DMA,
-	 }
+	}
 
 };
 
@@ -240,7 +243,7 @@ static struct platform_device davinci_rto_device = {
 
 
 //#define DM365_EVM_PHY_ID		"davinci_mdio-0:01"  // replaced by Gol
-#define DM365_EVM_PHY_ID		"davinci_mdio-0:00"   
+#define DM365_EVM_PHY_ID		"davinci_mdio-0:00"
 
 /* NOTE:  this is geared for the standard config, with a socketed
  * 2 GByte Micron NAND (MT29F16G08FAA) using 128KB sectors.  If you
@@ -705,13 +708,12 @@ static __init void dm365_evm_init(void)
 	v2r_init_i2c();
 
 	// try to init camera
-	if (camera_run) {
 #if defined(CONFIG_SOC_CAMERA_OV2643) || defined(CONFIG_SOC_CAMERA_OV2643_MODULE)
-		dm365_camera_configure();
+	dm365_camera_configure();
 #elif defined CONFIG_VIDEO_ADV7611
-	    dm365_adv7611_configure();
+	dm365_adv7611_configure();
 #endif
-	}
+
 	// set up UART1 GPIO
 	if (uart1_run) {
 		davinci_cfg_reg(DM365_UART1_RXD);
@@ -762,18 +764,18 @@ static __init void dm365_evm_init(void)
 	}
 
 	// try to init 1-Wire
-	if (w1_run) 
+	if (w1_run)
 		w1_gpio_init(); // run 1-wire master
 
 	// try to init SPI0
-	if (spi0_run) 
+	if (spi0_run)
 		davinci_init_spi(&v2rdac_spi_udesc, ARRAY_SIZE(v2rdac_info),  v2rdac_info); // run SPI0 init
 
 	// try to init G_HID
-	if (ghid_k_run) 
+	if (ghid_k_run)
 		ghid_k_init();
 
-	if (ghid_m_run) 
+	if (ghid_m_run)
 		ghid_m_init();
 
 	// try to init wlan
@@ -790,8 +792,8 @@ static __init void dm365_evm_init(void)
 		davinci_setup_mmc(1, &dm365evm_mmc1_config);
 	}
 
-	// set USB prioruty, 
-	// see http://e2e.ti.com/support/embedded/linux/f/354/t/94930.aspx 
+	// set USB prioruty,
+	// see http://e2e.ti.com/support/embedded/linux/f/354/t/94930.aspx
 	// and http://e2e.ti.com/support/dsp/davinci_digital_media_processors/f/100/t/150995.aspx
 	// davinci_writel(0x0, 0x1c40040); //master priority1 register1 - to set USB
 
@@ -803,7 +805,7 @@ static __init void dm365_evm_init(void)
 #ifdef CONFIG_V2R_PARSE_CMDLINE
 static void v2r_parse_cmdline(char * string)
 {
-
+	int temp_int;
 	char *p;
 	char *temp_string;
 	char *temp_param;
@@ -876,39 +878,33 @@ static void v2r_parse_cmdline(char * string)
 			}
 
 			if (!strcmp(param_name, "led1gpio")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				v2r_led[2].gpio = (u8)temp;
+				kstrtoint(param_value, 10, &temp_int);
+				v2r_led[2].gpio = (u8)temp_int;
 				led_run = 1;
 			}
 			if (!strcmp(param_name, "led2gpio")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				v2r_led[3].gpio = (u8)temp;
+				kstrtoint(param_value, 10, &temp_int);
+				v2r_led[3].gpio = (u8)temp_int;
 				led_run = 1;
 			}
 			if (!strcmp(param_name, "led3gpio")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				v2r_led[4].gpio = (u8)temp;
+				kstrtoint(param_value, 10, &temp_int);
+				v2r_led[4].gpio = (u8)temp_int;
 				led_run = 1;
 			}
 			if (!strcmp(param_name, "led4gpio")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				v2r_led[5].gpio = (u8)temp;
+				kstrtoint(param_value, 10, &temp_int);
+				v2r_led[5].gpio = (u8)temp_int;
 				led_run = 1;
 			}
 			if (!strcmp(param_name, "led5gpio")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				v2r_led[6].gpio = (u8)temp;
+				kstrtoint(param_value, 10, &temp_int);
+				v2r_led[6].gpio = (u8)temp_int;
 				led_run = 1;
 			}
 			if (!strcmp(param_name, "led6gpio")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				v2r_led[7].gpio = (u8)temp;
+				kstrtoint(param_value, 10, &temp_int);
+				v2r_led[7].gpio = (u8)temp_int;
 				led_run = 1;
 			}
 
@@ -957,19 +953,16 @@ static void v2r_parse_cmdline(char * string)
 
 
 			if (!strcmp(param_name, "1wire")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				w1_gpio_pdata.pin = temp;
-				printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp);
+				kstrtoint(param_value, 10, &temp_int);
+				w1_gpio_pdata.pin = temp_int;
+				printk(KERN_INFO "Use 1-wire on GPIO%d\n", temp_int);
 				w1_run = 1;
-				
 			}
 
 			if (!strcmp(param_name, "1wirepullup")) {
-				int temp;
-				kstrtoint(param_value, 10, &temp);
-				w1_gpio_pdata.ext_pullup_enable_pin = temp;
-				printk(KERN_INFO "Use 1-wire pullup resistor on GPIO%d\n", temp);
+				kstrtoint(param_value, 10, &temp_int);
+				w1_gpio_pdata.ext_pullup_enable_pin = temp_int;
+				printk(KERN_INFO "Use 1-wire pullup resistor on GPIO%d\n", temp_int);
 			}
 
 			if (!strcmp(param_name, "camera")) {
@@ -1021,4 +1014,4 @@ MACHINE_START(DAVINCI_DM365_EVM, "DaVinci DM365 EVM")
 	.dma_zone_size	= SZ_128M,
 	.restart	= davinci_restart,
 MACHINE_END
- 
+
