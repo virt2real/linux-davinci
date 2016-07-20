@@ -388,7 +388,6 @@ static int write_edid(struct v4l2_subdev *sd){
 	ksv_i2caddr = channel->KSV_ADDR;
 	edid_i2caddr = channel->EDID_ADDR;
 	v4l2_dbg(1, debug, sd, "Write edid controller\n");
-	printk("Write edid controller\n");
 	/* Disable I2C access to internal EDID ram from DDC port */
 	/* Disable HDCP 1.1 features */
 	/* Disable the Internal EDID */
@@ -410,7 +409,7 @@ static int write_edid(struct v4l2_subdev *sd){
 	v4l2_dbg(1, debug, sd, "Write edid data %d\n", sizeof(edid_data));
 	//Write EDID block
 	for (i = 0; i < sizeof(edid_data); i++){
-		printk("EDID %x, %x\n", i, edid_data[i]);
+		v4l2_dbg(1, debug, sd, "EDID %x, %x\n", i, edid_data[i]);
 		err = adv7611_i2c_write_reg(ch_client,
 			edid_i2caddr, i, edid_data[i]);
 		if (err < 0) {
