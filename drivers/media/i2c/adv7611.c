@@ -1,4 +1,3 @@
-#define DEBUG
 /*
  * Copyright (C) 2007-2009 Texas Instruments Inc
  *
@@ -39,7 +38,7 @@
 #include "adv7611.h"
 
 /* Debug functions */
-static int debug = 2;
+static int debug = 0;
 module_param(debug, int, 0644);
 MODULE_PARM_DESC(debug, "Debug level (0-2)");
 
@@ -696,7 +695,7 @@ static int adv7611_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 /* adv7611_setstd :
  * Function to set the video standard
  */
-static int adv7611_s_std(struct v4l2_subdev *sd, v4l2_std_id std)
+static int adv7611_s_std(struct v4l2_subdev *sd, v4l2_std_id std_id)
 {
 	int err = 0;
 	struct adv7611_channel *channel = to_adv7611(sd);
@@ -707,7 +706,7 @@ static int adv7611_s_std(struct v4l2_subdev *sd, v4l2_std_id std)
 	(void) channel;
 	(void) ch_client;
 
-	v4l2_dbg(1, debug, sd, "Start of adv7611_setstd..\n");
+	v4l2_dbg(1, debug, sd, "Start of adv7611_setstd: 0x%08x%08x..\n", (int)(std_id >> 32), (int)std_id);
 
 	v4l2_dbg(1, debug, sd, "End of adv7611 set standard...\n");
 	return err;
@@ -907,6 +906,7 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 			     && (queryStdEntry->fps1000_high >= fps_1000) ) {
 
 				*id = queryStdEntry->id;
+				v4l2_dbg(1, debug, sd, "found standart: 0x%08x%08x\n", (int)(*id >> 32), (int)*id);
 				gotformat = 1;
 				break;
 			}
@@ -1137,11 +1137,9 @@ static int adv7611_remove(struct i2c_client *c)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(c);
 
-#ifdef DEBUG
 	v4l_info(c,
 		"adv7611.c: removing adv7611 adapter on address 0x%x\n",
 		c->addr << 1);
-#endif
 
 	v4l2_device_unregister_subdev(sd);
 //	kfree(to_adv7611(sd));
