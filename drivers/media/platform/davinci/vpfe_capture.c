@@ -85,7 +85,7 @@
 #define PAL_IMAGE_SIZE		(720 * 576 * 2)
 #define SECOND_IMAGE_SIZE_MAX	(640 * 480 * 2)
 
-static int debug = 1;
+static int debug = 0;
 #ifdef CONFIG_VIDEO_YCBCR
 static u32 numbuffers = 4;
 #else
@@ -184,10 +184,18 @@ const struct vpfe_standard vpfe_standards[] = {
 	{V4L2_STD_1080I_30, 1920, 1080, {1, 1}, 1, {1, 30} },
 	{V4L2_STD_1080I_50, 1920, 1080, {1, 1}, 1, {1, 50} },
 	{V4L2_STD_1080I_60, 1920, 1080, {1, 1}, 1, {1, 60} },
+	{V4L2_STD_1080P_24, 1920, 1080, {1, 1}, 0, {1, 24} },
+	{V4L2_STD_1080P_25, 1920, 1080, {1, 1}, 0, {1, 25} },
 	{V4L2_STD_1080P_30, 1920, 1080, {1, 1}, 0, {1, 30} },
 	{V4L2_STD_1080P_50, 1920, 1080, {1, 1}, 0, {1, 50} },
 	{V4L2_STD_1080P_60, 1920, 1080, {1, 1}, 0, {1, 60} },
 };
+
+#define VPFE_STD	(V4L2_STD_525_60|V4L2_STD_625_50|V4L2_STD_525P_60|    \
+			V4L2_STD_625P_50|V4L2_STD_720P_30|V4L2_STD_720P_50| \
+			V4L2_STD_720P_60|V4L2_STD_1080I_30|V4L2_STD_1080I_50| \
+			V4L2_STD_1080I_60|V4L2_STD_1080P_24|V4L2_STD_1080P_25| \
+			V4L2_STD_1080P_30|V4L2_STD_1080P_50|V4L2_STD_1080P_60)
 
 /* Used when raw Bayer image from ccdc is directly captured to SDRAM */
 static const struct vpfe_pixel_format vpfe_pix_fmts[] = {
@@ -525,6 +533,10 @@ static int vpfe_config_image_format(struct vpfe_device *vpfe_dev,
 	struct v4l2_format sd_fmt;
 	int i, ret = 0;
 
+#ifdef CONFIG_V2R_DEBUG
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_config_image_format: 0x%08x%08x\n", (int)(*std_id >> 32), (int)*std_id);
+#endif
+
 	/* configure the ccdc based on standard */
 	for (i = 0; i < ARRAY_SIZE(vpfe_standards); i++) {
 		if (vpfe_standards[i].std_id & *std_id) {
@@ -838,6 +850,10 @@ static irqreturn_t vpfe_isr(int irq, void *dev_id)
 	enum v4l2_field field;
 	int fid;
 
+#ifdef CONFIG_V2R_DEBUG
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_isr\n");
+#endif
+
 	field = vpfe_dev->fmt.fmt.pix.field;
 
 	/* if streaming not started, don't do anything */
@@ -954,7 +970,7 @@ static irqreturn_t vpfe_imp_dma_isr(int irq, void *dev_id)
 	enum v4l2_field field;
 
 #ifdef CONFIG_V2R_DEBUG
-	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "\nvpfe_imp_dma_isr\n");
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_imp_dma_isr\n");
 #endif
 
 	/* if streaming not started, don't do anything */
@@ -989,7 +1005,7 @@ static irqreturn_t vpfe_imp_update_isr(int irq, void *dev_id)
 	struct vpfe_device *vpfe_dev = dev_id;
 
 #ifdef CONFIG_V2R_DEBUG
-	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "\nvpfe_imp_update_isr\n");
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_imp_update_isr\n");
 #endif
 
 	/* if streaming not started, don't do anything */
@@ -1010,6 +1026,10 @@ static void vpfe_detach_irq(struct vpfe_device *vpfe_dev)
 {
 	enum ccdc_frmfmt frame_format;
 
+#ifdef CONFIG_V2R_DEBUG
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_detach_irq\n");
+#endif
+
 	free_irq(vpfe_dev->ccdc_irq0, vpfe_dev);
 	if (vpfe_dev->out_from == VPFE_CCDC_OUT) {
 		frame_format = ccdc_dev->hw_ops.get_frame_format();
@@ -1027,7 +1047,11 @@ static int vpfe_attach_irq(struct vpfe_device *vpfe_dev)
 	enum ccdc_frmfmt frame_format;
 	int ret;
 	enum v4l2_field field;
-	
+
+#ifdef CONFIG_V2R_DEBUG
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_attach_irq\n");
+#endif
+
 	vpfe_dev->imp_update_irq = 0;
 
 	ret = request_irq(vpfe_dev->ccdc_irq0, vpfe_isr, IRQF_DISABLED,
@@ -1091,6 +1115,10 @@ static int vpfe_attach_irq(struct vpfe_device *vpfe_dev)
 /* vpfe_stop_capture: stop streaming in ccdc/isif */
 static void vpfe_stop_capture(struct vpfe_device *vpfe_dev)
 {
+#ifdef CONFIG_V2R_DEBUG
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_stop_capture\n");
+#endif
+
 	vpfe_dev->started = 0;
 	ccdc_dev->hw_ops.enable(0);
 	if (ccdc_dev->hw_ops.enable_out_to_sdram)
@@ -1929,6 +1957,10 @@ static int vpfe_querystd(struct file *file, void *priv, v4l2_std_id *std_id)
 	ret = v4l2_device_call_until_err(&vpfe_dev->v4l2_dev, sdinfo->grp_id,
 					 video, querystd, std_id);
 	mutex_unlock(&vpfe_dev->lock);
+
+#ifdef CONFIG_V2R_DEBUG
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_querystd: 0x%08x%08x\n", (int)(*std_id >> 32), (int) *std_id);
+#endif
 	return ret;
 }
 
@@ -1939,7 +1971,7 @@ static int vpfe_s_std(struct file *file, void *priv, v4l2_std_id *std_id)
 	int ret = 0;
 
 #ifdef CONFIG_V2R_DEBUG
-	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_s_std\n");
+	v4l2_dbg(1, debug, &vpfe_dev->v4l2_dev, "vpfe_s_std: 0x%08x%08x\n", (int)(*std_id >> 32), (int)*std_id);
 #endif
 
 	/* Call decoder driver function to set the standard */
@@ -3092,8 +3124,8 @@ static int vpfe_probe(struct platform_device *pdev)
 	vfd->fops		= &vpfe_fops;
 	vfd->ioctl_ops		= &vpfe_ioctl_ops;
 	vfd->minor		= -1;
-	vfd->tvnorms		= 0;
-	vfd->current_norm	= V4L2_STD_NTSC;
+	vfd->tvnorms		= VPFE_STD;
+	vfd->current_norm	= V4L2_STD_1080P_30;
 	vfd->v4l2_dev 		= &vpfe_dev->v4l2_dev;
 	snprintf(vfd->name, sizeof(vfd->name),
 		 "%s_V%d.%d.%d",
