@@ -409,11 +409,11 @@ static int write_edid(struct v4l2_subdev *sd){
 	v4l2_dbg(1, debug, sd, "Write edid data %d\n", sizeof(edid_data));
 	//Write EDID block
 	for (i = 0; i < sizeof(edid_data); i++){
-		v4l2_dbg(1, debug, sd, "EDID %x, %x\n", i, edid_data[i]);
+		v4l2_dbg(2, debug, sd, "EDID %x, %x\n", i, edid_data[i]);
 		err = adv7611_i2c_write_reg(ch_client,
 			edid_i2caddr, i, edid_data[i]);
 		if (err < 0) {
-			v4l2_dbg(1, debug, sd, "fail to write edid data\n");
+			v4l2_dbg(2, debug, sd, "fail to write edid data\n");
 			return err;
 			/* ADV761x calculates the checksums and enables I2C access
 			 * to internal EDID ram from DDC port.
@@ -711,6 +711,131 @@ static int adv7611_s_std(struct v4l2_subdev *sd, v4l2_std_id std_id)
 	return err;
 }
 
+/* adv7611_querystd_free_run :
+ * Function to return standard in the free run mode
+ */
+static int adv7611_querystd_free_run(struct v4l2_subdev *sd, v4l2_std_id *id)
+{
+	int err = 0;
+	unsigned char val;
+	unsigned char vid_std = 0;
+	unsigned char v_freq  = 0;
+
+	struct i2c_client *ch_client	= v4l2_get_subdevdata(sd);
+	struct adv7611_channel *channel = to_adv7611(sd);
+
+	v4l2_dbg(1, debug, sd, "Starting adv7611_querystd_free_run function...\n");
+
+	/* Check free run mode */
+	err = adv7611_i2c_read_reg(ch_client,
+		       channel->CP_ADDR,
+		       0xff,
+		       &val);
+
+	if (err < 0) {
+		v4l2_err(sd, "I2C read fails...free run detect\n");
+		return err;
+	}
+	
+	if (!(val & 0x10)) {
+		v4l2_err(sd, "No free run detected\n");
+		return -EIO;
+	}
+
+	/* get adv7611 VID_STD and V_FREQ */
+	err = adv7611_i2c_read_reg(ch_client,
+				   channel->IO_ADDR,
+				   0x0,
+				   &val);
+
+	if (err < 0) {
+		v4l2_err(sd, "I2C read fails...VID_STD\n");
+		return err;
+	}
+
+	vid_std = (val & 0x3f);
+
+	err = adv7611_i2c_read_reg(ch_client,
+				   channel->IO_ADDR,
+				   0x1,
+				   &val);
+
+	if (err < 0) {
+		v4l2_err(sd, "I2C read fails...V_FREQ\n");
+		return err;
+	}
+
+	val >>= 4;
+	v_freq = (val & 0x07);
+
+	v4l2_dbg(1, debug, sd, "vid_std: %02x v_freq: %02x\n", vid_std, v_freq);
+	err = 0;
+
+	/* check only decimation progressive mode */
+	switch ( vid_std ) {
+        case 0x0c:
+                /* PR 2×1 525p 720 × 480 */
+                *id = V4L2_STD_525P_60;
+                break;
+        case 0x0d:
+                /* PR 2×1 625p 720 × 576 */
+                *id = V4L2_STD_625P_50;
+                break;
+	case 0x19:
+		/* HD 2×1 720p 1280 × 720 */
+		switch ( v_freq ) {
+		case 0:
+			/* 60Hz */
+			*id = V4L2_STD_720P_60;
+			break;
+		case 1:
+			/* 50Hz */
+			*id = V4L2_STD_720P_50;
+			break;
+		case 2:
+			/* 30Hz */
+			*id = V4L2_STD_720P_30;
+			break;
+		default:
+			err = -EINVAL;
+			break;
+		}
+		break;
+	case 0x1c:
+		/* HD 2×1 1250 1920 × 1080 */
+		switch ( v_freq ) {
+		case 0:
+			/* 60Hz */
+			*id = V4L2_STD_1080P_60;
+			break;
+		case 1:
+			/* 50Hz */
+			*id = V4L2_STD_1080P_50;
+			break;
+		case 2:
+			/* 30Hz */
+			*id = V4L2_STD_1080P_30;
+			break;
+		case 3:
+			/* 25Hz */
+			*id = V4L2_STD_1080P_25;
+			break;
+		case 4:
+			/* 24Hz */
+			*id = V4L2_STD_1080P_24;
+			break;
+		default:
+			err = -EINVAL;
+			break;
+		}
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+	return err;
+}
+
 /* adv7611_querystd :
  * Function to return standard detected by decoder
  */
@@ -791,7 +916,7 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 
 	v4l2_dbg(1, debug, sd, "Starting querystd function...\n");
 	if (id == NULL) {
-		dev_err(&ch_client->dev, "NULL Pointer.\n");
+		v4l2_err(sd, "ID not specified - NULL Pointer.\n");
 		return -EINVAL;
 	}
 
@@ -802,8 +927,7 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 				   &val);
 
 	if (err < 0) {
-		dev_err(&ch_client->dev,
-			"I2C read fails...sync detect\n");
+		v4l2_err(sd, "I2C read fails...sync detect\n");
 		return err;
 	}
 
@@ -814,9 +938,14 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 
 	if ( !detected ) {
 		v4l2_dbg( 1, debug, sd, "No sync detected\n");
-		return -EIO;
+		/* try dry run mode */	
+		err = adv7611_querystd_free_run(sd, id);
+		v4l2_dbg(1, debug, sd, "free run result: %d\n", err); 
+		v4l2_dbg(1, debug, sd, "found standart: 0x%08x%08x\n", 
+			 (int)(*id >> 32), 
+			( int)*id);
+		return err;
 	}
-
 
 	do {
 		/* Query clock cycles per 8 lines */
@@ -824,8 +953,7 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 					   channel->CP_ADDR,
 					   0xb2, &val);
 		if (err < 0) {
-			dev_err(&ch_client->dev,
-				"I2C read fails...Lines per frame high\n");
+			v4l2_err(sd, "I2C read fails...Lines per frame high\n");
 			return err;
 		}
 
@@ -837,8 +965,7 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 					   channel->CP_ADDR,
 					   0xb3, &stdi_lcvs);
 		if (err < 0) {
-			dev_err(&ch_client->dev,
-				"I2C read fails...Lines per frame low\n");
+			v4l2_err(sd, "I2C read fails...Lines per frame low\n");
 			return err;
 		}
 		stdi_lcvs >>= 3;
@@ -858,8 +985,7 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 		stdi_lpf |= val;
 
 		if (err < 0) {
-			dev_err(&ch_client->dev,
-				"I2C read fails...Lines per field\n");
+			v4l2_err(sd, "I2C read fails...Lines per field\n");
 			return err;
 		}
 
@@ -876,8 +1002,7 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 		stdi_cpfdiv256 |= val;
 
 		if (err < 0) {
-			dev_err(&ch_client->dev,
-				"I2C read fails...CPF div 256\n");
+			v4l2_err(sd, "I2C read fails...CPF div 256\n");
 			return err;
 		}
 
@@ -919,13 +1044,13 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
 
 	} while ( gotformat == 0 && --formatretries > 0 ) ;
 
-	dev_notice(&ch_client->dev,
+	v4l2_dbg(1, debug, ch_client,
 		   "ADV7611 - interlaced=%d lines per field=%d clocks per 8 lines=%d fps=%u.%03u\n",
 		   (int)stdi_interlaced,
 		   (int)stdi_lpf, (int)stdi_cp8l, fps_1000/1000, fps_1000%1000);
 
 	if ( !gotformat ) {
-		dev_notice(&ch_client->dev, "querystd: No std detected\n" );
+		v4l2_dbg(1, debug, ch_client, "querystd: No std detected\n" );
 		return -EINVAL;
 	}
 
@@ -945,29 +1070,29 @@ static int adv7611_querystd(struct v4l2_subdev *sd, v4l2_std_id *id)
  */
 static int adv7611_s_stream(struct v4l2_subdev *sd, int enable)
 {
-	struct i2c_client *ch_client = v4l2_get_subdevdata(sd);
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct adv7611_channel *channel = to_adv7611(sd);
 	int err = 0;
 
-	v4l2_dbg(1, debug, sd, "s_stream %d\n", enable);
+	v4l2_dbg(1, debug, client, "s_stream %d\n", enable);
 
 //	  if (channel->streaming == enable)
 //		  return 0;
 
 	if ( enable ) {
-		err = adv7611_i2c_write_reg(ch_client,
+		err = adv7611_i2c_write_reg(client,
 					    channel->IO_ADDR,
 					    0x15,
 					    0xA0);
 	} else {
-		err = adv7611_i2c_write_reg(ch_client,
+		err = adv7611_i2c_write_reg(client,
 					    channel->IO_ADDR,
 					    0x15,
 					    0xBE);
 	}
 
 	if (err) {
-		v4l2_err(sd, "s_stream: err %d\n", err);
+		v4l2_err(client, "s_stream: err %d\n", err);
 	} else {
 		channel->streaming = enable;
 	}
@@ -1014,10 +1139,10 @@ static int adv7611_i2c_read_reg(struct i2c_client *client, u8 addr, u8 reg, u8 *
 		} while ( err < 2 && --retries > 0);
 	}
 	if ( err < 0 ) {
-		dev_err( &client->adapter->dev, "ADV7611: read addr %02x reg x%02x failed\n",
+		v4l2_err( client, "ADV7611: read addr %02x reg x%02x failed\n",
 			(int) addr, (int) reg );
 	} else {
-		v4l_dbg( 2, debug, client, "ADV7611: read addr %02x reg x%02x val %02x\n", 
+		v4l2_dbg( 2, debug, client, "ADV7611: read addr %02x reg x%02x val %02x\n", 
 			(int) addr, (int)reg, (int)(*val) );
 	}
 
@@ -1055,7 +1180,7 @@ static int adv7611_i2c_write_reg(struct i2c_client *client, u8 addr, u8 reg, u8 
 
 	if ( err < 0
 	     && client->adapter != NULL ) {
-	     dev_err( &client->adapter->dev,
+	     v4l2_err( client,
 		      "adv7611 i2c write failed: addr %02x reg x%02x value x%02x\n",
 		      (unsigned int)addr, (unsigned int)reg, (unsigned int)val
 		  );
@@ -1116,7 +1241,7 @@ static int adv7611_probe(struct i2c_client *c,
 	}
 	else {
 		ret = -EINVAL;
-		v4l_err(c, "adv7611 invalid I2C address %02x\n", c->addr );
+		v4l2_err(c, "adv7611 invalid I2C address %02x\n", c->addr );
 		kfree(core);
 		return ret;
 	}
@@ -1124,7 +1249,7 @@ static int adv7611_probe(struct i2c_client *c,
 
 	ret = adv7611_initialize(sd);
 	if ( ret != 0 ) {
-		v4l_err(c, "adv7611 init failed, code %d\n", ret );
+		v4l2_err(c, "adv7611 init failed, code %d\n", ret );
 		kfree(core);
 		return ret;
 	}
@@ -1136,7 +1261,7 @@ static int adv7611_remove(struct i2c_client *c)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(c);
 
-	v4l_info(c,
+	v4l2_info(c,
 		"adv7611.c: removing adv7611 adapter on address 0x%x\n",
 		c->addr << 1);
 
